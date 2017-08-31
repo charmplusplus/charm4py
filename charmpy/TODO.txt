@@ -1,0 +1,29 @@
+* TODO:
+- chare constructors with arguments
+- reductions
+- dynamic array element insertion / deletion
+- sections
+- individual chare migration (I think the Charm runtime doesn't support this right now)
+- mainchare and readonlines:
+  - right now probably only works correctly with one mainchare
+  - right now readonlies are broadcasted after mainchare constructor in PE 0
+- SDAG
+- threaded entry methods
+- [1] local msgs optim: it's possible that a chare might migrate for which a local
+  msg is stored. in this case, we need to send the msg down
+
+
+* TODO performance improvements:
+- a large part of the current overhead of charmpy is due to use of ctypes. Accessing the
+  charm runtime using a C-extension module should remove most of this overhead
+- use more efficient data structure to store and access local msgs
+- right now, the runtime's arrElem::AtSync is being called from Python via an entry
+  method. Instead, it should probably be a more direct call to the object's AtSync method
+- similarly for call to arrElem::migrateMe
+- msg compression adds latency (would only be useful if bandwidth is an issue)
+  maybe only use if msg size above certain threshold, and/or if msg is going to another
+  physical node. Also, lz4 is faster than zlib
+  Note that compression can be useful because some pickled objects can be very large
+- have all or most chare instance containers be lists? Not clear if/how much it would improve performance
+- have Charm.entryMethods be a list? Not clear if/how much it would improve performance
+
