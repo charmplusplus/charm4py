@@ -41,6 +41,17 @@ Charm++ library. For example:
 
 ./charmrun +p4 /usr/bin/python examples/wave2d/wave2d.py ++local
 
+Error output during startup
+---------------------------
+
+Output during startup (before Charm++ makes the call to register the main module) is
+suppressed by charmrun. After the call to register the main module, CharmPy
+redirects the output to the descriptors opened by Charm.
+
+In other words, errors during startup, including Python syntax errors, will not be
+printed. To see them, launch the program without charmrun, e.g.:
+/usr/bin/python examples/wave2d/wave2d.py
+
 Shared-memory parallelism
 -------------------------
 
