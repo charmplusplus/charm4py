@@ -30,7 +30,10 @@ in README.charmpy
 Launching CharmPy programs
 --------------------------
 
-Allow Python/ctypes to find the shared library. On Linux, one method is:
+Allow Python/ctypes to find the shared library.
+This can be done by setting the environment variable 'LIBCHARM_PATH':
+> export LIBCHARM_PATH=/path/to/shared_lib.so
+Alternatively on Linux:
 > export LD_LIBRARY_PATH=path_to_shared_lib_folder
 
 charmpy module must be in Python path:

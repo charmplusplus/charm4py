@@ -263,7 +263,11 @@ class Charm(object):
     self.recvArrayMsg(aid, ndims, arrayIndex, -1, 0, None, resumeFromSync=True)
 
   def initCharmLibrary(self):
-    self.lib = ctypes.CDLL("libcharm.so")
+    libcharm_env_var = os.environ.get("LIBCHARM_PATH")
+    if libcharm_env_var != None:
+      self.lib = ctypes.CDLL(libcharm_env_var)
+    else:
+      self.lib = ctypes.CDLL("libcharm.so")
 
     self.REGISTER_MAIN_MODULE_CB_TYPE = CFUNCTYPE(None)
     self.registerMainModuleCb = self.REGISTER_MAIN_MODULE_CB_TYPE(self.registerMainModule)
