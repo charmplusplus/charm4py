@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, ReadOnlies
+from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
 
 ro = ReadOnlies()
 
@@ -6,7 +6,11 @@ class Main(Mainchare):
   def __init__(self, args):
     super(Main,self).__init__()
 
-    if len(args) <= 1: args = [None,3,2]  # default: 3 dimensions of size 2 each
+    if len(args) <= 1:
+      args = [None,3,2]  # default: 3 dimensions of size 2 each
+    elif len(args) != 3:
+      CkAbort("Usage : python array_hello.py [<num_dimensions> <array_size>]")
+
     ro.nDims = int(args[1])
     ro.ARRAY_SIZE = [int(args[2])] * ro.nDims
     ro.firstIdx = [0] * ro.nDims
