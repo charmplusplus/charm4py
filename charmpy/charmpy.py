@@ -7,7 +7,7 @@
 import sys
 import os
 import ctypes
-from ctypes import c_int, c_short, c_char, c_char_p, c_void_p, POINTER, CFUNCTYPE
+from ctypes import c_int, c_short, c_char, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
 import cPickle
 import inspect
 import time
@@ -46,6 +46,31 @@ class Singleton(type):
 class ReadOnlies(object):
   __metaclass__ = Singleton
 
+
+# Import some useful structures defined on Charm side
+
+### !!! The order of fields here should match the struct CkReductionTypesExt in ckreduction.h !!! ####
+class ReducerTypes(Structure):
+  _fields_ = [
+    ("sum_int",     c_int),
+    ("sum_float",   c_int),
+    ("sum_double",  c_int),
+    ("nop",         c_int)
+  ]
+
+class ContributeInfo(Structure):
+  _fields_ = [
+    ("cbEpIdx", c_int),               # index of entry point at reduction target
+    ("data", c_void_p),               # data contributed for reduction
+    ("numelems", c_int),              # number of elements in data
+    ("dataSize", c_int),              # size of data in bytes
+    ("redType", c_int),               # type of reduction (ReducerTypes)
+    ("arrayId", c_int),               # array ID of the contributing chare array
+    ("arrayIdx", POINTER(c_int)),     # index of the contributing chare array element
+    ("ndims", c_int)                  # number of dimensions in index
+  ]
+
+
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
 class Charm(object):
   __metaclass__ = Singleton
@@ -57,15 +82,18 @@ class Charm(object):
     self.groups = []      # group instances on this PE (indexed by group ID)
     self.arrayTypes = []  # array classes registered in runtime system
     self.arrays = {}      # aid -> dict[idx] -> array element instance with index idx on this PE
-    self.entryMethods = {}        # ep_idx -> EntryMethod object
-    self.classEntryMethods = {}   # class name -> list of EntryMethod objects
-    self.proxyClasses = {}        # class name -> proxy class
-    self.c_elemIdx = (ctypes.c_int * 10)(-1)    # array element index of next send (in ctype compatible format)
+    self.entryMethods = {}                # ep_idx -> EntryMethod object
+    self.classEntryMethods = {}           # class name -> list of EntryMethod objects
+    self.classEntryMethods_byName = {}    # class name -> dict[ep name] -> EntryMethod object
+    self.proxyClasses = {}                # class name -> proxy class
     self.initCharmLibrary()
     self.proxyTimes = 0.0 # for profiling
     self.msgLens = []
     self.localMsgs = {}
     self.localMsgCounter = 0
+    self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
+    self.ReducerTypeMap = {} # reducer type -> (ctypes type, python type), TODO consider changing to list
+    self.buildReducerTypeMap()
 
   def recvReadOnly(self, msgSize, msg):
     msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
@@ -210,11 +238,18 @@ class Charm(object):
     if C.__name__ in self.classEntryMethods: return   # already registered
     #print "CharmPy: Registering class", C.__name__
     self.classEntryMethods[C.__name__] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
+    d = {}
+    for em in self.classEntryMethods[C.__name__]:
+      d[em.name] = em
+    self.classEntryMethods_byName[C.__name__] = d
+
     for m,v in inspect.getmembers(C, predicate=inspect.ismethod):
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
       if m in ["_pack", "pack", "AtSync"]: continue
       #print m
-      self.classEntryMethods[C.__name__].append(EntryMethod(C,m,profile=True))
+      em = EntryMethod(C,m,profile=True)
+      self.classEntryMethods[C.__name__].append(em)
+      self.classEntryMethods_byName[C.__name__][m] = em
 
     # TODO: or maybe, if useful somewhere else, just use a class attribute in base
     # class that tells me what it is
@@ -262,6 +297,39 @@ class Charm(object):
   def resumeFromSync(self, aid, ndims, arrayIndex):
     self.recvArrayMsg(aid, ndims, arrayIndex, -1, 0, None, resumeFromSync=True)
 
+  def buildReducerTypeMap(self):
+    # update this function as and when new reducer types are added to CharmPy
+    self.ReducerTypeMap[self.ReducerType.sum_int] = (c_int, int)
+    self.ReducerTypeMap[self.ReducerType.sum_float] = (c_float, float)
+    self.ReducerTypeMap[self.ReducerType.sum_double] = (c_double, float)
+    self.ReducerTypeMap[self.ReducerType.nop] = (None, None)
+
+  # Notes: data is a void*, it must be type casted based on reducerType to Python type
+  # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
+  def cpickleData(self, data, returnBuffer, dataSize, reducerType):
+    dataTypeTuple = self.ReducerTypeMap[reducerType]
+    numElems = 0
+    pyData = None
+    if reducerType == self.ReducerType.nop:
+      pyData = []
+    else:
+      numElems = dataSize / sizeof(dataTypeTuple[0])
+      pyData = ctypes.cast(data, POINTER(dataTypeTuple[0] * numElems)).contents
+      pyData = [list(pyData)] # can use numpy arrays here if needed
+
+    # if reduction result is one element, use base type
+    if numElems == 1: pyData = pyData[0]
+
+    #print "In charmpy. Data:", data, "dataSize:", dataSize, "numElems:", numElems, "reducerType:" reducerType
+
+    pickledData = cPickle.dumps(pyData, PICKLE_PROTOCOL)
+    pickledData = ctypes.create_string_buffer(pickledData)
+    # cast returnBuffer to char** and make it point to pickledData
+    returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
+    returnBuffer[0] = pickledData
+
+    return len(pickledData)
+
   def initCharmLibrary(self):
     libcharm_env_var = os.environ.get("LIBCHARM_PATH")
     if libcharm_env_var != None:
@@ -306,6 +374,11 @@ class Charm(object):
     self.RESUME_FROM_SYNC_CB_TYPE = CFUNCTYPE(None, c_int, c_int, POINTER(c_int))
     self.resumeFromSyncCb = self.RESUME_FROM_SYNC_CB_TYPE(self.resumeFromSync)
     self.lib.registerArrayResumeFromSyncExtCallback(self.resumeFromSyncCb)
+
+    # Args to cpickleData: data, return_buffer, data_size, reducer_type
+    self.CPICKLE_DATA_CB_TYPE = CFUNCTYPE(c_int, c_void_p, POINTER(c_char_p), c_int, c_int)
+    self.cpickleDataCb = self.CPICKLE_DATA_CB_TYPE(self.cpickleData)
+    self.lib.registerCPickleDataExtCallback(self.cpickleDataCb)
 
     # the following line decreases performance, don't know why. seems to work fine without it
     #self.lib.CkArrayExtSend.argtypes = (c_int, POINTER(c_int), c_int, c_int, c_char_p, c_int)
@@ -387,19 +460,19 @@ class Mainchare(object):
 
 def group_proxy_ctor(proxy, gid):
   proxy.gid = gid
-  # next entry method call will be to __elemIdx PE (broadcast if -1)
-  proxy.__elemIdx = -1
+  # next entry method call will be to elemIdx PE (broadcast if -1)
+  proxy.elemIdx = -1
 
 def group_proxy_elem(proxy, pe): # group proxy [] overload method
-  proxy.__elemIdx = pe
+  proxy.elemIdx = pe
   return proxy
 
 def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     proxy = args[0]
-    sendArgs = [proxy.gid, proxy.__elemIdx, ep]
+    sendArgs = [proxy.gid, proxy.elemIdx, ep]
     charm.sendToEntryMethod(charm.CkGroupExtSend, False, False, args[1:], sendArgs)
-    proxy.__elemIdx = -1
+    proxy.elemIdx = -1
   return proxy_entry_method
 
 def group_ckNew_gen(C, epIdx):
@@ -434,23 +507,29 @@ class Group(object):
 
 # -------------------- Array and Proxy -----------------------
 
-def array_proxy_ctor(proxy, aid):
+def array_proxy_ctor(proxy, aid, ndims):
   proxy.aid = aid
-  # next entry method call will be to __elemIdx array element (broadcast if empty tuple)
-  proxy.__elemIdx = ()
+  # next entry method call will be to elemIdx array element (broadcast if empty tuple)
+  proxy.elemIdx = ()
+  # C equivalent of elemIdx. Keep it as long as array dimensions strictly
+  proxy.c_elemIdx = (ctypes.c_int * ndims)(-1)
 
 def array_proxy_elem(proxy, idx): # array proxy [] overload method
-  proxy.__elemIdx = tuple(idx)
-  for i,v in enumerate(idx): charm.c_elemIdx[i] = v
+  # Check that length of idx matches array dimensions
+  if len(idx) != len(proxy.c_elemIdx):
+    CkAbort("Non-matching dimensions of array index")
+
+  proxy.elemIdx = tuple(idx)
+  for i,v in enumerate(idx): proxy.c_elemIdx[i] = v
   return proxy
 
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
-    local = LOCAL_MSG_OPTIM and (len(me.__elemIdx) > 0) and (me.__elemIdx in charm.arrays[me.aid])
-    sendArgs = [me.aid, charm.c_elemIdx, len(me.__elemIdx), ep]
+    local = LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0) and (me.elemIdx in charm.arrays[me.aid])
+    sendArgs = [me.aid, me.c_elemIdx, len(me.elemIdx), ep]
     charm.sendToEntryMethod(charm.CkArrayExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
-    me.__elemIdx = ()
+    me.elemIdx = ()
   return proxy_entry_method
 
 def array_ckNew_gen(C, epIdx):
@@ -462,19 +541,54 @@ def array_ckNew_gen(C, epIdx):
     dimsArray = (c_int*ndims)(*dims)
     #if CkMyPe() == 0: print "ndims=", ndims, "dimsArray=", [dimsArray[i] for i in range(ndims)], "epIdx=", charm.classEntryMethods[C.__name__][0].epIdx
     aid = charm.lib.CkCreateArrayExt(C.idx, ndims, dimsArray, epIdx, None, 0)
-    return cls(aid) # return instance of Proxy
+    return cls(aid, ndims) # return instance of Proxy
   return array_ckNew
 
 class Array(object):
   def __init__(self):
     self.aid = charm.currentArrayID
     self.thisIndex = charm.currentArrayElemIndex
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid)
+    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid, len(self.thisIndex))
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     self.usesAtSync = False
 
   def AtSync(self):
     self.thisProxy[self.thisIndex].AtSync()
+
+  def contribute(self, data, reducer_type, entry_method, proxy):
+    target_class = entry_method.im_class.__name__
+    target_ep_name = entry_method.__name__
+    try:
+      target_ep_object = charm.classEntryMethods_byName[target_class][target_ep_name]
+    except KeyError:
+      CkAbort("charmpy ERROR: reduction target not registered")
+    target_ep_idx = target_ep_object.epIdx
+
+    # determine length of data being contributed
+    # TODO consider numpy or other array types too
+    if type(data) != list: data = [data]
+    numElems = len(data)
+
+    # converting data to c_data for Charm side
+    c_data = None
+    c_data_size = 0
+    if reducer_type != charm.ReducerType.nop:
+      dataTypeTuple = charm.ReducerTypeMap[reducer_type]
+      c_data = (dataTypeTuple[0]*numElems)(*data)
+      c_data_size = numElems*sizeof(dataTypeTuple[0])
+
+    #print data, reducer_type, target_class, target_ep_name, target_ep_idx, type(proxy).__name__, numElems, c_data
+    c_arrayIdx = (c_int*len(self.thisIndex))(*self.thisIndex)
+
+    contributeInfo = ContributeInfo(target_ep_idx, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
+                                    reducer_type, self.aid, c_arrayIdx, len(self.thisIndex))
+
+    proxy_type = entry_method.im_class.__bases__[0].__name__
+    if proxy_type == 'Mainchare': # array contributing to main chare
+      charm.lib.CkArrayExtContributeChare(ctypes.byref(contributeInfo), proxy.cid[0], proxy.cid[1])
+    else: # using placeholder
+      charm.lib.CkArrayExtContribute(contributeInfo)
+
 
   @classmethod
   def __baseEntryMethods__(cls):
