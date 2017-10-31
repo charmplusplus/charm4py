@@ -589,6 +589,9 @@ class Array(object):
     elif proxy_type == 'Array': # array contributing to an array element/bcast
       charm.lib.CkArrayExtContributeArray(ctypes.byref(contributeInfo), proxy.aid, proxy.c_elemIdx, len(proxy.elemIdx))
       proxy.elemIdx = ()
+    elif proxy_type == 'Group': # array contributing to a group chare/bcast
+      charm.lib.CkArrayExtContributeGroup(ctypes.byref(contributeInfo), proxy.gid, proxy.elemIdx)
+      proxy.elemIdx = -1
     else: # using placeholder
       charm.lib.CkArrayExtContributeTmp(contributeInfo)
 
