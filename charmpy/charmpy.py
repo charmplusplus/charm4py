@@ -586,8 +586,11 @@ class Array(object):
     proxy_type = entry_method.im_class.__bases__[0].__name__
     if proxy_type == 'Mainchare': # array contributing to main chare
       charm.lib.CkArrayExtContributeChare(ctypes.byref(contributeInfo), proxy.cid[0], proxy.cid[1])
+    elif proxy_type == 'Array': # array contributing to an array element/bcast
+      charm.lib.CkArrayExtContributeArray(ctypes.byref(contributeInfo), proxy.aid, proxy.c_elemIdx, len(proxy.elemIdx))
+      proxy.elemIdx = ()
     else: # using placeholder
-      charm.lib.CkArrayExtContribute(contributeInfo)
+      charm.lib.CkArrayExtContributeTmp(contributeInfo)
 
 
   @classmethod

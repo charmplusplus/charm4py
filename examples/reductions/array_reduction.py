@@ -6,7 +6,7 @@ class Main(Mainchare):
   def __init__(self, args):
     super(Main,self).__init__()
 
-    self.expectedReductions = 3
+    self.expectedReductions = 5
     self.recvdReductions = 0
 
     ro.nDims = 1
@@ -41,6 +41,18 @@ class Main(Mainchare):
     if (self.recvdReductions >= self.expectedReductions):
         CkExit()
 
+  def done_array_to_array(self):
+    print "[Main] All array-to-array contributions done"
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
+
+  def done_array_to_array_bcast(self):
+    print "[Main] All array-to-array bcast contributions done"
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
+
 class Test(Array):
   def __init__(self):
     super(Test,self).__init__()
@@ -56,10 +68,18 @@ class Test(Array):
     # test nop reduction to main
     self.contribute(None, charm.ReducerType.nop, Main.done_nop, ro.mainProxy)
     # test contributing to Test[0]
-    #self.contribute(42, charm.ReducerType.sum_int, Test.reductionTarget, self.thisProxy[(0,)])
+    self.contribute(4.2, charm.ReducerType.sum_double, Test.reductionTarget, self.thisProxy[(0,)])
+    # test contributing to Test (broadcast)
+    self.contribute([4.2, 8.4], charm.ReducerType.sum_double, Test.reductionTargetBcast, self.thisProxy)
 
-  def reductionTarget(reduction_result):
-    CkExit()
+  def reductionTarget(self, reduction_result):
+    assert(self.thisIndex[0] == 0)
+    print "[Test ", self.thisIndex, "] Total sum: ", reduction_result
+    ro.mainProxy.done_array_to_array()
+
+  def reductionTargetBcast(self, reduction_result):
+    print "[Test ", self.thisIndex, "] Total sum: ", reduction_result
+    self.contribute(None, charm.ReducerType.nop, Main.done_array_to_array_bcast, ro.mainProxy)
 
 # ---- start charm ----
 charm.start([Main,Test])
