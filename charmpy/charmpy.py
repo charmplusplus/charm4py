@@ -523,6 +523,15 @@ def array_proxy_elem(proxy, idx): # array proxy [] overload method
   for i,v in enumerate(idx): proxy.c_elemIdx[i] = v
   return proxy
 
+def array_proxy_getstate(proxy):
+  return {'ndims': len(proxy.c_elemIdx), 'aid': proxy.aid}
+
+def array_proxy_setstate(proxy, state):
+  ndims = state.pop('ndims')
+  proxy.__dict__.update(state)
+  proxy.elemIdx = ()
+  proxy.c_elemIdx = (ctypes.c_int * ndims)(-1)
+
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
@@ -543,6 +552,7 @@ def array_ckNew_gen(C, epIdx):
     aid = charm.lib.CkCreateArrayExt(C.idx, ndims, dimsArray, epIdx, None, 0)
     return cls(aid, ndims) # return instance of Proxy
   return array_ckNew
+
 
 class Array(object):
   def __init__(self):
@@ -592,8 +602,8 @@ class Array(object):
     elif proxy_type == 'Group': # array contributing to a group chare/bcast
       charm.lib.CkArrayExtContributeGroup(ctypes.byref(contributeInfo), proxy.gid, proxy.elemIdx)
       proxy.elemIdx = -1
-    else: # using placeholder
-      charm.lib.CkArrayExtContributeTmp(contributeInfo)
+    else:
+      CkAbort("Unknown type of reduction target:", proxy_type)
 
 
   @classmethod
@@ -612,6 +622,8 @@ class Array(object):
     M["__init__"] = array_proxy_ctor
     M["__getitem__"] = array_proxy_elem
     M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
+    M["__getstate__"] = array_proxy_getstate
+    M["__setstate__"] = array_proxy_setstate
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
   def _pack(self):
