@@ -55,7 +55,10 @@ class ReducerTypes(Structure):
     ("sum_int",     c_int),
     ("sum_float",   c_int),
     ("sum_double",  c_int),
-    ("nop",         c_int)
+    ("nop",         c_int),
+    ("max_int",     c_int),
+    ("max_float",   c_int),
+    ("max_double",  c_int)
   ]
 
 class ContributeInfo(Structure):
@@ -303,6 +306,9 @@ class Charm(object):
     self.ReducerTypeMap[self.ReducerType.sum_float] = (c_float, float)
     self.ReducerTypeMap[self.ReducerType.sum_double] = (c_double, float)
     self.ReducerTypeMap[self.ReducerType.nop] = (None, None)
+    self.ReducerTypeMap[self.ReducerType.max_int] = (c_int, int)
+    self.ReducerTypeMap[self.ReducerType.max_float] = (c_float, float)
+    self.ReducerTypeMap[self.ReducerType.max_double] = (c_double, float)
 
   # Notes: data is a void*, it must be type casted based on reducerType to Python type
   # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
