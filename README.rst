@@ -37,7 +37,7 @@ Alternatively on Linux:
 > export LD_LIBRARY_PATH=path_to_shared_lib_folder
 
 charmpy module must be in Python path:
-> export PYTHONPATH=path_to_charmpy_folder
+> export PYTHONPATH=path_to_charmpy_folder (the one within the root folder of the repository)
 
 To launch CharmPy programs, use the charmrun binary generated when building the
 Charm++ library. For example:
