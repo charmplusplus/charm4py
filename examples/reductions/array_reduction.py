@@ -16,7 +16,6 @@ class Main(Mainchare):
 
     self.expectedReductions = 7
     self.recvdReductions = 0
-    self.groupBcast = 0 #TODO: remove after adding Group contribute support
 
     ro.nDims = 1
     ro.ARRAY_SIZE = [10] * ro.nDims # 1-D array with 10 elements
@@ -70,12 +69,10 @@ class Main(Mainchare):
       CkExit()
 
   def done_array_to_group_bcast(self):
-    self.groupBcast += 1
-    if self.groupBcast == CkNumPes():
-      print "[Main] All array-to-group bcast contributions done. Test passed"
-      self.recvdReductions += 1
-      if (self.recvdReductions >= self.expectedReductions):
-        CkExit()
+    print "[Main] All array-to-group bcast contributions done. Test passed"
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
 
 class Test(Array):
   def __init__(self):
@@ -115,14 +112,13 @@ class TestGroup(Group):
     print "TestGroup", self.thisIndex, "created on PE", CkMyPe()
 
   def reduceFromArray(self, reduction_result):
+    assert self.thisIndex == 0
     assert reduction_result == 40, "Array-to-group sum_int reduction failed."
     ro.mainProxy.done_array_to_group()
 
   def reduceFromArrayBcast(self, reduction_result):
     assert reduction_result == [0, 80, 30], "Array-to-group bcast sum_int reduction failed."
-    #TODO: add contribute support for groups
-    #self.contribute(None, charm.ReducerType.nop, Main.done_array_to_group_bcast, ro.mainProxy)
-    ro.mainProxy.done_array_to_group_bcast()
+    self.contribute(None, charm.ReducerType.nop, Main.done_array_to_group_bcast, ro.mainProxy)
 
 # ---- start charm ----
 charm.start([Main,Test,TestGroup])

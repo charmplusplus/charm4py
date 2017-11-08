@@ -61,6 +61,11 @@ class ReducerTypes(Structure):
     ("max_double",  c_int)
   ]
 
+## Constants to detect type of contributors for reduction. Order should match enum extContributorType ##
+(CONTRIBUTOR_TYPE_ARRAY,
+CONTRIBUTOR_TYPE_GROUP,
+CONTRIBUTOR_TYPE_NODEGROUP) = map(ctypes.c_int, xrange(3))
+
 class ContributeInfo(Structure):
   _fields_ = [
     ("cbEpIdx", c_int),               # index of entry point at reduction target
@@ -68,9 +73,10 @@ class ContributeInfo(Structure):
     ("numelems", c_int),              # number of elements in data
     ("dataSize", c_int),              # size of data in bytes
     ("redType", c_int),               # type of reduction (ReducerTypes)
-    ("arrayId", c_int),               # array ID of the contributing chare array
-    ("arrayIdx", POINTER(c_int)),     # index of the contributing chare array element
-    ("ndims", c_int)                  # number of dimensions in index
+    ("id", c_int),                    # ID of the contributing array/group
+    ("idx", POINTER(c_int)),          # index of the contributing chare array/group element
+    ("ndims", c_int),                 # number of dimensions in index
+    ("contributorType", c_int)        # type of contributor
   ]
 
 
@@ -336,6 +342,32 @@ class Charm(object):
 
     return len(pickledData)
 
+  # Charm class level contribute function used by Array, Group for reductions
+  def contribute(self, data, reducer_type, entry_method, proxy, elemId, c_elemIdx, ndims, elemType):
+    target_class = entry_method.im_class.__name__
+    target_ep_name = entry_method.__name__
+    try:
+      target_ep_idx = charm.classEntryMethods_byName[target_class][target_ep_name].epIdx
+    except KeyError:
+      CkAbort("charmpy ERROR: reduction target not registered")
+
+    # determine length of data being contributed
+    # TODO consider numpy or other array types too
+    if type(data) != list: data = [data]
+    numElems = len(data)
+
+    # converting data to c_data for Charm side
+    c_data = None
+    c_data_size = 0
+    if reducer_type != charm.ReducerType.nop:
+      dataTypeTuple = charm.ReducerTypeMap[reducer_type]
+      c_data = (dataTypeTuple[0]*numElems)(*data)
+      c_data_size = numElems*sizeof(dataTypeTuple[0])
+
+    contributeInfo = ContributeInfo(target_ep_idx, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
+                                    reducer_type, elemId, c_elemIdx, ndims, elemType)
+    proxy.ckContribute(contributeInfo)
+
   def initCharmLibrary(self):
     libcharm_env_var = os.environ.get("LIBCHARM_PATH")
     if libcharm_env_var != None:
@@ -444,6 +476,9 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
     charm.sendToEntryMethod(charm.CkChareExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
   return proxy_entry_method
 
+def mainchare_proxy_contribute(proxy, contributeInfo):
+  charm.lib.CkExtContributeToChare(ctypes.byref(contributeInfo), proxy.cid[0], proxy.cid[1])
+
 class Mainchare(object):
   def __init__(self):
     self.cid = charm.currentChareId
@@ -460,6 +495,7 @@ class Mainchare(object):
       if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
       M[m.name] = mainchare_proxy_method_gen(m.epIdx)
     M["__init__"] = mainchare_proxy_ctor
+    M["ckContribute"] = mainchare_proxy_contribute # function called when target proxy is Mainchare
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
 # ------------------ Group and Proxy  ----------------------
@@ -489,11 +525,19 @@ def group_ckNew_gen(C, epIdx):
     return charm.groups[gid].thisProxy
   return group_ckNew
 
+def group_proxy_contribute(proxy, contributeInfo):
+  charm.lib.CkExtContributeToGroup(ctypes.byref(contributeInfo), proxy.gid, proxy.elemIdx)
+  proxy.elemIdx = -1
+
 class Group(object):
   def __init__(self):
     self.gid = charm.currentGroupID
     self.thisIndex = CkMyPe()
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
+
+  def contribute(self, data, reducer_type, entry_method, proxy):
+    c_elemIdx = (c_int * 1)(self.thisIndex)
+    charm.contribute(data, reducer_type, entry_method, proxy, self.gid, c_elemIdx, 1, CONTRIBUTOR_TYPE_GROUP)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
@@ -509,6 +553,7 @@ class Group(object):
     M["__init__"] = group_proxy_ctor
     M["__getitem__"] = group_proxy_elem
     M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
+    M["ckContribute"] = group_proxy_contribute # function called when target proxy is Group
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
 # -------------------- Array and Proxy -----------------------
@@ -559,6 +604,9 @@ def array_ckNew_gen(C, epIdx):
     return cls(aid, ndims) # return instance of Proxy
   return array_ckNew
 
+def array_proxy_contribute(proxy, contributeInfo):
+  charm.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), proxy.aid, proxy.c_elemIdx, len(proxy.elemIdx))
+  proxy.elemIdx = ()
 
 class Array(object):
   def __init__(self):
@@ -572,45 +620,8 @@ class Array(object):
     self.thisProxy[self.thisIndex].AtSync()
 
   def contribute(self, data, reducer_type, entry_method, proxy):
-    target_class = entry_method.im_class.__name__
-    target_ep_name = entry_method.__name__
-    try:
-      target_ep_object = charm.classEntryMethods_byName[target_class][target_ep_name]
-    except KeyError:
-      CkAbort("charmpy ERROR: reduction target not registered")
-    target_ep_idx = target_ep_object.epIdx
-
-    # determine length of data being contributed
-    # TODO consider numpy or other array types too
-    if type(data) != list: data = [data]
-    numElems = len(data)
-
-    # converting data to c_data for Charm side
-    c_data = None
-    c_data_size = 0
-    if reducer_type != charm.ReducerType.nop:
-      dataTypeTuple = charm.ReducerTypeMap[reducer_type]
-      c_data = (dataTypeTuple[0]*numElems)(*data)
-      c_data_size = numElems*sizeof(dataTypeTuple[0])
-
-    #print data, reducer_type, target_class, target_ep_name, target_ep_idx, type(proxy).__name__, numElems, c_data
-    c_arrayIdx = (c_int*len(self.thisIndex))(*self.thisIndex)
-
-    contributeInfo = ContributeInfo(target_ep_idx, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
-                                    reducer_type, self.aid, c_arrayIdx, len(self.thisIndex))
-
-    proxy_type = entry_method.im_class.__bases__[0].__name__
-    if proxy_type == 'Mainchare': # array contributing to main chare
-      charm.lib.CkArrayExtContributeChare(ctypes.byref(contributeInfo), proxy.cid[0], proxy.cid[1])
-    elif proxy_type == 'Array': # array contributing to an array element/bcast
-      charm.lib.CkArrayExtContributeArray(ctypes.byref(contributeInfo), proxy.aid, proxy.c_elemIdx, len(proxy.elemIdx))
-      proxy.elemIdx = ()
-    elif proxy_type == 'Group': # array contributing to a group chare/bcast
-      charm.lib.CkArrayExtContributeGroup(ctypes.byref(contributeInfo), proxy.gid, proxy.elemIdx)
-      proxy.elemIdx = -1
-    else:
-      CkAbort("Unknown type of reduction target:", proxy_type)
-
+    c_elemIdx = (c_int * len(self.thisIndex))(*self.thisIndex)
+    charm.contribute(data, reducer_type, entry_method, proxy, self.aid, c_elemIdx, len(self.thisIndex), CONTRIBUTOR_TYPE_ARRAY)
 
   @classmethod
   def __baseEntryMethods__(cls):
@@ -630,6 +641,7 @@ class Array(object):
     M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
     M["__getstate__"] = array_proxy_getstate
     M["__setstate__"] = array_proxy_setstate
+    M["ckContribute"] = array_proxy_contribute # function called when target proxy is Array
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
   def _pack(self):
