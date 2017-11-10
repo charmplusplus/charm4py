@@ -24,6 +24,7 @@ PICKLE_PROTOCOL = -1    # -1 is highest protocol number
 ZLIB_COMPRESSION = 0    # 0 to 9
 LOCAL_MSG_OPTIM = True
 LOCAL_MSG_BUF_SIZE = 50
+AUTO_FLUSH_WHEN = True
 
 def arrayIndexToTuple(ndims, arrayIndex):
   if ndims <= 3: return tuple(ctypes.cast(arrayIndex, POINTER(c_int * ndims)).contents)
@@ -139,7 +140,9 @@ class Charm(Singleton):
       args = cPickle.loads(msg)
     if PROFILING:
       recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
+    if AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
     getattr(obj, em.name)(*args)  # invoke entry method
+    if AUTO_FLUSH_WHEN and (len(obj._checkWhen) > 0): obj.__flushWhen__()
     if PROFILING: em.addTimes( (time.time() - initTime - self.proxyTimes), self.proxyTimes, recv_overhead )
 
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg):
@@ -459,6 +462,28 @@ def profile_proxy(func):
   func_with_profiling.ep = func.ep
   return func_with_profiling
 
+# This decorator makes a wrapper for the chosen entry method 'func'.
+# It is used so that the entry method is invoked only if the chare's member
+# 'attrib_name' is equal to the first argument of the entry method.
+# Entry method is guaranteed to be invoked (for any message order) as long as there
+# are messages satisfying the condition if AUTO_FLUSH_WHEN = True. Otherwise user
+# must call chare.flushWhen() when a chare modifies its condition attribute
+def when(attrib_name):
+  def _when(func):
+    def entryMethod(self, *args, **kwargs):
+      tag = args[0]
+      if tag == getattr(self, attrib_name):
+        func(self, *args) # expected msg, invoke entry method
+        if AUTO_FLUSH_WHEN and (tag == getattr(self, attrib_name)): self._checkWhen.discard(func.__name__)
+      else:
+        msgs = self._when_buffer.setdefault(func.__name__, {})
+        msgs.setdefault(tag, []).append(args) # store, don't expect msg now
+        self._checkWhen = set() # no entry method ran, so no need to check when buffers
+    entryMethod.when_attrib_name = attrib_name
+    entryMethod.func = func
+    return entryMethod
+  return _when
+
 # ---------------------- Chare -----------------------
 
 class Chare(object):
@@ -471,6 +496,7 @@ class Chare(object):
     self._local = [i for i in range(1, LOCAL_MSG_BUF_SIZE+1)]
     self._local[-1] = None
     self._local_free_head = 0
+    self._when_buffer = {}
 
   def __addLocal__(self, msg):
     if self._local_free_head is None: CkAbort("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
@@ -484,6 +510,24 @@ class Chare(object):
     self._local[tag] = self._local_free_head
     self._local_free_head = tag
     return msg
+
+  def flushWhen(self):
+    if len(self._when_buffer) > 0:
+      self._checkWhen = set(self._when_buffer.keys())
+      self.__flushWhen__()
+      self._checkWhen = set()
+
+  def __flushWhen__(self):
+    for method_name in self._checkWhen:
+      msgs = self._when_buffer[method_name]
+      method = getattr(self, method_name)
+      while True:
+        attrib = getattr(self, method.when_attrib_name)
+        msgs_now = msgs.pop(attrib, []) # check if expected msgs are stored
+        if len(msgs_now) == 0:
+          if len(msgs) == 0: self._when_buffer.pop(method_name)
+          break
+        for m in msgs_now: method.func(self, *m)
 
 # ----------------- Mainchare and Proxy --------------
 
