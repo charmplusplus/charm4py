@@ -344,6 +344,7 @@ class Charm(object):
 
   # Charm class level contribute function used by Array, Group for reductions
   def contribute(self, data, reducer_type, entry_method, proxy, elemId, c_elemIdx, ndims, elemType):
+    if reducer_type is None: reducer_type = self.ReducerType.nop
     target_class = entry_method.im_class.__name__
     target_ep_name = entry_method.__name__
     try:
