@@ -23,9 +23,9 @@ Running CharmPy programs
 Build Charm++ shared library
 ----------------------------
 
-You need to build Charm++ as a shared library. The branch that currently has support
-for CharmPy is 'juan/charmpy'. Instructions to build the library are in that branch,
-in README.charmpy
+You need to build Charm++ as a shared library. The branch (in Charm++ repository)
+that currently has support for CharmPy is 'jjgalvez/charmpy'. Instructions to build
+the library are in that branch, in README.charmpy
 
 Launching CharmPy programs
 --------------------------
@@ -37,7 +37,7 @@ Alternatively on Linux:
 > export LD_LIBRARY_PATH=path_to_shared_lib_folder
 
 charmpy module must be in Python path:
-> export PYTHONPATH=path_to_charmpy_folder (the one within the root folder of the repository)
+> export PYTHONPATH=path_to_charmpy_folder (the folder that contains charmpy.py)
 
 To launch CharmPy programs, use the charmrun binary generated when building the
 Charm++ library. For example:
