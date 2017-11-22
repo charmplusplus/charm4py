@@ -5,22 +5,22 @@ ro = ReadOnlies()
 class Main(Mainchare):
   def __init__(self, args):
     super(Main,self).__init__()
-    print "Running Hello on", CkNumPes(), "processors"
+    print("Running Hello on " + str(CkNumPes()) + " processors")
     grpProxy = charm.HelloProxy.ckNew()
     grpProxy[0].SayHi(17)
     ro.mainProxy = self.thisProxy
 
   def done(self):
-    print "All done"
+    print("All done")
     CkExit()
 
 class Hello(Group):
   def __init__(self):
     super(Hello,self).__init__()
-    print "Hello", self.thisIndex, "created"
+    print("Hello " + str(self.thisIndex) + " created")
 
   def SayHi(self, hiNo):
-    print "Hi[", hiNo, "] from element", self.thisIndex
+    print("Hi[" + str(hiNo) + "] from element " + str(self.thisIndex))
     if self.thisIndex + 1 < CkNumPes():
       # Pass the hello on:
       self.thisProxy[self.thisIndex+1].SayHi(hiNo+1)

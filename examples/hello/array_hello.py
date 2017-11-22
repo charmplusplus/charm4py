@@ -18,22 +18,22 @@ class Main(Mainchare):
 
     nElements = 1
     for x in ro.ARRAY_SIZE: nElements *= x
-    print "Running Hello on", CkNumPes(), "processors for", nElements, "elements, array dims=", ro.ARRAY_SIZE
+    print("Running Hello on " + str(CkNumPes()) + " processors for " + str(nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
     ro.mainProxy = self.thisProxy
     arrProxy = charm.HelloProxy.ckNew(ro.ARRAY_SIZE)
     arrProxy[ro.firstIdx].SayHi(17)
 
   def done(self):
-    print "All done"
+    print("All done")
     CkExit()
 
 class Hello(Array):
   def __init__(self):
     super(Hello,self).__init__()
-    print "Hello", self.thisIndex, "created on PE", CkMyPe()
+    print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def SayHi(self, hiNo):
-    print "Hi[", hiNo, "] from element", self.thisIndex, "on PE", CkMyPe()
+    print("Hi[" + str(hiNo) + "] from element " + str(self.thisIndex) + " on PE " + str(CkMyPe()))
     if self.thisIndex == ro.lastIdx:
       ro.mainProxy.done()
     else:

@@ -13,19 +13,19 @@ class HelloList:
 class Main(Mainchare):
   def __init__(self, args):
     super(Main,self).__init__()
-    print "Running Hello on", CkNumPes(), "processors"
+    print("Running Hello on " + str(CkNumPes()) + " processors")
     grpProxy = charm.HelloProxy.ckNew()
     grpProxy[0].SayHi(HelloList(17))
     ro.mainProxy = self.thisProxy
 
   def done(self, hellos):
-    print "All done", hellos
+    print("All done " + str(hellos))
     CkExit()
 
 class Hello(Group):
   def __init__(self):
     super(Hello,self).__init__()
-    print "Hello", self.thisIndex, "created"
+    print("Hello " + str(self.thisIndex) + " created")
 
   def SayHi(self, hellos):
     hellos.addHello("Hi[" + str(hellos.hiNo) + "] from element " + str(self.thisIndex))

@@ -24,8 +24,8 @@ class Main(Mainchare):
     super(Main,self).__init__()
 
     if (len(args) != 3) and (len(args) != 7):
-      print args[0], "[array_size] [block_size]"
-      print "OR", args[0], "[array_size_X] [array_size_Y] [array_size_Z] [block_size_X] [block_size_Y] [block_size_Z]"
+      print(args[0] + " [array_size] [block_size]")
+      print("OR " + args[0] + " [array_size_X] [array_size_Y] [array_size_Z] [block_size_X] [block_size_Y] [block_size_Z]")
       CkAbort("Incorrect program arguments")
 
     if len(args) == 3:
@@ -39,15 +39,15 @@ class Main(Mainchare):
     if (ro.arrayDimY < ro.blockDimY) or (ro.arrayDimY % ro.blockDimY != 0): CkAbort("array_size_Y % block_size_Y != 0!")
     if (ro.arrayDimZ < ro.blockDimZ) or (ro.arrayDimZ % ro.blockDimZ != 0): CkAbort("array_size_Z % block_size_Z != 0!")
 
-    ro.num_chare_x = ro.arrayDimX / ro.blockDimX
-    ro.num_chare_y = ro.arrayDimY / ro.blockDimY
-    ro.num_chare_z = ro.arrayDimZ / ro.blockDimZ
+    ro.num_chare_x = ro.arrayDimX // ro.blockDimX
+    ro.num_chare_y = ro.arrayDimY // ro.blockDimY
+    ro.num_chare_z = ro.arrayDimZ // ro.blockDimZ
 
     # print info
-    print "\nSTENCIL COMPUTATION WITH BARRIERS\n"
-    print "Running Stencil on", CkNumPes(), "processors with", (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), "chares"
-    print "Array Dimensions:", (ro.arrayDimX, ro.arrayDimY, ro.arrayDimZ)
-    print "Block Dimensions:", (ro.blockDimX, ro.blockDimY, ro.blockDimZ)
+    print("\nSTENCIL COMPUTATION WITH BARRIERS\n")
+    print("Running Stencil on " + str(CkNumPes()) + " processors with " + str((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z)) + " chares")
+    print("Array Dimensions: " + str((ro.arrayDimX, ro.arrayDimY, ro.arrayDimZ)))
+    print("Block Dimensions: " + str((ro.blockDimX, ro.blockDimY, ro.blockDimZ)))
 
     # Create new array of worker chares
     ro.mainProxy = self.thisProxy
@@ -67,7 +67,7 @@ class Main(Mainchare):
   def doStep(self):
     self.steps += 1
     if self.steps == self.numchares:
-      #print "Starting new iteration"
+      #print("Starting new iteration")
       self.steps = 0
       self.array.doStep()
 
@@ -75,11 +75,11 @@ class Stencil(Array):
   def __init__(self):
     super(Stencil,self).__init__()
 
-    #print "Element", self.thisIndex, "created"
+    #print("Element " + str(self.thisIndex) + " created")
 
     # NOTE: this uses lists for double arrays, better to use numpy (see stencil3d_numba.py)
     arrSize = (ro.blockDimX+2) * (ro.blockDimY+2) * (ro.blockDimZ+2)
-    if self.thisIndex == (0,0,0): print "array size=", arrSize
+    if self.thisIndex == (0,0,0): print("array size=" + str(arrSize))
     self.temperature = [0.0] * arrSize
     self.new_temperature = [0.0] * arrSize
     self.iterations = self.imsg = 0
@@ -148,7 +148,7 @@ class Stencil(Array):
     if self.iterations in self.ghostData:
       msgs = self.ghostData[self.iterations]
       if len(msgs) == 6:
-        for i in xrange(6):
+        for i in range(6):
           msg = msgs.pop()
           self.processGhosts(msg[0], msg[1], msg[2], msg[3])
         self.thisProxy[self.thisIndex].check_and_compute()
@@ -197,19 +197,17 @@ class Stencil(Array):
 
     if self.thisIndex == (0,0,0):
       endTime = time.time()
-      print "[", self.iterations, "] Time per iteration:", endTime-self.startTime, endTime-ro.initTime
+      print("[" + str(self.iterations) + "] Time per iteration: " + str(endTime-self.startTime) + " " + str(endTime-ro.initTime))
 
     if self.iterations == MAX_ITER:
-      # TODO implement contribute
-      #contribute(0, 0, CkReduction::concat, Main.report, ro.mainProxy)
+      #self.contribute(None, None, ro.mainProxy.report)
       ro.mainProxy.report()
     else:
       if self.thisIndex == (0,0,0): self.startTime = time.time()
       if self.iterations % LBPERIOD_ITER == 0:
         self.AtSync()
       else:
-        # TODO implement contribute
-        #contribute(0, 0, CkReduction::concat, Stencil.doStep, self.thisProxy)
+        #self.contribute(None, None, self.thisProxy.doStep)
         ro.mainProxy.doStep()
 
   # Check to see if we have received all neighbor values yet
@@ -228,7 +226,7 @@ class Stencil(Array):
       work = 10.0
 
     blockDimX, blockDimY, blockDimZ = ro.blockDimX, ro.blockDimY, ro.blockDimZ
-    for w in xrange(int(work)):
+    for w in range(int(work)):
       for k in range(1, blockDimZ+1):
         for j in range(1, blockDimY+1):
           for i in range(1, blockDimX+1):

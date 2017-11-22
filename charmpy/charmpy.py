@@ -5,10 +5,16 @@
 # Accesses C/C++ Charm shared library for core runtime functionality.
 #
 import sys
+if sys.version_info < (2, 7, 0):
+  print("charmpy requires Python 2.7 or higher")
+  exit(1)
 import os
 import ctypes
 from ctypes import c_int, c_short, c_char, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
-import cPickle
+if sys.version_info < (3, 0, 0):
+  import cPickle
+else:
+  import pickle as cPickle
 import inspect
 import time
 import zlib
@@ -36,16 +42,14 @@ class EntryMethod(object):
     self.times[1] += t2
     self.times[2] += t3
 
-class Singleton(type):
-  _instances = {}
-  def __call__(cls, *args, **kwargs):
-    if cls not in cls._instances:
-      cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-    return cls._instances[cls]
+class Singleton(object):
+  _instance = None
+  def __new__(cls, *args, **kwargs):
+    if not isinstance(cls._instance, cls):
+      cls._instance = object.__new__(cls, *args, **kwargs)
+    return cls._instance
 
-class ReadOnlies(object):
-  __metaclass__ = Singleton
-
+class ReadOnlies(Singleton): pass
 
 # Import some useful structures defined on Charm side
 
@@ -64,7 +68,7 @@ class ReducerTypes(Structure):
 ## Constants to detect type of contributors for reduction. Order should match enum extContributorType ##
 (CONTRIBUTOR_TYPE_ARRAY,
 CONTRIBUTOR_TYPE_GROUP,
-CONTRIBUTOR_TYPE_NODEGROUP) = map(ctypes.c_int, xrange(3))
+CONTRIBUTOR_TYPE_NODEGROUP) = map(ctypes.c_int, range(3))
 
 class ContributeInfo(Structure):
   _fields_ = [
@@ -81,8 +85,7 @@ class ContributeInfo(Structure):
 
 
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
-class Charm(object):
-  __metaclass__ = Singleton
+class Charm(Singleton):
 
   def __init__(self):
     self.mainchareTypes = []
@@ -108,7 +111,7 @@ class Charm(object):
     msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
     roData = cPickle.loads(msg)
     ro = ReadOnlies()
-    for name,obj in roData.iteritems(): setattr(ro, name, obj)
+    for name,obj in roData.items(): setattr(ro, name, obj)
 
   def buildMainchare(self, onPe, objPtr, ep, argc, argv):
     cid = (onPe, objPtr)  # chare ID
@@ -118,7 +121,7 @@ class Charm(object):
     em = self.entryMethods[ep]
     if not em.isCtor: CkAbort("charmpy ERROR: specified mainchare entry method not constructor")
     self.currentChareId = cid
-    self.chares[cid] = em.C([argv[i] for i in range(argc)]) # call mainchare constructor
+    self.chares[cid] = em.C([argv[i].decode() for i in range(argc)]) # call mainchare constructor
     if CkMyPe() == 0:
       ro = ReadOnlies()
       roData = {}
@@ -126,12 +129,12 @@ class Charm(object):
         if attr.startswith("__") and attr.endswith("__"): continue
         roData[attr] = getattr(ro, attr)
       msg = cPickle.dumps(roData, PICKLE_PROTOCOL)
-      #print "Registering readonly data of size", len(msg)
+      #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonlyExt("python_ro", "python_ro", len(msg), msg)
 
   def invokeEntryMethod(self, obj, em, msg, t0, local, compression):
-    if local and msg.startswith("_local"):
-      args = self.getLocalMsg(int(msg.split(":")[1]))
+    if local and msg.startswith(b"_local"):
+      args = self.getLocalMsg(int(msg.split(b":")[1]))
     else:
       if compression: msg = zlib.decompress(msg)
       args = cPickle.loads(msg)
@@ -156,7 +159,7 @@ class Charm(object):
     em = self.entryMethods[ep]
     obj = self.groups[gid]
     if obj is None:
-      #if CkMyPe() == 0: print "Group", gid, "not instantiated yet"
+      #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
       if not em.isCtor: CkAbort("charmpy ERROR: specified group entry method not constructor")
       self.currentGroupID = gid
       self.groups[gid] = em.C()
@@ -167,11 +170,11 @@ class Charm(object):
     if PROFILING: t0 = time.time()
     arrIndex = arrayIndexToTuple(ndims, arrayIndex)
     if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-    #print "Array msg received, aid=", aid, "ndims=", ndims, "arrIndex=", arrIndex, "ep=", ep
+    #print("Array msg received, aid=" + str(aid) + " ndims=" + str(ndims) + " arrIndex=" + str(arrIndex) + " ep=" + str(ep))
     if aid not in self.arrays: self.arrays[aid] = {}
     obj = self.arrays[aid].get(arrIndex)
     if obj is None: # not instantiated yet
-      #if CkMyPe() == 0: print "Array element", aid, "index", arrIndex, "not instantiated yet"
+      #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(arrIndex) + " not instantiated yet")
       em = self.entryMethods[ep]
       if not em.isCtor: CkAbort("charmpy ERROR: specified array entry method not constructor")
       self.currentArrayID = aid
@@ -202,7 +205,7 @@ class Charm(object):
     if PROFILING: proxyInitTime = time.time()
     if local:
       localMsgId = self.addLocalMsg(msgArgs)
-      msg = "_local:" + str(localMsgId)
+      msg = ("_local:" + str(localMsgId)).encode()
     else:
       msg = cPickle.dumps(msgArgs, PICKLE_PROTOCOL)
       if compress: msg = zlib.compress(msg, ZLIB_COMPRESSION)
@@ -213,13 +216,13 @@ class Charm(object):
 
   # register class C in Charm
   def registerInCharm(self, C, libRegisterFunc):
-    C.cname = ctypes.create_string_buffer(C.__name__)
+    C.cname = ctypes.create_string_buffer(C.__name__.encode())
     chareIdx, startEpIdx = c_int(0), c_int(0)
     entryMethods = self.classEntryMethods[C.__name__]
-    #if CkMyPe() == 0: print "CharmPy:: Registering class", C.__name__, "in Charm with", len(entryMethods), "entry methods", [e.name for e in entryMethods]
+    #if CkMyPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
     libRegisterFunc(C.cname, len(entryMethods), ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
     chareIdx, startEpIdx = chareIdx.value, startEpIdx.value
-    #if CkMyPe() == 0: print "CharmPy:: Chare idx=", chareIdx, "ctor Idx=", startEpIdx
+    #if CkMyPe() == 0: print("CharmPy:: Chare idx=" + str(chareIdx) + " ctor Idx=" + str(startEpIdx))
     C.idx = chareIdx
     for i,em in enumerate(entryMethods):
       if i == 0: em.isCtor = True
@@ -233,8 +236,10 @@ class Charm(object):
   # first callback from Charm++ shared library
   # this method registers classes with the shared library
   def registerMainModule(self):
-    # Charm++ captures stdout, so we need to reopen the sys.stdout stream
-    sys.stdout = os.fdopen(1,"w",0)
+    # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
+    # policy that ensures that messages reach Charm++ in a timely fashion
+    sys.stdout = os.fdopen(1,'wt',1)
+    sys.stderr = os.fdopen(2,'wt',1)
     if CkMyPe() != 0:
       self.lib.CkRegisterReadonlyExt("python_null", "python_null", 0, None)
 
@@ -245,17 +250,18 @@ class Charm(object):
   # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
   def register(self, C):
     if C.__name__ in self.classEntryMethods: return   # already registered
-    #print "CharmPy: Registering class", C.__name__
+    #print("CharmPy: Registering class " + C.__name__)
     self.classEntryMethods[C.__name__] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
     d = {}
     for em in self.classEntryMethods[C.__name__]:
       d[em.name] = em
     self.classEntryMethods_byName[C.__name__] = d
 
-    for m,v in inspect.getmembers(C, predicate=inspect.ismethod):
+    for m in dir(C):
+      if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
       if m in ["_pack", "pack", "AtSync"]: continue
-      #print m
+      #print(m)
       em = EntryMethod(C,m,profile=True)
       self.classEntryMethods[C.__name__].append(em)
       self.classEntryMethods_byName[C.__name__][m] = em
@@ -271,7 +277,7 @@ class Charm(object):
   def start(self, classes=[]):
     for C in classes: self.register(C)
 
-    self.argv_bufs = [ctypes.create_string_buffer(arg) for arg in sys.argv]
+    self.argv_bufs = [ctypes.create_string_buffer(arg.encode()) for arg in sys.argv]
     LP_c_char = POINTER(c_char)
     argc = len(sys.argv)
     argv_p = (LP_c_char * (argc + 1))()
@@ -325,14 +331,14 @@ class Charm(object):
     if reducerType == self.ReducerType.nop:
       pyData = []
     else:
-      numElems = dataSize / sizeof(dataTypeTuple[0])
+      numElems = dataSize // sizeof(dataTypeTuple[0])
       pyData = ctypes.cast(data, POINTER(dataTypeTuple[0] * numElems)).contents
       pyData = [list(pyData)] # can use numpy arrays here if needed
 
     # if reduction result is one element, use base type
     if numElems == 1: pyData = pyData[0]
 
-    #print "In charmpy. Data:", data, "dataSize:", dataSize, "numElems:", numElems, "reducerType:" reducerType
+    #print("In charmpy. Data: " + str(data) + " dataSize: " + str(dataSize) + " numElems: " + str(numElems) + " reducerType: " + str(reducerType))
 
     pickledData = cPickle.dumps(pyData, PICKLE_PROTOCOL)
     pickledData = ctypes.create_string_buffer(pickledData)
@@ -343,14 +349,8 @@ class Charm(object):
     return len(pickledData)
 
   # Charm class level contribute function used by Array, Group for reductions
-  def contribute(self, data, reducer_type, entry_method, proxy, elemId, c_elemIdx, ndims, elemType):
+  def contribute(self, data, reducer_type, target, elemId, c_elemIdx, ndims, elemType):
     if reducer_type is None: reducer_type = self.ReducerType.nop
-    target_class = entry_method.im_class.__name__
-    target_ep_name = entry_method.__name__
-    try:
-      target_ep_idx = charm.classEntryMethods_byName[target_class][target_ep_name].epIdx
-    except KeyError:
-      CkAbort("charmpy ERROR: reduction target not registered")
 
     # determine length of data being contributed
     # TODO consider numpy or other array types too
@@ -365,9 +365,9 @@ class Charm(object):
       c_data = (dataTypeTuple[0]*numElems)(*data)
       c_data_size = numElems*sizeof(dataTypeTuple[0])
 
-    contributeInfo = ContributeInfo(target_ep_idx, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
+    contributeInfo = ContributeInfo(target.ep, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
                                     reducer_type, elemId, c_elemIdx, ndims, elemType)
-    proxy.ckContribute(contributeInfo)
+    target.__self__.ckContribute(contributeInfo)
 
   def initCharmLibrary(self):
     libcharm_env_var = os.environ.get("LIBCHARM_PATH")
@@ -428,18 +428,18 @@ class Charm(object):
   def printTable(self, table, sep):
       col_width = [max(len(x) for x in col) for col in zip(*table)]
       for j,line in enumerate(table):
-        if j in sep: print sep[j]
-        print "| " + " | ".join("{:{}}".format(x, col_width[i]) for i, x in enumerate(line)) + " |"
+        if j in sep: print(sep[j])
+        print("| " + " | ".join("{:{}}".format(x, col_width[i]) for i, x in enumerate(line)) + " |")
 
   def printStats(self):
     if not PROFILING:
-      print "NOTE: profiling is disabled"
+      print("NOTE: profiling is disabled")
       return
     total, pyoverhead = 0.0, 0.0
     table = [["","em","send","recv"]]
     lineNb = 1
     sep = {}
-    for C,entryMethods in self.classEntryMethods.iteritems():
+    for C,entryMethods in self.classEntryMethods.items():
       sep[lineNb] = "---- " + str(C) + " ----"
       for em in entryMethods:
         if not em.profile: continue
@@ -449,20 +449,20 @@ class Charm(object):
         pyoverhead += (vals[1] + vals[2])
         lineNb += 1
     self.printTable(table, sep)
-    print "Total Python recorded time=", total
-    print "Python non-entry method time=", pyoverhead
-    print "\nArray messages:", len(self.msgLens)
-    print "Min msg size=", min(self.msgLens)
-    print "Mean msg size=", sum(self.msgLens) / float(len(self.msgLens))
-    print "Max msg size=", max(self.msgLens)
-    print "Total msg len=", round(sum(self.msgLens) / 1024.0 / 1024.0,3), "MB"
+    print("Total Python recorded time= " + str(total))
+    print("Python non-entry method time= " + str(pyoverhead))
+    print("\nArray messages: " + str(len(self.msgLens)))
+    print("Min msg size= " + str(min(self.msgLens)))
+    print("Mean msg size= " + str(sum(self.msgLens) / float(len(self.msgLens))))
+    print("Max msg size= " + str(max(self.msgLens)))
+    print("Total msg len= " + str(round(sum(self.msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
 charm = Charm() # Charm is a singleton, ok to import this file multiple times
 
 def CkMyPe(): return charm.lib.CkMyPeHook()
 def CkNumPes(): return charm.lib.CkNumPesHook()
 def CkExit(): charm.lib.CkExit()
-def CkAbort(msg): charm.lib.CmiAbort(msg)
+def CkAbort(msg): charm.lib.CmiAbort(msg.encode())
 
 # ----------------- Mainchare and Proxy --------------
 
@@ -475,6 +475,7 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
     sendArgs = [proxy.cid[0], proxy.cid[1], ep]
     local = LOCAL_MSG_OPTIM and (proxy.cid in charm.chares)
     charm.sendToEntryMethod(charm.CkChareExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
+  proxy_entry_method.ep = ep
   return proxy_entry_method
 
 def mainchare_proxy_contribute(proxy, contributeInfo):
@@ -490,7 +491,7 @@ class Mainchare(object):
 
   @classmethod
   def __getProxyClass__(cls):
-    #print "Creating proxy class for class", cls.__name__
+    #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
     for m in charm.classEntryMethods[cls.__name__]:
       if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
@@ -516,12 +517,13 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
     sendArgs = [proxy.gid, proxy.elemIdx, ep]
     charm.sendToEntryMethod(charm.CkGroupExtSend, False, False, args[1:], sendArgs)
     proxy.elemIdx = -1
+  proxy_entry_method.ep = ep
   return proxy_entry_method
 
 def group_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
   def group_ckNew(cls):
-    #print "calling ckNew for class", C.__name__, " cIdx=", C.idx
+    #print("calling ckNew for class " + C.__name__ + " cIdx= " + str(C.idx))
     gid = charm.lib.CkCreateGroupExt(C.idx, epIdx, None, 0)
     return charm.groups[gid].thisProxy
   return group_ckNew
@@ -536,16 +538,16 @@ class Group(object):
     self.thisIndex = CkMyPe()
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
 
-  def contribute(self, data, reducer_type, entry_method, proxy):
+  def contribute(self, data, reducer_type, target):
     c_elemIdx = (c_int * 1)(self.thisIndex)
-    charm.contribute(data, reducer_type, entry_method, proxy, self.gid, c_elemIdx, 1, CONTRIBUTOR_TYPE_GROUP)
+    charm.contribute(data, reducer_type, target, self.gid, c_elemIdx, 1, CONTRIBUTOR_TYPE_GROUP)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
 
   @classmethod
   def __getProxyClass__(cls):
-    #print "Creating proxy class for class", cls.__name__
+    #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:
@@ -591,16 +593,17 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
     sendArgs = [me.aid, me.c_elemIdx, len(me.elemIdx), ep]
     charm.sendToEntryMethod(charm.CkArrayExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
     me.elemIdx = ()
+  proxy_entry_method.ep = ep
   return proxy_entry_method
 
 def array_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
   def array_ckNew(cls, dims):
-    #if CkMyPe() == 0: print "calling array ckNew for class", C.__name__, " cIdx=", C.idx
+    #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
     ndims = len(dims)
     dimsArray = (c_int*ndims)(*dims)
-    #if CkMyPe() == 0: print "ndims=", ndims, "dimsArray=", [dimsArray[i] for i in range(ndims)], "epIdx=", charm.classEntryMethods[C.__name__][0].epIdx
+    #if CkMyPe() == 0: print("ndims=" + str(ndims) + " dimsArray=" + str([dimsArray[i] for i in range(ndims)]) + " epIdx=" + str(charm.classEntryMethods[C.__name__][0].epIdx))
     aid = charm.lib.CkCreateArrayExt(C.idx, ndims, dimsArray, epIdx, None, 0)
     return cls(aid, ndims) # return instance of Proxy
   return array_ckNew
@@ -620,9 +623,9 @@ class Array(object):
   def AtSync(self):
     self.thisProxy[self.thisIndex].AtSync()
 
-  def contribute(self, data, reducer_type, entry_method, proxy):
+  def contribute(self, data, reducer_type, target):
     c_elemIdx = (c_int * len(self.thisIndex))(*self.thisIndex)
-    charm.contribute(data, reducer_type, entry_method, proxy, self.aid, c_elemIdx, len(self.thisIndex), CONTRIBUTOR_TYPE_ARRAY)
+    charm.contribute(data, reducer_type, target, self.aid, c_elemIdx, len(self.thisIndex), CONTRIBUTOR_TYPE_ARRAY)
 
   @classmethod
   def __baseEntryMethods__(cls):
@@ -631,7 +634,7 @@ class Array(object):
 
   @classmethod
   def __getProxyClass__(cls):
-    #print "Creating proxy class for class", cls.__name__
+    #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:

@@ -27,7 +27,7 @@ class Main(Mainchare):
     self.programStartTime = self.periodStartTime = time.time()
     ro.mainProxy = self.thisProxy # store the main proxy
 
-    print "Running wave2d on", CkNumPes(), "processors"
+    print("Running wave2d on " + str(CkNumPes()) + " processors")
 
     # Create new array of worker chares
     ro.arrayProxy = charm.WaveProxy.ckNew((chareArrayWidth, chareArrayHeight))
@@ -43,7 +43,7 @@ class Main(Mainchare):
     #charm.liveViz.deposit([(pos,imSize,im)])
     if self.count == chareArrayWidth * chareArrayHeight:
       if self.iteration == total_iterations:
-        print "Program Done!, Total time=", time.time() - self.programStartTime
+        print("Program Done!, Total time= " + str(time.time() - self.programStartTime))
         charm.printStats()
         CkExit()
       else:
@@ -51,7 +51,7 @@ class Main(Mainchare):
         self.count = 0
         self.iteration += 1
         if self.iteration % 20 == 0:
-          print "Completed", self.iteration, "iterations", time.time() - self.periodStartTime
+          print("Completed " + str(self.iteration) + " iterations " + str(time.time() - self.periodStartTime))
           self.periodStartTime = time.time()
           #charm.liveViz.snapshot("examples/wave2d/wave2d-" + str(self.iteration) + ".png", "PNG")
         restart = (self.iteration % 1000 == 0)  # loop simulation every 1000 iterations
@@ -129,8 +129,8 @@ def initPressure(numInitialPertubations, W, H, w, h, elemIdx, pressure, pressure
 class Wave(Array):
   def __init__(self):
     super(Wave,self).__init__()
-    self.mywidth = TotalDataWidth / chareArrayWidth
-    self.myheight = TotalDataHeight / chareArrayHeight
+    self.mywidth = TotalDataWidth // chareArrayWidth
+    self.myheight = TotalDataHeight // chareArrayHeight
     self.buffers = [None] * 4
     self.messages_due = 4
     self.InitialConditions()
