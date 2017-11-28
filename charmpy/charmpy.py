@@ -464,6 +464,11 @@ def CkNumPes(): return charm.lib.CkNumPesHook()
 def CkExit(): charm.lib.CkExit()
 def CkAbort(msg): charm.lib.CmiAbort(msg.encode())
 
+# ---------------------- Chare -----------------------
+
+class Chare(object):
+  def __init__(self): pass
+
 # ----------------- Mainchare and Proxy --------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -481,8 +486,9 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
 def mainchare_proxy_contribute(proxy, contributeInfo):
   charm.lib.CkExtContributeToChare(ctypes.byref(contributeInfo), proxy.cid[0], proxy.cid[1])
 
-class Mainchare(object):
+class Mainchare(Chare):
   def __init__(self):
+    super(Mainchare,self).__init__()
     self.cid = charm.currentChareId
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.cid)
 
@@ -532,8 +538,9 @@ def group_proxy_contribute(proxy, contributeInfo):
   charm.lib.CkExtContributeToGroup(ctypes.byref(contributeInfo), proxy.gid, proxy.elemIdx)
   proxy.elemIdx = -1
 
-class Group(object):
+class Group(Chare):
   def __init__(self):
+    super(Group,self).__init__()
     self.gid = charm.currentGroupID
     self.thisIndex = CkMyPe()
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
@@ -612,8 +619,9 @@ def array_proxy_contribute(proxy, contributeInfo):
   charm.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), proxy.aid, proxy.c_elemIdx, len(proxy.elemIdx))
   proxy.elemIdx = ()
 
-class Array(object):
+class Array(Chare):
   def __init__(self):
+    super(Array,self).__init__()
     self.aid = charm.currentArrayID
     self.thisIndex = charm.currentArrayElemIndex
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid, len(self.thisIndex))
