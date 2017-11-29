@@ -9,14 +9,10 @@
   - right now readonlies are broadcasted after mainchare constructor in PE 0
 - SDAG
 - threaded entry methods
-- [1] local msgs optim: it's possible that a chare might migrate for which a local
-  msg is stored. in this case, we need to send the msg down
-
 
 * TODO performance improvements:
 - a large part of the current overhead of charmpy is due to use of ctypes. Accessing the
   charm runtime using a C-extension module should remove most of this overhead
-- use more efficient data structure to store and access local msgs
 - right now, the runtime's arrElem::AtSync is being called from Python via an entry
   method. Instead, it should probably be a more direct call to the object's AtSync method
 - similarly for call to arrElem::migrateMe

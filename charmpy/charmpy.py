@@ -22,8 +22,8 @@ import zlib
 PROFILING = True
 PICKLE_PROTOCOL = -1    # -1 is highest protocol number
 ZLIB_COMPRESSION = 0    # 0 to 9
-LOCAL_MSG_OPTIM = True  # experimental; disable if there are issues, see [1] in TODO.txt
-
+LOCAL_MSG_OPTIM = True
+LOCAL_MSG_BUF_SIZE = 50
 
 def arrayIndexToTuple(ndims, arrayIndex):
   if ndims <= 3: return tuple(ctypes.cast(arrayIndex, POINTER(c_int * ndims)).contents)
@@ -101,8 +101,6 @@ class Charm(Singleton):
     self.initCharmLibrary()
     self.proxyTimes = 0.0 # for profiling
     self.msgLens = []
-    self.localMsgs = {}
-    self.localMsgCounter = 0
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.ReducerTypeMap = {} # reducer type -> (ctypes type, python type), TODO consider changing to list
     self.buildReducerTypeMap()
@@ -132,9 +130,9 @@ class Charm(Singleton):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonlyExt("python_ro", "python_ro", len(msg), msg)
 
-  def invokeEntryMethod(self, obj, em, msg, t0, local, compression):
-    if local and msg.startswith(b"_local"):
-      args = self.getLocalMsg(int(msg.split(b":")[1]))
+  def invokeEntryMethod(self, obj, em, msg, t0, compression):
+    if LOCAL_MSG_OPTIM and msg.startswith(b"_local"):
+      args = obj.__removeLocal__(int(msg.split(b":")[1]))
     else:
       if compression: msg = zlib.decompress(msg)
       args = cPickle.loads(msg)
@@ -149,7 +147,7 @@ class Charm(Singleton):
     cid = (onPe, objPtr)  # chare ID
     obj = self.chares.get(cid)
     if obj is None: CkAbort("charmpy ERROR: chare with id " + str(cid) + " not found")
-    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, LOCAL_MSG_OPTIM, ZLIB_COMPRESSION > 0)
+    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
 
   def recvGroupMsg(self, gid, ep, msgSize, msg):
     if PROFILING: t0 = time.time()
@@ -164,7 +162,7 @@ class Charm(Singleton):
       self.currentGroupID = gid
       self.groups[gid] = em.C()
     else:
-      self.invokeEntryMethod(obj, em, msg, t0, False, False)
+      self.invokeEntryMethod(obj, em, msg, t0, False)
 
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, migration=False, resumeFromSync=False):
     if PROFILING: t0 = time.time()
@@ -191,21 +189,13 @@ class Charm(Singleton):
       self.arrays[aid][arrIndex] = obj
     else:
       if resumeFromSync: return obj.resumeFromSync()
-      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, LOCAL_MSG_OPTIM, ZLIB_COMPRESSION > 0)
+      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
 
-  def addLocalMsg(self, data):
-    self.localMsgCounter += 1
-    self.localMsgs[self.localMsgCounter] = data
-    return self.localMsgCounter
-
-  def getLocalMsg(self, localMsgId):
-    return self.localMsgs.pop(localMsgId)
-
-  def sendToEntryMethod(self, sendFunc, local, compress, msgArgs, sendArgs):
+  def sendToEntryMethod(self, sendFunc, destObj, compress, msgArgs, sendArgs):
     if PROFILING: proxyInitTime = time.time()
-    if local:
-      localMsgId = self.addLocalMsg(msgArgs)
-      msg = ("_local:" + str(localMsgId)).encode()
+    if destObj: # if dest obj is local
+      localTag = destObj.__addLocal__(msgArgs)
+      msg = ("_local:" + str(localTag)).encode()
     else:
       msg = cPickle.dumps(msgArgs, PICKLE_PROTOCOL)
       if compress: msg = zlib.compress(msg, ZLIB_COMPRESSION)
@@ -467,7 +457,28 @@ def CkAbort(msg): charm.lib.CmiAbort(msg.encode())
 # ---------------------- Chare -----------------------
 
 class Chare(object):
-  def __init__(self): pass
+  def __init__(self):
+    # messages to this chare from chares in the same PE are stored here without copying
+    # or pickling. _local is a fixed size array that implements a mem pool, where msgs
+    # can be in non-consecutive positions, and the indexes of free slots are stored
+    # as a linked list inside _local, with _local_free_head being the index of the
+    # first free slot, _local[_local_free_head] is the index of next free slot and so on
+    self._local = [i for i in range(1, LOCAL_MSG_BUF_SIZE+1)]
+    self._local[-1] = None
+    self._local_free_head = 0
+
+  def __addLocal__(self, msg):
+    if self._local_free_head is None: CkAbort("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
+    h = self._local_free_head
+    self._local_free_head = self._local[self._local_free_head]
+    self._local[h] = msg
+    return h
+
+  def __removeLocal__(self, tag):
+    msg = self._local[tag]
+    self._local[tag] = self._local_free_head
+    self._local_free_head = tag
+    return msg
 
 # ----------------- Mainchare and Proxy --------------
 
@@ -477,9 +488,10 @@ def mainchare_proxy_ctor(proxy, cid):
 def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     proxy = args[0]
+    destObj = None
+    if LOCAL_MSG_OPTIM: destObj = charm.chares.get(proxy.cid)
     sendArgs = [proxy.cid[0], proxy.cid[1], ep]
-    local = LOCAL_MSG_OPTIM and (proxy.cid in charm.chares)
-    charm.sendToEntryMethod(charm.CkChareExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
+    charm.sendToEntryMethod(charm.CkChareExtSend, destObj, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -519,10 +531,12 @@ def group_proxy_elem(proxy, pe): # group proxy [] overload method
 
 def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
-    proxy = args[0]
-    sendArgs = [proxy.gid, proxy.elemIdx, ep]
-    charm.sendToEntryMethod(charm.CkGroupExtSend, False, False, args[1:], sendArgs)
-    proxy.elemIdx = -1
+    me = args[0] # proxy
+    destObj = None
+    if LOCAL_MSG_OPTIM and (me.elemIdx == CkMyPe()): destObj = charm.groups[me.gid]
+    sendArgs = [me.gid, me.elemIdx, ep]
+    charm.sendToEntryMethod(charm.CkGroupExtSend, destObj, False, args[1:], sendArgs)
+    me.elemIdx = -1
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -596,9 +610,10 @@ def array_proxy_setstate(proxy, state):
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
-    local = LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0) and (me.elemIdx in charm.arrays[me.aid])
+    destObj = None
+    if LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0): destObj = charm.arrays[me.aid].get(me.elemIdx)
     sendArgs = [me.aid, me.c_elemIdx, len(me.elemIdx), ep]
-    charm.sendToEntryMethod(charm.CkArrayExtSend, local, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
+    charm.sendToEntryMethod(charm.CkArrayExtSend, destObj, ZLIB_COMPRESSION > 0, args[1:], sendArgs)
     me.elemIdx = ()
   proxy_entry_method.ep = ep
   return proxy_entry_method
