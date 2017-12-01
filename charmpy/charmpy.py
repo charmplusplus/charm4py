@@ -19,7 +19,7 @@ import inspect
 import time
 import zlib
 
-PROFILING = True
+PROFILING = False
 PICKLE_PROTOCOL = -1    # -1 is highest protocol number
 ZLIB_COMPRESSION = 0    # 0 to 9
 LOCAL_MSG_OPTIM = True
@@ -100,7 +100,7 @@ class Charm(Singleton):
     self.proxyClasses = {}                # class name -> proxy class
     self.initCharmLibrary()
     self.proxyTimes = 0.0 # for profiling
-    self.msgLens = []
+    self.msgLens = [0]    # for profiling
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.ReducerTypeMap = {} # reducer type -> (ctypes type, python type), TODO consider changing to list
     self.buildReducerTypeMap()
@@ -142,6 +142,7 @@ class Charm(Singleton):
     if PROFILING: em.addTimes( (time.time() - initTime - self.proxyTimes), self.proxyTimes, recv_overhead )
 
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg):
+    t0 = None
     if PROFILING: t0 = time.time()
     if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
     cid = (onPe, objPtr)  # chare ID
@@ -150,6 +151,7 @@ class Charm(Singleton):
     self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
 
   def recvGroupMsg(self, gid, ep, msgSize, msg):
+    t0 = None
     if PROFILING: t0 = time.time()
     if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
     if gid >= len(self.groups):
@@ -165,6 +167,7 @@ class Charm(Singleton):
       self.invokeEntryMethod(obj, em, msg, t0, False)
 
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, migration=False, resumeFromSync=False):
+    t0 = None
     if PROFILING: t0 = time.time()
     arrIndex = arrayIndexToTuple(ndims, arrayIndex)
     if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
@@ -192,17 +195,14 @@ class Charm(Singleton):
       self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
 
   def sendToEntryMethod(self, sendFunc, destObj, compress, msgArgs, sendArgs):
-    if PROFILING: proxyInitTime = time.time()
     if destObj: # if dest obj is local
       localTag = destObj.__addLocal__(msgArgs)
       msg = ("_local:" + str(localTag)).encode()
     else:
       msg = cPickle.dumps(msgArgs, PICKLE_PROTOCOL)
       if compress: msg = zlib.compress(msg, ZLIB_COMPRESSION)
+    self.lastMsgLen = len(msg)
     sendFunc(*(sendArgs + [msg, len(msg)]))
-    if PROFILING:
-      self.proxyTimes += (time.time() - proxyInitTime)
-      self.msgLens.append(len(msg))
 
   # register class C in Charm
   def registerInCharm(self, C, libRegisterFunc):
@@ -423,7 +423,7 @@ class Charm(Singleton):
 
   def printStats(self):
     if not PROFILING:
-      print("NOTE: profiling is disabled")
+      print("NOTE: called charm.printStats() but profiling is disabled")
       return
     total, pyoverhead = 0.0, 0.0
     table = [["","em","send","recv"]]
@@ -441,7 +441,7 @@ class Charm(Singleton):
     self.printTable(table, sep)
     print("Total Python recorded time= " + str(total))
     print("Python non-entry method time= " + str(pyoverhead))
-    print("\nArray messages: " + str(len(self.msgLens)))
+    print("\nArray messages: " + str(len(self.msgLens)-1))
     print("Min msg size= " + str(min(self.msgLens)))
     print("Mean msg size= " + str(sum(self.msgLens) / float(len(self.msgLens))))
     print("Max msg size= " + str(max(self.msgLens)))
@@ -453,6 +453,15 @@ def CkMyPe(): return charm.lib.CkMyPeHook()
 def CkNumPes(): return charm.lib.CkNumPesHook()
 def CkExit(): charm.lib.CkExit()
 def CkAbort(msg): charm.lib.CmiAbort(msg.encode())
+
+def profile_proxy(func):
+  def func_with_profiling(*args, **kwargs):
+    proxyInitTime = time.time()
+    func(*args, **kwargs)
+    charm.msgLens.append(charm.lastMsgLen)
+    charm.proxyTimes += (time.time() - proxyInitTime)
+  func_with_profiling.ep = func.ep
+  return func_with_profiling
 
 # ---------------------- Chare -----------------------
 
@@ -513,7 +522,8 @@ class Mainchare(Chare):
     M = dict()  # proxy methods
     for m in charm.classEntryMethods[cls.__name__]:
       if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
-      M[m.name] = mainchare_proxy_method_gen(m.epIdx)
+      if PROFILING: M[m.name] = profile_proxy(mainchare_proxy_method_gen(m.epIdx))
+      else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
     M["__init__"] = mainchare_proxy_ctor
     M["ckContribute"] = mainchare_proxy_contribute # function called when target proxy is Mainchare
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
@@ -573,7 +583,8 @@ class Group(Chare):
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:
       if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
-      M[m.name] = group_proxy_method_gen(m.epIdx)
+      if PROFILING: M[m.name] = profile_proxy(group_proxy_method_gen(m.epIdx))
+      else: M[m.name] = group_proxy_method_gen(m.epIdx)
     M["__init__"] = group_proxy_ctor
     M["__getitem__"] = group_proxy_elem
     M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
@@ -662,7 +673,8 @@ class Array(Chare):
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:
       if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
-      M[m.name] = array_proxy_method_gen(m.epIdx)
+      if PROFILING: M[m.name] = profile_proxy(array_proxy_method_gen(m.epIdx))
+      else: M[m.name] = array_proxy_method_gen(m.epIdx)
     M["__init__"] = array_proxy_ctor
     M["__getitem__"] = array_proxy_elem
     M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
