@@ -37,7 +37,8 @@ class EntryMethod(object):
     self.epIdx = -1   # entry method index assigned by Charm
     self.profile = profile
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
-    getattr(C, name).em = self
+    if sys.version_info < (3, 0, 0): getattr(C, name).__func__.em = self
+    else: getattr(C, name).em = self
   def addTimes(self, t1, t2, t3):
     self.times[0] += t1
     self.times[1] += t2
