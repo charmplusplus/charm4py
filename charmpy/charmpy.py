@@ -192,7 +192,9 @@ class Charm(Singleton):
         obj = em.C()
       self.arrays[aid][arrIndex] = obj
     else:
-      if resumeFromSync: return obj.resumeFromSync()
+      if resumeFromSync:
+        msg = cPickle.dumps([])
+        ep = getattr(obj, 'resumeFromSync').em.epIdx
       self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
 
   def sendToEntryMethod(self, sendFunc, destObj, compress, msgArgs, sendArgs):
