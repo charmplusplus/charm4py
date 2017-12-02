@@ -37,6 +37,7 @@ class EntryMethod(object):
     self.epIdx = -1   # entry method index assigned by Charm
     self.profile = profile
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
+    getattr(C, name).em = self
   def addTimes(self, t1, t2, t3):
     self.times[0] += t1
     self.times[1] += t2
@@ -96,7 +97,6 @@ class Charm(Singleton):
     self.arrays = {}      # aid -> dict[idx] -> array element instance with index idx on this PE
     self.entryMethods = {}                # ep_idx -> EntryMethod object
     self.classEntryMethods = {}           # class name -> list of EntryMethod objects
-    self.classEntryMethods_byName = {}    # class name -> dict[ep name] -> EntryMethod object
     self.proxyClasses = {}                # class name -> proxy class
     self.initCharmLibrary()
     self.proxyTimes = 0.0 # for profiling
@@ -242,19 +242,12 @@ class Charm(Singleton):
     if C.__name__ in self.classEntryMethods: return   # already registered
     #print("CharmPy: Registering class " + C.__name__)
     self.classEntryMethods[C.__name__] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
-    d = {}
-    for em in self.classEntryMethods[C.__name__]:
-      d[em.name] = em
-    self.classEntryMethods_byName[C.__name__] = d
-
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
       if m in ["_pack", "pack", "AtSync"]: continue
       #print(m)
-      em = EntryMethod(C,m,profile=True)
-      self.classEntryMethods[C.__name__].append(em)
-      self.classEntryMethods_byName[C.__name__][m] = em
+      self.classEntryMethods[C.__name__].append(EntryMethod(C,m,profile=True))
 
     # TODO: or maybe, if useful somewhere else, just use a class attribute in base
     # class that tells me what it is
