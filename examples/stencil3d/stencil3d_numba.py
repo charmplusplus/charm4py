@@ -2,7 +2,7 @@
 # This version uses NumPy and Numba
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Mainchare, Group, Array, CkMyPe, CkNumPes, CkExit, CkAbort, ReadOnlies
+from charmpy import charm, Mainchare, Array, CkNumPes, CkExit, CkAbort, ReadOnlies, when
 import time
 import math
 import numpy as np
@@ -41,7 +41,6 @@ class Main(Mainchare):
     ro.num_chare_y = ro.arrayDimY // ro.blockDimY
     ro.num_chare_z = ro.arrayDimZ // ro.blockDimZ
 
-    # print info
     print("\nSTENCIL COMPUTATION WITH BARRIERS\n")
     print("Running Stencil on " + str(CkNumPes()) + " processors with " + str((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z)) + " chares")
     print("Array Dimensions: " + str((ro.arrayDimX, ro.arrayDimY, ro.arrayDimZ)))
@@ -50,25 +49,13 @@ class Main(Mainchare):
     # Create new array of worker chares
     ro.mainProxy = self.thisProxy
     self.array = charm.StencilProxy.ckNew((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z))
-    self.numchares = ro.num_chare_x * ro.num_chare_y * ro.num_chare_z
-    self.reports = self.steps = 0
 
     # Start the computation
-    self.array.doStep()
+    self.array.begin_iteration()
 
   def report(self):
-    self.reports += 1
-    if self.reports == self.numchares:
-      charm.printStats()
-      CkExit()
-
-  def doStep(self):
-    self.steps += 1
-    if self.steps == self.numchares:
-      #print("Starting new iteration")
-      self.steps = 0
-      self.array.doStep()
-
+    charm.printStats()
+    CkExit()
 
 @numba.jit(nopython=True, cache=True)
 def index(a,b,c,X,Y): return (a + b*(X+2) + c*(X+2)*(Y+2))
@@ -159,17 +146,12 @@ class Stencil(Array):
     if self.thisIndex == (0,0,0): print("array size=" + str(arrSize))
     self.temperature = np.zeros(arrSize)
     self.new_temperature = np.zeros(arrSize)
-    self.iterations = self.imsg = 0
-    self.ghostData = {}
+    self.iterations = 0
+    self.msgsRcvd = 0
     constrainBC_fast(self.temperature,ro.blockDimX,ro.blockDimY,ro.blockDimZ)
 
     # start measuring time
     if self.thisIndex == (0,0,0): self.startTime = time.time()
-
-  def doStep(self):
-    self.begin_iteration()
-    self.imsg = 0
-    self.checkGhostsRcv()
 
   def begin_iteration(self):
     self.iterations += 1
@@ -201,21 +183,13 @@ class Stencil(Array):
     # Send my back face
     self.thisProxy[i[0], i[1], (i[2]+1)%Z].receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)
 
+  @when("iterations")
   def receiveGhosts(self, iteration, direction, height, width, gh):
-    # buffer it
-    if iteration not in self.ghostData: self.ghostData[iteration] = []
-    msgs = self.ghostData[iteration]
-    msgs.append([direction, height, width, gh])
-    if len(msgs) == 6: self.thisProxy[self.thisIndex].checkGhostsRcv()
-
-  def checkGhostsRcv(self):
-    if self.iterations in self.ghostData:
-      msgs = self.ghostData[self.iterations]
-      if len(msgs) == 6:
-        for i in range(6):
-          msg = msgs.pop()
-          self.processGhosts(msg[0], msg[1], msg[2], msg[3])
-        self.thisProxy[self.thisIndex].check_and_compute()
+    self.processGhosts(direction, height, width, gh)
+    self.msgsRcvd += 1
+    if self.msgsRcvd == 6:
+      self.msgsRcvd = 0
+      self.thisProxy[self.thisIndex].check_and_compute()
 
   def processGhosts(self, direction, height, width, gh):
     blockDimX, blockDimY, blockDimZ = ro.blockDimX, ro.blockDimY, ro.blockDimZ
@@ -236,15 +210,13 @@ class Stencil(Array):
       print("[" + str(self.iterations) + "] Time per iteration: " + str(endTime-self.startTime) + " " + str(endTime-ro.initTime))
 
     if self.iterations == MAX_ITER:
-      #contribute(None, None, ro.mainProxy.report)
-      ro.mainProxy.report()
+      self.contribute(None, None, ro.mainProxy.report)
     else:
       if self.thisIndex == (0,0,0): self.startTime = time.time()
       if self.iterations % LBPERIOD_ITER == 0:
         self.AtSync()
       else:
-        #contribute(None, None, self.thisProxy.doStep)
-        ro.mainProxy.doStep()
+        self.contribute(None, None, self.thisProxy.begin_iteration)
 
   # Check to see if we have received all neighbor values yet
   # If all neighbor values have been received, we update our values and proceed
@@ -265,7 +237,7 @@ class Stencil(Array):
     compute_kernel_fast(work, blockDimX, blockDimY, blockDimZ, self.new_temperature, self.temperature)
 
   def resumeFromSync(self):
-    self.doStep()
+    self.begin_iteration()
 
 # ------ start charm -------
 
