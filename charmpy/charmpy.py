@@ -18,7 +18,6 @@ else:
 import inspect
 import time
 import zlib
-import traceback
 
 PROFILING = False
 PICKLE_PROTOCOL = -1    # -1 is highest protocol number
@@ -88,6 +87,11 @@ class ContributeInfo(Structure):
   ]
 
 
+class CharmPyError(Exception):
+  def __init__(self, msg):
+    super(CharmPyError, self).__init__(msg)
+    self.message = msg
+
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
 class Charm(Singleton):
 
@@ -109,6 +113,7 @@ class Charm(Singleton):
     self.buildReducerTypeMap()
 
   def handleGeneralError(self):
+    import traceback
     errorType, error, stacktrace = sys.exc_info()
     print("----------------- Python Stack Traceback PE " + str(CkMyPe()) + " -----------------")
     traceback.print_tb(stacktrace, limit=None)
@@ -127,10 +132,10 @@ class Charm(Singleton):
     try:
       cid = (onPe, objPtr)  # chare ID
       if onPe != CkMyPe():  # TODO this check can probably be removed as I assume the runtime already does it
-        CkAbort("charmpy ERROR: received msg for chare not on this PE")
-      if cid in self.chares: CkAbort("charmpy ERROR: chare " + str(cid) + " already instantiated")
+        raise CharmPyError("Received msg for chare not on this PE")
+      if cid in self.chares: raise CharmPyError("Chare " + str(cid) + " already instantiated")
       em = self.entryMethods[ep]
-      if not em.isCtor: CkAbort("charmpy ERROR: specified mainchare entry method not constructor")
+      if not em.isCtor: raise CharmPyError("Specified mainchare entry method not constructor")
       self.currentChareId = cid
       self.chares[cid] = em.C([argv[i].decode() for i in range(argc)]) # call mainchare constructor
       if CkMyPe() == 0:
@@ -165,7 +170,7 @@ class Charm(Singleton):
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       cid = (onPe, objPtr)  # chare ID
       obj = self.chares.get(cid)
-      if obj is None: CkAbort("charmpy ERROR: chare with id " + str(cid) + " not found")
+      if obj is None: raise CharmPyError("Chare with id " + str(cid) + " not found")
       self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, ZLIB_COMPRESSION > 0)
     except:
       self.handleGeneralError()
@@ -181,7 +186,7 @@ class Charm(Singleton):
       obj = self.groups[gid]
       if obj is None:
         #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
-        if not em.isCtor: CkAbort("charmpy ERROR: specified group entry method not constructor")
+        if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
         self.currentGroupID = gid
         self.groups[gid] = em.C()
       else:
@@ -201,7 +206,7 @@ class Charm(Singleton):
       if obj is None: # not instantiated yet
         #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(arrIndex) + " not instantiated yet")
         em = self.entryMethods[ep]
-        if not em.isCtor: CkAbort("charmpy ERROR: specified array entry method not constructor")
+        if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
         self.currentArrayID = aid
         self.currentArrayElemIndex = arrIndex
         if migration:
@@ -529,7 +534,7 @@ class Chare(object):
     self._when_buffer = {}
 
   def __addLocal__(self, msg):
-    if self._local_free_head is None: CkAbort("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
+    if self._local_free_head is None: raise CharmPyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
     h = self._local_free_head
     self._local_free_head = self._local[self._local_free_head]
     self._local[h] = msg
@@ -591,7 +596,7 @@ class Mainchare(Chare):
     #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
     for m in charm.classEntryMethods[cls.__name__]:
-      if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
+      if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if PROFILING: M[m.name] = profile_proxy(mainchare_proxy_method_gen(m.epIdx))
       else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
     M["__init__"] = mainchare_proxy_ctor
@@ -652,7 +657,7 @@ class Group(Chare):
     M = dict()  # proxy methods
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:
-      if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
+      if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if PROFILING: M[m.name] = profile_proxy(group_proxy_method_gen(m.epIdx))
       else: M[m.name] = group_proxy_method_gen(m.epIdx)
     M["__init__"] = group_proxy_ctor
@@ -673,7 +678,7 @@ def array_proxy_ctor(proxy, aid, ndims):
 def array_proxy_elem(proxy, idx): # array proxy [] overload method
   # Check that length of idx matches array dimensions
   if len(idx) != len(proxy.c_elemIdx):
-    CkAbort("Non-matching dimensions of array index")
+     raise CharmPyError("Dimensions of index " + str(idx) + " don't match array dimensions")
 
   proxy.elemIdx = tuple(idx)
   for i,v in enumerate(idx): proxy.c_elemIdx[i] = v
@@ -742,7 +747,7 @@ class Array(Chare):
     M = dict()  # proxy methods
     entryMethods = charm.classEntryMethods[cls.__name__]
     for m in entryMethods:
-      if m.epIdx == -1: CkAbort("charmpy ERROR: unregistered entry method")
+      if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if PROFILING: M[m.name] = profile_proxy(array_proxy_method_gen(m.epIdx))
       else: M[m.name] = array_proxy_method_gen(m.epIdx)
     M["__init__"] = array_proxy_ctor
