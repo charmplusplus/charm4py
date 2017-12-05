@@ -211,11 +211,7 @@ class Charm(Singleton):
         self.currentArrayElemIndex = arrIndex
         if migration:
           if ZLIB_COMPRESSION > 0: msg = zlib.decompress(msg)
-          if hasattr(em.C, "pack"):
-            obj = em.C.__new__(em.C)    # TODO test this, we don't want to call the constructor
-            obj.unpack(msg)
-          else:
-            obj = cPickle.loads(msg)
+          obj = cPickle.loads(msg)
         else:
           obj = em.C()
         self.arrays[aid][arrIndex] = obj
@@ -281,7 +277,7 @@ class Charm(Singleton):
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
-      if m in ["_pack", "pack", "AtSync"]: continue
+      if m in ["AtSync"]: continue
       #print(m)
       self.classEntryMethods[C.__name__].append(EntryMethod(C,m,profile=True))
 
@@ -309,7 +305,7 @@ class Charm(Singleton):
       arrIndex = arrayIndexToTuple(ndims, arrayIndex)
       if sizing:
         obj = self.arrays[aid][arrIndex]
-        obj.migMsg = obj._pack()
+        obj.migMsg = cPickle.dumps(obj, PICKLE_PROTOCOL)
         if ZLIB_COMPRESSION > 0: obj.migMsg = zlib.compress(obj.migMsg, ZLIB_COMPRESSION)
         pdata = None
         return len(obj.migMsg)
@@ -317,7 +313,7 @@ class Charm(Singleton):
         obj = self.arrays[aid].pop(arrIndex)
         if hasattr(obj,"migMsg"): msg = obj.migMsg
         else:
-          msg = obj._pack()
+          msg = cPickle.dumps(obj, PICKLE_PROTOCOL)
           if ZLIB_COMPRESSION > 0: msg = zlib.compress(msg, ZLIB_COMPRESSION)
         data = ctypes.create_string_buffer(msg)
         #pdata[0] = ctypes.cast(data, c_void_p).value
@@ -757,8 +753,3 @@ class Array(Chare):
     M["__setstate__"] = array_proxy_setstate
     M["ckContribute"] = array_proxy_contribute # function called when target proxy is Array
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
-
-  def _pack(self):
-    if hasattr(self, "pack"): return self.pack()  # user-implemented pack method
-    else: return cPickle.dumps(self, PICKLE_PROTOCOL) # pickle my whole self
-
