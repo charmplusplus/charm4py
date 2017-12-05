@@ -666,12 +666,12 @@ class Group(Chare):
 
 def array_proxy_ctor(proxy, aid, ndims):
   proxy.aid = aid
-  # next entry method call will be to elemIdx array element (broadcast if empty tuple)
-  proxy.elemIdx = ()
+  proxy.elemIdx = () # next entry method call will be to elemIdx array element (broadcast if empty tuple)
   # C equivalent of elemIdx. Keep it as long as array dimensions strictly
   proxy.c_elemIdx = (ctypes.c_int * ndims)(-1)
 
 def array_proxy_elem(proxy, idx): # array proxy [] overload method
+  if type(idx) == int: idx = (idx,)
   # Check that length of idx matches array dimensions
   if len(idx) != len(proxy.c_elemIdx):
      raise CharmPyError("Dimensions of index " + str(idx) + " don't match array dimensions")
@@ -705,6 +705,7 @@ def array_ckNew_gen(C, epIdx):
   def array_ckNew(cls, dims):
     #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
+    if type(dims) == int: dims = (dims,)
     ndims = len(dims)
     dimsArray = (c_int*ndims)(*dims)
     #if CkMyPe() == 0: print("ndims=" + str(ndims) + " dimsArray=" + str([dimsArray[i] for i in range(ndims)]) + " epIdx=" + str(charm.classEntryMethods[C.__name__][0].epIdx))

@@ -93,7 +93,7 @@ class TestGroup(Group):
     # test nop reduction to main
     self.contribute(None, charm.ReducerType.nop, ro.mainProxy.done_nop)
     # test contributing to TestArray[0]
-    self.contribute([4.2, 13.1], charm.ReducerType.sum_float, ro.arrayProxy[(0,)].reduceGroupToArray)
+    self.contribute([4.2, 13.1], charm.ReducerType.sum_float, ro.arrayProxy[0].reduceGroupToArray)
     # test contributing to TestArray (broadcast)
     self.contribute(-4, charm.ReducerType.sum_int, ro.arrayProxy.reduceGroupToArrayBcast)
     # test contributing to TestGroup[0]

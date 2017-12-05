@@ -89,7 +89,7 @@ class Test(Array):
     # test nop reduction to main
     self.contribute(None, charm.ReducerType.nop, ro.mainProxy.done_nop)
     # test contributing to Test[0]
-    self.contribute(4.2, charm.ReducerType.sum_double, self.thisProxy[(0,)].reductionTarget)
+    self.contribute(4.2, charm.ReducerType.sum_double, self.thisProxy[0].reductionTarget)
     # test contributing to Test (broadcast)
     self.contribute([4.2, 8.4], charm.ReducerType.sum_double, self.thisProxy.reductionTargetBcast)
     # test contributing to TestGroup[0]
