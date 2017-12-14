@@ -52,6 +52,9 @@ class ReadOnlies(Singleton): pass
 CONTRIBUTOR_TYPE_GROUP,
 CONTRIBUTOR_TYPE_NODEGROUP) = range(3)
 
+# global tuple containing Python basic types
+PYTHON_BASIC_TYPES = (int, float, bool)
+
 class CharmPyError(Exception):
   def __init__(self, msg):
     super(CharmPyError, self).__init__(msg)
@@ -251,9 +254,41 @@ class Charm(Singleton):
 
   # Charm class level contribute function used by Array, Group for reductions
   def contribute(self, data, reducer_type, target, contributor):
-    if not hasattr(data, '__len__'): data = [data]
+    # nop reduction short circuit
+    if reducer_type is None or reducer_type == Reducer.nop:
+      reducer_type = Reducer.nop
+      data = [None]
+      contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
+      target.__self__.ckContribute(contributeInfo)
+      return
+
+    check_elems = data
+    if not hasattr(data, '__len__'): check_elems = [data]
+    pyReducer = False
+
+    if not callable(reducer_type):
+      for elem in check_elems:
+        if type(elem) not in PYTHON_BASIC_TYPES:
+          pyReducer = True
+          break
+    else:
+      pyReducer = True
+
+    # load reducer based on if it's Python or Charm
+    if not pyReducer:
+      if not hasattr(data, '__len__'): data = [data]
+      reducer_type = reducer_type[1][type(data[0])] # choose Charm reducer based on first data element since it's homogenous
+    else:
+      if not callable(reducer_type):
+        reducer_type = reducer_type[0] # we are using in-built Python reducers
+      rednMsg = ({b"custom_reducer": reducer_type.__name__}, [data])
+      rednMsgPickle = cPickle.dumps(rednMsg, Options.PICKLE_PROTOCOL)
+      data = rednMsgPickle # data for custom reducers is a custom reduction msg
+      reducer_type = self.ReducerType.external_py # inform Charm about using external Py reducer
+
     contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
     target.__self__.ckContribute(contributeInfo)
+
 
   def printTable(self, table, sep):
     col_width = [max(len(x) for x in col) for col in zip(*table)]
@@ -323,6 +358,27 @@ def when(attrib_name):
     entryMethod.func = func
     return entryMethod
   return _when
+
+# ---------------------- CkReducer -----------------------
+
+class CkReducer(Singleton):
+  def __init__(self):
+    self.nop = charm.ReducerType.nop
+    self.max = (self._max, {int: charm.ReducerType.max_int, float: charm.ReducerType.max_double})
+    self.sum = (self._sum, {int: charm.ReducerType.sum_int, float: charm.ReducerType.sum_double})
+
+  # python versions of built-in reducers
+  def _max(self, contribs):
+    return max(contribs)
+
+  def _sum(self, contribs):
+    return sum(contribs)
+
+# global singular instance of Reducer
+Reducer = CkReducer()
+# add reference to Reducer in charm object
+charm.Reducer = Reducer
+
 
 # ---------------------- Chare -----------------------
 

@@ -1,4 +1,5 @@
 from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
+from charmpy import Reducer
 
 # utility methods for assertions
 def assert_allclose(actual, desired, tol):
@@ -82,20 +83,20 @@ class Test(Array):
   def doReduction(self):
     print("Test element " + str(self.thisIndex) + " on PE " + str(CkMyPe()) + " is starting its contributions.")
     # test contributing single int back to Main
-    self.contribute(42, charm.ReducerType.sum_int, ro.mainProxy.done_int)
+    self.contribute(42, Reducer.sum, ro.mainProxy.done_int)
     # test contributing list of floats back to main
     num = [10.1, 13.4]
-    self.contribute(num+[float(self.thisIndex[0])], charm.ReducerType.sum_float, ro.mainProxy.done_float)
+    self.contribute(num+[float(self.thisIndex[0])], Reducer.sum, ro.mainProxy.done_float)
     # test nop reduction to main
-    self.contribute(None, charm.ReducerType.nop, ro.mainProxy.done_nop)
+    self.contribute(None, Reducer.nop, ro.mainProxy.done_nop)
     # test contributing to Test[0]
-    self.contribute(4.2, charm.ReducerType.sum_double, self.thisProxy[0].reductionTarget)
+    self.contribute(4.2, Reducer.sum, self.thisProxy[0].reductionTarget)
     # test contributing to Test (broadcast)
-    self.contribute([4.2, 8.4], charm.ReducerType.sum_double, self.thisProxy.reductionTargetBcast)
+    self.contribute([4.2, 8.4], Reducer.sum, self.thisProxy.reductionTargetBcast)
     # test contributing to TestGroup[0]
-    self.contribute(4, charm.ReducerType.sum_int, ro.groupProxy[0].reduceFromArray)
+    self.contribute(4, Reducer.sum, ro.groupProxy[0].reduceFromArray)
     # test contributing to TestGroup (broadcast)
-    self.contribute([0, 8, 3], charm.ReducerType.sum_int, ro.groupProxy.reduceFromArrayBcast)
+    self.contribute([0, 8, 3], Reducer.sum, ro.groupProxy.reduceFromArrayBcast)
 
   def reductionTarget(self, reduction_result):
     assert self.thisIndex[0] == 0
@@ -104,7 +105,7 @@ class Test(Array):
 
   def reductionTargetBcast(self, reduction_result):
     assert_allclose(reduction_result, [42.0, 84.0], 1e-03)
-    self.contribute(None, charm.ReducerType.nop, ro.mainProxy.done_array_to_array_bcast)
+    self.contribute(None, None, ro.mainProxy.done_array_to_array_bcast)
 
 class TestGroup(Group):
   def __init__(self):
@@ -118,7 +119,7 @@ class TestGroup(Group):
 
   def reduceFromArrayBcast(self, reduction_result):
     assert reduction_result == [0, 80, 30], "Array-to-group bcast sum_int reduction failed."
-    self.contribute(None, charm.ReducerType.nop, ro.mainProxy.done_array_to_group_bcast)
+    self.contribute(None, None, ro.mainProxy.done_array_to_group_bcast)
 
 # ---- start charm ----
 charm.start([Main,Test,TestGroup])

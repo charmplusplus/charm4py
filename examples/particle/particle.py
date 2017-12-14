@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, when
+from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, when, Reducer
 import random
 import math
 
@@ -74,7 +74,7 @@ class Cell(Array):
     self.msgsRcvd += 1
     if self.msgsRcvd == len(self.neighbors):
       self.msgsRcvd = 0
-      self.contribute(len(self.particles), charm.ReducerType.max_int, ro.mainProxy.collectMax)
+      self.contribute(len(self.particles), Reducer.max, ro.mainProxy.collectMax)
       self.iteration += 1
       if self.iteration >= NUM_ITER: self.contribute(None, None, ro.mainProxy.done)
       elif self.iteration % 10 == 2: self.AtSync() # do load balancing

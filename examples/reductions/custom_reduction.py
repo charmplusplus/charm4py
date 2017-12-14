@@ -1,0 +1,86 @@
+from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
+from charmpy import Reducer
+
+ro = ReadOnlies()
+
+def myReducer(contribs):
+  result = []
+  result.append(sum([c[0] for c in contribs]))
+  result.append(max([c[1] for c in contribs]))
+  result.append(min([c[2] for c in contribs]))
+  return result
+
+Reducer.myReducer = myReducer
+
+class Main(Mainchare):
+  def __init__(self, args):
+    super(Main, self).__init__()
+    self.recvdReductions = 0
+    self.expectedReductions = 3
+
+    ro.nDims = 1
+    ro.ARRAY_SIZE = [10] * ro.nDims
+    ro.firstIdx = [0] * ro.nDims
+    ro.lastIdx = tuple([x-1 for x in ro.ARRAY_SIZE])
+
+    self.nElements = 1
+    for x in ro.ARRAY_SIZE: self.nElements *= x
+    print("Running reduction example on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
+    ro.mainProxy = self.thisProxy
+    ro.arrProxy = charm.TestProxy.ckNew(ro.ARRAY_SIZE)
+    ro.arrProxy.doReduction()
+
+  def done_charm_builtin(self, result):
+    sum_indices = (self.nElements*(self.nElements-1))/2
+    assert result == [10, sum_indices], "Built-in Charm sum_int reduction failed"
+    print("[Main] All Charm builtin reductions done. Test passed")
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
+
+  def done_python_builtin(self, result):
+    sum_indices = (self.nElements*(self.nElements-1))/2
+    assert type(result) == MyObject
+    assert result.value == sum_indices, "Built-in Python _sum reduction failed"
+    print("[Main] All Python builtin reductions done. Test passed")
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
+
+  def done_python_custom(self, result):
+    assert result == [10, ro.lastIdx[0], 0], "Custom Python myReduce failed"
+    print("[Main] All Python custom reductions done. Test passed")
+    self.recvdReductions += 1
+    if (self.recvdReductions >= self.expectedReductions):
+      CkExit()
+
+class MyObject(object):
+  def __init__(self, n):
+    self.value = n
+
+  def __add__(self, other):
+    return MyObject(self.value+other.value)
+
+  def __radd__(self, other):
+    if other == 0:
+      return self
+    else:
+      return self.__add__(other)
+
+class Test(Array):
+  def __init__(self):
+    super(Test, self).__init__()
+    print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
+
+  def doReduction(self):
+    # test contributing using built-in Charm reducer
+    self.contribute([1,self.thisIndex[0]], Reducer.sum, ro.mainProxy.done_charm_builtin)
+    a = MyObject(self.thisIndex[0])
+    # test contributing using built-in Python reducer
+    self.contribute(a, Reducer.sum, ro.mainProxy.done_python_builtin)
+    # test contributing using custom Python reducer
+    self.contribute([1,self.thisIndex[0],self.thisIndex[0]], Reducer.myReducer, ro.mainProxy.done_python_custom)
+
+
+# ---- start charm ----
+charm.start([Main,Test])

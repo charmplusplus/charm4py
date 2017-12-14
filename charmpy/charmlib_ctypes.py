@@ -19,7 +19,8 @@ class ReducerTypes(Structure):
     ("nop",         c_int),
     ("max_int",     c_int),
     ("max_float",   c_int),
-    ("max_double",  c_int)
+    ("max_double",  c_int),
+    ("external_py", c_int)
   ]
 
 class ContributeInfo(Structure):
@@ -43,18 +44,19 @@ class CharmLib(object):
     self.opts = opts
     self.init()
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
-    self.ReducerTypeMap = {} # reducer type -> (ctypes type, python type), TODO consider changing to list
+    self.ReducerTypeMap = {} # reducer type -> ctypes type, TODO consider changing to list
     self.buildReducerTypeMap()
 
   def buildReducerTypeMap(self):
     # update this function as and when new reducer types are added to CharmPy
-    self.ReducerTypeMap[self.ReducerType.sum_int] = (c_int, int)
-    self.ReducerTypeMap[self.ReducerType.sum_float] = (c_float, float)
-    self.ReducerTypeMap[self.ReducerType.sum_double] = (c_double, float)
-    self.ReducerTypeMap[self.ReducerType.nop] = (None, None)
-    self.ReducerTypeMap[self.ReducerType.max_int] = (c_int, int)
-    self.ReducerTypeMap[self.ReducerType.max_float] = (c_float, float)
-    self.ReducerTypeMap[self.ReducerType.max_double] = (c_double, float)
+    self.ReducerTypeMap[self.ReducerType.sum_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.sum_float] = c_float
+    self.ReducerTypeMap[self.ReducerType.sum_double] = c_double
+    self.ReducerTypeMap[self.ReducerType.nop] = None
+    self.ReducerTypeMap[self.ReducerType.max_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.max_float] = c_float
+    self.ReducerTypeMap[self.ReducerType.max_double] = c_double
+    self.ReducerTypeMap[self.ReducerType.external_py] = c_char
 
   def getContributeInfo(self, ep, data, reducer_type, contributor):
     if reducer_type is None: reducer_type = self.ReducerType.nop
@@ -62,9 +64,9 @@ class CharmLib(object):
     c_data = None
     c_data_size = 0
     if reducer_type != self.ReducerType.nop:
-      dataTypeTuple = self.ReducerTypeMap[reducer_type]
-      c_data = (dataTypeTuple[0]*numElems)(*data)
-      c_data_size = numElems*sizeof(dataTypeTuple[0])
+      dataType = self.ReducerTypeMap[reducer_type]
+      c_data = (dataType*numElems)(*data)
+      c_data_size = numElems*sizeof(dataType)
 
     elemId, index, elemType = contributor
     if type(index) == int: index = [index]
@@ -219,14 +221,14 @@ class CharmLib(object):
   # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
   def cpickleData(self, data, returnBuffer, dataSize, reducerType):
     try:
-      dataTypeTuple = self.ReducerTypeMap[reducerType]
+      dataType = self.ReducerTypeMap[reducerType]
       numElems = 0
       pyData = None
       if reducerType == self.ReducerType.nop:
         pyData = []
       else:
-        numElems = dataSize // sizeof(dataTypeTuple[0])
-        pyData = ctypes.cast(data, POINTER(dataTypeTuple[0] * numElems)).contents
+        numElems = dataSize // sizeof(dataType)
+        pyData = ctypes.cast(data, POINTER(dataType * numElems)).contents
         pyData = [list(pyData)] # can use numpy arrays here if needed
 
       # if reduction result is one element, use base type
@@ -244,6 +246,35 @@ class CharmLib(object):
       return len(pickledData)
     except:
       self.charm.handleGeneralError()
+
+  # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
+  def pyReduction(self, msgs, msgSizes, nMsgs, returnBuffer):
+    contribs = []
+    currentReducer = None
+    for i in range(nMsgs):
+      msg = msgs[i]
+      if msgSizes[i] > 0:
+        msg = ctypes.cast(msg, POINTER(c_char * msgSizes[i])).contents.raw
+        header, args = cPickle.loads(msg)
+
+        customReducer = header[b"custom_reducer"]
+
+        if currentReducer is None: currentReducer = customReducer
+        # check for correctness of msg
+        assert customReducer == currentReducer
+
+        contribs.append(args[0])
+
+    reductionResult = getattr(self.charm.Reducer, currentReducer)(contribs)
+    rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
+    rednMsgPickle = cPickle.dumps(rednMsg, self.opts.PICKLE_PROTOCOL)
+    rednMsgPickle = ctypes.create_string_buffer(rednMsgPickle)
+
+    # cast returnBuffer to char** and make it point to pickled reduction msg
+    returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
+    returnBuffer[0] = rednMsgPickle
+
+    return len(rednMsgPickle)
 
   # first callback from Charm++ shared library
   def registerMainModule(self):
@@ -301,6 +332,11 @@ class CharmLib(object):
     self.CPICKLE_DATA_CB_TYPE = CFUNCTYPE(c_int, c_void_p, POINTER(c_char_p), c_int, c_int)
     self.cpickleDataCb = self.CPICKLE_DATA_CB_TYPE(self.cpickleData)
     self.lib.registerCPickleDataExtCallback(self.cpickleDataCb)
+
+    # Args to pyReduction: msgs, msgSizes, nMsgs, returnBuffer
+    self.PY_REDUCTION_CB_TYPE = CFUNCTYPE(c_int, POINTER(c_void_p), POINTER(c_int), c_int, POINTER(c_char_p))
+    self.pyReductionCb = self.PY_REDUCTION_CB_TYPE(self.pyReduction)
+    self.lib.registerPyReductionExtCallback(self.pyReductionCb)
 
     # the following line decreases performance, don't know why. seems to work fine without it
     #self.lib.CkArrayExtSend.argtypes = (c_int, POINTER(c_int), c_int, c_int, c_char_p, c_int)
