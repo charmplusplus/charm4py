@@ -234,7 +234,8 @@ class CharmLib(object):
 
       #print("In charmpy. Data: " + str(data) + " dataSize: " + str(dataSize) + " numElems: " + str(numElems) + " reducerType: " + str(reducerType))
 
-      pickledData = cPickle.dumps(pyData, self.opts.PICKLE_PROTOCOL)
+      msg = ({},pyData) # first element is msg header
+      pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
       pickledData = ctypes.create_string_buffer(pickledData)
       # cast returnBuffer to char** and make it point to pickledData
       returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))

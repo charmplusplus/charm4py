@@ -117,7 +117,7 @@ class Charm(Singleton):
       args = obj.__removeLocal__(int(msg.split(b":")[1]))
     else:
       if compression: msg = zlib.decompress(msg)
-      args = cPickle.loads(msg)
+      header,args = cPickle.loads(msg)
     if Options.PROFILING:
       recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
@@ -163,7 +163,7 @@ class Charm(Singleton):
       self.arrays[aid][index] = obj
     else:
       if resumeFromSync:
-        msg = cPickle.dumps([])
+        msg = cPickle.dumps(({},[]))
         ep = getattr(obj, 'resumeFromSync').em.epIdx
       self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, Options.ZLIB_COMPRESSION > 0)
 
@@ -177,7 +177,8 @@ class Charm(Singleton):
       localTag = destObj.__addLocal__(msgArgs)
       msg = ("_local:" + str(localTag)).encode()
     else:
-      msg = cPickle.dumps(msgArgs, Options.PICKLE_PROTOCOL)
+      msg = ({},msgArgs)  # first element is msg header
+      msg = cPickle.dumps(msg, Options.PICKLE_PROTOCOL)
       if compress: msg = zlib.compress(msg, Options.ZLIB_COMPRESSION)
     self.lastMsgLen = len(msg)
     return msg
