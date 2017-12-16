@@ -24,6 +24,7 @@ class Options:
   LOCAL_MSG_OPTIM = True
   LOCAL_MSG_BUF_SIZE = 50
   AUTO_FLUSH_WHEN = True
+  QUIET = False
 
 class EntryMethod(object):
   def __init__(self, C, name, profile=False):
@@ -235,6 +236,7 @@ class Charm(Singleton):
 
   # begin Charm++ program
   def start(self, classes=[]):
+    if "++quiet" in sys.argv: Options.QUIET = True
     for C in classes: self.register(C)
     self.lib.start()
 
