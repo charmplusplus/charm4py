@@ -46,6 +46,7 @@ class CharmLib(object):
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.ReducerTypeMap = {} # reducer type -> ctypes type, TODO consider changing to list
     self.buildReducerTypeMap()
+    self.times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
 
   def buildReducerTypeMap(self):
     # update this function as and when new reducer types are added to CharmPy
@@ -172,18 +173,19 @@ class CharmLib(object):
 
   def arrayElemLeave(self, aid, ndims, arrayIndex, pdata, sizing):
     try:
+      if self.opts.PROFILING: t0 = time.time()
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       msg = self.charm.arrayElemLeave(aid, arrIndex, bool(sizing))
       if sizing:
         pdata = None
-        return len(msg)
       else:
         data = ctypes.create_string_buffer(msg)
         #pdata[0] = ctypes.cast(data, c_void_p).value
         pdata = ctypes.cast(pdata, POINTER(POINTER(c_char)))
         pdata[0] = data
         # TODO could Python garbage collect the msg before charm++ copies it?
-        return len(msg)
+      if self.opts.PROFILING: self.times[2] += (time.time() - t0)
+      return len(msg)
     except:
       self.charm.handleGeneralError()
 
@@ -221,6 +223,7 @@ class CharmLib(object):
   # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
   def cpickleData(self, data, returnBuffer, dataSize, reducerType):
     try:
+      if self.opts.PROFILING: t0 = time.time()
       dataType = self.ReducerTypeMap[reducerType]
       numElems = 0
       pyData = None
@@ -243,12 +246,14 @@ class CharmLib(object):
       returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
       returnBuffer[0] = pickledData
 
+      if self.opts.PROFILING: self.times[0] += (time.time() - t0)
       return len(pickledData)
     except:
       self.charm.handleGeneralError()
 
   # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
   def pyReduction(self, msgs, msgSizes, nMsgs, returnBuffer):
+    if self.opts.PROFILING: t0 = time.time()
     contribs = []
     currentReducer = None
     for i in range(nMsgs):
@@ -274,6 +279,7 @@ class CharmLib(object):
     returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
     returnBuffer[0] = rednMsgPickle
 
+    if self.opts.PROFILING: self.times[1] += (time.time() - t0)
     return len(rednMsgPickle)
 
   # first callback from Charm++ shared library

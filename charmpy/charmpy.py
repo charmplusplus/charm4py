@@ -302,7 +302,8 @@ class Charm(Singleton):
     if not Options.PROFILING:
       print("NOTE: called charm.printStats() but profiling is disabled")
       return
-    total, pyoverhead = 0.0, 0.0
+    print("Timings for PE " + str(CkMyPe()) + ":")
+    total, pyoverhead = sum(self.lib.times), sum(self.lib.times)
     table = [["","em","send","recv"]]
     lineNb = 1
     sep = {}
@@ -316,13 +317,15 @@ class Charm(Singleton):
         pyoverhead += (vals[1] + vals[2])
         lineNb += 1
     self.printTable(table, sep)
-    print("Total Python recorded time= " + str(total))
-    print("Python non-entry method time= " + str(pyoverhead))
-    print("\nArray messages: " + str(len(self.msgLens)-1))
-    print("Min msg size= " + str(min(self.msgLens)))
-    print("Mean msg size= " + str(sum(self.msgLens) / float(len(self.msgLens))))
-    print("Max msg size= " + str(max(self.msgLens)))
-    print("Total msg len= " + str(round(sum(self.msgLens) / 1024.0 / 1024.0,3)) + " MB")
+    print("Total Python recorded time = " + str(total))
+    print("Python non-entry method time = " + str(pyoverhead))
+    if self.lib.times[1] > 0:
+      print("Time in custom reductions = " + str(self.lib.times[1]))
+    msgLens = self.msgLens[1:]  # first element is 0
+    print("\nMessages sent: " + str(len(msgLens)))
+    msgSizeStats = [min(msgLens), sum(msgLens) / float(len(msgLens)), max(msgLens)]
+    print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
+    print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
 charm    = Charm() # Charm is a singleton, ok to import this file multiple times
 CkMyPe   = charm.lib.CkMyPe
