@@ -15,7 +15,7 @@ ro = ReadOnlies()
 
 TotalDataWidth, TotalDataHeight = 800, 699
 chareArrayWidth, chareArrayHeight = 4, 3
-total_iterations = 5000
+total_iterations = 3000
 numInitialPertubations = 5
 LEFT, RIGHT, UP, DOWN = range(4)
 
