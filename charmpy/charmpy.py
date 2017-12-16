@@ -109,11 +109,11 @@ class Charm(Singleton):
       ro = ReadOnlies()
       roData = {}
       for attr in dir(ro):   # attr is string
-        if attr.startswith("__") and attr.endswith("__"): continue
+        if attr.startswith("_") or attr.endswith("_"): continue
         roData[attr] = getattr(ro, attr)
       msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
       #print("Registering readonly data of size " + str(len(msg)))
-      self.lib.CkRegisterReadonly("python_ro", "python_ro", msg)
+      self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
   def invokeEntryMethod(self, obj, em, msg, t0, compression):
     if Options.LOCAL_MSG_OPTIM and msg.startswith(b"_local"):
@@ -208,7 +208,7 @@ class Charm(Singleton):
     # policy that ensures that messages reach Charm++ in a timely fashion
     sys.stdout = os.fdopen(1,'wt',1)
     sys.stderr = os.fdopen(2,'wt',1)
-    if CkMyPe() != 0: self.lib.CkRegisterReadonly("python_null", "python_null", None)
+    if CkMyPe() != 0: self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
 
     for C in self.mainchareTypes: self.registerInCharm(C, self.lib.CkRegisterMainchare)
     for C in self.groupTypes: self.registerInCharm(C, self.lib.CkRegisterGroup)
