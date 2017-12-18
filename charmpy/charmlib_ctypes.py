@@ -38,11 +38,12 @@ class ContributeInfo(Structure):
 
 class CharmLib(object):
 
-  def __init__(self, charm, opts):
+  def __init__(self, charm, opts, libcharm_path):
+    self.name = 'ctypes'
     self.chareNames = []
     self.charm = charm
     self.opts = opts
-    self.init()
+    self.init(libcharm_path)
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.ReducerTypeMap = {} # reducer type -> ctypes type, TODO consider changing to list
     self.buildReducerTypeMap()
@@ -291,10 +292,11 @@ class CharmLib(object):
     except:
       self.charm.handleGeneralError()
 
-  def init(self):
-    libcharm_env_var = os.environ.get("LIBCHARM_PATH")
-    if libcharm_env_var != None:
-      self.lib = ctypes.CDLL(libcharm_env_var)
+  def init(self, libcharm_path):
+    p = os.environ.get("LIBCHARM_PATH")
+    if p is not None: libcharm_path = p
+    if libcharm_path != None:
+      self.lib = ctypes.CDLL(libcharm_path + '/libcharm.so')
     else:
       self.lib = ctypes.CDLL("libcharm.so")
 

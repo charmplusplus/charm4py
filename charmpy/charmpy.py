@@ -16,7 +16,7 @@ else:
 import time
 import zlib
 import itertools
-from charmlib_ctypes import CharmLib
+import json
 
 class Options:
   PROFILING = False
@@ -77,7 +77,26 @@ class Charm(Singleton):
     self.proxyClasses = {}                # class name -> proxy class
     self.proxyTimes = 0.0 # for profiling
     self.msgLens = [0]    # for profiling
-    self.lib = CharmLib(self, Options)
+    self.opts = Options
+    cfgPath = None
+    from os.path import expanduser
+    cfgPath = expanduser("~") + '/charmpy.cfg'
+    if not os.path.exists(cfgPath):
+      cfgPath = os.path.dirname(__file__) + '/charmpy.cfg' # look in folder where charmpy.py is
+      if not os.path.exists(cfgPath): cfgPath = None
+    if cfgPath is None:
+      print("charmpy.cfg not found")
+      exit(1)
+    cfg = json.load(open(cfgPath, 'r'))
+    if cfg['libcharm_interface'] == 'ctypes':
+      from charmlib_ctypes import CharmLib
+    elif cfg['libcharm_interface'] == 'cffi':
+      sys.path.append(os.path.dirname(__file__) + '/__cffi_objs__')
+      from charmlib_cffi import CharmLib
+    else:
+      print("Unrecognized interface " + cfg['libcharm_interface'])
+      exit(1)
+    self.lib = CharmLib(self, Options, cfg.get('libcharm_path'))
     self.ReducerType = self.lib.ReducerType
     self.CkContributeToChare = self.lib.CkContributeToChare
     self.CkContributeToGroup = self.lib.CkContributeToGroup
@@ -118,8 +137,8 @@ class Charm(Singleton):
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
   def invokeEntryMethod(self, obj, em, msg, t0, compression):
-    if Options.LOCAL_MSG_OPTIM and msg.startswith(b"_local"):
-      args = obj.__removeLocal__(int(msg.split(b":")[1]))
+    if Options.LOCAL_MSG_OPTIM and (msg[:7] == b"_local:"):
+      args = obj.__removeLocal__(int(msg[7:]))
     else:
       if compression: msg = zlib.decompress(msg)
       header,args = cPickle.loads(msg)
@@ -214,6 +233,14 @@ class Charm(Singleton):
     sys.stderr = os.fdopen(2,'wt',1)
     if CkMyPe() != 0: self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
 
+    if (CkMyPe() == 0) and (not Options.QUIET):
+      import platform
+      out_msg = ("CharmPy> Running on Python " + str(platform.python_version()) +
+                " (" + str(platform.python_implementation()) + "). Using '" +
+                self.lib.name + "' interface to access Charm++")
+      if self.lib.name != "cffi": out_msg += ", **WARNING**: cffi recommended for best performance"
+      print(out_msg)
+
     for C in self.mainchareTypes: self.registerInCharm(C, self.lib.CkRegisterMainchare)
     for C in self.groupTypes: self.registerInCharm(C, self.lib.CkRegisterGroup)
     for C in self.arrayTypes: self.registerInCharm(C, self.lib.CkRegisterArray)
@@ -303,7 +330,6 @@ class Charm(Singleton):
     contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
     self.lastMsgLen = contributeInfo.dataSize
     target.__self__.ckContribute(contributeInfo)
-
 
   def printTable(self, table, sep):
     col_width = [max(len(x) for x in col) for col in zip(*table)]
