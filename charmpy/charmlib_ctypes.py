@@ -60,7 +60,6 @@ class CharmLib(object):
     self.ReducerTypeMap[self.ReducerType.external_py] = c_char
 
   def getContributeInfo(self, ep, data, reducer_type, contributor):
-    if reducer_type is None: reducer_type = self.ReducerType.nop
     numElems = len(data)
     c_data = None
     c_data_size = 0
@@ -253,34 +252,37 @@ class CharmLib(object):
 
   # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
   def pyReduction(self, msgs, msgSizes, nMsgs, returnBuffer):
-    if self.opts.PROFILING: t0 = time.time()
-    contribs = []
-    currentReducer = None
-    for i in range(nMsgs):
-      msg = msgs[i]
-      if msgSizes[i] > 0:
-        msg = ctypes.cast(msg, POINTER(c_char * msgSizes[i])).contents.raw
-        header, args = cPickle.loads(msg)
+    try:
+      if self.opts.PROFILING: t0 = time.time()
+      contribs = []
+      currentReducer = None
+      for i in range(nMsgs):
+        msg = msgs[i]
+        if msgSizes[i] > 0:
+          msg = ctypes.cast(msg, POINTER(c_char * msgSizes[i])).contents.raw
+          header, args = cPickle.loads(msg)
 
-        customReducer = header[b"custom_reducer"]
+          customReducer = header[b"custom_reducer"]
 
-        if currentReducer is None: currentReducer = customReducer
-        # check for correctness of msg
-        assert customReducer == currentReducer
+          if currentReducer is None: currentReducer = customReducer
+          # check for correctness of msg
+          assert customReducer == currentReducer
 
-        contribs.append(args[0])
+          contribs.append(args[0])
 
-    reductionResult = getattr(self.charm.Reducer, currentReducer)(contribs)
-    rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
-    rednMsgPickle = cPickle.dumps(rednMsg, self.opts.PICKLE_PROTOCOL)
-    rednMsgPickle = ctypes.create_string_buffer(rednMsgPickle)
+      reductionResult = getattr(self.charm.Reducer, currentReducer)(contribs)
+      rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
+      rednMsgPickle = cPickle.dumps(rednMsg, self.opts.PICKLE_PROTOCOL)
+      rednMsgPickle = ctypes.create_string_buffer(rednMsgPickle)
 
-    # cast returnBuffer to char** and make it point to pickled reduction msg
-    returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
-    returnBuffer[0] = rednMsgPickle
+      # cast returnBuffer to char** and make it point to pickled reduction msg
+      returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
+      returnBuffer[0] = rednMsgPickle
 
-    if self.opts.PROFILING: self.times[1] += (time.time() - t0)
-    return len(rednMsgPickle)
+      if self.opts.PROFILING: self.times[1] += (time.time() - t0)
+      return len(rednMsgPickle)
+    except:
+      self.charm.handleGeneralError()
 
   # first callback from Charm++ shared library
   def registerMainModule(self):
