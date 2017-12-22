@@ -261,6 +261,7 @@ class Charm(Singleton):
       reducer_type = Reducer.nop
       data = [None]
       contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
+      self.lastMsgLen = 0
       target.__self__.ckContribute(contributeInfo)
       return
 
@@ -289,6 +290,7 @@ class Charm(Singleton):
       reducer_type = self.ReducerType.external_py # inform Charm about using external Py reducer
 
     contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
+    self.lastMsgLen = contributeInfo.dataSize
     target.__self__.ckContribute(contributeInfo)
 
 
@@ -339,7 +341,7 @@ def profile_proxy(func):
     func(*args, **kwargs)
     charm.msgLens.append(charm.lastMsgLen)
     charm.proxyTimes += (time.time() - proxyInitTime)
-  func_with_profiling.ep = func.ep
+  if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
 
 # This decorator makes a wrapper for the chosen entry method 'func'.
@@ -578,6 +580,7 @@ class Array(Chare):
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid, len(self.thisIndex))
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     self.usesAtSync = False
+    if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def AtSync(self):
     self.thisProxy[self.thisIndex].AtSync()
