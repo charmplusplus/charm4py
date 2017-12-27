@@ -15,6 +15,7 @@ else:
   import pickle as cPickle
 import time
 import zlib
+import itertools
 from charmlib_ctypes import CharmLib
 
 class Options:
@@ -122,6 +123,8 @@ class Charm(Singleton):
     else:
       if compression: msg = zlib.decompress(msg)
       header,args = cPickle.loads(msg)
+      if b"custom_reducer" in header and header[b"custom_reducer"] == "gather":
+        args[0] = [tup[1] for tup in args[0]]
     if Options.PROFILING:
       recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
@@ -265,11 +268,11 @@ class Charm(Singleton):
       target.__self__.ckContribute(contributeInfo)
       return
 
-    check_elems = data
-    if not hasattr(data, '__len__'): check_elems = [data]
     pyReducer = False
 
     if not callable(reducer_type):
+      check_elems = data
+      if not hasattr(data, '__len__'): check_elems = [data]
       for elem in check_elems:
         if type(elem) not in PYTHON_BASIC_TYPES:
           pyReducer = True
@@ -284,7 +287,15 @@ class Charm(Singleton):
     else:
       if not callable(reducer_type):
         reducer_type = reducer_type[0] # we are using in-built Python reducers
-      rednMsg = ({b"custom_reducer": reducer_type.__name__}, [data])
+
+      # TODO: Can remove following if block by moving the pre-processing and post-processing
+      # to custom reducers. Custom reducers can be defined as objects which have the functions
+      # `applyReducer`, `preProcessData`, `postProcessData`
+      if reducer_type.__name__ == "gather":
+        # append array index to data for sorting in reducer
+        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [[(contributor[1], data)]])
+      else:
+        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [data])
       rednMsgPickle = cPickle.dumps(rednMsg, Options.PICKLE_PROTOCOL)
       data = rednMsgPickle # data for custom reducers is a custom reduction msg
       reducer_type = self.ReducerType.external_py # inform Charm about using external Py reducer
@@ -380,6 +391,11 @@ class CkReducer(Singleton):
 
   def _sum(self, contribs):
     return sum(contribs)
+
+  def gather(self, contribs):
+    # contribs will be a list of list of tuples
+    # first element of tuple is always array index of chare
+    return sorted(itertools.chain(*contribs))
 
 # global singular instance of Reducer
 Reducer = CkReducer()
@@ -515,6 +531,10 @@ class Group(Chare):
     contributor = (self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
     charm.contribute(data, reducer_type, target, contributor)
 
+  def gather(self, data, target):
+    contributor = (self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
+    charm.contribute(data, Reducer.gather, target, contributor)
+
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
 
@@ -588,6 +608,10 @@ class Array(Chare):
   def contribute(self, data, reducer_type, target):
     contributor = (self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
     charm.contribute(data, reducer_type, target, contributor)
+
+  def gather(self, data, target):
+    contributor = (self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
+    charm.contribute(data, Reducer.gather, target, contributor)
 
   @classmethod
   def __baseEntryMethods__(cls):
