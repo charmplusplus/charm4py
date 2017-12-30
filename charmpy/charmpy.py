@@ -76,7 +76,7 @@ class Charm(Singleton):
     self.classEntryMethods = {}           # class name -> list of EntryMethod objects
     self.proxyClasses = {}                # class name -> proxy class
     self.proxyTimes = 0.0 # for profiling
-    self.msgLens = [0]    # for profiling
+    self.msgLens = []     # for profiling
     self.opts = Options
     cfgPath = None
     from os.path import expanduser
@@ -360,8 +360,9 @@ class Charm(Singleton):
     print("Python non-entry method time = " + str(pyoverhead))
     if self.lib.times[1] > 0:
       print("Time in custom reductions = " + str(self.lib.times[1]))
-    msgLens = self.msgLens[1:]  # first element is 0
-    print("\nMessages sent: " + str(len(msgLens)))
+    print("\nMessages sent: " + str(len(self.msgLens)))
+    msgLens = self.msgLens
+    if len(msgLens) == 0: msgLens = [0.0]
     msgSizeStats = [min(msgLens), sum(msgLens) / float(len(msgLens)), max(msgLens)]
     print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
     print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
@@ -552,6 +553,7 @@ class Group(Chare):
     self.gid = charm.currentGroupID
     self.thisIndex = CkMyPe()
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
+    if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def contribute(self, data, reducer_type, target):
     contributor = (self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
