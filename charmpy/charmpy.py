@@ -184,6 +184,7 @@ class Charm(Singleton):
       if migration:
         if Options.ZLIB_COMPRESSION > 0: msg = zlib.decompress(msg)
         obj = cPickle.loads(msg)
+        obj.contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
         obj = em.C()
       self.arrays[aid][index] = obj
@@ -273,6 +274,7 @@ class Charm(Singleton):
   def arrayElemLeave(self, aid, index, sizing):
     if sizing:
       obj = self.arrays[aid][index]
+      del obj.contributeInfo  # don't want to pickle this
       obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
       if Options.ZLIB_COMPRESSION > 0: obj.migMsg = zlib.compress(obj.migMsg, Options.ZLIB_COMPRESSION)
       return obj.migMsg
@@ -320,7 +322,7 @@ class Charm(Singleton):
       # `applyReducer`, `preProcessData`, `postProcessData`
       if reducer_type.__name__ == "gather":
         # append array index to data for sorting in reducer
-        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [[(contributor[1], data)]])
+        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [[(contributor.thisIndex, data)]])
       else:
         rednMsg = ({b"custom_reducer": reducer_type.__name__}, [data])
       rednMsgPickle = cPickle.dumps(rednMsg, Options.PICKLE_PROTOCOL)
@@ -553,15 +555,14 @@ class Group(Chare):
     self.gid = charm.currentGroupID
     self.thisIndex = CkMyPe()
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
+    self.contributeInfo = charm.lib.initContributeInfo(self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
     if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def contribute(self, data, reducer_type, target):
-    contributor = (self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
-    charm.contribute(data, reducer_type, target, contributor)
+    charm.contribute(data, reducer_type, target, self)
 
   def gather(self, data, target):
-    contributor = (self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
-    charm.contribute(data, Reducer.gather, target, contributor)
+    charm.contribute(data, Reducer.gather, target, self)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
@@ -628,18 +629,17 @@ class Array(Chare):
     self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid, len(self.thisIndex))
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     self.usesAtSync = False
+    self.contributeInfo = charm.lib.initContributeInfo(self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
     if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def AtSync(self):
     self.thisProxy[self.thisIndex].AtSync()
 
   def contribute(self, data, reducer_type, target):
-    contributor = (self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
-    charm.contribute(data, reducer_type, target, contributor)
+    charm.contribute(data, reducer_type, target, self)
 
   def gather(self, data, target):
-    contributor = (self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
-    charm.contribute(data, Reducer.gather, target, contributor)
+    charm.contribute(data, Reducer.gather, target, self)
 
   @classmethod
   def __baseEntryMethods__(cls):

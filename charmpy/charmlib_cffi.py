@@ -15,8 +15,6 @@ class ContributeInfo:
     self.c_data = args[1]
     self.dataSize = args[3]
     self.c_idx  = args[6]
-    # TODO: have this struct always pre-allocated? currently ContributeInfo is used
-    # and discarded right after call to 'getContributeInfo' so it should be safe
     self.data = ffi.new("struct ContributeInfo*", args)
 
 class CharmLib(object):
@@ -48,6 +46,12 @@ class CharmLib(object):
     R[r.external_py] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
     return R
 
+  def initContributeInfo(self, elemId, index, elemType):
+    if type(index) == int: index = (index,)
+    c_elemIdx = ffi.new('int[]', index)
+    return ContributeInfo((-1, ffi.NULL, 0, 0, self.ReducerType.nop, elemId,
+                          c_elemIdx, len(index), elemType))
+
   def getContributeInfo(self, ep, data, reducer_type, contributor):
     numElems = len(data)
     if reducer_type == self.ReducerType.external_py:
@@ -63,13 +67,14 @@ class CharmLib(object):
       c_data = ffi.NULL
       c_data_size = 0
 
-    elemId, index, elemType = contributor
-    if type(index) == int: index = (index,)
-    c_elemIdx = ffi.new('int[]', index)
-    return ContributeInfo((ep, c_data, numElems, c_data_size, reducer_type, elemId,
-                          c_elemIdx, len(index), elemType))
-#    return ffi.new("struct ContributeInfo*", (ep, c_data, numElems, c_data_size, reducer_type, elemId,
-#                          c_elemIdx, len(index), elemType))
+    c_info = contributor.contributeInfo
+    c_struct = c_info.data
+    c_struct.cbEpIdx = ep
+    c_struct.data = c_info.c_data = c_data
+    c_struct.numelems = numElems
+    c_struct.dataSize = c_info.dataSize = c_data_size
+    c_struct.redType = reducer_type
+    return c_info
 
   @ffi.def_extern()
   def recvReadOnly_py2(msgSize, msg):

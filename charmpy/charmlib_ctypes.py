@@ -60,6 +60,13 @@ class CharmLib(object):
     self.ReducerTypeMap[self.ReducerType.max_double] = c_double
     self.ReducerTypeMap[self.ReducerType.external_py] = c_char
 
+  def initContributeInfo(self, elemId, index, elemType):
+    if type(index) == int: index = (index,)
+    ndims = len(index)
+    c_elemIdx = (c_int*ndims)(*index)
+    return ContributeInfo(-1, 0, 0, 0, self.ReducerType.nop, elemId, c_elemIdx,
+                          ndims, elemType)
+
   def getContributeInfo(self, ep, data, reducer_type, contributor):
     numElems = len(data)
     c_data = None
@@ -69,12 +76,13 @@ class CharmLib(object):
       c_data = (dataType*numElems)(*data)
       c_data_size = numElems*sizeof(dataType)
 
-    elemId, index, elemType = contributor
-    if type(index) == int: index = [index]
-    ndims = len(index)
-    c_elemIdx = (c_int*ndims)(*index)
-    return ContributeInfo(ep, ctypes.cast(c_data, c_void_p), numElems, c_data_size,
-                          reducer_type, elemId, c_elemIdx, ndims, elemType)
+    c_info = contributor.contributeInfo
+    c_info.cbEpIdx = ep
+    c_info.data = ctypes.cast(c_data, c_void_p)
+    c_info.numelems = numElems
+    c_info.dataSize = c_data_size
+    c_info.redType = reducer_type
+    return c_info
 
   def arrayIndexToTuple(self, ndims, arrayIndex):
     if ndims <= 3: return tuple(ctypes.cast(arrayIndex, POINTER(c_int * ndims)).contents)
