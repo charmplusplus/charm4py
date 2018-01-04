@@ -1,5 +1,5 @@
 import ctypes
-from ctypes import c_int, c_short, c_char, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
+from ctypes import c_int, c_short, c_char, c_long, c_uint, c_ushort, c_ubyte, c_ulong, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
 import sys
 import os
 import time
@@ -13,14 +13,48 @@ else:
 ### !!! The order of fields here should match the struct CkReductionTypesExt in ckreduction.h !!! ####
 class ReducerTypes(Structure):
   _fields_ = [
-    ("sum_int",     c_int),
-    ("sum_float",   c_int),
-    ("sum_double",  c_int),
-    ("nop",         c_int),
-    ("max_int",     c_int),
-    ("max_float",   c_int),
-    ("max_double",  c_int),
-    ("external_py", c_int)
+    ("nop",                 c_int),
+    ("sum_char",            c_int),
+    ("sum_short",           c_int),
+    ("sum_int",             c_int),
+    ("sum_long",            c_int),
+    ("sum_uchar",           c_int),
+    ("sum_ushort",          c_int),
+    ("sum_uint",            c_int),
+    ("sum_ulong",           c_int),
+    ("sum_float",           c_int),
+    ("sum_double",          c_int),
+    ("product_char",        c_int),
+    ("product_short",       c_int),
+    ("product_int",         c_int),
+    ("product_long",        c_int),
+    ("product_uchar",       c_int),
+    ("product_ushort",      c_int),
+    ("product_uint",        c_int),
+    ("product_ulong",       c_int),
+    ("product_float",       c_int),
+    ("product_double",      c_int),
+    ("max_char",            c_int),
+    ("max_short",           c_int),
+    ("max_int",             c_int),
+    ("max_long",            c_int),
+    ("max_uchar",           c_int),
+    ("max_ushort",          c_int),
+    ("max_uint",            c_int),
+    ("max_ulong",           c_int),
+    ("max_float",           c_int),
+    ("max_double",          c_int),
+    ("min_char",            c_int),
+    ("min_short",           c_int),
+    ("min_int",             c_int),
+    ("min_long",            c_int),
+    ("min_uchar",           c_int),
+    ("min_ushort",          c_int),
+    ("min_uint",            c_int),
+    ("min_ulong",           c_int),
+    ("min_float",           c_int),
+    ("min_double",          c_int),
+    ("external_py",         c_int)
   ]
 
 class ContributeInfo(Structure):
@@ -51,13 +85,52 @@ class CharmLib(object):
 
   def buildReducerTypeMap(self):
     # update this function as and when new reducer types are added to CharmPy
+    self.ReducerTypeMap[self.ReducerType.nop] = None
+    # Sum reducers
+    self.ReducerTypeMap[self.ReducerType.sum_char] = c_char
+    self.ReducerTypeMap[self.ReducerType.sum_short] = c_short
     self.ReducerTypeMap[self.ReducerType.sum_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.sum_long] = c_long
+    self.ReducerTypeMap[self.ReducerType.sum_uchar] = c_ubyte
+    self.ReducerTypeMap[self.ReducerType.sum_ushort] = c_ushort
+    self.ReducerTypeMap[self.ReducerType.sum_uint] = c_uint
+    self.ReducerTypeMap[self.ReducerType.sum_ulong] = c_ulong
     self.ReducerTypeMap[self.ReducerType.sum_float] = c_float
     self.ReducerTypeMap[self.ReducerType.sum_double] = c_double
-    self.ReducerTypeMap[self.ReducerType.nop] = None
+    # Product reducers
+    self.ReducerTypeMap[self.ReducerType.product_char] = c_char
+    self.ReducerTypeMap[self.ReducerType.product_short] = c_short
+    self.ReducerTypeMap[self.ReducerType.product_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.product_long] = c_long
+    self.ReducerTypeMap[self.ReducerType.product_uchar] = c_ubyte
+    self.ReducerTypeMap[self.ReducerType.product_ushort] = c_ushort
+    self.ReducerTypeMap[self.ReducerType.product_uint] = c_uint
+    self.ReducerTypeMap[self.ReducerType.product_ulong] = c_ulong
+    self.ReducerTypeMap[self.ReducerType.product_float] = c_float
+    self.ReducerTypeMap[self.ReducerType.product_double] = c_double
+    # Max reducers
+    self.ReducerTypeMap[self.ReducerType.max_char] = c_char
+    self.ReducerTypeMap[self.ReducerType.max_short] = c_short
     self.ReducerTypeMap[self.ReducerType.max_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.max_long] = c_long
+    self.ReducerTypeMap[self.ReducerType.max_uchar] = c_ubyte
+    self.ReducerTypeMap[self.ReducerType.max_ushort] = c_ushort
+    self.ReducerTypeMap[self.ReducerType.max_uint] = c_uint
+    self.ReducerTypeMap[self.ReducerType.max_ulong] = c_ulong
     self.ReducerTypeMap[self.ReducerType.max_float] = c_float
     self.ReducerTypeMap[self.ReducerType.max_double] = c_double
+    # Min reducers
+    self.ReducerTypeMap[self.ReducerType.min_char] = c_char
+    self.ReducerTypeMap[self.ReducerType.min_short] = c_short
+    self.ReducerTypeMap[self.ReducerType.min_int] = c_int
+    self.ReducerTypeMap[self.ReducerType.min_long] = c_long
+    self.ReducerTypeMap[self.ReducerType.min_uchar] = c_ubyte
+    self.ReducerTypeMap[self.ReducerType.min_ushort] = c_ushort
+    self.ReducerTypeMap[self.ReducerType.min_uint] = c_uint
+    self.ReducerTypeMap[self.ReducerType.min_ulong] = c_ulong
+    self.ReducerTypeMap[self.ReducerType.min_float] = c_float
+    self.ReducerTypeMap[self.ReducerType.min_double] = c_double
+    # Custom reducer
     self.ReducerTypeMap[self.ReducerType.external_py] = c_char
 
   def initContributeInfo(self, elemId, index, elemType):

@@ -411,15 +411,26 @@ def when(attrib_name):
 class CkReducer(Singleton):
   def __init__(self):
     self.nop = charm.ReducerType.nop
-    self.max = (self._max, {int: charm.ReducerType.max_int, float: charm.ReducerType.max_double})
-    self.sum = (self._sum, {int: charm.ReducerType.sum_int, float: charm.ReducerType.sum_double})
+    self.sum = (self._sum, {int: charm.ReducerType.sum_long, float: charm.ReducerType.sum_double})
+    self.product = (self._product, {int: charm.ReducerType.product_long, float: charm.ReducerType.product_double})
+    self.max = (self._max, {int: charm.ReducerType.max_long, float: charm.ReducerType.max_double})
+    self.min = (self._min, {int: charm.ReducerType.min_long, float: charm.ReducerType.min_double})
 
   # python versions of built-in reducers
+  def _sum(self, contribs):
+    return sum(contribs)
+
+  def _product(self, contribs):
+    result = contribs[0]
+    for i in range(1, len(contribs)):
+      result *= contribs[i]
+    return result
+
   def _max(self, contribs):
     return max(contribs)
 
-  def _sum(self, contribs):
-    return sum(contribs)
+  def _min(self, contribs):
+    return min(contribs)
 
   def gather(self, contribs):
     # contribs will be a list of list of tuples

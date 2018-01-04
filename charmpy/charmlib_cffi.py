@@ -36,13 +36,52 @@ class CharmLib(object):
     fields = [f for (f,t) in ffi.typeof("struct CkReductionTypesExt").fields]
     R = [None] * (max([getattr(r, f) for f in fields]) + 1)
     # update this function as and when new reducer types are added to CharmPy
+    R[r.nop] = (None, None, None, 0)
+    # Sum reducers
+    R[r.sum_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
+    R[r.sum_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
     R[r.sum_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
+    R[r.sum_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    R[r.sum_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
+    R[r.sum_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
+    R[r.sum_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
+    R[r.sum_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
     R[r.sum_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
     R[r.sum_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
-    R[r.nop] = (None, None, None, 0)
+    # Product reducers
+    R[r.product_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
+    R[r.product_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
+    R[r.product_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
+    R[r.product_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    R[r.product_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
+    R[r.product_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
+    R[r.product_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
+    R[r.product_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
+    R[r.product_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
+    R[r.product_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
+    # Max reducers
+    R[r.max_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
+    R[r.max_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
     R[r.max_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
+    R[r.max_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    R[r.max_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
+    R[r.max_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
+    R[r.max_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
+    R[r.max_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
     R[r.max_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
     R[r.max_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
+    # Min reducers
+    R[r.min_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
+    R[r.min_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
+    R[r.min_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
+    R[r.min_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    R[r.min_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
+    R[r.min_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
+    R[r.min_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
+    R[r.min_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
+    R[r.min_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
+    R[r.min_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
+    # Custom reducer
     R[r.external_py] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
     return R
 

@@ -16,7 +16,7 @@ class Main(Mainchare):
   def __init__(self, args):
     super(Main, self).__init__()
     self.recvdReductions = 0
-    self.expectedReductions = 3
+    self.expectedReductions = 4
 
     ro.nDims = 1
     ro.ARRAY_SIZE = [10] * ro.nDims
@@ -41,7 +41,7 @@ class Main(Mainchare):
   def done_python_builtin(self, result):
     sum_indices = (self.nElements*(self.nElements-1))/2
     assert type(result) == MyObject
-    assert result.value == sum_indices, "Built-in Python _sum reduction failed"
+    assert result.value == sum_indices or result.value == 0, "Built-in Python _sum or _product reduction failed"
     print("[Main] All Python builtin reductions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
@@ -61,6 +61,9 @@ class MyObject(object):
   def __add__(self, other):
     return MyObject(self.value+other.value)
 
+  def __mul__(self, other):
+    return MyObject(self.value*other.value)
+
   def __radd__(self, other):
     if other == 0:
       return self
@@ -78,6 +81,8 @@ class Test(Array):
     a = MyObject(self.thisIndex[0])
     # test contributing using built-in Python reducer
     self.contribute(a, Reducer.sum, ro.mainProxy.done_python_builtin)
+    # test product reducer
+    self.contribute(a, Reducer.product, ro.mainProxy.done_python_builtin)
     # test contributing using custom Python reducer
     self.contribute([1,self.thisIndex[0],self.thisIndex[0]], Reducer.myReducer, ro.mainProxy.done_python_custom)
 
