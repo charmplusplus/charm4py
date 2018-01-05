@@ -21,7 +21,6 @@ import json
 class Options:
   PROFILING = False
   PICKLE_PROTOCOL = -1    # -1 is highest protocol number
-  ZLIB_COMPRESSION = 0    # 0 to 9
   LOCAL_MSG_OPTIM = True
   LOCAL_MSG_BUF_SIZE = 50
   AUTO_FLUSH_WHEN = True
@@ -136,11 +135,10 @@ class Charm(Singleton):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
-  def invokeEntryMethod(self, obj, em, msg, t0, compression):
+  def invokeEntryMethod(self, obj, em, msg, t0):
     if Options.LOCAL_MSG_OPTIM and (msg[:7] == b"_local:"):
       args = obj.__removeLocal__(int(msg[7:]))
     else:
-      if compression: msg = zlib.decompress(msg)
       header,args = cPickle.loads(msg)
       if b"custom_reducer" in header and header[b"custom_reducer"] == "gather":
         args[0] = [tup[1] for tup in args[0]]
@@ -156,7 +154,7 @@ class Charm(Singleton):
     cid = (onPe, objPtr)  # chare ID
     obj = self.chares.get(cid)
     if obj is None: raise CharmPyError("Chare with id " + str(cid) + " not found")
-    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, Options.ZLIB_COMPRESSION > 0)
+    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0)
 
   def recvGroupMsg(self, gid, ep, msg, t0):
     if gid >= len(self.groups):
@@ -169,7 +167,7 @@ class Charm(Singleton):
       self.currentGroupID = gid
       self.groups[gid] = em.C()
     else:
-      self.invokeEntryMethod(obj, em, msg, t0, False)
+      self.invokeEntryMethod(obj, em, msg, t0)
 
   def recvArrayMsg(self, aid, index, ep, msg, t0, migration=False, resumeFromSync=False):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
@@ -182,7 +180,6 @@ class Charm(Singleton):
       self.currentArrayID = aid
       self.currentArrayElemIndex = index
       if migration:
-        if Options.ZLIB_COMPRESSION > 0: msg = zlib.decompress(msg)
         obj = cPickle.loads(msg)
         obj.contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
@@ -192,21 +189,20 @@ class Charm(Singleton):
       if resumeFromSync:
         msg = cPickle.dumps(({},[]))
         ep = getattr(obj, 'resumeFromSync').em.epIdx
-      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0, Options.ZLIB_COMPRESSION > 0)
+      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0)
 
   # packs arguments for remote method call (msgArgs) into a msg (bytearray) and
   # returns the msg. In general, it returns the pickled arguments, but if the
   # destination object exists in this PE, it will store the args in '_local'
   # buffer of destination obj (without copying) and return a small msg instead
   # with information to retrieve the args when the scheduler delivers it
-  def packMsg(self, destObj, compress, msgArgs):
+  def packMsg(self, destObj, msgArgs):
     if destObj: # if dest obj is local
       localTag = destObj.__addLocal__(msgArgs)
       msg = ("_local:" + str(localTag)).encode()
     else:
       msg = ({},msgArgs)  # first element is msg header
       msg = cPickle.dumps(msg, Options.PICKLE_PROTOCOL)
-      if compress: msg = zlib.compress(msg, Options.ZLIB_COMPRESSION)
     self.lastMsgLen = len(msg)
     return msg
 
@@ -276,14 +272,12 @@ class Charm(Singleton):
       obj = self.arrays[aid][index]
       del obj.contributeInfo  # don't want to pickle this
       obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
-      if Options.ZLIB_COMPRESSION > 0: obj.migMsg = zlib.compress(obj.migMsg, Options.ZLIB_COMPRESSION)
       return obj.migMsg
     else:
       obj = self.arrays[aid].pop(index)
       if hasattr(obj,"migMsg"): msg = obj.migMsg
       else:
         msg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
-        if Options.ZLIB_COMPRESSION > 0: msg = zlib.compress(msg, Options.ZLIB_COMPRESSION)
       return msg
 
   # Charm class level contribute function used by Array, Group for reductions
@@ -498,7 +492,7 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
     me = args[0] # proxy
     destObj = None
     if Options.LOCAL_MSG_OPTIM: destObj = charm.chares.get(me.cid)
-    msg = charm.packMsg(destObj, Options.ZLIB_COMPRESSION > 0, args[1:])
+    msg = charm.packMsg(destObj, args[1:])
     charm.CkChareSend(me.cid, ep, msg)
   proxy_entry_method.ep = ep
   return proxy_entry_method
@@ -542,7 +536,7 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
     me = args[0] # proxy
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (me.elemIdx == CkMyPe()): destObj = charm.groups[me.gid]
-    msg = charm.packMsg(destObj, False, args[1:])
+    msg = charm.packMsg(destObj, args[1:])
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
     me.elemIdx = -1
   proxy_entry_method.ep = ep
@@ -612,7 +606,7 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
     me = args[0]  # proxy
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0): destObj = charm.arrays[me.aid].get(me.elemIdx)
-    msg = charm.packMsg(destObj, Options.ZLIB_COMPRESSION > 0, args[1:])
+    msg = charm.packMsg(destObj, args[1:])
     charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
     me.elemIdx = ()
   proxy_entry_method.ep = ep
