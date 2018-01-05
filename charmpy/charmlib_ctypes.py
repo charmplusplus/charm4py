@@ -73,6 +73,7 @@ class ContributeInfo(Structure):
 class CharmLib(object):
 
   def __init__(self, charm, opts, libcharm_path):
+    self.direct_copy_supported = False
     self.name = 'ctypes'
     self.chareNames = []
     self.charm = charm
@@ -174,44 +175,47 @@ class CharmLib(object):
     except:
       self.charm.handleGeneralError()
 
-  def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg):
+  def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if self.opts.PROFILING: t0 = time.time()
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvChareMsg(onPe, objPtr, ep, msg, t0)
+      self.charm.recvChareMsg((onPe, objPtr), ep, msg, t0, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
-  def recvGroupMsg(self, gid, ep, msgSize, msg):
+  def recvGroupMsg(self, gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if self.opts.PROFILING: t0 = time.time()
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvGroupMsg(gid, ep, msg, t0)
+      self.charm.recvGroupMsg(gid, ep, msg, t0, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
-  def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg):
+  def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if self.opts.PROFILING: t0 = time.time()
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0)
+      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
   def CkChareSend(self, chare_id, ep, msg):
-    self.lib.CkChareExtSend(chare_id[0], chare_id[1], ep, msg, len(msg))
+    msg0, dcopy = msg
+    self.lib.CkChareExtSend(chare_id[0], chare_id[1], ep, msg0, len(msg0))
 
   def CkGroupSend(self, group_id, index, ep, msg):
-    self.lib.CkGroupExtSend(group_id, index, ep, msg, len(msg))
+    msg0, dcopy = msg
+    self.lib.CkGroupExtSend(group_id, index, ep, msg0, len(msg0))
 
   def CkArraySend(self, array_id, index, ep, msg):
+    msg0, dcopy = msg
     ndims = len(index)
     c_elemIdx = (ctypes.c_int * ndims)(*index)  # TODO have buffer preallocated for this?
-    self.lib.CkArrayExtSend(array_id, c_elemIdx, ndims, ep, msg, len(msg))
+    self.lib.CkArrayExtSend(array_id, c_elemIdx, ndims, ep, msg0, len(msg0))
 
   def CkRegisterReadonly(self, n1, n2, msg):
     if msg is None: self.lib.CkRegisterReadonlyExt(n1, n2, 0, msg)
@@ -284,7 +288,7 @@ class CharmLib(object):
       if self.opts.PROFILING: t0 = time.time()
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, migration=True)
+      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, -1, migration=True)
     except:
       self.charm.handleGeneralError()
 
@@ -293,7 +297,7 @@ class CharmLib(object):
       t0 = None
       if self.opts.PROFILING: t0 = time.time()
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
-      self.charm.recvArrayMsg(aid, arrIndex, -1, 0, t0, resumeFromSync=True)
+      self.charm.recvArrayMsg(aid, arrIndex, -1, 0, t0, -1, resumeFromSync=True)
     except:
       self.charm.handleGeneralError()
 
@@ -402,15 +406,15 @@ class CharmLib(object):
     self.buildMainchareCb = self.BUILD_MAINCHARE_CB_TYPE(self.buildMainchare)
     self.lib.registerMainchareCtorExtCallback(self.buildMainchareCb)
 
-    self.RECV_CHARE_CB_TYPE = CFUNCTYPE(None, c_int, c_void_p, c_int, c_int, POINTER(c_char))
+    self.RECV_CHARE_CB_TYPE = CFUNCTYPE(None, c_int, c_void_p, c_int, c_int, POINTER(c_char), c_int)
     self.recvChareCb = self.RECV_CHARE_CB_TYPE(self.recvChareMsg)
     self.lib.registerChareMsgRecvExtCallback(self.recvChareCb)
 
-    self.RECV_GROUP_CB_TYPE = CFUNCTYPE(None, c_int, c_int, c_int, POINTER(c_char))
+    self.RECV_GROUP_CB_TYPE = CFUNCTYPE(None, c_int, c_int, c_int, POINTER(c_char), c_int)
     self.recvGroupCb = self.RECV_GROUP_CB_TYPE(self.recvGroupMsg)
     self.lib.registerGroupMsgRecvExtCallback(self.recvGroupCb)
 
-    self.RECV_ARRAY_CB_TYPE = CFUNCTYPE(None, c_int, c_int, POINTER(c_int), c_int, c_int, POINTER(c_char))
+    self.RECV_ARRAY_CB_TYPE = CFUNCTYPE(None, c_int, c_int, POINTER(c_int), c_int, c_int, POINTER(c_char), c_int)
     self.recvArrayCb = self.RECV_ARRAY_CB_TYPE(self.recvArrayMsg)
     self.lib.registerArrayMsgRecvExtCallback(self.recvArrayCb)
 

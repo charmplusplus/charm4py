@@ -1,6 +1,7 @@
 from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, when, Reducer
 import random
 import math
+import array
 
 NUM_ITER = 100
 MAX_START_PARTICLES_PER_CELL = 5000
@@ -52,14 +53,15 @@ class Cell(Array):
     self.neighbors = self.getNbIndexes() # list of neighbor indexes as tuples
 
   def run(self):
-    outgoingParticles = {nb: [] for nb in self.neighbors}
+    outgoingParticles = {nb: array.array('d') for nb in self.neighbors}
     i = 0
     while i < len(self.particles):
       p = self.particles[i]
       p.perturb()
       dest_cell = (int(p.coords[0] / ro.cellSize[0]), int(p.coords[1] / ro.cellSize[1]))
       if dest_cell != self.thisIndex:
-        outgoingParticles[dest_cell].append(p)
+        outgoingParticles[dest_cell].append(p.coords[0])
+        outgoingParticles[dest_cell].append(p.coords[1])
         self.particles[i] = self.particles[-1]
         self.particles.pop()
       else:
@@ -70,7 +72,7 @@ class Cell(Array):
 
   @when("iteration")
   def updateNeighbor(self, iter, particles):
-    self.particles += particles
+    self.particles += [Particle(float(particles[i]), float(particles[i+1])) for i in range(0,len(particles),2)]
     self.msgsRcvd += 1
     if self.msgsRcvd == len(self.neighbors):
       self.msgsRcvd = 0

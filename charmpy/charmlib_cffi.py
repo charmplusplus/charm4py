@@ -21,6 +21,7 @@ class CharmLib(object):
 
   def __init__(self, _charm, opts, libcharm_path):
     global charm, ReducerType, ReducerTypeMap, times
+    self.direct_copy_supported = (sys.version_info[0] >= 3) # requires Python 3
     charm = _charm
     self.name = 'cffi'
     self.chareNames = []
@@ -31,6 +32,8 @@ class CharmLib(object):
     self.ReducerTypeMap = ReducerTypeMap
     times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
     self.times = times
+    self.send_bufs = ffi.new("char*[]", 60)  # supports up to 60 direct-copy entry method arguments
+    self.send_buf_sizes = ffi.new("int[]", [0] * 60)
 
   def buildReducerTypeMap(self, r):
     fields = [f for (f,t) in ffi.typeof("struct CkReductionTypesExt").fields]
@@ -138,72 +141,99 @@ class CharmLib(object):
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg):
+  def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       objPtr = int(ffi.cast("uintptr_t", objPtr))
-      charm.recvChareMsg(onPe, objPtr, ep, ffi.buffer(msg, msgSize)[:], t0)
+      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg):
+  def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       objPtr = int(ffi.cast("uintptr_t", objPtr))
-      charm.recvChareMsg(onPe, objPtr, ep, ffi.buffer(msg, msgSize), t0)
+      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def recvGroupMsg_py2(gid, ep, msgSize, msg):
+  def recvGroupMsg_py2(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
-      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], t0)
+      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def recvGroupMsg_py3(gid, ep, msgSize, msg):
+  def recvGroupMsg_py3(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
-      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), t0)
+      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg):
-    try:
-      t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
-      arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0)
-    except:
-      charm.handleGeneralError()
-
-  @ffi.def_extern()
-  def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg):
+  def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
+    except:
+      charm.handleGeneralError()
+
+  @ffi.def_extern()
+  def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
+    try:
+      t0 = None
+      if charm.opts.PROFILING: t0 = time.time()
+      arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
       charm.handleGeneralError()
 
   def CkChareSend(self, chare_id, ep, msg):
+    msg0, dcopy = msg
     objPtr = ffi.cast("void*", chare_id[1])
-    lib.CkChareExtSend(chare_id[0], objPtr, ep, msg, len(msg))
+    if len(dcopy) == 0:
+      lib.CkChareExtSend(chare_id[0], objPtr, ep, msg0, len(msg0))
+    else:
+      self.send_bufs[0] = ffi.from_buffer(msg0)
+      self.send_buf_sizes[0] = len(msg0)
+      for i,buf in enumerate(dcopy):
+        self.send_bufs[i+1] = ffi.from_buffer(buf)
+        self.send_buf_sizes[i+1] = buf.nbytes
+      lib.CkChareExtSend_multi(chare_id[0], objPtr, ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
   def CkGroupSend(self, group_id, index, ep, msg):
-    lib.CkGroupExtSend(group_id, index, ep, msg, len(msg))
+    msg0, dcopy = msg
+    if len(dcopy) == 0:
+      lib.CkGroupExtSend(group_id, index, ep, msg0, len(msg0))
+    else:
+      self.send_bufs[0] = ffi.from_buffer(msg0)
+      self.send_buf_sizes[0] = len(msg0)
+      for i,buf in enumerate(dcopy):
+        self.send_bufs[i+1] = ffi.from_buffer(buf)
+        self.send_buf_sizes[i+1] = buf.nbytes
+      lib.CkGroupExtSend_multi(group_id, index, ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
   def CkArraySend(self, array_id, index, ep, msg):
-    lib.CkArrayExtSend(array_id, index, len(index), ep, msg, len(msg))
+    msg0, dcopy = msg
+    if len(dcopy) == 0:
+      lib.CkArrayExtSend(array_id, index, len(index), ep, msg0, len(msg0))
+    else:
+      self.send_bufs[0] = ffi.from_buffer(msg0)
+      self.send_buf_sizes[0] = len(msg0)
+      for i,buf in enumerate(dcopy):
+        self.send_bufs[i+1] = ffi.from_buffer(buf)
+        self.send_buf_sizes[i+1] = buf.nbytes
+      lib.CkArrayExtSend_multi(array_id, index, len(index), ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
   def CkRegisterReadonly(self, n1, n2, msg):
     if msg is None: lib.CkRegisterReadonlyExt(n1, n2, 0, ffi.NULL)
@@ -267,7 +297,7 @@ class CharmLib(object):
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, migration=True)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, -1, migration=True)
     except:
       charm.handleGeneralError()
 
@@ -277,7 +307,7 @@ class CharmLib(object):
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, migration=True)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, -1, migration=True)
     except:
       charm.handleGeneralError()
 
@@ -287,7 +317,7 @@ class CharmLib(object):
       t0 = None
       if charm.opts.PROFILING: t0 = time.time()
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, -1, None, t0, resumeFromSync=True)
+      charm.recvArrayMsg(aid, arrIndex, -1, None, t0, -1, resumeFromSync=True)
     except:
       charm.handleGeneralError()
 
@@ -312,6 +342,7 @@ class CharmLib(object):
         dataTypeTuple = ReducerTypeMap[reducerType]
         numElems = dataSize // dataTypeTuple[3]
         #pyData = ffi.cast(dataTypeTuple[0] + '[' + str(int(numElems)) + ']', data)
+        # TODO this should return array.array or numpy.ndarray instead of list of values
         pyData = [ffi.unpack(ffi.cast(dataTypeTuple[2],data), numElems)]
         # if reduction result is one element, use base type
         if numElems == 1: pyData = pyData[0]

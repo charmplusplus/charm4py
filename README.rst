@@ -20,8 +20,8 @@ Installing
 
 Requirements:
 
-  - Python 2.7 or higher. Python 3 recommended for best performance and for
-    continued support.
+  - Python 2.7 or higher. Python 3 is *highly* recommended for best performance, and
+    for continued support.
     CharmPy has been tested with the following implementations: CPython (most common
     Python implementation) and PyPy.
 
@@ -30,7 +30,7 @@ Requirements:
     is required prior to setup of charmpy.
 
   - There are two modes to access the shared library from CharmPy: cffi and ctypes.
-    For best performance, cffi is highly recommended (see below for instructions).
+    For best performance, cffi is *highly* recommended (see below for instructions).
 
 Using CharmPy with CFFI
 -----------------------

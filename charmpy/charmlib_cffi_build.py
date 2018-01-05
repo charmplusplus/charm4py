@@ -154,15 +154,18 @@ ffibuilder.cdef("""
     void CkArrayDoneInsertingExt(int aid);
 
     void CkChareExtSend(int onPE, void *objPtr, int epIdx, char *msg, int msgSize);
+    void CkChareExtSend_multi(int onPE, void *objPtr, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
     void CkGroupExtSend(int gid, int pe, int epIdx, char *msg, int msgSize);
+    void CkGroupExtSend_multi(int gid, int pe, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
     void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize);
+    void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
 
     void registerCkRegisterMainModuleCallback(void (*cb)());
     void registerMainchareCtorExtCallback(void (*cb)(int, void*, int, int, char **));
     void registerReadOnlyRecvExtCallback(void (*cb)(int, char*));
-    void registerChareMsgRecvExtCallback(void (*cb)(int, void*, int, int, char*));
-    void registerGroupMsgRecvExtCallback(void (*cb)(int, int, int, char *));
-    void registerArrayMsgRecvExtCallback(void (*cb)(int, int, int *, int, int, char *));
+    void registerChareMsgRecvExtCallback(void (*cb)(int, void*, int, int, char*, int));
+    void registerGroupMsgRecvExtCallback(void (*cb)(int, int, int, char *, int));
+    void registerArrayMsgRecvExtCallback(void (*cb)(int, int, int *, int, int, char *, int));
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
     void registerArrayElemJoinExtCallback(void (*cb)(int, int, int *, int, char*, int));
     void registerArrayResumeFromSyncExtCallback(void (*cb)(int, int, int *));
@@ -178,12 +181,12 @@ ffibuilder.cdef("""
     extern "Python" void recvReadOnly_py2(int, char*);
     extern "Python" void recvReadOnly_py3(int, char*);
     extern "Python" void buildMainchare(int, void*, int, int, char **);
-    extern "Python" void recvChareMsg_py2(int, void*, int, int, char*);
-    extern "Python" void recvChareMsg_py3(int, void*, int, int, char*);
-    extern "Python" void recvGroupMsg_py2(int, int, int, char *);
-    extern "Python" void recvGroupMsg_py3(int, int, int, char *);
-    extern "Python" void recvArrayMsg_py2(int, int, int *, int, int, char *);
-    extern "Python" void recvArrayMsg_py3(int, int, int *, int, int, char *);
+    extern "Python" void recvChareMsg_py2(int, void*, int, int, char*, int);
+    extern "Python" void recvChareMsg_py3(int, void*, int, int, char*, int);
+    extern "Python" void recvGroupMsg_py2(int, int, int, char *, int);
+    extern "Python" void recvGroupMsg_py3(int, int, int, char *, int);
+    extern "Python" void recvArrayMsg_py2(int, int, int *, int, int, char *, int);
+    extern "Python" void recvArrayMsg_py3(int, int, int *, int, int, char *, int);
     extern "Python" int  arrayElemLeave(int, int, int *, char**, int);
     extern "Python" void arrayElemJoin_py2(int, int, int *, int, char*, int);
     extern "Python" void arrayElemJoin_py3(int, int, int *, int, char*, int);

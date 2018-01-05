@@ -152,13 +152,12 @@ class Wave(Array):
     X,Y = chareArrayWidth, chareArrayHeight
     i = self.thisIndex
     # NOTE: sending the arrays as strings is faster than letting charmpy pickle the numpy arrays
-    self.thisProxy[(i[0]-1)%X, i[1]].recvGhosts(RIGHT, left_edge.tobytes()) # Send my left edge
-    self.thisProxy[(i[0]+1)%X, i[1]].recvGhosts(LEFT, right_edge.tobytes()) # Send my right edge
-    self.thisProxy[i[0], (i[1]-1)%Y].recvGhosts(DOWN, top_edge.tobytes()) # Send my top edge
-    self.thisProxy[i[0], (i[1]+1)%Y].recvGhosts(UP, bottom_edge.tobytes()) # Send my bottom edge
+    self.thisProxy[(i[0]-1)%X, i[1]].recvGhosts(RIGHT, left_edge) # Send my left edge
+    self.thisProxy[(i[0]+1)%X, i[1]].recvGhosts(LEFT, right_edge) # Send my right edge
+    self.thisProxy[i[0], (i[1]-1)%Y].recvGhosts(DOWN, top_edge) # Send my top edge
+    self.thisProxy[i[0], (i[1]+1)%Y].recvGhosts(UP, bottom_edge) # Send my bottom edge
 
   def recvGhosts(self, whichSide, ghost_values):
-    ghost_values = np.fromstring(ghost_values, dtype=float, count=-1, sep='')
     self.buffers[whichSide] = ghost_values
     self.check_and_compute()
 
@@ -180,7 +179,7 @@ class Wave(Array):
     fillSubImage(data, w, h, self.pressure)
     sx = self.thisIndex[0] * w # where my portion of the image is located
     sy = self.thisIndex[1] * h
-    ro.mainProxy.iterationCompleted(data.tobytes(), (sx,sy), (w,h))
+    ro.mainProxy.iterationCompleted(data, (sx,sy), (w,h))
 
 # ------ start charm -------
 

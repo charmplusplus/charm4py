@@ -14,6 +14,7 @@ else:
     import ctypes
     libcharm = ctypes.CDLL(libcharmPath + "/libcharm.so")
     t = libcharm.StartCharmExt
+    t = libcharm.CkArrayExtSend_multi  # ensure correct version of library
     del t
     del ctypes
   except:

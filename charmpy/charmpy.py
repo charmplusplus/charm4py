@@ -17,6 +17,14 @@ import time
 import zlib
 import itertools
 import json
+import array
+try:
+  import numpy
+except ImportError:
+  # this is to avoid numpy dependency
+  class NumpyDummy:
+    ndarray = None
+  numpy = NumpyDummy()
 
 class Options:
   PROFILING = False
@@ -61,6 +69,20 @@ class CharmPyError(Exception):
     super(CharmPyError, self).__init__(msg)
     self.message = msg
 
+def rebuildByteArray(data):
+  return bytes(data)
+
+def rebuildArray(data, typecode):
+  #a = array.array('d', data.cast(typecode))  # this is slow
+  a = array.array(typecode)
+  a.frombytes(data)
+  return a
+
+def rebuildNumpyArray(data, shape, dt):
+  a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
+  a.shape = shape
+  return a.copy()
+
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
 class Charm(Singleton):
 
@@ -77,6 +99,7 @@ class Charm(Singleton):
     self.proxyTimes = 0.0 # for profiling
     self.msgLens = []     # for profiling
     self.opts = Options
+    self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
     cfgPath = None
     from os.path import expanduser
     cfgPath = expanduser("~") + '/charmpy.cfg'
@@ -135,12 +158,19 @@ class Charm(Singleton):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
-  def invokeEntryMethod(self, obj, em, msg, t0):
+  def invokeEntryMethod(self, obj, em, msg, dcopy_start, t0):
     if Options.LOCAL_MSG_OPTIM and (msg[:7] == b"_local:"):
       args = obj.__removeLocal__(int(msg[7:]))
     else:
-      header,args = cPickle.loads(msg)
-      if b"custom_reducer" in header and header[b"custom_reducer"] == "gather":
+      header, args = cPickle.loads(msg)
+      if dcopy_start > 0:
+        rel_offset = dcopy_start
+        buf = memoryview(msg)
+        for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
+          arg_buf = buf[rel_offset:rel_offset + size]
+          args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
+          rel_offset += size
+      elif b"custom_reducer" in header and header[b"custom_reducer"] == "gather":
         args[0] = [tup[1] for tup in args[0]]
     if Options.PROFILING:
       recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
@@ -150,13 +180,11 @@ class Charm(Singleton):
     if Options.PROFILING:
       em.addTimes([time.time() - initTime - self.proxyTimes, self.proxyTimes, recv_overhead])
 
-  def recvChareMsg(self, onPe, objPtr, ep, msg, t0):
-    cid = (onPe, objPtr)  # chare ID
-    obj = self.chares.get(cid)
-    if obj is None: raise CharmPyError("Chare with id " + str(cid) + " not found")
-    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0)
+  def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
+    obj = self.chares[chare_id]
+    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, dcopy_start, t0)
 
-  def recvGroupMsg(self, gid, ep, msg, t0):
+  def recvGroupMsg(self, gid, ep, msg, t0, dcopy_start):
     if gid >= len(self.groups):
       while len(self.groups) <= gid: self.groups.append(None)
     em = self.entryMethods[ep]
@@ -167,9 +195,9 @@ class Charm(Singleton):
       self.currentGroupID = gid
       self.groups[gid] = em.C()
     else:
-      self.invokeEntryMethod(obj, em, msg, t0)
+      self.invokeEntryMethod(obj, em, msg, dcopy_start, t0)
 
-  def recvArrayMsg(self, aid, index, ep, msg, t0, migration=False, resumeFromSync=False):
+  def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start, migration=False, resumeFromSync=False):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
     if aid not in self.arrays: self.arrays[aid] = {}
     obj = self.arrays[aid].get(index)
@@ -189,22 +217,68 @@ class Charm(Singleton):
       if resumeFromSync:
         msg = cPickle.dumps(({},[]))
         ep = getattr(obj, 'resumeFromSync').em.epIdx
-      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, t0)
+      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, dcopy_start, t0)
 
-  # packs arguments for remote method call (msgArgs) into a msg (bytearray) and
-  # returns the msg. In general, it returns the pickled arguments, but if the
-  # destination object exists in this PE, it will store the args in '_local'
-  # buffer of destination obj (without copying) and return a small msg instead
-  # with information to retrieve the args when the scheduler delivers it
   def packMsg(self, destObj, msgArgs):
+    """Prepares a message for sending, given arguments to an entry method invocation.
+
+      The message is the result of pickling `(header,args)` where header is a dict,
+      and args the list of arguments. If direct-copy is enabled, arguments supporting
+      the buffer interface will bypass pickling and their place in 'args' will be
+      made empty. Instead, info to reconstruct these args at the destination will be
+      put in the header, and this method will return a list of buffers for
+      direct-copying of these args into a CkMessage at Charm side.
+
+      If destination object exists on same PE as source, the args will be stored in
+      '_local' buffer of destination obj (without copying), and the msg will be a
+      small "tag" to retrieve the args from '_local' when the msg is delivered.
+
+      Args:
+          destObj: destination object if it exists on the same PE as source, otherwise None
+          msgArgs: arguments to entry method
+
+      Returns:
+          2-tuple containing msg and list of direct-copy buffers
+
+    """
+    direct_copy_buffers = []
+    dcopy_size = 0
     if destObj: # if dest obj is local
       localTag = destObj.__addLocal__(msgArgs)
       msg = ("_local:" + str(localTag)).encode()
     else:
-      msg = ({},msgArgs)  # first element is msg header
+      header = {}           # msg header
+      direct_copy_hdr = []  # goes to header
+      args = list(msgArgs)
+      if self.lib.direct_copy_supported:
+        for i,arg in enumerate(msgArgs):
+          t = type(arg)
+          if t == bytes:
+            nbytes = len(arg)
+            direct_copy_hdr.append((i, 0, (), nbytes))
+          elif t == array.array:
+            nbytes = arg.buffer_info()[1] * arg.itemsize
+            direct_copy_hdr.append((i, 1, (arg.typecode), nbytes))
+          elif t == numpy.ndarray and not arg.dtype.hasobject:
+            # https://docs.scipy.org/doc/numpy/neps/npy-format.html explains what
+            # describes a numpy array
+            # FIXME support Fortran contiguous layout? NOTE that even if we passed
+            # the layout order (array.flags.c_contiguous) to the remote, there is
+            # the issue that when attempting to get a buffer in cffi to the
+            # memoryview, Python throws error: "memoryview: underlying buffer is not
+            # C-contiguous", which seems to be a CPython error (not cffi related)
+            nbytes = arg.nbytes
+            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.name), nbytes))
+          else:
+            continue
+          args[i] = None  # will direct-copy this arg so remove from args list
+          direct_copy_buffers.append(memoryview(arg))
+          dcopy_size += nbytes
+        if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
+      msg = (header, args)
       msg = cPickle.dumps(msg, Options.PICKLE_PROTOCOL)
-    self.lastMsgLen = len(msg)
-    return msg
+    self.lastMsgLen = len(msg) + dcopy_size
+    return (msg, direct_copy_buffers)
 
   # register class C in Charm
   def registerInCharm(self, C, libRegisterFunc):
