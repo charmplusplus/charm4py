@@ -7,6 +7,19 @@ if sys.version_info < (3, 0, 0):
   import cPickle
 else:
   import pickle as cPickle
+import ckreduction as red
+import array
+try:
+  import numpy
+  haveNumpy = True
+except ImportError:
+  # this is to avoid numpy dependency
+  haveNumpy = False
+  class NumpyDummyModule:
+    class ndarray: pass
+    class number: pass
+  numpy = NumpyDummyModule()
+
 
 # Import some useful structures defined on Charm side
 
@@ -80,59 +93,24 @@ class CharmLib(object):
     self.opts = opts
     self.init(libcharm_path)
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
-    self.ReducerTypeMap = {} # reducer type -> ctypes type, TODO consider changing to list
-    self.buildReducerTypeMap()
     self.times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
+    self.c_type_table = [None] * 10
+    self.c_type_table[red.C_CHAR] = c_char
+    self.c_type_table[red.C_SHORT] = c_short
+    self.c_type_table[red.C_INT] = c_int
+    self.c_type_table[red.C_LONG] = c_long
+    self.c_type_table[red.C_UCHAR] = c_ubyte
+    self.c_type_table[red.C_USHORT] = c_ushort
+    self.c_type_table[red.C_UINT] = c_uint
+    self.c_type_table[red.C_ULONG] = c_ulong
+    self.c_type_table[red.C_FLOAT] = c_float
+    self.c_type_table[red.C_DOUBLE] = c_double
 
-  def buildReducerTypeMap(self):
-    # update this function as and when new reducer types are added to CharmPy
-    self.ReducerTypeMap[self.ReducerType.nop] = None
-    # Sum reducers
-    self.ReducerTypeMap[self.ReducerType.sum_char] = c_char
-    self.ReducerTypeMap[self.ReducerType.sum_short] = c_short
-    self.ReducerTypeMap[self.ReducerType.sum_int] = c_int
-    self.ReducerTypeMap[self.ReducerType.sum_long] = c_long
-    self.ReducerTypeMap[self.ReducerType.sum_uchar] = c_ubyte
-    self.ReducerTypeMap[self.ReducerType.sum_ushort] = c_ushort
-    self.ReducerTypeMap[self.ReducerType.sum_uint] = c_uint
-    self.ReducerTypeMap[self.ReducerType.sum_ulong] = c_ulong
-    self.ReducerTypeMap[self.ReducerType.sum_float] = c_float
-    self.ReducerTypeMap[self.ReducerType.sum_double] = c_double
-    # Product reducers
-    self.ReducerTypeMap[self.ReducerType.product_char] = c_char
-    self.ReducerTypeMap[self.ReducerType.product_short] = c_short
-    self.ReducerTypeMap[self.ReducerType.product_int] = c_int
-    self.ReducerTypeMap[self.ReducerType.product_long] = c_long
-    self.ReducerTypeMap[self.ReducerType.product_uchar] = c_ubyte
-    self.ReducerTypeMap[self.ReducerType.product_ushort] = c_ushort
-    self.ReducerTypeMap[self.ReducerType.product_uint] = c_uint
-    self.ReducerTypeMap[self.ReducerType.product_ulong] = c_ulong
-    self.ReducerTypeMap[self.ReducerType.product_float] = c_float
-    self.ReducerTypeMap[self.ReducerType.product_double] = c_double
-    # Max reducers
-    self.ReducerTypeMap[self.ReducerType.max_char] = c_char
-    self.ReducerTypeMap[self.ReducerType.max_short] = c_short
-    self.ReducerTypeMap[self.ReducerType.max_int] = c_int
-    self.ReducerTypeMap[self.ReducerType.max_long] = c_long
-    self.ReducerTypeMap[self.ReducerType.max_uchar] = c_ubyte
-    self.ReducerTypeMap[self.ReducerType.max_ushort] = c_ushort
-    self.ReducerTypeMap[self.ReducerType.max_uint] = c_uint
-    self.ReducerTypeMap[self.ReducerType.max_ulong] = c_ulong
-    self.ReducerTypeMap[self.ReducerType.max_float] = c_float
-    self.ReducerTypeMap[self.ReducerType.max_double] = c_double
-    # Min reducers
-    self.ReducerTypeMap[self.ReducerType.min_char] = c_char
-    self.ReducerTypeMap[self.ReducerType.min_short] = c_short
-    self.ReducerTypeMap[self.ReducerType.min_int] = c_int
-    self.ReducerTypeMap[self.ReducerType.min_long] = c_long
-    self.ReducerTypeMap[self.ReducerType.min_uchar] = c_ubyte
-    self.ReducerTypeMap[self.ReducerType.min_ushort] = c_ushort
-    self.ReducerTypeMap[self.ReducerType.min_uint] = c_uint
-    self.ReducerTypeMap[self.ReducerType.min_ulong] = c_ulong
-    self.ReducerTypeMap[self.ReducerType.min_float] = c_float
-    self.ReducerTypeMap[self.ReducerType.min_double] = c_double
-    # Custom reducer
-    self.ReducerTypeMap[self.ReducerType.external_py] = c_char
+  def sizeof(self, c_type_id):
+    return ctypes.sizeof(self.c_type_table[c_type_id])
+
+  def getReductionTypesFields(self):
+    return [field_name for field_name,field_type in ReducerTypes._fields_]
 
   def initContributeInfo(self, elemId, index, elemType):
     if type(index) == int: index = (index,)
@@ -141,14 +119,30 @@ class CharmLib(object):
     return ContributeInfo(-1, 0, 0, 0, self.ReducerType.nop, elemId, c_elemIdx,
                           ndims, elemType)
 
-  def getContributeInfo(self, ep, data, reducer_type, contributor):
-    numElems = len(data)
-    c_data = None
-    c_data_size = 0
-    if reducer_type != self.ReducerType.nop:
-      dataType = self.ReducerTypeMap[reducer_type]
-      c_data = (dataType*numElems)(*data)
-      c_data_size = numElems*sizeof(dataType)
+  def getContributeInfo(self, ep, contribution, contributor):
+    reducer_type, data, c_type = contribution
+    if reducer_type == self.ReducerType.external_py:
+      numElems = len(data)
+      c_data = c_char_p(data)
+      c_data_size = numElems * sizeof(c_char)
+    elif reducer_type != self.ReducerType.nop:
+      dataType = self.c_type_table[c_type]
+      t = type(data)
+      if t == numpy.ndarray or isinstance(data, numpy.number):
+        numElems = data.size
+        c_data = (dataType*numElems).from_buffer(data)  # get pointer to data, no copy
+        c_data_size = data.nbytes
+      elif t == array.array:
+        numElems = len(data)
+        c_data = (dataType*numElems).from_buffer(data)  # get pointer to data, no copy
+        c_data_size = data.buffer_info()[1] * data.itemsize
+      else:
+        numElems = len(data)
+        c_data = (dataType*numElems)(*data) # this is *really* slow when data is large
+        c_data_size = numElems*sizeof(dataType)
+    else:
+      c_data = None
+      c_data_size = numElems = 0
 
     c_info = contributor.contributeInfo
     c_info.cbEpIdx = ep
@@ -312,35 +306,45 @@ class CharmLib(object):
     c_elemIdx = (ctypes.c_int * ndims)(*index)
     self.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), aid, c_elemIdx, ndims)
 
-  # Notes: data is a void*, it must be type casted based on reducerType to Python type
-  # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
-  def cpickleData(self, data, returnBuffer, dataSize, reducerType):
+  def cpickleData(self, data, dataSize, reducerType, returnBuffers, returnBufferSizes):
     try:
       if self.opts.PROFILING: t0 = time.time()
-      dataType = self.ReducerTypeMap[reducerType]
-      numElems = 0
-      pyData = None
-      if reducerType == self.ReducerType.nop:
-        pyData = []
-      else:
+      header = {}
+      if reducerType != self.ReducerType.nop:
+        ctype = self.charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataType = self.c_type_table[ctype]
         numElems = dataSize // sizeof(dataType)
-        pyData = ctypes.cast(data, POINTER(dataType * numElems)).contents
-        pyData = [list(pyData)] # can use numpy arrays here if needed
+        if numElems == 1:
+          pyData = [ctypes.cast(data, POINTER(dataType))[0]]
+        elif sys.version_info[0] < 3:
+          data = ctypes.cast(data, POINTER(dataType * numElems)).contents
+          if haveNumpy:
+            dt = self.charm.redMgr.rev_np_array_type_map[ctype]
+            a = numpy.fromstring(data, dtype=numpy.dtype(dt))
+          else:
+            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+            a = array.array(array_typecode, data)
+          pyData = [a]
+        else:
+          if haveNumpy:
+            dtype = self.charm.redMgr.rev_np_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+          else:
+            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+          returnBuffers[1] = ctypes.cast(data, c_char_p)
+          returnBufferSizes[1] = dataSize
+          pyData = [None]
+      else:
+        pyData = []
 
-      # if reduction result is one element, use base type
-      if numElems == 1: pyData = pyData[0]
-
-      #print("In charmpy. Data: " + str(data) + " dataSize: " + str(dataSize) + " numElems: " + str(numElems) + " reducerType: " + str(reducerType))
-
-      msg = ({},pyData) # first element is msg header
+      msg = (header, pyData)
       pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
-      pickledData = ctypes.create_string_buffer(pickledData)
-      # cast returnBuffer to char** and make it point to pickledData
-      returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
-      returnBuffer[0] = pickledData
+      returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
+      returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
+      returnBufferSizes[0] = len(pickledData)
 
       if self.opts.PROFILING: self.times[0] += (time.time() - t0)
-      return len(pickledData)
     except:
       self.charm.handleGeneralError()
 
@@ -364,7 +368,7 @@ class CharmLib(object):
 
           contribs.append(args[0])
 
-      reductionResult = getattr(self.charm.Reducer, currentReducer)(contribs)
+      reductionResult = getattr(self.charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
       rednMsgPickle = cPickle.dumps(rednMsg, self.opts.PICKLE_PROTOCOL)
       rednMsgPickle = ctypes.create_string_buffer(rednMsgPickle)
@@ -432,7 +436,7 @@ class CharmLib(object):
     self.lib.registerArrayResumeFromSyncExtCallback(self.resumeFromSyncCb)
 
     # Args to cpickleData: data, return_buffer, data_size, reducer_type
-    self.CPICKLE_DATA_CB_TYPE = CFUNCTYPE(c_int, c_void_p, POINTER(c_char_p), c_int, c_int)
+    self.CPICKLE_DATA_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, POINTER(c_char_p), POINTER(c_int))
     self.cpickleDataCb = self.CPICKLE_DATA_CB_TYPE(self.cpickleData)
     self.lib.registerCPickleDataExtCallback(self.cpickleDataCb)
 

@@ -10,7 +10,7 @@ def myReducer(contribs):
   result.append(min([c[2] for c in contribs]))
   return result
 
-Reducer.myReducer = myReducer
+Reducer.addReducer(myReducer)
 
 class Main(Mainchare):
   def __init__(self, args):
@@ -32,7 +32,7 @@ class Main(Mainchare):
 
   def done_charm_builtin(self, result):
     sum_indices = (self.nElements*(self.nElements-1))/2
-    assert result == [10, sum_indices], "Built-in Charm sum_int reduction failed"
+    assert list(result) == [10, sum_indices], "Built-in Charm sum_int reduction failed"
     print("[Main] All Charm builtin reductions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):

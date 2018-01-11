@@ -15,8 +15,8 @@ else:
   import pickle as cPickle
 import time
 import zlib
-import itertools
 import json
+import ckreduction
 import array
 try:
   import numpy
@@ -60,9 +60,6 @@ class ReadOnlies(Singleton): pass
 (CONTRIBUTOR_TYPE_ARRAY,
 CONTRIBUTOR_TYPE_GROUP,
 CONTRIBUTOR_TYPE_NODEGROUP) = range(3)
-
-# global tuple containing Python basic types
-PYTHON_BASIC_TYPES = (int, float, bool)
 
 class CharmPyError(Exception):
   def __init__(self, msg):
@@ -126,6 +123,8 @@ class Charm(Singleton):
     self.CkChareSend = self.lib.CkChareSend
     self.CkGroupSend = self.lib.CkGroupSend
     self.CkArraySend = self.lib.CkArraySend
+    self.reducers = ckreduction.ReducerContainer(self)
+    self.redMgr   = ckreduction.ReductionManager(self, self.reducers)
 
   def handleGeneralError(self):
     import traceback
@@ -163,15 +162,16 @@ class Charm(Singleton):
       args = obj.__removeLocal__(int(msg[7:]))
     else:
       header, args = cPickle.loads(msg)
-      if dcopy_start > 0:
+      if b'dcopy' in header:
         rel_offset = dcopy_start
         buf = memoryview(msg)
         for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
           arg_buf = buf[rel_offset:rel_offset + size]
           args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
           rel_offset += size
-      elif b"custom_reducer" in header and header[b"custom_reducer"] == "gather":
-        args[0] = [tup[1] for tup in args[0]]
+      elif b"custom_reducer" in header:
+        reducer = getattr(self.reducers, header[b"custom_reducer"])
+        if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
     if Options.PROFILING:
       recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
@@ -355,49 +355,9 @@ class Charm(Singleton):
       return msg
 
   # Charm class level contribute function used by Array, Group for reductions
-  def contribute(self, data, reducer_type, target, contributor):
-    # nop reduction short circuit
-    if reducer_type is None or reducer_type == Reducer.nop:
-      reducer_type = Reducer.nop
-      data = [None]
-      contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
-      self.lastMsgLen = 0
-      target.__self__.ckContribute(contributeInfo)
-      return
-
-    pyReducer = False
-
-    if not callable(reducer_type):
-      check_elems = data
-      if not hasattr(data, '__len__'): check_elems = [data]
-      for elem in check_elems:
-        if type(elem) not in PYTHON_BASIC_TYPES:
-          pyReducer = True
-          break
-    else:
-      pyReducer = True
-
-    # load reducer based on if it's Python or Charm
-    if not pyReducer:
-      if not hasattr(data, '__len__'): data = [data]
-      reducer_type = reducer_type[1][type(data[0])] # choose Charm reducer based on first data element since it's homogenous
-    else:
-      if not callable(reducer_type):
-        reducer_type = reducer_type[0] # we are using in-built Python reducers
-
-      # TODO: Can remove following if block by moving the pre-processing and post-processing
-      # to custom reducers. Custom reducers can be defined as objects which have the functions
-      # `applyReducer`, `preProcessData`, `postProcessData`
-      if reducer_type.__name__ == "gather":
-        # append array index to data for sorting in reducer
-        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [[(contributor.thisIndex, data)]])
-      else:
-        rednMsg = ({b"custom_reducer": reducer_type.__name__}, [data])
-      rednMsgPickle = cPickle.dumps(rednMsg, Options.PICKLE_PROTOCOL)
-      data = rednMsgPickle # data for custom reducers is a custom reduction msg
-      reducer_type = self.ReducerType.external_py # inform Charm about using external Py reducer
-
-    contributeInfo = self.lib.getContributeInfo(target.ep, data, reducer_type, contributor)
+  def contribute(self, data, reducer, target, contributor):
+    contribution = self.redMgr.prepare(data, reducer, contributor)
+    contributeInfo = self.lib.getContributeInfo(target.ep, contribution, contributor)
     self.lastMsgLen = contributeInfo.dataSize
     target.__self__.ckContribute(contributeInfo)
 
@@ -438,6 +398,7 @@ class Charm(Singleton):
     print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
 charm    = Charm() # Charm is a singleton, ok to import this file multiple times
+Reducer  = charm.reducers  # put reference to reducers in module scope
 CkMyPe   = charm.lib.CkMyPe
 CkNumPes = charm.lib.CkNumPes
 CkExit   = charm.lib.CkExit
@@ -473,43 +434,6 @@ def when(attrib_name):
     entryMethod.func = func
     return entryMethod
   return _when
-
-# ---------------------- CkReducer -----------------------
-
-class CkReducer(Singleton):
-  def __init__(self):
-    self.nop = charm.ReducerType.nop
-    self.sum = (self._sum, {int: charm.ReducerType.sum_long, float: charm.ReducerType.sum_double})
-    self.product = (self._product, {int: charm.ReducerType.product_long, float: charm.ReducerType.product_double})
-    self.max = (self._max, {int: charm.ReducerType.max_long, float: charm.ReducerType.max_double})
-    self.min = (self._min, {int: charm.ReducerType.min_long, float: charm.ReducerType.min_double})
-
-  # python versions of built-in reducers
-  def _sum(self, contribs):
-    return sum(contribs)
-
-  def _product(self, contribs):
-    result = contribs[0]
-    for i in range(1, len(contribs)):
-      result *= contribs[i]
-    return result
-
-  def _max(self, contribs):
-    return max(contribs)
-
-  def _min(self, contribs):
-    return min(contribs)
-
-  def gather(self, contribs):
-    # contribs will be a list of list of tuples
-    # first element of tuple is always array index of chare
-    return sorted(itertools.chain(*contribs))
-
-# global singular instance of Reducer
-Reducer = CkReducer()
-# add reference to Reducer in charm object
-charm.Reducer = Reducer
-
 
 # ---------------------- Chare -----------------------
 

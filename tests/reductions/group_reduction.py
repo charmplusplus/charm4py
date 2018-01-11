@@ -104,7 +104,7 @@ class TestGroup(Group):
 
   def reduceGroupToGroup(self, reduction_result):
     assert self.thisIndex == 0
-    assert reduction_result == [CkNumPes()*x for x in [5, 7, -3, 0]], "Group-to-group reduction failed."
+    assert list(reduction_result) == [CkNumPes()*x for x in [5, 7, -3, 0]], "Group-to-group reduction failed."
     ro.mainProxy.done_group_to_group()
 
   def reduceGroupToGroupBcast(self, reduction_result):

@@ -169,7 +169,7 @@ ffibuilder.cdef("""
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
     void registerArrayElemJoinExtCallback(void (*cb)(int, int, int *, int, char*, int));
     void registerArrayResumeFromSyncExtCallback(void (*cb)(int, int, int *));
-    void registerCPickleDataExtCallback(int (*cb)(void*, char**, int, int));
+    void registerCPickleDataExtCallback(void (*cb)(void*, int, int, char**, int*));
     void registerPyReductionExtCallback(int (*cb)(char**, int*, int, char**));
 
     void CkExtContributeToChare(struct ContributeInfo* contribute_params, int onPE, void* objPtr);
@@ -191,7 +191,8 @@ ffibuilder.cdef("""
     extern "Python" void arrayElemJoin_py2(int, int, int *, int, char*, int);
     extern "Python" void arrayElemJoin_py3(int, int, int *, int, char*, int);
     extern "Python" void resumeFromSync(int, int, int *);
-    extern "Python" int cpickleData(void*, char**, int, int);
+    extern "Python" void cpickleData_py2(void*, int, int, char**, int*);
+    extern "Python" void cpickleData_py3(void*, int, int, char**, int*);
     extern "Python" int pyReduction_py2(char**, int*, int, char**);
     extern "Python" int pyReduction_py3(char**, int*, int, char**);
 

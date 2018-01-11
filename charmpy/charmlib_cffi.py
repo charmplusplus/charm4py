@@ -5,6 +5,19 @@ if sys.version_info[0] < 3:
   import cPickle
 else:
   import pickle as cPickle
+import ckreduction as red
+import array
+try:
+  import numpy
+  haveNumpy = True
+except ImportError:
+  # this is to avoid numpy dependency
+  haveNumpy = False
+  class NumpyDummyModule:
+    class ndarray: pass
+    class number: pass
+  numpy = NumpyDummyModule()
+
 
 index_ctype = ('', 'int[1]', 'int[2]', 'int[3]', 'short[4]', 'short[5]', 'short[6]')
 
@@ -20,73 +33,35 @@ class ContributeInfo:
 class CharmLib(object):
 
   def __init__(self, _charm, opts, libcharm_path):
-    global charm, ReducerType, ReducerTypeMap, times
+    global charm, ReducerType, c_type_table, times
     self.direct_copy_supported = (sys.version_info[0] >= 3) # requires Python 3
     charm = _charm
     self.name = 'cffi'
     self.chareNames = []
     self.init()
     ReducerType = ffi.cast('struct CkReductionTypesExt*', lib.getReducersStruct())
-    ReducerTypeMap = self.buildReducerTypeMap(ReducerType)
     self.ReducerType = ReducerType
-    self.ReducerTypeMap = ReducerTypeMap
     times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
     self.times = times
     self.send_bufs = ffi.new("char*[]", 60)  # supports up to 60 direct-copy entry method arguments
     self.send_buf_sizes = ffi.new("int[]", [0] * 60)
+    c_type_table = [None] * 10
+    c_type_table[red.C_CHAR] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
+    c_type_table[red.C_SHORT] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
+    c_type_table[red.C_INT] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
+    c_type_table[red.C_LONG] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    c_type_table[red.C_UCHAR] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
+    c_type_table[red.C_USHORT] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
+    c_type_table[red.C_UINT] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
+    c_type_table[red.C_ULONG] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
+    c_type_table[red.C_FLOAT] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
+    c_type_table[red.C_DOUBLE] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
 
-  def buildReducerTypeMap(self, r):
-    fields = [f for (f,t) in ffi.typeof("struct CkReductionTypesExt").fields]
-    R = [None] * (max([getattr(r, f) for f in fields]) + 1)
-    # update this function as and when new reducer types are added to CharmPy
-    R[r.nop] = (None, None, None, 0)
-    # Sum reducers
-    R[r.sum_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
-    R[r.sum_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
-    R[r.sum_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
-    R[r.sum_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
-    R[r.sum_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
-    R[r.sum_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
-    R[r.sum_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
-    R[r.sum_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
-    R[r.sum_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
-    R[r.sum_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
-    # Product reducers
-    R[r.product_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
-    R[r.product_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
-    R[r.product_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
-    R[r.product_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
-    R[r.product_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
-    R[r.product_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
-    R[r.product_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
-    R[r.product_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
-    R[r.product_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
-    R[r.product_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
-    # Max reducers
-    R[r.max_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
-    R[r.max_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
-    R[r.max_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
-    R[r.max_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
-    R[r.max_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
-    R[r.max_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
-    R[r.max_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
-    R[r.max_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
-    R[r.max_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
-    R[r.max_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
-    # Min reducers
-    R[r.min_char] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
-    R[r.min_short] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
-    R[r.min_int] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
-    R[r.min_long] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
-    R[r.min_uchar] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
-    R[r.min_ushort] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
-    R[r.min_uint] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
-    R[r.min_ulong] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
-    R[r.min_float] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
-    R[r.min_double] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
-    # Custom reducer
-    R[r.external_py] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
-    return R
+  def sizeof(self, c_type_id):
+    return c_type_table[c_type_id][3]
+
+  def getReductionTypesFields(self):
+    return [f for (f,t) in ffi.typeof("struct CkReductionTypesExt").fields]
 
   def initContributeInfo(self, elemId, index, elemType):
     if type(index) == int: index = (index,)
@@ -94,20 +69,31 @@ class CharmLib(object):
     return ContributeInfo((-1, ffi.NULL, 0, 0, self.ReducerType.nop, elemId,
                           c_elemIdx, len(index), elemType))
 
-  def getContributeInfo(self, ep, data, reducer_type, contributor):
-    numElems = len(data)
+  def getContributeInfo(self, ep, contribution, contributor):
+    reducer_type, data, c_type = contribution
     if reducer_type == self.ReducerType.external_py:
+      numElems = len(data)
       c_data = ffi.from_buffer(data)  # this avoids a copy
       c_data_size = numElems * ffi.sizeof('char')
     elif reducer_type != self.ReducerType.nop:
-      dataTypeTuple = self.ReducerTypeMap[reducer_type]
-      # TODO avoid copy if data is a buffer-type object, but not sure if that would
-      # work with charm internal reductions. Example: dealing with numpy datatypes
-      c_data = ffi.new(dataTypeTuple[1], data)
-      c_data_size = numElems * dataTypeTuple[3]
+      t = type(data)
+      if t == numpy.ndarray or isinstance(data, numpy.number):
+        c_data = ffi.from_buffer(data)  # get pointer to data, no copy
+        c_data_size = data.nbytes
+        numElems = data.size
+      elif t == array.array:
+        c_data = ffi.from_buffer(data)  # get pointer to data, no copy
+        c_data_size = data.buffer_info()[1] * data.itemsize
+        numElems = len(data)
+      else:
+        dataTypeTuple = c_type_table[c_type]
+        numElems = len(data)
+        # this copies and convert data to C array of C type
+        c_data = ffi.new(dataTypeTuple[1], data)
+        c_data_size = numElems * dataTypeTuple[3]
     else:
       c_data = ffi.NULL
-      c_data_size = 0
+      c_data_size = numElems = 0
 
     c_info = contributor.contributeInfo
     c_struct = c_info.data
@@ -331,32 +317,76 @@ class CharmLib(object):
   def CkContributeToArray(self, contributeInfo, aid, index):
     lib.CkExtContributeToArray(contributeInfo.data, aid, index, len(index))
 
-  # Notes: data is a void*, it must be type casted based on reducerType to Python type
-  # returnBuffer must contain the cPickled form of type casted data, use char** to writeback
+  # TODO method should be renamed to something else
   @ffi.def_extern()
-  def cpickleData(data, returnBuffer, dataSize, reducerType):
+  def cpickleData_py2(data, dataSize, reducerType, returnBuffers, returnBufferSizes):
     try:
       if charm.opts.PROFILING: t0 = time.time()
-      pyData = []
+      header = {}
       if reducerType != ReducerType.nop:
-        dataTypeTuple = ReducerTypeMap[reducerType]
+        ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataTypeTuple = c_type_table[ctype]
         numElems = dataSize // dataTypeTuple[3]
-        #pyData = ffi.cast(dataTypeTuple[0] + '[' + str(int(numElems)) + ']', data)
-        # TODO this should return array.array or numpy.ndarray instead of list of values
-        pyData = [ffi.unpack(ffi.cast(dataTypeTuple[2],data), numElems)]
-        # if reduction result is one element, use base type
-        if numElems == 1: pyData = pyData[0]
+        if numElems == 1:
+          pyData = [ffi.cast(dataTypeTuple[2], data)[0]]
+        else:
+          if haveNumpy:
+            dt = charm.redMgr.rev_np_array_type_map[ctype]
+            a = numpy.fromstring(ffi.buffer(data, dataSize)[:], dtype=numpy.dtype(dt))
+          else:
+            array_typecode = charm.redMgr.rev_array_type_map[ctype]
+            a = array.array(array_typecode, ffi.buffer(data, dataSize)[:])
+          pyData = [a]
+      else:
+        pyData = []
 
-      msg = ({}, pyData) # first element is msg header
+      msg = (header, pyData)
       # save msg, else it might be deleted before returning control to libcharm
       CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
-      returnBuffer[0] = ffi.from_buffer(CharmLib.tempData)
+      returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
+      returnBufferSizes[0] = len(CharmLib.tempData)
 
       if charm.opts.PROFILING:
         global times
         times[0] += (time.time() - t0)
 
-      return len(CharmLib.tempData)
+    except:
+      charm.handleGeneralError()
+
+  @ffi.def_extern()
+  def cpickleData_py3(data, dataSize, reducerType, returnBuffers, returnBufferSizes):
+    try:
+      if charm.opts.PROFILING: t0 = time.time()
+      header = {}
+      if reducerType != ReducerType.nop:
+        ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataTypeTuple = c_type_table[ctype]
+        numElems = dataSize // dataTypeTuple[3]
+        if numElems == 1:
+          pyData = [ffi.cast(dataTypeTuple[2], data)[0]]
+        else:
+          if haveNumpy:
+            dtype = charm.redMgr.rev_np_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+          else:
+            array_typecode = charm.redMgr.rev_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+          returnBuffers[1] = data
+          returnBufferSizes[1] = dataSize
+          pyData = [None]
+      else:
+        pyData = []
+
+      msg = (header, pyData)
+      # save msg, else it might be deleted before returning control to libcharm
+      CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+      returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
+      returnBufferSizes[0] = len(CharmLib.tempData)
+
+      if charm.opts.PROFILING:
+        global times
+        times[0] += (time.time() - t0)
+
     except:
       charm.handleGeneralError()
 
@@ -377,7 +407,7 @@ class CharmLib(object):
           assert customReducer == currentReducer
           contribs.append(args[0])
 
-      reductionResult = getattr(charm.Reducer, currentReducer)(contribs)
+      reductionResult = getattr(charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
       CharmLib.tempData = cPickle.dumps(rednMsg, charm.opts.PICKLE_PROTOCOL)
       returnBuffer[0] = ffi.from_buffer(CharmLib.tempData)
@@ -407,7 +437,7 @@ class CharmLib(object):
           assert customReducer == currentReducer
           contribs.append(args[0])
 
-      reductionResult = getattr(charm.Reducer, currentReducer)(contribs)
+      reductionResult = getattr(charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
       CharmLib.tempData = cPickle.dumps(rednMsg, charm.opts.PICKLE_PROTOCOL)
       returnBuffer[0] = ffi.from_buffer(CharmLib.tempData)
@@ -434,7 +464,6 @@ class CharmLib(object):
     lib.registerMainchareCtorExtCallback(lib.buildMainchare)
     lib.registerArrayElemLeaveExtCallback(lib.arrayElemLeave)
     lib.registerArrayResumeFromSyncExtCallback(lib.resumeFromSync)
-    lib.registerCPickleDataExtCallback(lib.cpickleData)
     if sys.version_info[0] < 3:
       lib.registerReadOnlyRecvExtCallback(lib.recvReadOnly_py2)
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py2)
@@ -442,6 +471,7 @@ class CharmLib(object):
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py2)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py2)
       lib.registerPyReductionExtCallback(lib.pyReduction_py2)
+      lib.registerCPickleDataExtCallback(lib.cpickleData_py2)
     else:
       lib.registerReadOnlyRecvExtCallback(lib.recvReadOnly_py3)
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py3)
@@ -449,6 +479,7 @@ class CharmLib(object):
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py3)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py3)
       lib.registerPyReductionExtCallback(lib.pyReduction_py3)
+      lib.registerCPickleDataExtCallback(lib.cpickleData_py3)
 
     self.CkArrayExtSend = lib.CkArrayExtSend
     self.CkGroupExtSend = lib.CkGroupExtSend

@@ -1,5 +1,7 @@
 from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
 from charmpy import Reducer
+import array
+import numpy
 
 # utility methods for assertions
 def assert_allclose(actual, desired, tol):
@@ -92,11 +94,11 @@ class Test(Array):
     # test contributing to Test[0]
     self.contribute(4.2, Reducer.sum, self.thisProxy[0].reductionTarget)
     # test contributing to Test (broadcast)
-    self.contribute([4.2, 8.4], Reducer.sum, self.thisProxy.reductionTargetBcast)
+    self.contribute(numpy.array([4.2, 8.4]), Reducer.sum, self.thisProxy.reductionTargetBcast)
     # test contributing to TestGroup[0]
     self.contribute(4, Reducer.sum, ro.groupProxy[0].reduceFromArray)
     # test contributing to TestGroup (broadcast)
-    self.contribute([0, 8, 3], Reducer.sum, ro.groupProxy.reduceFromArrayBcast)
+    self.contribute(array.array('i', [0, 8, 3]), Reducer.sum, ro.groupProxy.reduceFromArrayBcast)
 
   def reductionTarget(self, reduction_result):
     assert self.thisIndex[0] == 0
@@ -118,7 +120,7 @@ class TestGroup(Group):
     ro.mainProxy.done_array_to_group()
 
   def reduceFromArrayBcast(self, reduction_result):
-    assert reduction_result == [0, 80, 30], "Array-to-group bcast sum_int reduction failed."
+    assert list(reduction_result) == [0, 80, 30], "Array-to-group bcast sum_int reduction failed."
     self.contribute(None, None, ro.mainProxy.done_array_to_group_bcast)
 
 # ---- start charm ----
