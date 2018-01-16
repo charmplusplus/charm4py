@@ -243,6 +243,14 @@ class CharmLib(object):
     dimsArray = (c_int*ndims)(*dims)
     return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, None, 0)
 
+  def CkInsert(self, aid, index, epIdx, onPE):
+    indexDims = len(index)
+    c_index = (c_int*indexDims)(*index)
+    self.lib.CkInsertArrayExt(aid, indexDims, c_index, epIdx, onPE, None, 0)
+
+  def CkDoneInserting(self, aid):
+    self.lib.CkArrayDoneInsertingExt(aid)
+
   def start(self):
     self.argv_bufs = [ctypes.create_string_buffer(arg.encode()) for arg in sys.argv]
     LP_c_char = POINTER(c_char)

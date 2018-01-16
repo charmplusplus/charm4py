@@ -233,6 +233,12 @@ class CharmLib(object):
   def CkCreateArray(self, chareIdx, dims, epIdx):
     return lib.CkCreateArrayExt(chareIdx, len(dims), dims, epIdx, ffi.NULL, 0)
 
+  def CkInsert(self, aid, index, epIdx, onPE):
+    lib.CkInsertArrayExt(aid, len(index), index, epIdx, onPE, ffi.NULL, 0)
+
+  def CkDoneInserting(self, aid):
+    lib.CkArrayDoneInsertingExt(aid)
+
   def start(self):
     argv_bufs = [ffi.new("char[]", arg.encode()) for arg in sys.argv]
     lib.StartCharmExt(len(sys.argv), argv_bufs)

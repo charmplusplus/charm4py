@@ -612,19 +612,40 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
+# NOTE: From user side ckNew can be used as follows:
+# arrProxy.ckNew((dim1, dim2,...)) or arrProxy.ckNew(dim1)
+# arrProxy.ckNew(ndims=2) - create an empty array of 2 dimensions
 def array_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
-  def array_ckNew(cls, dims):
+  def array_ckNew(cls, dims=None, ndims=-1):
     #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
     if type(dims) == int: dims = (dims,)
+
+    if dims is None and ndims == -1:
+      raise CharmPyError("Bounds and number of dimensions for array cannot be empty in ckNew")
+    elif dims is not None and ndims != -1 and ndims != len(dims):
+      raise CharmPyError("Number of bounds should match number of dimensions")
+    elif dims is None and ndims != -1: # create an empty array
+      dims = (0,)*ndims
+
     aid = charm.lib.CkCreateArray(C.idx, dims, epIdx)
     return cls(aid, len(dims)) # return instance of Proxy
   return array_ckNew
 
+def array_ckInsert_gen(epIdx):
+  def array_ckInsert(proxy, index, onPE=-1):
+    if type(index) == int: index = (index,)
+    assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
+    charm.lib.CkInsert(proxy.aid, index, epIdx, onPE) #TODO: add constructor params
+  return array_ckInsert
+
 def array_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToArray(contributeInfo, proxy.aid, proxy.elemIdx)
   proxy.elemIdx = ()
+
+def array_proxy_doneInserting(proxy):
+  charm.lib.CkDoneInserting(proxy.aid)
 
 class Array(Chare):
   def __init__(self):
@@ -663,5 +684,7 @@ class Array(Chare):
     M["__init__"] = array_proxy_ctor
     M["__getitem__"] = array_proxy_elem
     M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
+    M["ckInsert"] = array_ckInsert_gen(entryMethods[0].epIdx)
     M["ckContribute"] = array_proxy_contribute # function called when target proxy is Array
+    M["ckDoneInserting"] = array_proxy_doneInserting
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
