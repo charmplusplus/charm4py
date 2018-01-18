@@ -1,6 +1,6 @@
-from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
+from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import readonlies as ro
 
-ro = ReadOnlies()
 
 class Main(Mainchare):
   def __init__(self, args):

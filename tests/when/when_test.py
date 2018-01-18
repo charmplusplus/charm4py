@@ -1,7 +1,7 @@
-from charmpy import charm, Mainchare, Group, CkExit, CkMyPe, CkNumPes, ReadOnlies, when, CkAbort
+from charmpy import charm, Mainchare, Group, CkExit, CkMyPe, CkNumPes, when, CkAbort
+from charmpy import readonlies as ro
 
 GRP_TO_SEND = 20
-ro = ReadOnlies()
 
 class Main(Mainchare):
   def __init__(self, args):

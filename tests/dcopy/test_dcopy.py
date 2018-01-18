@@ -1,5 +1,6 @@
 import charmpy
-from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, CkNumPes
+from charmpy import charm, Mainchare, Array, CkExit, CkNumPes
+from charmpy import readonlies as ro
 import time
 import array
 import numpy
@@ -11,8 +12,6 @@ charmpy.Options.LOCAL_MSG_OPTIM = False
 MAX_ITER = 10
 DATA_LEN = 15000        # number of doubles
 CHARES_PER_PE = 10
-
-ro = ReadOnlies()
 
 class Main(Mainchare):
 

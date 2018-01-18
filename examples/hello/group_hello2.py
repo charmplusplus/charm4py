@@ -1,6 +1,6 @@
-from charmpy import charm, Mainchare, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies
+from charmpy import charm, Mainchare, Group, CkMyPe, CkNumPes, CkExit
+from charmpy import readonlies as ro
 
-ro = ReadOnlies()
 
 class HelloList:
   def __init__(self, hiNo):

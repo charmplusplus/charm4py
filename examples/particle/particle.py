@@ -1,4 +1,5 @@
-from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, when, Reducer
+from charmpy import charm, Mainchare, Array, CkExit, when, Reducer
+from charmpy import readonlies as ro
 import random
 import math
 import array
@@ -6,7 +7,6 @@ import array
 NUM_ITER = 100
 MAX_START_PARTICLES_PER_CELL = 5000
 SIM_BOX_SIZE = 100.0
-ro = ReadOnlies()
 
 class Particle:
   def __init__(self, x, y):

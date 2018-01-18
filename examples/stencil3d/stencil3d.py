@@ -3,11 +3,11 @@
 # performs much better
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Mainchare, Array, CkNumPes, CkExit, CkAbort, ReadOnlies, when
+from charmpy import charm, Mainchare, Array, CkNumPes, CkExit, CkAbort, when
+from charmpy import readonlies as ro
 import time
 import math
 
-ro = ReadOnlies()
 ro.initTime = time.time()
 
 MAX_ITER = 100

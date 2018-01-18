@@ -1,7 +1,6 @@
-from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
+from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import readonlies as ro
 from charmpy import Reducer
-
-ro = ReadOnlies()
 
 def myReducer(contribs):
   result = []

@@ -1,10 +1,10 @@
 import charmpy
-from charmpy import charm, Mainchare, Array, CkExit, ReadOnlies, CkNumPes, Reducer
+from charmpy import charm, Mainchare, Array, CkExit, CkNumPes, Reducer
+from charmpy import readonlies as ro
 import time
 import numpy
 
 charmpy.Options.PROFILING = True
-ro = ReadOnlies()
 
 CHARES_PER_PE = 8
 NUM_ITER = 5000

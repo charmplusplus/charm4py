@@ -4,14 +4,13 @@
 # Original author: Isaac Dooley (2008)
 # Converted to Python from examples/charm++/wave2d in Charm++ codebase
 
-from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, CkAbort, ReadOnlies
+from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import readonlies as ro
 import time
 import math
 import numpy as np
 import numba
 import random
-
-ro = ReadOnlies()
 
 TotalDataWidth, TotalDataHeight = 800, 699
 chareArrayWidth, chareArrayHeight = 4, 3

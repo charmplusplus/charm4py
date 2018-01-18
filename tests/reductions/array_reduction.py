@@ -1,4 +1,5 @@
-from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, ReadOnlies, CkAbort
+from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import readonlies as ro
 from charmpy import Reducer
 import array
 import numpy
@@ -10,8 +11,6 @@ def assert_allclose(actual, desired, tol):
 
 def assert_almost_equal(actual, desired, tol):
   assert abs(actual -desired) <= tol
-
-ro = ReadOnlies()
 
 class Main(Mainchare):
   def __init__(self, args):

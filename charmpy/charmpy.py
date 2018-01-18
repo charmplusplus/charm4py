@@ -47,14 +47,11 @@ class EntryMethod(object):
   def addTimes(self, times):
     for i,t in enumerate(times): self.times[i] += t
 
-class Singleton(object):
-  _instance = None
-  def __new__(cls, *args, **kwargs):
-    if not isinstance(cls._instance, cls):
-      cls._instance = object.__new__(cls, *args, **kwargs)
-    return cls._instance
+class ReadOnlies(object): # for backwards-compatibility. TODO Remove eventually
+  def __new__(cls):
+    return readonlies
 
-class ReadOnlies(Singleton): pass
+class __ReadOnlies(object): pass
 
 ## Constants to detect type of contributors for reduction. Order should match enum extContributorType ##
 (CONTRIBUTOR_TYPE_ARRAY,
@@ -81,7 +78,7 @@ def rebuildNumpyArray(data, shape, dt):
   return a.copy()
 
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
-class Charm(Singleton):
+class Charm(object):
 
   def __init__(self):
     self.mainchareTypes = []
@@ -135,8 +132,7 @@ class Charm(Singleton):
 
   def recvReadOnly(self, msg):
     roData = cPickle.loads(msg)
-    ro = ReadOnlies()
-    for name,obj in roData.items(): setattr(ro, name, obj)
+    for name,obj in roData.items(): setattr(readonlies, name, obj)
 
   def buildMainchare(self, onPe, objPtr, ep, args):
     cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int or long)
@@ -148,11 +144,10 @@ class Charm(Singleton):
     self.currentChareId = cid
     self.chares[cid] = em.C(args) # call mainchare constructor
     if CkMyPe() == 0: # broadcast readonlies
-      ro = ReadOnlies()
       roData = {}
-      for attr in dir(ro):   # attr is string
+      for attr in dir(readonlies):   # attr is string
         if attr.startswith("_") or attr.endswith("_"): continue
-        roData[attr] = getattr(ro, attr)
+        roData[attr] = getattr(readonlies, attr)
       msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
@@ -397,7 +392,8 @@ class Charm(Singleton):
     print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
     print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
-charm    = Charm() # Charm is a singleton, ok to import this file multiple times
+charm    = Charm()
+readonlies = __ReadOnlies()
 Reducer  = charm.reducers  # put reference to reducers in module scope
 CkMyPe   = charm.lib.CkMyPe
 CkNumPes = charm.lib.CkNumPes
