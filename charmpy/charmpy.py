@@ -324,7 +324,7 @@ class Charm(Singleton):
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
-      if m in ["AtSync"]: continue
+      if m in ["AtSync", "flushWhen", "contribute", "gather"]: continue
       #print(m)
       self.classEntryMethods[C.__name__].append(EntryMethod(C,m,profile=Options.PROFILING))
 
