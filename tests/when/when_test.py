@@ -35,4 +35,4 @@ class TestG(Group):
     self.msgsSent += 1
     if self.msgsSent < GRP_TO_SEND: self.thisProxy[self.thisIndex].run()
 
-charm.start([Main,TestG])
+charm.start()

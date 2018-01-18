@@ -123,4 +123,4 @@ class TestGroup(Group):
     self.contribute(None, None, ro.mainProxy.done_array_to_group_bcast)
 
 # ---- start charm ----
-charm.start([Main,Test,TestGroup])
+charm.start()

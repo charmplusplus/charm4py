@@ -66,4 +66,4 @@ class TestGroup(Group):
 
 
 # ---- start charm ----
-charm.start([Main,Test,TestGroup])
+charm.start()

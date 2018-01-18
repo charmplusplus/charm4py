@@ -38,4 +38,4 @@ class Hello(Group):
 
 
 # ---- start charm ----
-charm.start([Main,Hello])
+charm.start()

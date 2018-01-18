@@ -16,6 +16,8 @@ else:
 import time
 import zlib
 import json
+import importlib
+import inspect
 import ckreduction
 import array
 try:
@@ -88,7 +90,7 @@ class Charm(object):
     self.arrayTypes = []  # array classes registered in runtime system
     self.arrays = {}      # aid -> dict[idx] -> array element instance with index idx on this PE
     self.entryMethods = {}                # ep_idx -> EntryMethod object
-    self.classEntryMethods = {}           # class name -> list of EntryMethod objects
+    self.classEntryMethods = {}           # class -> list of EntryMethod objects
     self.proxyClasses = {}                # class name -> proxy class
     self.proxyTimes = 0.0 # for profiling
     self.msgLens = []     # for profiling
@@ -277,7 +279,7 @@ class Charm(object):
 
   # register class C in Charm
   def registerInCharm(self, C, libRegisterFunc):
-    entryMethods = self.classEntryMethods[C.__name__]
+    entryMethods = self.classEntryMethods[C]
     #if CkMyPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
     C.idx, startEpIdx = libRegisterFunc(C.__name__, len(entryMethods))
     #if CkMyPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx) + " ctor Idx=" + str(startEpIdx))
@@ -313,27 +315,47 @@ class Charm(object):
 
   # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
   def register(self, C):
-    if C.__name__ in self.classEntryMethods: return   # already registered
+    if C in self.classEntryMethods: return   # already registered
     #print("CharmPy: Registering class " + C.__name__)
-    self.classEntryMethods[C.__name__] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
+    self.classEntryMethods[C] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
       if m in ["AtSync", "flushWhen", "contribute", "gather"]: continue
       #print(m)
-      self.classEntryMethods[C.__name__].append(EntryMethod(C,m,profile=Options.PROFILING))
+      self.classEntryMethods[C].append(EntryMethod(C,m,profile=Options.PROFILING))
 
-    # TODO: or maybe, if useful somewhere else, just use a class attribute in base
-    # class that tells me what it is
-    types = [T.__name__ for T in C.mro()]
-    if "Group" in types: self.groupTypes.append(C)
-    elif "Mainchare" in types: self.mainchareTypes.append(C)
-    elif "Array" in types: self.arrayTypes.append(C)
+    types = C.mro()
+    if Group in types: self.groupTypes.append(C)
+    elif Mainchare in types: self.mainchareTypes.append(C)
+    elif Array in types: self.arrayTypes.append(C)
 
-  # begin Charm++ program
-  def start(self, classes=[]):
+  def start(self, classes=[], modules=[]):
+    """
+    Start Charm++ program.
+
+    IMPORTANT: classes must be registered in the same order on all processes. In
+    other words, the arguments to this method must have the same ordering on all
+    processes.
+
+    Args:
+        classes: list of Charm classes to register with runtime
+        modules: list of names of modules containing Charm classes (all of the Charm
+                 classes defined in the module will be registered). method will
+                 always search module '__main__' for Charm classes even if no
+                 arguments are passed to this method.
+    """
     if "++quiet" in sys.argv: Options.QUIET = True
     for C in classes: self.register(C)
+    M = list(modules)
+    if '__main__' not in M: M.append('__main__')
+    for module_name in M:
+      if module_name not in sys.modules: importlib.import_module(module_name)
+      for C_name,C in inspect.getmembers(sys.modules[module_name], inspect.isclass):
+        if C.__module__ != __name__ and hasattr(C, 'mro') and Chare in C.mro():
+          self.register(C)
+    if len(self.classEntryMethods) == 0:
+      raise CharmPyError("Can't start Charm program because no Charm classes registered")
     self.lib.start()
 
   def arrayElemLeave(self, aid, index, sizing):
@@ -507,7 +529,7 @@ class Mainchare(Chare):
   def __getProxyClass__(cls):
     #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    for m in charm.classEntryMethods[cls.__name__]:
+    for m in charm.classEntryMethods[cls]:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(mainchare_proxy_method_gen(m.epIdx))
       else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
@@ -570,7 +592,7 @@ class Group(Chare):
   def __getProxyClass__(cls):
     #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    entryMethods = charm.classEntryMethods[cls.__name__]
+    entryMethods = charm.classEntryMethods[cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(group_proxy_method_gen(m.epIdx))
@@ -670,7 +692,7 @@ class Array(Chare):
   def __getProxyClass__(cls):
     #print("Creating proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    entryMethods = charm.classEntryMethods[cls.__name__]
+    entryMethods = charm.classEntryMethods[cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(array_proxy_method_gen(m.epIdx))

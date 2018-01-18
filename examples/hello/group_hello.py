@@ -28,4 +28,4 @@ class Hello(Group):
       ro.mainProxy.done()
 
 # ---- start charm ----
-charm.start([Main,Hello])
+charm.start()

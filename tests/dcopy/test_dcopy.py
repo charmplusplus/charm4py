@@ -73,4 +73,4 @@ class Test(Array):
             self.contribute(None, None, ro.mainProxy.iterationComplete)
 
 
-charm.start([Main,Test])
+charm.start()

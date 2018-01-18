@@ -44,4 +44,4 @@ class Hello(Array):
       return self.thisProxy[nextIndex].SayHi(hiNo+1)
 
 # ---- start charm ----
-charm.start([Main,Hello])
+charm.start()

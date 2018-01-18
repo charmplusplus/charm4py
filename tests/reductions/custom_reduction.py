@@ -87,4 +87,4 @@ class Test(Array):
 
 
 # ---- start charm ----
-charm.start([Main,Test])
+charm.start()

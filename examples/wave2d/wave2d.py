@@ -182,4 +182,4 @@ class Wave(Array):
 
 # ------ start charm -------
 
-charm.start([Main,Wave])
+charm.start()

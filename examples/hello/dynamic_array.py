@@ -58,5 +58,5 @@ class Hello(Array):
     self.contribute(1, Reducer.sum, ro.mainProxy.doneReduction)
 
 # ---- start charm ----
-charm.start([Main,Hello])
+charm.start()
 

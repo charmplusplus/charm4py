@@ -235,4 +235,4 @@ class Stencil(Array):
 
 # ------ start charm -------
 
-charm.start([Main,Stencil])
+charm.start()

@@ -47,4 +47,4 @@ class Test(Array):
       self.contribute(self.data, Reducer.sum, ro.mainProxy.collectSum)
       self.reductions += 1
 
-charm.start([Main,Test])
+charm.start()

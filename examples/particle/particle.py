@@ -96,4 +96,4 @@ class Cell(Array):
 
 # ------ start charm -------
 
-charm.start([Main,Cell])
+charm.start()
