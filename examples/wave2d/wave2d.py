@@ -14,7 +14,7 @@ import random
 
 TotalDataWidth, TotalDataHeight = 800, 699
 chareArrayWidth, chareArrayHeight = 4, 3
-total_iterations = 3000
+default_total_iterations = 3000
 numInitialPertubations = 5
 LEFT, RIGHT, UP, DOWN = range(4)
 
@@ -22,6 +22,12 @@ LEFT, RIGHT, UP, DOWN = range(4)
 class Main(Mainchare):
   def __init__(self, args):
     super(Main,self).__init__()
+
+    if len(args) <= 1:
+      self.total_iterations = default_total_iterations
+    else:
+      self.total_iterations = int(args[1])
+
     self.iteration = self.count = 0
     self.programStartTime = self.periodStartTime = time.time()
     ro.mainProxy = self.thisProxy # store the main proxy
@@ -41,7 +47,7 @@ class Main(Mainchare):
     self.count += 1
     #charm.liveViz.deposit([(pos,imSize,im)])
     if self.count == chareArrayWidth * chareArrayHeight:
-      if self.iteration == total_iterations:
+      if self.iteration == self.total_iterations:
         print("Program Done!, Total time= " + str(time.time() - self.programStartTime))
         charm.printStats()
         CkExit()

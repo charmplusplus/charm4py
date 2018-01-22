@@ -47,7 +47,7 @@ tests.append(['examples/hello/dynamic_array.py'])
 tests.append(['examples/multi-module/main.py'])
 tests.append(['examples/particle/particle.py'])
 tests.append(['examples/stencil3d/stencil3d_numba.py', '64', '32'])
-tests.append(['examples/wave2d/wave2d.py'])
+tests.append(['examples/wave2d/wave2d.py', '1500'])
 
 commonArgs = ['++local', '+p4']
 
