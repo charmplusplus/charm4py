@@ -5,14 +5,12 @@ GRP_TO_SEND = 20
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
     if CkNumPes() < 3: CkAbort("Run program with at least 3 PEs")
     grpProxy = charm.TestGProxy.ckNew()
     grpProxy.run()
 
 class TestG(Group):
   def __init__(self):
-    super(TestG,self).__init__()
     self.msgsRcvd = 0   # for PE 0
     self.current  = 1   # for PE 0
     self.msgsSent = 0   # for PEs != 0

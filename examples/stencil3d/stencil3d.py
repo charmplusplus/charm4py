@@ -21,7 +21,6 @@ def index(a,b,c):
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if (len(args) != 3) and (len(args) != 7):
       print(args[0] + " [array_size] [block_size]")
@@ -61,8 +60,6 @@ class Main(Mainchare):
 
 class Stencil(Array):
   def __init__(self):
-    super(Stencil,self).__init__()
-
     #print("Element " + str(self.thisIndex) + " created")
 
     # NOTE: this uses lists for double arrays, better to use numpy (see stencil3d_numba.py)

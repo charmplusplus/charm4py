@@ -12,7 +12,6 @@ def assert_almost_equal(actual, desired, tol):
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     self.expectedReductions = 7
     self.recvdReductions = 0
@@ -80,7 +79,6 @@ class Main(Mainchare):
 
 class TestGroup(Group):
   def __init__(self):
-    super(TestGroup,self).__init__()
     print("TestGroup " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def doReduction(self):
@@ -113,7 +111,6 @@ class TestGroup(Group):
 
 class TestArray(Array):
   def __init__(self):
-    super(TestArray,self).__init__()
     print("TestArray " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def reduceGroupToArray(self, reduction_result):

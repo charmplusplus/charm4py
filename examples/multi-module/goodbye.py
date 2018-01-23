@@ -4,7 +4,7 @@ import time
 
 class Goodbye(Group):
     def __init__(self):
-        super(Goodbye, self).__init__()
+        pass
 
     def SayGoodbye(self):
         print("Goodbye from PE", CkMyPe())

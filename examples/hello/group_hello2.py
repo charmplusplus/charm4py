@@ -12,7 +12,6 @@ class HelloList:
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
     print("Running Hello on " + str(CkNumPes()) + " processors")
     grpProxy = charm.HelloProxy.ckNew()
     grpProxy[0].SayHi(HelloList(17))
@@ -24,7 +23,6 @@ class Main(Mainchare):
 
 class Hello(Group):
   def __init__(self):
-    super(Hello,self).__init__()
     print("Hello " + str(self.thisIndex) + " created")
 
   def SayHi(self, hellos):

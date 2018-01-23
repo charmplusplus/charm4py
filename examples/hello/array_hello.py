@@ -4,7 +4,6 @@ from charmpy import readonlies as ro
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if len(args) <= 1:
       args = [None,3,2]  # default: 3 dimensions of size 2 each
@@ -29,7 +28,6 @@ class Main(Mainchare):
 
 class Hello(Array):
   def __init__(self):
-    super(Hello,self).__init__()
     print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def SayHi(self, hiNo):

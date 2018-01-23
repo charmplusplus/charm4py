@@ -4,7 +4,7 @@ import time
 
 class Hello(Group):
     def __init__(self):
-        super(Hello, self).__init__()
+        pass
 
     def SayHi(self):
         print("Hello from PE", CkMyPe(), "on", time.strftime('%c'))

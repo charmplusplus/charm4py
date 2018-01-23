@@ -16,7 +16,6 @@ def assert_almost_equal(actual, desired, tol):
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     ro.mainProxy = self.thisProxy
     ro.NUM_CHARES = CkNumPes() * CHARES_PER_PE
@@ -35,7 +34,6 @@ class Main(Mainchare):
 
 class Test(Array):
   def __init__(self):
-    super(Test,self).__init__()
 
     self.data = numpy.arange(DATA_LEN, dtype='float64')
     self.reductions = 0

@@ -19,7 +19,6 @@ class Particle:
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if len(args) == 3: ro.arrayDims = (int(args[1]), int(args[2]))
     else: ro.arrayDims = (6,3)  # default: 2D chare array 6x3
@@ -41,7 +40,6 @@ def getNumParticles(pos, dims):  # assigns more particles to cells closer to cen
 
 class Cell(Array):
   def __init__(self):
-    super(Cell,self).__init__()
     self.iteration = 0
     self.particles = []
     self.msgsRcvd = 0

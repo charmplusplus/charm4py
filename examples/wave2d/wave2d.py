@@ -21,7 +21,6 @@ LEFT, RIGHT, UP, DOWN = range(4)
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if len(args) <= 1:
       self.total_iterations = default_total_iterations
@@ -133,7 +132,6 @@ def initPressure(numInitialPertubations, W, H, w, h, elemIdx, pressure, pressure
 
 class Wave(Array):
   def __init__(self):
-    super(Wave,self).__init__()
     self.mywidth = TotalDataWidth // chareArrayWidth
     self.myheight = TotalDataHeight // chareArrayHeight
     self.buffers = [None] * 4

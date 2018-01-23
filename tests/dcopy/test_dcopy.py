@@ -16,8 +16,6 @@ CHARES_PER_PE = 10
 class Main(Mainchare):
 
     def __init__(self, args):
-        super(Main, self).__init__()
-
         ro.numChares = CkNumPes() * CHARES_PER_PE
         ro.arrayIndexes = [(i,) for i in range(ro.numChares)]
         ro.testProxy = charm.TestProxy.ckNew(ro.numChares)
@@ -38,7 +36,6 @@ class Main(Mainchare):
 
 class Test(Array):
     def __init__(self):
-        super(Test, self).__init__()
 
         self.x = numpy.arange(DATA_LEN, dtype='float64')
         y = self.x * (self.thisIndex[0] + 1)

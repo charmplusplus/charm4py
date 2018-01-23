@@ -4,7 +4,6 @@ from charmpy import Reducer
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main, self).__init__()
 
     self.recvdReductions = 0
     self.expectedReductions = 4
@@ -43,7 +42,6 @@ class Main(Mainchare):
 
 class Test(Array):
   def __init__(self):
-    super(Test, self).__init__()
     print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def doGather(self):
@@ -54,7 +52,6 @@ class Test(Array):
 
 class TestGroup(Group):
   def __init__(self):
-    super(TestGroup, self).__init__()
     print("TestGroup " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def doGather(self):

@@ -146,7 +146,10 @@ class Charm(object):
     em = self.entryMethods[ep]
     if not em.isCtor: raise CharmPyError("Specified mainchare entry method not constructor")
     self.currentChareId = cid
-    self.chares[cid] = em.C(args) # call mainchare constructor
+    obj = object.__new__(em.C)  # create object but don't call __init__
+    super(em.C, obj).__init__() # call Mainchare class __init__ first
+    obj.__init__(args)          # now call the user's __init__
+    self.chares[cid] = obj
     if CkMyPe() == 0: # broadcast readonlies
       roData = {}
       for attr in dir(readonlies):   # attr is string
@@ -192,7 +195,10 @@ class Charm(object):
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
       if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
       self.currentGroupID = gid
-      self.groups[gid] = em.C()
+      obj = object.__new__(em.C)  # create object but don't call __init__
+      super(em.C, obj).__init__() # call Group class __init__ first
+      obj.__init__()              # now call the user's __init__
+      self.groups[gid] = obj
     else:
       self.invokeEntryMethod(obj, em, msg, dcopy_start, t0)
 
@@ -210,7 +216,9 @@ class Charm(object):
         obj = cPickle.loads(msg)
         obj.contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
-        obj = em.C()
+        obj = object.__new__(em.C)  # create object but don't call __init__
+        super(em.C, obj).__init__() # call Array class __init__ first
+        obj.__init__()              # now call the user's array element __init__
       self.arrays[aid][index] = obj
     else:
       if resumeFromSync:
@@ -477,6 +485,7 @@ class Chare(object):
     self._local[-1] = None
     self._local_free_head = 0
     self._when_buffer = {}
+    self._chare_initialized = True
 
   def __addLocal__(self, msg):
     if self._local_free_head is None: raise CharmPyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
@@ -529,9 +538,10 @@ def mainchare_proxy_contribute(proxy, contributeInfo):
 
 class Mainchare(Chare):
   def __init__(self):
+    if hasattr(self, '_chare_initialized'): return
     super(Mainchare,self).__init__()
-    self.cid = charm.currentChareId
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.cid)
+    self._cid = charm.currentChareId
+    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._cid)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
@@ -582,11 +592,12 @@ def group_proxy_contribute(proxy, contributeInfo):
 
 class Group(Chare):
   def __init__(self):
+    if hasattr(self, '_chare_initialized'): return
     super(Group,self).__init__()
-    self.gid = charm.currentGroupID
+    self._gid = charm.currentGroupID
     self.thisIndex = CkMyPe()
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.gid)
-    self.contributeInfo = charm.lib.initContributeInfo(self.gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
+    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._gid)
+    self.contributeInfo = charm.lib.initContributeInfo(self._gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
     if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def contribute(self, data, reducer_type, target):
@@ -674,13 +685,14 @@ def array_proxy_doneInserting(proxy):
 
 class Array(Chare):
   def __init__(self):
+    if hasattr(self, '_chare_initialized'): return
     super(Array,self).__init__()
-    self.aid = charm.currentArrayID
+    self._aid = charm.currentArrayID
     self.thisIndex = charm.currentArrayElemIndex
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self.aid, len(self.thisIndex))
+    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._aid, len(self.thisIndex))
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     self.usesAtSync = False
-    self.contributeInfo = charm.lib.initContributeInfo(self.aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
+    self.contributeInfo = charm.lib.initContributeInfo(self._aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
     if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
 
   def AtSync(self):

@@ -13,7 +13,6 @@ Reducer.addReducer(myReducer)
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main, self).__init__()
     self.recvdReductions = 0
     self.expectedReductions = 4
 
@@ -71,7 +70,6 @@ class MyObject(object):
 
 class Test(Array):
   def __init__(self):
-    super(Test, self).__init__()
     print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def doReduction(self):

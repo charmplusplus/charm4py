@@ -5,7 +5,6 @@ from charmpy import Reducer
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if len(args) <= 1:
       args = [None,1,5]  # default: 1 dimension of size 5
@@ -40,7 +39,6 @@ class Main(Mainchare):
 
 class Hello(Array):
   def __init__(self):
-    super(Hello,self).__init__()
     print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def SayHi(self, hiNo):

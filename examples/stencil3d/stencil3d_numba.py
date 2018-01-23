@@ -19,7 +19,6 @@ DIVIDEBY7 = 0.14285714285714285714
 
 class Main(Mainchare):
   def __init__(self, args):
-    super(Main,self).__init__()
 
     if (len(args) != 3) and (len(args) != 7):
       print(args[0] + " [array_size] [block_size]")
@@ -138,8 +137,6 @@ def processGhosts_fast(T, direction, width, height, gh, X, Y, Z):
 
 class Stencil(Array):
   def __init__(self):
-    super(Stencil,self).__init__()
-
     #print("Element " + str(self.thisIndex) + " created")
 
     arrSize = (ro.blockDimX+2) * (ro.blockDimY+2) * (ro.blockDimZ+2)
