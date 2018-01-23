@@ -20,7 +20,7 @@ else:
   except:
     print("Error accessing " + libcharmPath + "/libcharm.so " +
           "(library not found or is not valid)")
-    exit(1)
+    raise sys.exc_info()[1]
 
 cffiFound = False
 if '--with-ctypes' not in sys.argv:
