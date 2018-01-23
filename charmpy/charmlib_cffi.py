@@ -122,7 +122,7 @@ class CharmLib(object):
   def buildMainchare(onPe, objPtr, ep, argc, argv):
     try:
       objPtr = int(ffi.cast("uintptr_t", objPtr))
-      charm.buildMainchare(onPe, objPtr, ep, [ffi.string(argv[i]) for i in range(argc)])
+      charm.buildMainchare(onPe, objPtr, ep, [ffi.string(argv[i]).decode() for i in range(argc)])
     except:
       charm.handleGeneralError()
 
