@@ -83,6 +83,8 @@ def rebuildNumpyArray(data, shape, dt):
 class Charm(object):
 
   def __init__(self):
+    self._myPe = -1
+    self._numPes = -1
     self.mainchareTypes = []
     self.chares = {}
     self.groupTypes = []  # group classes registered in runtime system
@@ -295,13 +297,16 @@ class Charm(object):
   # first callback from Charm++ shared library
   # this method registers classes with the shared library
   def registerMainModule(self):
+    self._myPe   = self.lib.CkMyPe()
+    self._numPes = self.lib.CkNumPes()
+
     # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
     # policy that ensures that messages reach Charm++ in a timely fashion
     sys.stdout = os.fdopen(1,'wt',1)
     sys.stderr = os.fdopen(2,'wt',1)
-    if CkMyPe() != 0: self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
+    if self.myPe() != 0: self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
 
-    if (CkMyPe() == 0) and (not Options.QUIET):
+    if (self.myPe() == 0) and (not Options.QUIET):
       import platform
       out_msg = ("CharmPy> Running on Python " + str(platform.python_version()) +
                 " (" + str(platform.python_implementation()) + "). Using '" +
@@ -388,7 +393,7 @@ class Charm(object):
     if not Options.PROFILING:
       print("NOTE: called charm.printStats() but profiling is disabled")
       return
-    print("Timings for PE " + str(CkMyPe()) + ":")
+    print("Timings for PE " + str(self.myPe()) + ":")
     total, pyoverhead = sum(self.lib.times), sum(self.lib.times)
     table = [["","em","send","recv"]]
     lineNb = 1
@@ -414,13 +419,19 @@ class Charm(object):
     print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
     print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
+  # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
+  def myPe(self): return self._myPe
+  def numPes(self): return self._numPes
+  def exit(self): self.lib.CkExit()
+  def abort(self, msg): self.lib.CkAbort(msg)
+
 charm    = Charm()
 readonlies = __ReadOnlies()
 Reducer  = charm.reducers  # put reference to reducers in module scope
-CkMyPe   = charm.lib.CkMyPe
-CkNumPes = charm.lib.CkNumPes
-CkExit   = charm.lib.CkExit
-CkAbort  = charm.lib.CkAbort
+CkMyPe   = charm.myPe
+CkNumPes = charm.numPes
+CkExit   = charm.exit
+CkAbort  = charm.abort
 
 def profile_proxy(func):
   def func_with_profiling(*args, **kwargs):
@@ -552,7 +563,7 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
     destObj = None
-    if Options.LOCAL_MSG_OPTIM and (me.elemIdx == CkMyPe()): destObj = charm.groups[me.gid]
+    if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()): destObj = charm.groups[me.gid]
     msg = charm.packMsg(destObj, args[1:])
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
   proxy_entry_method.ep = ep
