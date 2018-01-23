@@ -543,9 +543,10 @@ def group_proxy_ctor(proxy, gid):
   proxy.gid = gid
   proxy.elemIdx = -1 # next entry method call will be to elemIdx PE (broadcast if -1)
 
-def group_proxy_elem(proxy, pe): # group proxy [] overload method
-  proxy.elemIdx = pe
-  return proxy
+def group_proxy_elem(proxy, pe):  # group proxy [] overload method
+  proxy_clone = proxy.__class__(proxy.gid)
+  proxy_clone.elemIdx = pe
+  return proxy_clone
 
 def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
@@ -554,7 +555,6 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
     if Options.LOCAL_MSG_OPTIM and (me.elemIdx == CkMyPe()): destObj = charm.groups[me.gid]
     msg = charm.packMsg(destObj, args[1:])
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
-    me.elemIdx = -1
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -568,7 +568,6 @@ def group_ckNew_gen(C, epIdx):
 
 def group_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToGroup(contributeInfo, proxy.gid, proxy.elemIdx)
-  proxy.elemIdx = -1
 
 class Group(Chare):
   def __init__(self):
@@ -611,11 +610,12 @@ def array_proxy_ctor(proxy, aid, ndims):
   proxy.elemIdx = () # next entry method call will be to elemIdx array element (broadcast if empty tuple)
 
 def array_proxy_elem(proxy, idx): # array proxy [] overload method
+  proxy_clone = proxy.__class__(proxy.aid, proxy.ndims)
   if type(idx) == int: idx = (idx,)
-  if len(idx) != proxy.ndims:
+  if len(idx) != proxy_clone.ndims:
     raise CharmPyError("Dimensions of index " + str(idx) + " don't match array dimensions")
-  proxy.elemIdx = tuple(idx)
-  return proxy
+  proxy_clone.elemIdx = tuple(idx)
+  return proxy_clone
 
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
@@ -624,7 +624,6 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
     if Options.LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0): destObj = charm.arrays[me.aid].get(me.elemIdx)
     msg = charm.packMsg(destObj, args[1:])
     charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
-    me.elemIdx = ()
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -658,7 +657,6 @@ def array_ckInsert_gen(epIdx):
 
 def array_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToArray(contributeInfo, proxy.aid, proxy.elemIdx)
-  proxy.elemIdx = ()
 
 def array_proxy_doneInserting(proxy):
   charm.lib.CkDoneInserting(proxy.aid)
