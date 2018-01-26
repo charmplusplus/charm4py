@@ -139,6 +139,8 @@ class Charm(object):
     self.CkArraySend = self.lib.CkArraySend
     self.reducers = ckreduction.ReducerContainer(self)
     self.redMgr   = ckreduction.ReductionManager(self, self.reducers)
+    self.mainchareRegistered = False
+    self.entry_func = None  # entry point to Charm program. can be used in place of defining a Mainchare
 
   def handleGeneralError(self):
     import traceback
@@ -161,6 +163,7 @@ class Charm(object):
     self.currentChareId = cid
     obj = object.__new__(em.C)  # create object but don't call __init__
     super(em.C, obj).__init__() # call Mainchare class __init__ first
+    if self.entry_func is not None: obj.main = self.entry_func
     obj.__init__(args)          # now call the user's __init__
     self.chares[cid] = obj
     if Options.PROFILING: self.activeChares.add((em.C, Mainchare))
@@ -345,6 +348,10 @@ class Charm(object):
       if Array in charm_types: self.registerInCharm(C, Array, self.lib.CkRegisterArray)
 
   def registerAs(self, C, charm_type_id):
+    if charm_type_id == MAINCHARE:
+      if self.mainchareRegistered:
+        raise CharmPyError("More than one entry point has been specified")
+      self.mainchareRegistered = True
     charm_type = charm_type_id_to_class[charm_type_id]
     #print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
     self.classEntryMethods[charm_type_id][C] = [EntryMethod(C,m,charm_type_id) for m in charm_type.__baseEntryMethods__()]
@@ -370,7 +377,7 @@ class Charm(object):
       for charm_type_id in collections: self.registerAs(C, charm_type_id)
     self.register_order.append(C)
 
-  def start(self, classes=[], modules=[]):
+  def start(self, classes=[], modules=[], entry=None):
     """
     Start Charm++ program.
 
@@ -397,6 +404,11 @@ class Charm(object):
             self.register(C)
           elif Group in C.mro() or Array in C.mro():
             raise CharmPyError("Refer to new API to create Arrays and Groups")
+    if entry is not None:
+      self.entry_func = entry
+      self.register(DefaultMainchare)
+    if not self.mainchareRegistered:
+      raise CharmPyError("Can't start program because no main entry point has been specified")
     if len(self.registered) == 0:
       raise CharmPyError("Can't start Charm program because no Charm classes registered")
     self.lib.start()
@@ -599,6 +611,10 @@ class Mainchare(Chare):
     M["__init__"] = mainchare_proxy_ctor
     M["ckContribute"] = mainchare_proxy_contribute # function called when target proxy is Mainchare
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
+
+class DefaultMainchare(Mainchare):
+  def __init__(self, args):
+    self.main(args)
 
 # ------------------ Group and Proxy  ----------------------
 
