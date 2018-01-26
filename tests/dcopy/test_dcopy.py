@@ -1,5 +1,5 @@
 import charmpy
-from charmpy import charm, Mainchare, Array, CkExit, CkNumPes
+from charmpy import charm, Chare, Mainchare, Array, CkNumPes
 from charmpy import readonlies as ro
 import time
 import array
@@ -18,7 +18,7 @@ class Main(Mainchare):
     def __init__(self, args):
         ro.numChares = CkNumPes() * CHARES_PER_PE
         ro.arrayIndexes = [(i,) for i in range(ro.numChares)]
-        ro.testProxy = charm.TestProxy.ckNew(ro.numChares)
+        ro.testProxy = Array(Test, ro.numChares)
         ro.mainProxy = self.thisProxy
         ro.testProxy.doIteration()
         self.iterations = 0
@@ -30,11 +30,11 @@ class Main(Mainchare):
         if self.iterations == MAX_ITER:
             print("Program done. Total time =", time.time() - self.startTime)
             charm.printStats()
-            CkExit()
+            charm.exit()
         else:
             ro.testProxy.doIteration()
 
-class Test(Array):
+class Test(Chare):
     def __init__(self):
 
         self.x = numpy.arange(DATA_LEN, dtype='float64')

@@ -1,15 +1,14 @@
-from charmpy import charm, Mainchare, Group, CkExit, CkMyPe, CkNumPes, when, CkAbort
+from charmpy import charm, Chare, Mainchare, Group, CkMyPe, CkNumPes, when
 from charmpy import readonlies as ro
 
 GRP_TO_SEND = 20
 
 class Main(Mainchare):
   def __init__(self, args):
-    if CkNumPes() < 3: CkAbort("Run program with at least 3 PEs")
-    grpProxy = charm.TestGProxy.ckNew()
-    grpProxy.run()
+    if CkNumPes() < 3: charm.abort("Run program with at least 3 PEs")
+    Group(Test).run()
 
-class TestG(Group):
+class Test(Chare):
   def __init__(self):
     self.msgsRcvd = 0   # for PE 0
     self.current  = 1   # for PE 0
@@ -24,7 +23,7 @@ class TestG(Group):
     if self.msgsRcvd >= GRP_TO_SEND:
       self.msgsRcvd = 0
       self.current += 1
-      if self.current == CkNumPes(): CkExit()
+      if self.current == CkNumPes(): charm.exit()
 
   def run(self):
     if CkMyPe() == 0: return

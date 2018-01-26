@@ -1,12 +1,13 @@
-from charmpy import charm, Mainchare
+from charmpy import charm, Mainchare, Group
 from charmpy import readonlies as ro
+import hello, goodbye
 
 class Main(Mainchare):
     def __init__(self, args):
         ro.mainProxy = self.thisProxy
-        hello = charm.HelloProxy.ckNew()
-        ro.byeProxy = charm.GoodbyeProxy.ckNew()
-        hello.SayHi()
+        hellos  = Group(hello.Hello)
+        ro.byes = Group(goodbye.Goodbye)
+        hellos.SayHi()
 
     def done(self):
         charm.exit()

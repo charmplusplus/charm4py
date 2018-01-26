@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Group, CkMyPe, CkNumPes, CkExit
+from charmpy import charm, Chare, Mainchare, Group, CkMyPe, CkNumPes
 from charmpy import readonlies as ro
 
 
@@ -13,15 +13,15 @@ class HelloList:
 class Main(Mainchare):
   def __init__(self, args):
     print("Running Hello on " + str(CkNumPes()) + " processors")
-    grpProxy = charm.HelloProxy.ckNew()
+    grpProxy = Group(Hello)
     grpProxy[0].SayHi(HelloList(17))
     ro.mainProxy = self.thisProxy
 
   def done(self, hellos):
     print("All done " + str(hellos))
-    CkExit()
+    charm.exit()
 
-class Hello(Group):
+class Hello(Chare):
   def __init__(self):
     print("Hello " + str(self.thisIndex) + " created")
 

@@ -144,7 +144,7 @@ class CharmLib(object):
       c_data = None
       c_data_size = numElems = 0
 
-    c_info = contributor.contributeInfo
+    c_info = contributor._contributeInfo
     c_info.cbEpIdx = ep
     c_info.data = ctypes.cast(c_data, c_void_p)
     c_info.numelems = numElems

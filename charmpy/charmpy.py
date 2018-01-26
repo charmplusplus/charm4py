@@ -18,6 +18,7 @@ import zlib
 import json
 import importlib
 import inspect
+import types
 import ckreduction
 import array
 try:
@@ -36,16 +37,28 @@ class Options:
   AUTO_FLUSH_WHEN = True
   QUIET = False
 
+# A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form groups,
+# (3) to form arrays. To achieve this, Charmpy can register with the Charm++ library up to 3
+# different types for the given class (a Mainchare, a Group and an Array), and each type will
+# register its own entry methods, even though the definition (body) of the entry methods in Python is the same.
+MAINCHARE, GROUP, ARRAY = range(3)
+CHARM_TYPES = (MAINCHARE, GROUP, ARRAY)
+
 class EntryMethod(object):
-  def __init__(self, C, name, profile=False):
+  def __init__(self, C, name, charm_type_id, profile=False):
     self.C = C          # class to which method belongs to
     self.name = name    # entry method name
     self.isCtor = False # true if method is constructor
     self.epIdx = -1     # entry method index assigned by Charm
     self.profile = profile
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
-    if sys.version_info < (3, 0, 0): getattr(C, name).__func__.em = self
-    else: getattr(C, name).em = self
+    if sys.version_info[0] < 3:
+      method = getattr(C, name).__func__
+    else:
+      method = getattr(C, name)
+    # a user class' method can have up to len(CHARM_TYPES) EntryMethod objects associated with it
+    if not hasattr(method, 'entry_method_obj'): method.entry_method_obj = [None] * len(CHARM_TYPES)
+    method.entry_method_obj[charm_type_id] = self
   def addTimes(self, times):
     for i,t in enumerate(times): self.times[i] += t
 
@@ -85,17 +98,17 @@ class Charm(object):
   def __init__(self):
     self._myPe = -1
     self._numPes = -1
-    self.mainchareTypes = []
+    self.registered = {}      # class -> set of Charm types (Mainchare, Group, Array) for which this class is registered
+    self.register_order = []  # list of classes in registration order (all processes must use same order)
     self.chares = {}
-    self.groupTypes = []  # group classes registered in runtime system
-    self.groups = []      # group instances on this PE (indexed by group ID)
-    self.arrayTypes = []  # array classes registered in runtime system
-    self.arrays = {}      # aid -> dict[idx] -> array element instance with index idx on this PE
-    self.entryMethods = {}                # ep_idx -> EntryMethod object
-    self.classEntryMethods = {}           # class -> list of EntryMethod objects
-    self.proxyClasses = {}                # class name -> proxy class
-    self.proxyTimes = 0.0 # for profiling
-    self.msgLens = []     # for profiling
+    self.groups = []          # group instances on this PE (indexed by group ID)
+    self.arrays = {}          # aid -> idx -> array element instance with index idx on this PE
+    self.entryMethods = {}    # ep_idx -> EntryMethod object
+    self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
+    self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
+    self.proxyTimes = 0.0     # for profiling
+    self.msgLens = []         # for profiling
+    self.activeChares = set() # for profiling (active chares on this PE)
     self.opts = Options
     self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
     cfgPath = None
@@ -150,6 +163,7 @@ class Charm(object):
     super(em.C, obj).__init__() # call Mainchare class __init__ first
     obj.__init__(args)          # now call the user's __init__
     self.chares[cid] = obj
+    if Options.PROFILING: self.activeChares.add((em.C, Mainchare))
     if CkMyPe() == 0: # broadcast readonlies
       roData = {}
       for attr in dir(readonlies):   # attr is string
@@ -194,11 +208,12 @@ class Charm(object):
     if obj is None:
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
       if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
-      self.currentGroupID = gid
       obj = object.__new__(em.C)  # create object but don't call __init__
-      super(em.C, obj).__init__() # call Group class __init__ first
+      Group.initMember(obj, gid)
+      super(em.C, obj).__init__() # call Chare class __init__ first
       obj.__init__()              # now call the user's __init__
       self.groups[gid] = obj
+      if Options.PROFILING: self.activeChares.add((em.C, Group))
     else:
       self.invokeEntryMethod(obj, em, msg, dcopy_start, t0)
 
@@ -210,20 +225,20 @@ class Charm(object):
       #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(index) + " not instantiated yet")
       em = self.entryMethods[ep]
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
-      self.currentArrayID = aid
-      self.currentArrayElemIndex = index
       if migration:
         obj = cPickle.loads(msg)
-        obj.contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
+        obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
         obj = object.__new__(em.C)  # create object but don't call __init__
-        super(em.C, obj).__init__() # call Array class __init__ first
+        Array.initMember(obj, aid, index)
+        super(em.C, obj).__init__() # call Chare class __init__ first
         obj.__init__()              # now call the user's array element __init__
       self.arrays[aid][index] = obj
+      if Options.PROFILING: self.activeChares.add((em.C, Array))
     else:
       if resumeFromSync:
         msg = cPickle.dumps(({},[]))
-        ep = getattr(obj, 'resumeFromSync').em.epIdx
+        ep = getattr(obj, 'resumeFromSync').entry_method_obj[ARRAY].epIdx
       self.invokeEntryMethod(obj, self.entryMethods[ep], msg, dcopy_start, t0)
 
   def packMsg(self, destObj, msgArgs):
@@ -288,17 +303,18 @@ class Charm(object):
     return (msg, direct_copy_buffers)
 
   # register class C in Charm
-  def registerInCharm(self, C, libRegisterFunc):
-    entryMethods = self.classEntryMethods[C]
+  def registerInCharm(self, C, charm_type, libRegisterFunc):
+    charm_type_id = charm_type.type_id
+    entryMethods = self.classEntryMethods[charm_type_id][C]
     #if CkMyPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
-    C.idx, startEpIdx = libRegisterFunc(C.__name__, len(entryMethods))
+    C.idx, startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
     #if CkMyPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx) + " ctor Idx=" + str(startEpIdx))
     for i,em in enumerate(entryMethods):
       if i == 0: em.isCtor = True
       em.epIdx = startEpIdx + i
       self.entryMethods[em.epIdx] = em
-    proxyClass = C.__getProxyClass__()
-    self.proxyClasses[C.__name__] = proxyClass
+    proxyClass = charm_type.__getProxyClass__(C)
+    self.proxyClasses[charm_type_id][C] = proxyClass
     setattr(self, proxyClass.__name__, proxyClass) # save new class in my namespace
     globals()[proxyClass.__name__] = proxyClass    # save in module namespace (needed to pickle the proxy)
 
@@ -322,26 +338,37 @@ class Charm(object):
       if self.lib.name != "cffi": out_msg += ", **WARNING**: cffi recommended for best performance"
       print(out_msg)
 
-    for C in self.mainchareTypes: self.registerInCharm(C, self.lib.CkRegisterMainchare)
-    for C in self.groupTypes: self.registerInCharm(C, self.lib.CkRegisterGroup)
-    for C in self.arrayTypes: self.registerInCharm(C, self.lib.CkRegisterArray)
+    for C in self.register_order:
+      charm_types = self.registered[C]
+      if Mainchare in charm_types: self.registerInCharm(C, Mainchare, self.lib.CkRegisterMainchare)
+      if Group in charm_types: self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
+      if Array in charm_types: self.registerInCharm(C, Array, self.lib.CkRegisterArray)
 
-  # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
-  def register(self, C):
-    if C in self.classEntryMethods: return   # already registered
-    #print("CharmPy: Registering class " + C.__name__)
-    self.classEntryMethods[C] = [EntryMethod(C,m) for m in C.__baseEntryMethods__()]
+  def registerAs(self, C, charm_type_id):
+    charm_type = charm_type_id_to_class[charm_type_id]
+    #print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
+    self.classEntryMethods[charm_type_id][C] = [EntryMethod(C,m,charm_type_id) for m in charm_type.__baseEntryMethods__()]
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
       if m in ["AtSync", "flushWhen", "contribute", "gather"]: continue
       #print(m)
-      self.classEntryMethods[C].append(EntryMethod(C,m,profile=Options.PROFILING))
+      self.classEntryMethods[charm_type_id][C].append(EntryMethod(C,m,charm_type_id,profile=Options.PROFILING))
+    self.registered[C].add(charm_type)
 
-    types = C.mro()
-    if Group in types: self.groupTypes.append(C)
-    elif Mainchare in types: self.mainchareTypes.append(C)
-    elif Array in types: self.arrayTypes.append(C)
+  # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
+  # by default a class is registered to work with both Groups and Arrays
+  def register(self, C, collections=(GROUP, ARRAY)):
+    if C in self.registered: return # already registered
+    if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
+      raise CharmPyError("Only subclasses of Chare can be registered")
+
+    self.registered[C] = set()
+    if Mainchare in C.mro():
+      self.registerAs(C, MAINCHARE)
+    else:
+      for charm_type_id in collections: self.registerAs(C, charm_type_id)
+    self.register_order.append(C)
 
   def start(self, classes=[], modules=[]):
     """
@@ -365,16 +392,19 @@ class Charm(object):
     for module_name in M:
       if module_name not in sys.modules: importlib.import_module(module_name)
       for C_name,C in inspect.getmembers(sys.modules[module_name], inspect.isclass):
-        if C.__module__ != __name__ and hasattr(C, 'mro') and Chare in C.mro():
-          self.register(C)
-    if len(self.classEntryMethods) == 0:
+        if C.__module__ != __name__ and hasattr(C, 'mro'):
+          if Chare in C.mro():
+            self.register(C)
+          elif Group in C.mro() or Array in C.mro():
+            raise CharmPyError("Refer to new API to create Arrays and Groups")
+    if len(self.registered) == 0:
       raise CharmPyError("Can't start Charm program because no Charm classes registered")
     self.lib.start()
 
   def arrayElemLeave(self, aid, index, sizing):
     if sizing:
       obj = self.arrays[aid][index]
-      del obj.contributeInfo  # don't want to pickle this
+      del obj._contributeInfo  # don't want to pickle this
       obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
       return obj.migMsg
     else:
@@ -406,9 +436,9 @@ class Charm(object):
     table = [["","em","send","recv"]]
     lineNb = 1
     sep = {}
-    for C,entryMethods in self.classEntryMethods.items():
-      sep[lineNb] = "---- " + str(C) + " ----"
-      for em in entryMethods:
+    for C,charm_type in self.activeChares:
+      sep[lineNb] = "---- " + str(C) + " as " + charm_type.__name__ + " ----"
+      for em in self.classEntryMethods[charm_type.type_id][C]:
         if not em.profile: continue
         vals = em.times
         table.append( [em.name] + [str(round(v,3)) for v in vals] )
@@ -476,6 +506,7 @@ def when(attrib_name):
 
 class Chare(object):
   def __init__(self):
+    if hasattr(self, '_chare_initialized'): return
     # messages to this chare from chares in the same PE are stored here without copying
     # or pickling. _local is a fixed size array that implements a mem pool, where msgs
     # can be in non-consecutive positions, and the indexes of free slots are stored
@@ -518,6 +549,14 @@ class Chare(object):
           break
         for m in msgs_now: method.func(self, *m)
 
+  def contribute(self, data, reducer_type, target):
+    charm.contribute(data, reducer_type, target, self)
+
+  def gather(self, data, target):
+    charm.contribute(data, Reducer.gather, target, self)
+
+  def AtSync(self): pass  # chares which are members of an Array will have this replaced with ArrayElem_AtSync
+
 # ----------------- Mainchare and Proxy --------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -537,20 +576,23 @@ def mainchare_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToChare(contributeInfo, proxy.cid)
 
 class Mainchare(Chare):
+
+  type_id = MAINCHARE
+
   def __init__(self):
     if hasattr(self, '_chare_initialized'): return
     super(Mainchare,self).__init__()
     self._cid = charm.currentChareId
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._cid)
+    self.thisProxy = charm.proxyClasses[MAINCHARE][self.__class__](self._cid)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
 
   @classmethod
-  def __getProxyClass__(cls):
-    #print("Creating proxy class for class " + cls.__name__)
+  def __getProxyClass__(C, cls):
+    #print("Creating mainchare proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    for m in charm.classEntryMethods[cls]:
+    for m in charm.classEntryMethods[MAINCHARE][cls]:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(mainchare_proxy_method_gen(m.epIdx))
       else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
@@ -590,30 +632,30 @@ def group_ckNew_gen(C, epIdx):
 def group_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToGroup(contributeInfo, proxy.gid, proxy.elemIdx)
 
-class Group(Chare):
-  def __init__(self):
-    if hasattr(self, '_chare_initialized'): return
-    super(Group,self).__init__()
-    self._gid = charm.currentGroupID
-    self.thisIndex = CkMyPe()
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._gid)
-    self.contributeInfo = charm.lib.initContributeInfo(self._gid, self.thisIndex, CONTRIBUTOR_TYPE_GROUP)
-    if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
+class Group(object):
 
-  def contribute(self, data, reducer_type, target):
-    charm.contribute(data, reducer_type, target, self)
+  type_id = GROUP
 
-  def gather(self, data, target):
-    charm.contribute(data, Reducer.gather, target, self)
+  def __new__(cls, C):
+    if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
+      raise CharmPyError("Only subclasses of Chare can be member of Group")
+    return charm.proxyClasses[GROUP][C].ckNew()
+
+  @classmethod
+  def initMember(cls, obj, gid):
+    obj.thisIndex = CkMyPe()
+    obj.thisProxy = charm.proxyClasses[GROUP][obj.__class__](gid)
+    obj._contributeInfo = charm.lib.initContributeInfo(gid, obj.thisIndex, CONTRIBUTOR_TYPE_GROUP)
+    if Options.PROFILING: obj.contribute = profile_proxy(obj.contribute)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
 
   @classmethod
-  def __getProxyClass__(cls):
-    #print("Creating proxy class for class " + cls.__name__)
+  def __getProxyClass__(C, cls):
+    #print("Creating group proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    entryMethods = charm.classEntryMethods[cls]
+    entryMethods = charm.classEntryMethods[GROUP][cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(group_proxy_method_gen(m.epIdx))
@@ -622,7 +664,7 @@ class Group(Chare):
     M["__getitem__"] = group_proxy_elem
     M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
     M["ckContribute"] = group_proxy_contribute # function called when target proxy is Group
-    return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
+    return type(cls.__name__ + 'GroupProxy', (), M) # create and return proxy class
 
 # -------------------- Array and Proxy -----------------------
 
@@ -683,26 +725,27 @@ def array_proxy_contribute(proxy, contributeInfo):
 def array_proxy_doneInserting(proxy):
   charm.lib.CkDoneInserting(proxy.aid)
 
-class Array(Chare):
-  def __init__(self):
-    if hasattr(self, '_chare_initialized'): return
-    super(Array,self).__init__()
-    self._aid = charm.currentArrayID
-    self.thisIndex = charm.currentArrayElemIndex
-    self.thisProxy = charm.proxyClasses[self.__class__.__name__](self._aid, len(self.thisIndex))
+def ArrayElem_AtSync(obj):
+  obj.thisProxy[obj.thisIndex].AtSync()
+
+class Array(object):
+
+  type_id = ARRAY
+
+  def __new__(cls, C, dims=None, ndims=-1):
+    if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
+      raise CharmPyError("Only subclasses of Chare can be member of Array")
+    return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims)
+
+  @classmethod
+  def initMember(cls, obj, aid, index):
+    obj.thisIndex = index
+    obj.thisProxy = charm.proxyClasses[ARRAY][obj.__class__](aid, len(obj.thisIndex))
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
-    self.usesAtSync = False
-    self.contributeInfo = charm.lib.initContributeInfo(self._aid, self.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
-    if Options.PROFILING: self.contribute = profile_proxy(self.contribute)
-
-  def AtSync(self):
-    self.thisProxy[self.thisIndex].AtSync()
-
-  def contribute(self, data, reducer_type, target):
-    charm.contribute(data, reducer_type, target, self)
-
-  def gather(self, data, target):
-    charm.contribute(data, Reducer.gather, target, self)
+    obj.usesAtSync = False
+    obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
+    if Options.PROFILING: obj.contribute = profile_proxy(obj.contribute)
+    obj.AtSync = types.MethodType(ArrayElem_AtSync, obj)
 
   @classmethod
   def __baseEntryMethods__(cls):
@@ -710,10 +753,10 @@ class Array(Chare):
     return ["__init__", "__init__", "AtSync"]
 
   @classmethod
-  def __getProxyClass__(cls):
-    #print("Creating proxy class for class " + cls.__name__)
+  def __getProxyClass__(C, cls):
+    #print("Creating array proxy class for class " + cls.__name__)
     M = dict()  # proxy methods
-    entryMethods = charm.classEntryMethods[cls]
+    entryMethods = charm.classEntryMethods[ARRAY][cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
       if Options.PROFILING: M[m.name] = profile_proxy(array_proxy_method_gen(m.epIdx))
@@ -724,4 +767,7 @@ class Array(Chare):
     M["ckInsert"] = array_ckInsert_gen(entryMethods[0].epIdx)
     M["ckContribute"] = array_proxy_contribute # function called when target proxy is Array
     M["ckDoneInserting"] = array_proxy_doneInserting
-    return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
+    return type(cls.__name__ + 'ArrayProxy', (), M) # create and return proxy class
+
+
+charm_type_id_to_class = (Mainchare, Group, Array)   # needs to match order of MAINCHARE, GROUP, ... "enum"

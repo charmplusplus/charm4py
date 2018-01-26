@@ -4,7 +4,7 @@
 # Original author: Isaac Dooley (2008)
 # Converted to Python from examples/charm++/wave2d in Charm++ codebase
 
-from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Mainchare, Array, CkMyPe, CkNumPes
 from charmpy import readonlies as ro
 import time
 import math
@@ -34,7 +34,7 @@ class Main(Mainchare):
     print("Running wave2d on " + str(CkNumPes()) + " processors")
 
     # Create new array of worker chares
-    ro.arrayProxy = charm.WaveProxy.ckNew((chareArrayWidth, chareArrayHeight))
+    ro.arrayProxy = Array(Wave, (chareArrayWidth, chareArrayHeight))
     # Start the computation
     ro.arrayProxy.begin_iteration(False)
     #charm.initLiveViz((TotalDataWidth,TotalDataHeight))
@@ -49,7 +49,7 @@ class Main(Mainchare):
       if self.iteration == self.total_iterations:
         print("Program Done!, Total time= " + str(time.time() - self.programStartTime))
         charm.printStats()
-        CkExit()
+        charm.exit()
       else:
         # Start the next iteration
         self.count = 0
@@ -130,7 +130,7 @@ def initPressure(numInitialPertubations, W, H, w, h, elemIdx, pressure, pressure
           t = 700.0 * math.cos(rscaled) # Range won't exceed -700 to 700
           pressure[i,j] = pressure_old[i,j] = t
 
-class Wave(Array):
+class Wave(Chare):
   def __init__(self):
     self.mywidth = TotalDataWidth // chareArrayWidth
     self.myheight = TotalDataHeight // chareArrayHeight

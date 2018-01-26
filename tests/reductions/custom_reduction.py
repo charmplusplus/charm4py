@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
@@ -25,7 +25,7 @@ class Main(Mainchare):
     for x in ro.ARRAY_SIZE: self.nElements *= x
     print("Running reduction example on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
     ro.mainProxy = self.thisProxy
-    ro.arrProxy = charm.TestProxy.ckNew(ro.ARRAY_SIZE)
+    ro.arrProxy = Array(Test, ro.ARRAY_SIZE)
     ro.arrProxy.doReduction()
 
   def done_charm_builtin(self, result):
@@ -68,7 +68,7 @@ class MyObject(object):
     else:
       return self.__add__(other)
 
-class Test(Array):
+class Test(Chare):
   def __init__(self):
     print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 

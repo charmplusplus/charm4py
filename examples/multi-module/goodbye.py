@@ -1,8 +1,8 @@
-from charmpy import Group, CkMyPe
+from charmpy import Chare, CkMyPe
 from charmpy import readonlies as ro
 import time
 
-class Goodbye(Group):
+class Goodbye(Chare):
     def __init__(self):
         pass
 

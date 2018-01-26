@@ -95,7 +95,7 @@ class CharmLib(object):
       c_data = ffi.NULL
       c_data_size = numElems = 0
 
-    c_info = contributor.contributeInfo
+    c_info = contributor._contributeInfo
     c_struct = c_info.data
     c_struct.cbEpIdx = ep
     c_struct.data = c_info.c_data = c_data

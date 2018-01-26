@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
@@ -17,8 +17,8 @@ class Main(Mainchare):
     for x in ro.ARRAY_SIZE: self.nElements *= x
     print("Running gather example on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
     ro.mainProxy = self.thisProxy
-    ro.arrProxy = charm.TestProxy.ckNew(ro.ARRAY_SIZE)
-    ro.grpProxy = charm.TestGroupProxy.ckNew()
+    ro.arrProxy = Array(Test, ro.ARRAY_SIZE)
+    ro.grpProxy = Group(TestGroup)
     ro.arrProxy.doGather()
     ro.grpProxy.doGather()
 
@@ -40,7 +40,7 @@ class Main(Mainchare):
     if (self.recvdReductions >= self.expectedReductions):
       CkExit()
 
-class Test(Array):
+class Test(Chare):
   def __init__(self):
     print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
@@ -50,7 +50,7 @@ class Test(Array):
     # gather arrays
     self.gather(self.thisIndex, ro.mainProxy.done_gather_array)
 
-class TestGroup(Group):
+class TestGroup(Chare):
   def __init__(self):
     print("TestGroup " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 

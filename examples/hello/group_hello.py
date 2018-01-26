@@ -1,11 +1,11 @@
-from charmpy import charm, Mainchare, Group
+from charmpy import charm, Chare, Mainchare, Group
 from charmpy import readonlies as ro
 
 
 class Main(Mainchare):
   def __init__(self, args):
     print("Running Hello on " + str(charm.numPes()) + " processors")
-    grpProxy = charm.HelloProxy.ckNew()
+    grpProxy = Group(Hello)
     grpProxy[0].SayHi(17)
     ro.mainProxy = self.thisProxy
 
@@ -13,7 +13,7 @@ class Main(Mainchare):
     print("All done")
     charm.exit()
 
-class Hello(Group):
+class Hello(Chare):
   def __init__(self):
     print("Hello " + str(self.thisIndex) + " created")
 

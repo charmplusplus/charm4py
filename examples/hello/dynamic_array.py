@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Mainchare, Array, CkMyPe, CkNumPes
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
@@ -9,7 +9,7 @@ class Main(Mainchare):
     if len(args) <= 1:
       args = [None,1,5]  # default: 1 dimension of size 5
     elif len(args) != 3:
-      CkAbort("Usage : python array_hello.py [<num_dimensions> <array_size>]")
+      charm.abort("Usage : python array_hello.py [<num_dimensions> <array_size>]")
 
     ro.nDims = int(args[1])
     ro.ARRAY_SIZE = [int(args[2])] * ro.nDims
@@ -20,7 +20,7 @@ class Main(Mainchare):
     for x in ro.ARRAY_SIZE: self.nElements *= x
     print("Running Hello on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements")
     ro.mainProxy = self.thisProxy
-    self.arrProxy = charm.HelloProxy.ckNew(ndims=1)
+    self.arrProxy = Array(Hello, ndims=1)
     print("Created array proxy")
     for i in range(self.nElements):
       self.arrProxy.ckInsert(i)
@@ -35,9 +35,9 @@ class Main(Mainchare):
   def doneReduction(self, result):
     assert result == 1*self.nElements, "Reduction for dynamic array insertion failed."
     print("All done.")
-    CkExit()
+    charm.exit()
 
-class Hello(Array):
+class Hello(Chare):
   def __init__(self):
     print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 

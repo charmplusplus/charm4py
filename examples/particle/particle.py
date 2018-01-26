@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Array, CkExit, when, Reducer
+from charmpy import charm, Mainchare, Chare, Array, when, Reducer
 from charmpy import readonlies as ro
 import random
 import math
@@ -24,21 +24,21 @@ class Main(Mainchare):
     else: ro.arrayDims = (6,3)  # default: 2D chare array 6x3
     ro.cellSize = (SIM_BOX_SIZE / ro.arrayDims[0], SIM_BOX_SIZE / ro.arrayDims[1])
     ro.mainProxy = self.thisProxy
-    ro.cellProxy = charm.CellProxy.ckNew(ro.arrayDims)
-    ro.cellProxy.run()
+    ro.cells = Array(Cell, ro.arrayDims)
+    ro.cells.run()
 
   def collectMax(self, max_particles):
     print("Max particles= " + str(max_particles))
 
   def done(self):
-    CkExit()
+    charm.exit()
 
 def getNumParticles(pos, dims):  # assigns more particles to cells closer to center
   d = math.sqrt((pos[0]-dims[0]/2)**2 + (pos[1]-dims[1]/2)**2)
   max_d = math.sqrt((dims[0]/2)**2 + (dims[1]/2)**2) + 0.001
   return int((1-(d/max_d)) * MAX_START_PARTICLES_PER_CELL)
 
-class Cell(Array):
+class Cell(Chare):
   def __init__(self):
     self.iteration = 0
     self.particles = []
@@ -66,7 +66,7 @@ class Cell(Array):
         i += 1
 
     for nb in self.neighbors:
-      ro.cellProxy[nb].updateNeighbor(self.iteration, outgoingParticles[nb])
+      ro.cells[nb].updateNeighbor(self.iteration, outgoingParticles[nb])
 
   @when("iteration")
   def updateNeighbor(self, iter, particles):

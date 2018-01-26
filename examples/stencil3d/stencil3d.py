@@ -3,7 +3,7 @@
 # performs much better
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Mainchare, Array, CkNumPes, CkExit, CkAbort, when
+from charmpy import charm, Chare, Mainchare, Array, CkNumPes, when
 from charmpy import readonlies as ro
 import time
 import math
@@ -25,7 +25,7 @@ class Main(Mainchare):
     if (len(args) != 3) and (len(args) != 7):
       print(args[0] + " [array_size] [block_size]")
       print("OR " + args[0] + " [array_size_X] [array_size_Y] [array_size_Z] [block_size_X] [block_size_Y] [block_size_Z]")
-      CkAbort("Incorrect program arguments")
+      charm.abort("Incorrect program arguments")
 
     if len(args) == 3:
       ro.arrayDimX = ro.arrayDimY = ro.arrayDimZ = int(args[1])
@@ -34,9 +34,9 @@ class Main(Mainchare):
       ro.arrayDimX, ro.arrayDimY, ro.arrayDimZ = [int(arg) for arg in args[1:4]]
       ro.blockDimX, ro.blockDimY, ro.blockDimZ = [int(arg) for arg in args[4:7]]
 
-    if (ro.arrayDimX < ro.blockDimX) or (ro.arrayDimX % ro.blockDimX != 0): CkAbort("array_size_X % block_size_X != 0!")
-    if (ro.arrayDimY < ro.blockDimY) or (ro.arrayDimY % ro.blockDimY != 0): CkAbort("array_size_Y % block_size_Y != 0!")
-    if (ro.arrayDimZ < ro.blockDimZ) or (ro.arrayDimZ % ro.blockDimZ != 0): CkAbort("array_size_Z % block_size_Z != 0!")
+    if (ro.arrayDimX < ro.blockDimX) or (ro.arrayDimX % ro.blockDimX != 0): charm.abort("array_size_X % block_size_X != 0!")
+    if (ro.arrayDimY < ro.blockDimY) or (ro.arrayDimY % ro.blockDimY != 0): charm.abort("array_size_Y % block_size_Y != 0!")
+    if (ro.arrayDimZ < ro.blockDimZ) or (ro.arrayDimZ % ro.blockDimZ != 0): charm.abort("array_size_Z % block_size_Z != 0!")
 
     ro.num_chare_x = ro.arrayDimX // ro.blockDimX
     ro.num_chare_y = ro.arrayDimY // ro.blockDimY
@@ -49,16 +49,16 @@ class Main(Mainchare):
 
     # Create new array of worker chares
     ro.mainProxy = self.thisProxy
-    self.array = charm.StencilProxy.ckNew((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z))
+    self.array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z))
 
     # Start the computation
     self.array.begin_iteration()
 
   def report(self):
     charm.printStats()
-    CkExit()
+    charm.exit()
 
-class Stencil(Array):
+class Stencil(Chare):
   def __init__(self):
     #print("Element " + str(self.thisIndex) + " created")
 
@@ -155,7 +155,7 @@ class Stencil(Array):
         for i in range(height):
           self.temperature[index2(i+1, j+1, blockDimZ+1)] = gh[j*height+i]
     else:
-      CkAbort("ERROR\n");
+      charm.abort("ERROR\n");
 
   def check_and_compute(self):
     self.compute_kernel()

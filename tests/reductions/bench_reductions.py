@@ -1,5 +1,5 @@
 import charmpy
-from charmpy import charm, Mainchare, Array, CkExit, CkNumPes, Reducer
+from charmpy import charm, Chare, Mainchare, Array, CkExit, CkNumPes, Reducer
 from charmpy import readonlies as ro
 import time
 import numpy
@@ -19,7 +19,7 @@ class Main(Mainchare):
 
     ro.mainProxy = self.thisProxy
     ro.NUM_CHARES = CkNumPes() * CHARES_PER_PE
-    ro.arrayProxy = charm.TestProxy.ckNew(ro.NUM_CHARES)
+    ro.arrayProxy = Array(Test, ro.NUM_CHARES)
     ro.arrayProxy.run()
     self.startTime = time.time()
 
@@ -32,7 +32,7 @@ class Main(Mainchare):
     charm.printStats()
     CkExit()
 
-class Test(Array):
+class Test(Chare):
   def __init__(self):
 
     self.data = numpy.arange(DATA_LEN, dtype='float64')

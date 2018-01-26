@@ -2,7 +2,7 @@
 Tests the index proxy for a particular group element.
 """
 
-from charmpy import charm, Mainchare, Group, CkMyPe, CkExit, CkNumPes, CkAbort
+from charmpy import charm, Chare, Mainchare, Group, CkMyPe, CkNumPes
 
 class Main(Mainchare):
     """
@@ -10,19 +10,17 @@ class Main(Mainchare):
     """
 
     def __init__(self, args):
-        super(Main, self).__init__()
         if CkNumPes() < 3:
-            CkAbort("Run program with at least 3 PEs")
-        grp_proxy = charm.TestGroupProxy.ckNew()
+            charm.abort("Run program with at least 3 PEs")
+        grp_proxy = Group(Test)
         grp_proxy[0].start()
 
-class TestGroup(Group):
+class Test(Chare):
     """
     A chare group to test the element proxy.
     """
 
     def __init__(self):
-        super(TestGroup, self).__init__()
         self.count = 0
 
     def say(self, msg):
@@ -36,7 +34,7 @@ class TestGroup(Group):
         print("Say", msg, "on PE", CkMyPe())
         if self.count == 2:
             assert CkMyPe() == 2
-            CkExit()
+            charm.exit()
 
     def start(self):
         """
