@@ -596,6 +596,10 @@ class Chare(object):
 
   def AtSync(self): pass  # chares which are members of an Array will have this replaced with ArrayElem_AtSync
 
+  def migrate(self, toPe):
+    # print("[charmpy] Calling migrate, aid: ", self.thisProxy.aid, "ndims",
+              # self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
+    charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 # ----------------- Mainchare and Proxy --------------
 
 def mainchare_proxy_ctor(proxy, cid):

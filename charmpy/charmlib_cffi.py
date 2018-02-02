@@ -266,6 +266,9 @@ class CharmLib(object):
   def CkInsert(self, aid, index, epIdx, onPE):
     lib.CkInsertArrayExt(aid, len(index), index, epIdx, onPE, ffi.NULL, 0)
 
+  def CkMigrate(self, aid, index, toPe):
+    lib.CkMigrateExt(aid, len(index), index, toPe)
+
   def CkDoneInserting(self, aid):
     lib.CkArrayDoneInsertingExt(aid)
 

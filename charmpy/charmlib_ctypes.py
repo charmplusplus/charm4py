@@ -253,6 +253,11 @@ class CharmLib(object):
     c_index = (c_int*indexDims)(*index)
     self.lib.CkInsertArrayExt(aid, indexDims, c_index, epIdx, onPE, None, 0)
 
+  def CkMigrate(self, aid, index, toPe):
+    indexDims = len(index)
+    c_index = (c_int*indexDims)(*index)
+    self.lib.CkMigrateExt(aid, indexDims, c_index, toPe)
+
   def CkDoneInserting(self, aid):
     self.lib.CkArrayDoneInsertingExt(aid)
 

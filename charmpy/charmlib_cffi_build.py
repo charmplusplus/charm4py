@@ -159,6 +159,7 @@ ffibuilder.cdef("""
     int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, char *msg, int msgSize);
     void CkInsertArrayExt(int aid, int ndims, int *index, int epIdx, int onPE, char *msg, int msgSize);
     void CkArrayDoneInsertingExt(int aid);
+    void CkMigrateExt(int aid, int ndims, int *index, int toPe);
 
     void CkChareExtSend(int onPE, void *objPtr, int epIdx, char *msg, int msgSize);
     void CkChareExtSend_multi(int onPE, void *objPtr, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
