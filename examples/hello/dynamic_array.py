@@ -1,13 +1,14 @@
 from charmpy import charm, Chare, Mainchare, Array, CkMyPe, CkNumPes
 from charmpy import readonlies as ro
 from charmpy import Reducer
+import itertools
 
 
 class Main(Mainchare):
   def __init__(self, args):
 
     if len(args) <= 1:
-      args = [None,1,5]  # default: 1 dimension of size 5
+      args = [None,2,3]  # default: 2 dimensions of size 3
     elif len(args) != 3:
       charm.abort("Usage : python array_hello.py [<num_dimensions> <array_size>]")
 
@@ -20,9 +21,11 @@ class Main(Mainchare):
     for x in ro.ARRAY_SIZE: self.nElements *= x
     print("Running Hello on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements")
     ro.mainProxy = self.thisProxy
-    self.arrProxy = Array(Hello, ndims=1)
+    self.arrProxy = Array(Hello, ndims=ro.nDims)
     print("Created array proxy")
-    for i in range(self.nElements):
+    indices = list(itertools.product(range(ro.ARRAY_SIZE[0]), repeat=ro.nDims))
+    assert len(indices) == self.nElements
+    for i in indices:
       self.arrProxy.ckInsert(i)
 
     self.arrProxy.ckDoneInserting()

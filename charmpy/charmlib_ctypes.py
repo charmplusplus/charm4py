@@ -239,6 +239,7 @@ class CharmLib(object):
   def CkCreateArray(self, chareIdx, dims, epIdx):
     ndims = len(dims)
     dimsArray = (c_int*ndims)(*dims)
+    if all(v == 0 for v in dims): ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
     return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, None, 0)
 
   def CkInsert(self, aid, index, epIdx, onPE):
