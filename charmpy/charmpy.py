@@ -107,7 +107,8 @@ class Charm(object):
     self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
     self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
     self.proxyTimes = 0.0     # for profiling
-    self.msgLens = []         # for profiling
+    self.msg_send_sizes = []  # for profiling
+    self.msg_recv_sizes = []  # for profiling
     self.activeChares = set() # for profiling (active chares on this PE)
     self.opts = Options
     self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
@@ -444,30 +445,44 @@ class Charm(object):
       print("NOTE: called charm.printStats() but profiling is disabled")
       return
     print("Timings for PE " + str(self.myPe()) + ":")
-    total, pyoverhead = sum(self.lib.times), sum(self.lib.times)
-    table = [["","em","send","recv"]]
+    table = [["","em","send","recv","total"]]
     lineNb = 1
     sep = {}
+    row_totals = [0.0] * 4
     for C,charm_type in self.activeChares:
-      sep[lineNb] = "---- " + str(C) + " as " + charm_type.__name__ + " ----"
+      sep[lineNb] = "------ " + str(C) + " as " + charm_type.__name__ + " ------"
       for em in self.classEntryMethods[charm_type.type_id][C]:
         if not em.profile: continue
-        vals = em.times
+        vals = em.times + [sum(em.times)]
+        for i in range(len(row_totals)): row_totals[i] += vals[i]
         table.append( [em.name] + [str(round(v,3)) for v in vals] )
-        total += sum(vals)
-        pyoverhead += (vals[1] + vals[2])
         lineNb += 1
+    sep[lineNb] = "-------------------------------------------------------"
+    table.append([""] + [str(round(v,3)) for v in row_totals])
+    lineNb += 1
+    sep[lineNb] = "-------------------------------------------------------"
+    misc_overheads = [str(round(v,3)) for v in self.lib.times]
+    table.append(["reductions", ' ', ' ', misc_overheads[0], misc_overheads[0]])
+    table.append(["custom reductions",   ' ', ' ', misc_overheads[1], misc_overheads[1]])
+    table.append(["migrating out",  ' ', ' ', misc_overheads[2], misc_overheads[2]])
+    lineNb += 3
+    sep[lineNb] = "-------------------------------------------------------"
+    row_totals[2] += sum(self.lib.times)
+    row_totals[3] += sum(self.lib.times)
+    table.append([""] + [str(round(v,3)) for v in row_totals])
+    lineNb += 1
     self.printTable(table, sep)
-    print("Total Python recorded time = " + str(total))
-    print("Python non-entry method time = " + str(pyoverhead))
-    if self.lib.times[1] > 0:
-      print("Time in custom reductions = " + str(self.lib.times[1]))
-    print("\nMessages sent: " + str(len(self.msgLens)))
-    msgLens = self.msgLens
-    if len(msgLens) == 0: msgLens = [0.0]
-    msgSizeStats = [min(msgLens), sum(msgLens) / float(len(msgLens)), max(msgLens)]
-    print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
-    print("Total bytes sent = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
+    for i in (0,1):
+      if i == 0:
+        print("\nMessages sent: " + str(len(self.msg_send_sizes)))
+        msgLens = self.msg_send_sizes
+      else:
+        print("\nMessages received: " + str(len(self.msg_recv_sizes)))
+        msgLens = self.msg_recv_sizes
+      if len(msgLens) == 0: msgLens = [0.0]
+      msgSizeStats = [min(msgLens), sum(msgLens) / float(len(msgLens)), max(msgLens)]
+      print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
+      print("Total bytes = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
   # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
   def myPe(self): return self._myPe
@@ -487,7 +502,7 @@ def profile_proxy(func):
   def func_with_profiling(*args, **kwargs):
     proxyInitTime = time.time()
     func(*args, **kwargs)
-    charm.msgLens.append(charm.lastMsgLen)
+    charm.msg_send_sizes.append(charm.lastMsgLen)
     charm.proxyTimes += (time.time() - proxyInitTime)
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling

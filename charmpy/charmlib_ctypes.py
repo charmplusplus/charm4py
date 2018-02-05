@@ -172,7 +172,9 @@ class CharmLib(object):
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.PROFILING:
+        t0 = time.time()
+        self.charm.msg_recv_sizes.append(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvChareMsg((onPe, objPtr), ep, msg, t0, dcopy_start)
     except:
@@ -181,7 +183,9 @@ class CharmLib(object):
   def recvGroupMsg(self, gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.PROFILING:
+        t0 = time.time()
+        self.charm.msg_recv_sizes.append(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvGroupMsg(gid, ep, msg, t0, dcopy_start)
     except:
@@ -190,7 +194,9 @@ class CharmLib(object):
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.PROFILING:
+        t0 = time.time()
+        self.charm.msg_recv_sizes.append(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, dcopy_start)
@@ -280,7 +286,9 @@ class CharmLib(object):
   def arrayElemJoin(self, aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.PROFILING:
+        t0 = time.time()
+        self.charm.msg_recv_sizes.append(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, -1, migration=True)
@@ -358,6 +366,7 @@ class CharmLib(object):
       for i in range(nMsgs):
         msg = msgs[i]
         if msgSizes[i] > 0:
+          if self.opts.PROFILING: self.charm.msg_recv_sizes.append(int(msgSizes[i]))
           msg = ctypes.cast(msg, POINTER(c_char * msgSizes[i])).contents.raw
           header, args = cPickle.loads(msg)
 

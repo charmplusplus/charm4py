@@ -130,7 +130,9 @@ class CharmLib(object):
   def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
       charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
     except:
@@ -140,7 +142,9 @@ class CharmLib(object):
   def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
       charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
@@ -150,7 +154,9 @@ class CharmLib(object):
   def recvGroupMsg_py2(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
     except:
       charm.handleGeneralError()
@@ -159,7 +165,9 @@ class CharmLib(object):
   def recvGroupMsg_py3(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
       charm.handleGeneralError()
@@ -168,7 +176,9 @@ class CharmLib(object):
   def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
     except:
@@ -178,7 +188,9 @@ class CharmLib(object):
   def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
     except:
@@ -283,7 +295,9 @@ class CharmLib(object):
   def arrayElemJoin_py2(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, -1, migration=True)
     except:
@@ -293,7 +307,9 @@ class CharmLib(object):
   def arrayElemJoin_py3(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.opts.PROFILING:
+        t0 = time.time()
+        charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, -1, migration=True)
     except:
@@ -401,6 +417,7 @@ class CharmLib(object):
       currentReducer = None
       for i in range(nMsgs):
         msgSize = msgSizes[i]
+        if charm.opts.PROFILING: charm.msg_recv_sizes.append(msgSize)
         if msgSize > 0:
           header, args = cPickle.loads(ffi.buffer(msgs[i], msgSize)[:])
           customReducer = header[b"custom_reducer"]
@@ -431,6 +448,7 @@ class CharmLib(object):
       currentReducer = None
       for i in range(nMsgs):
         msgSize = msgSizes[i]
+        if charm.opts.PROFILING: charm.msg_recv_sizes.append(msgSize)
         if msgSize > 0:
           header, args = cPickle.loads(ffi.buffer(msgs[i], msgSize))
           customReducer = header[b"custom_reducer"]
