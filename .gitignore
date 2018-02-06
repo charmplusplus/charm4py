@@ -2,6 +2,7 @@
 charmpy.cfg
 
 #ignore cffi build files
+docs/_build/
 __cffi_objs__
 __pycache__
 
