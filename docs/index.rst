@@ -52,6 +52,7 @@ Example applications are in the ``examples`` subdirectory.
    running
    tutorial
    performance
+   benchmarks
    contact
 
 Indices and tables

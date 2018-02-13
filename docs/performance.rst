@@ -76,6 +76,8 @@ of messages sent and received and their sizes).
 Charm++ has powerful tracing functionality and a performance analysis and visualization
 tool called *Projections*. This functionality has not yet been integrated into Charmpy.
 
+.. _perf-serialization-label:
+
 Serialization
 -------------
 
