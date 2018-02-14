@@ -1,10 +1,10 @@
-============
+========
 Tutorial
-============
+========
 
 .. contents::
 
-Most of the code throughout this section can also be found in ``examples/tutorial``.
+Most of the code throughout this section can be found in ``examples/tutorial``.
 
 Program start and exit
 ----------------------
@@ -27,7 +27,7 @@ We will begin with a simple usage pattern [#]_:
 
 We need to define an entry point to the Charmpy program, which we refer to as the
 Charm *main* function.
-In our example it is the function called ``main`` .
+In our example, it is the function called ``main`` .
 The main function runs on only one processor, typically processor 0, and is in charge
 of creating and distributing work across the system. The main function must take
 one argument to get the list of command-line arguments.
@@ -198,8 +198,9 @@ conveniently wait for a result) by using the keyword ``block``:
     # wait for a value from chare with index (10,10)
     x = my_array[10,10].apply(3, block=True)
 
-Proxies can be sent to other chares as arguments of methods. We will see this in
-the *Hello World* example below.
+.. tip::
+    Proxies can be sent to other chares as arguments of methods. We will see this in
+    the *Hello World* example below.
 
 Reductions 101
 --------------
@@ -254,8 +255,8 @@ system needs to be aggregated in some way, for example to obtain the maximum val
 in a distributed data set or to concatenate data in some fashion. The aggregation
 operations that are applied to the data are called *reducers*, and Charmpy includes
 several built-in reducers (including ``sum``, ``max``, ``min``, ``product``, ``gather``),
-as well as allowing users to define their own custom reducers for use in reductions. Please
-refer to the manual for more information.
+as well as allowing users to easily define their own custom reducers for use in reductions.
+Please refer to the manual for more information.
 
 Arrays (array.array_) and `NumPy arrays`_ can be passed as contribution to many of
 Charmpy's built-in reducers. The reducer will be applied to elements
@@ -320,7 +321,7 @@ Now we will show a full *Hello World* example:
 This program prints a "Hello World" message from all processors.
 
 Here we introduce a new type of chare called ``Mainchare``. A Mainchare constructor
-serves as an Charm *main* function. A Mainchare is also frequently
+serves as a Charm *main* function. A Mainchare is also frequently
 used as a program exit point. An instance of ``Mainchare`` is a chare that exists only on PE 0.
 
 The Mainchare requests the creation of a ``Group`` of chares of type ``Hello``.

@@ -4,8 +4,7 @@ Charmpy
 
 Charmpy is a high-level parallel and distributed programming framework with a simple and powerful
 API, based on migratable Python objects and remote method invocation; built on top
-of an adaptive C/C++ runtime system providing *speed*, *scalability* and dynamic *load
-balancing*.
+of an adaptive C/C++ runtime system providing *speed*, *scalability* and *dynamic load balancing*.
 
 Please see the Documentation_.
 

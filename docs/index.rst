@@ -5,7 +5,7 @@ Charmpy
 Charmpy is a high-level parallel and distributed programming framework with a simple
 and powerful API, based on migratable Python objects and remote method invocation;
 built on top of an adaptive C/C++ runtime system providing *speed*, *scalability* and
-dynamic *load balancing*.
+*dynamic load balancing*.
 
 Charmpy allows writing parallel and distributed applications in Python based on
 the `Charm++ programming model`_. Charm++ has seen extensive use in the
@@ -26,7 +26,7 @@ implementation (e.g. PyPy_).
 
 We have found that using charmpy + numba, it is possible to build parallel applications
 entirely in Python that have the same or similar performance as the equivalent C++ Charm
-application.
+application, and that scale to hundreds of thousands of cores.
 
 Example applications are in the ``examples`` subdirectory.
 

@@ -92,7 +92,8 @@ Running with CFFI interface
 - Solutions for some issues observed in macOS environment:
 
   1. To load the Charm++ shared library through the dynamic linker without turning off SIP, the
-     following symlink solution can be used:
+     following symlink solution can be used::
+
      $ ln -s /path/to/libcharm.so /usr/local/lib
 
   2. When executing a Charmpy program with the CFFI interface, if an error related
@@ -101,5 +102,5 @@ Running with CFFI interface
      $ cd charmpy/__cffi_objs__
      $ install_name_tool -change libcharm.so /usr/local/lib/libcharm.so _charmlib.so
 
-     Note : This assumes that you have symlinked the library as indicated in (1).
+     Note: This assumes that you have symlinked the library as indicated in (1).
 
