@@ -13,7 +13,46 @@ Mini-app benchmarks
 LeanMD - Molecular Dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TODO
+We have ported the LeanMD_ Charm++ mini-app to Charmpy, with all the code written
+in Python. The physics functions are JIT compiled by Numba_. The code is currently
+available in the ``leanmd-experimental`` branch of Charmpy.
+
+Here we compare the performance between the C++ and Python versions.
+First we ran a *strong scaling* problem on `Blue Waters`_ with 8 million particles,
+obtaining the following results:
+
+.. image:: images/leanmd-bluewaters.svg
+   :alt: Leanmd strong scaling on Blue Waters
+   :width: 60%
+   :align: center
+
+As we can see, the performance and scaling characteristics of Charmpy closely mimic
+the behavior of the C++ program. The y axis is logarithmic scale, and we can see that
+performance scales linearly with the number of cores. The average performance difference
+between Charmpy and Charm++ is 19%.
+
+We also ran a different problem size (51 million particles) and configuration to
+evaluate performance with very high core counts (131k cores on Blue Waters),
+obtaining the following results:
+
++---------------+----------------------+
+|    Version    |  Time per step (ms)  |
++===============+======================+
+|  Charmpy      |      438             |
++---------------+----------------------+
+|  Charm++      |      458             |
++---------------+----------------------+
+
+Here we can see that Charmpy performs better than C++. At this core count, parallel
+overhead becomes significant and Charmpy benefits from a feature that is not yet implemented
+in the C++ version of Charm. The feature allows aggregation of receives to local objects
+in the same *section*, thus reducing overhead.
+
+.. _leanmd: http://charmplusplus.org/miniApps/
+
+.. _Numba: https://numba.pydata.org/
+
+.. _Blue Waters: http://www.ncsa.illinois.edu/enabling/bluewaters
 
 Features benchmarks
 -------------------
