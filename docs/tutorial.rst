@@ -198,6 +198,10 @@ conveniently wait for a result) by using the keyword ``block``:
     # wait for a value from chare with index (10,10)
     x = my_array[10,10].apply(3, block=True)
 
+    def apply(self, x):
+      self.data += x  # apply parameter
+      return self.data.copy() # return result to caller
+
 .. tip::
     Proxies can be sent to other chares as arguments of methods. We will see this in
     the *Hello World* example below.
@@ -331,8 +335,9 @@ It then tells all the members of the group to say hello, also passing a proxy to
 itself (``self.thisProxy``).
 
 When the method is invoked on the remote chares, they print their message along
-with their index in the group (which is stored in the attribute ``thisIndex``).
-For groups, the index coincides with the PE number.
+with their index in the collection (which is stored in the attribute ``thisIndex``).
+For groups, the index is an ``int`` and coincides with the PE number on which the chare
+is located. For arrays, the index is a ``tuple``.
 
 We want to exit the program only after all the chares have printed their message.
 However, since they reside on different processes, we need to communicate this

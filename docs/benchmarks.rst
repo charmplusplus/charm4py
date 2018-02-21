@@ -7,8 +7,8 @@ Benchmarks
 This section presents Charmpy benchmark results using: (a) real examples and miniapps;
 (b) synthetic test cases to evaluate specific features.
 
-Mini-app benchmarks
--------------------
+Mini-apps
+---------
 
 LeanMD - Molecular Dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -54,8 +54,8 @@ in the same *section*, thus reducing overhead.
 
 .. _Blue Waters: http://www.ncsa.illinois.edu/enabling/bluewaters
 
-Features benchmarks
--------------------
+Features
+--------
 
 Bypass pickling for NumPy and other arrays
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
