@@ -231,6 +231,7 @@ class Charm(object):
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
       if migration:
         obj = cPickle.loads(msg)
+        obj.AtSync = types.MethodType(ArrayElem_AtSync, obj) # reset AtSync instance method
         obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
         obj = object.__new__(em.C)  # create object but don't call __init__
@@ -418,6 +419,7 @@ class Charm(object):
     if sizing:
       obj = self.arrays[aid][index]
       del obj._contributeInfo  # don't want to pickle this
+      del obj.AtSync # method exists only in instance, not in class. remove to avoid error when unpickling
       obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
       return obj.migMsg
     else:
