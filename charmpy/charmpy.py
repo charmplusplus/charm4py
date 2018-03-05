@@ -759,7 +759,9 @@ def array_proxy_doneInserting(proxy):
   charm.lib.CkDoneInserting(proxy.aid)
 
 def ArrayElem_AtSync(obj):
-  obj.thisProxy[obj.thisIndex].AtSync()
+  # directly call CkArraySend to bypass Python code
+  # the call is equivalent to obj.thisProxy[obj.thisIndex].AtSync()
+  charm.CkArraySend(obj.thisProxy.aid, obj.thisIndex, obj.thisProxy.AtSync.ep, (b'',[]))
 
 class Array(object):
 
