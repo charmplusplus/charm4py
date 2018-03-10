@@ -1,6 +1,18 @@
 import sys
 import os
 
+def check_libcharm_version(lib):
+    req_version = tuple([int(n) for n in open('charmpy/libcharm_version', 'r').read().split('.')])
+    commit_id_str = ctypes.c_char_p.in_dll(lib, "CmiCommitID").value.decode()
+    version = [int(n) for n in commit_id_str.split('-')[0][1:].split('.')]
+    version = tuple(version + [int(commit_id_str.split('-')[1])])
+    if version < req_version:
+      req_str = '.'.join([str(n) for n in req_version])
+      cur_str = '.'.join([str(n) for n in version])
+      print("Charm++ version >= " + req_str + " required. Existing version is " + cur_str)
+      exit(1)
+
+
 if len(sys.argv) < 2:
   print("Usage: python setup.py CHARM_PATH")
   exit(1)
@@ -13,9 +25,8 @@ else:
   try:
     import ctypes
     libcharm = ctypes.CDLL(libcharmPath + "/libcharm.so")
-    t = libcharm.StartCharmExt
-    t = libcharm.CkArrayExtSend_multi  # ensure correct version of library
-    del t
+    check_libcharm_version(libcharm)
+    del libcharm
     del ctypes
   except:
     print("Error accessing " + libcharmPath + "/libcharm.so " +

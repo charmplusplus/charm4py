@@ -478,7 +478,13 @@ class CharmLib(object):
     except:
       charm.handleGeneralError()
 
+  def lib_version_check(self):
+    commit_id = ffi.string(lib.get_charm_commit_id()).decode()
+    charm.lib_version_check(commit_id)
+
   def init(self):
+
+    self.lib_version_check()
 
     lib.registerCkRegisterMainModuleCallback(lib.registerMainModule)
     lib.registerMainchareCtorExtCallback(lib.buildMainchare)

@@ -399,6 +399,10 @@ class CharmLib(object):
     except:
       self.charm.handleGeneralError()
 
+  def lib_version_check(self):
+    commit_id = ctypes.c_char_p.in_dll(self.lib, "CmiCommitID").value.decode()
+    self.charm.lib_version_check(commit_id)
+
   def init(self, libcharm_path):
     p = os.environ.get("LIBCHARM_PATH")
     if p is not None: libcharm_path = p
@@ -406,6 +410,8 @@ class CharmLib(object):
       self.lib = ctypes.CDLL(libcharm_path + '/libcharm.so')
     else:
       self.lib = ctypes.CDLL("libcharm.so")
+
+    self.lib_version_check()
 
     self.REGISTER_MAIN_MODULE_CB_TYPE = CFUNCTYPE(None)
     self.registerMainModuleCb = self.REGISTER_MAIN_MODULE_CB_TYPE(self.registerMainModule)

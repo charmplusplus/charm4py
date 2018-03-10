@@ -58,6 +58,11 @@ ffibuilder.set_source("_charmlib",
           return &charm_reducers;
         }
 
+        extern const char* const CmiCommitID;
+        const char* get_charm_commit_id() {
+          return CmiCommitID;
+        }
+
         struct ContributeInfo {
           int cbEpIdx;            // index of entry point at reduction target
           void *data;             // data contributed for reduction
@@ -142,6 +147,8 @@ ffibuilder.cdef("""
     };
 
     void *getReducersStruct();
+
+    const char* get_charm_commit_id();
 
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
     void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);

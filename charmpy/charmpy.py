@@ -486,6 +486,16 @@ class Charm(object):
       print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
       print("Total bytes = " + str(round(sum(msgLens) / 1024.0 / 1024.0,3)) + " MB")
 
+  def lib_version_check(self, commit_id_str):
+    req_version = tuple([int(n) for n in open(os.path.dirname(__file__) + '/libcharm_version', 'r').read().split('.')])
+    version = [int(n) for n in commit_id_str.split('-')[0][1:].split('.')]
+    version = tuple(version + [int(commit_id_str.split('-')[1])])
+    if version < req_version:
+      req_str = '.'.join([str(n) for n in req_version])
+      cur_str = '.'.join([str(n) for n in version])
+      raise CharmPyError("Charm++ version >= " + req_str + " required. " +
+                         "Existing version is " + cur_str)
+
   # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
   def myPe(self): return self._myPe
   def numPes(self): return self._numPes
