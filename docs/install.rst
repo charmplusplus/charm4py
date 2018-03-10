@@ -43,7 +43,6 @@ First download Charm++::
 
     $ git clone https://charm.cs.illinois.edu/gerrit/charm
     $ cd charm
-    $ git fetch https://charm.cs.illinois.edu/gerrit/charm refs/changes/22/3622/3 && git checkout FETCH_HEAD
 
 Next, build the library. Below are instructions for regular Linux and macOS
 environments. These generally apply to Linux clusters as well.
@@ -56,7 +55,7 @@ Linux::
     $ cd lib
     $ gcc -shared -o libcharm.so -Wl,--whole-archive libck.a libconv-core.a libconv-util.a \
       libmemory-default.a libconv-machine.a libthreads-default.a libconv-partition.a libtmgr.a \
-      libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,--no-whole-archive -lstdc++
+      libhwloc_embedded.a libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,--no-whole-archive -lstdc++
 
 macOS::
 
@@ -64,7 +63,7 @@ macOS::
     $ cd lib
     $ gcc -shared -o libcharm.so -Wl,-all_load libck.a libconv-core.a libconv-util.a \
       libmemory-default.a libconv-machine.a libthreads-default.a libconv-partition.a libtmgr.a \
-      libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,-noall_load -lstdc++
+      libhwloc_embedded.a libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,-noall_load -lstdc++
 
 .. note::
     Charm++ can be built on specialized enviroments, like Cray XE, and you can refer to the
@@ -75,6 +74,17 @@ macOS::
     a generic way to generate the shared library on these systems is work in progress.
 
 .. _manual: http://charm.cs.illinois.edu/manuals/html/charm++/A.html
+
+Updating the Charm++ shared library
+-----------------------------------
+
+If you update your version of Charmpy, you might find that it requires a more
+recent version of Charm++/libcharm. Charmpy will inform the user if this is the case.
+
+In this situation, you can clone a recent version of Charm++ or update your git repository,
+and rebuild the library (as explained in the previous section).
+
+After this, make sure to rerun Charmpy :doc:`setup`.
 
 Using Charmpy with CFFI
 -----------------------
