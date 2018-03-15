@@ -14,7 +14,7 @@ if sys.version_info < (3, 0, 0):
 else:
   import pickle as cPickle
 import time
-import zlib
+from collections import defaultdict
 import json
 import importlib
 import inspect
@@ -52,13 +52,6 @@ class EntryMethod(object):
     self.epIdx = -1     # entry method index assigned by Charm
     self.profile = profile
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
-    if sys.version_info[0] < 3:
-      method = getattr(C, name).__func__
-    else:
-      method = getattr(C, name)
-    # a user class' method can have up to len(CHARM_TYPES) EntryMethod objects associated with it
-    if not hasattr(method, 'entry_method_obj'): method.entry_method_obj = [None] * len(CHARM_TYPES)
-    method.entry_method_obj[charm_type_id] = self
   def addTimes(self, times):
     for i,t in enumerate(times): self.times[i] += t
 
@@ -101,8 +94,8 @@ class Charm(object):
     self.registered = {}      # class -> set of Charm types (Mainchare, Group, Array) for which this class is registered
     self.register_order = []  # list of classes in registration order (all processes must use same order)
     self.chares = {}
-    self.groups = []          # group instances on this PE (indexed by group ID)
-    self.arrays = {}          # aid -> idx -> array element instance with index idx on this PE
+    self.groups = {}          # group ID -> group instance on this PE
+    self.arrays = defaultdict(dict)          # aid -> idx -> array element instance with index idx on this PE
     self.entryMethods = {}    # ep_idx -> EntryMethod object
     self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
     self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
@@ -177,21 +170,7 @@ class Charm(object):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
-  def invokeEntryMethod(self, obj, em, msg, dcopy_start, t0):
-    if Options.LOCAL_MSG_OPTIM and (msg[:7] == b"_local:"):
-      args = obj.__removeLocal__(int(msg[7:]))
-    else:
-      header, args = cPickle.loads(msg)
-      if b'dcopy' in header:
-        rel_offset = dcopy_start
-        buf = memoryview(msg)
-        for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
-          arg_buf = buf[rel_offset:rel_offset + size]
-          args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
-          rel_offset += size
-      elif b"custom_reducer" in header:
-        reducer = getattr(self.reducers, header[b"custom_reducer"])
-        if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
+  def invokeEntryMethod(self, obj, em, args, t0):
     if Options.PROFILING:
       recv_overhead, initTime, self.sendTime = (time.time() - t0), time.time(), 0.0
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
@@ -202,14 +181,16 @@ class Charm(object):
 
   def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
     obj = self.chares[chare_id]
-    self.invokeEntryMethod(obj, self.entryMethods[ep], msg, dcopy_start, t0)
+    args = self.unpackMsg(msg, dcopy_start, obj)
+    self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
 
   def recvGroupMsg(self, gid, ep, msg, t0, dcopy_start):
-    if gid >= len(self.groups):
-      while len(self.groups) <= gid: self.groups.append(None)
-    em = self.entryMethods[ep]
-    obj = self.groups[gid]
-    if obj is None:
+    if gid in self.groups:
+      obj = self.groups[gid]
+      args = self.unpackMsg(msg, dcopy_start, obj)
+      self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
+    else:
+      em = self.entryMethods[ep]
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
       if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
       obj = object.__new__(em.C)  # create object but don't call __init__
@@ -218,15 +199,19 @@ class Charm(object):
       obj.__init__()              # now call the user's __init__
       self.groups[gid] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Group))
-    else:
-      self.invokeEntryMethod(obj, em, msg, dcopy_start, t0)
 
   def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start, migration=False, resumeFromSync=False):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
-    if aid not in self.arrays: self.arrays[aid] = {}
-    obj = self.arrays[aid].get(index)
-    if obj is None: # not instantiated yet
+    if index in self.arrays[aid]:
+      obj = self.arrays[aid][index]
+      if resumeFromSync:
+        msg = cPickle.dumps(({},[]))
+        ep = obj.thisProxy.resumeFromSync.ep
+      args = self.unpackMsg(msg, dcopy_start, obj)
+      self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
+    else:
       #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(index) + " not instantiated yet")
+      # TODO profile this code path
       em = self.entryMethods[ep]
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
       if migration:
@@ -239,11 +224,23 @@ class Charm(object):
         obj.__init__()              # now call the user's array element __init__
       self.arrays[aid][index] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Array))
-    else:
-      if resumeFromSync:
-        msg = cPickle.dumps(({},[]))
-        ep = getattr(obj, 'resumeFromSync').entry_method_obj[ARRAY].epIdx
-      self.invokeEntryMethod(obj, self.entryMethods[ep], msg, dcopy_start, t0)
+
+  def unpackMsg(self, msg, dcopy_start, dest_obj):
+    if msg[:7] == b"_local:":
+      return dest_obj.__removeLocal__(int(msg[7:]))
+
+    header, args = cPickle.loads(msg)
+    if b'dcopy' in header:
+      rel_offset = dcopy_start
+      buf = memoryview(msg)
+      for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
+        arg_buf = buf[rel_offset:rel_offset + size]
+        args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
+        rel_offset += size
+    elif b"custom_reducer" in header:
+      reducer = getattr(self.reducers, header[b"custom_reducer"])
+      if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
+    return args
 
   def packMsg(self, destObj, msgArgs):
     """Prepares a message for sending, given arguments to an entry method invocation.
