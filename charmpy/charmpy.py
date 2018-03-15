@@ -611,7 +611,8 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
     destObj = None
-    if Options.LOCAL_MSG_OPTIM: destObj = charm.chares.get(me.cid)
+    if Options.LOCAL_MSG_OPTIM and (me.cid in charm.chares) and (len(args) > 1):
+      destObj = charm.chares[me.cid]
     msg = charm.packMsg(destObj, args[1:])
     charm.CkChareSend(me.cid, ep, msg)
   proxy_entry_method.ep = ep
@@ -664,7 +665,8 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
     destObj = None
-    if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()): destObj = charm.groups[me.gid]
+    if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()) and (len(args) > 1):
+      destObj = charm.groups[me.gid]
     msg = charm.packMsg(destObj, args[1:])
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
   proxy_entry_method.ep = ep
@@ -733,7 +735,9 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
     destObj = None
-    if Options.LOCAL_MSG_OPTIM and (len(me.elemIdx) > 0): destObj = charm.arrays[me.aid].get(me.elemIdx)
+    if Options.LOCAL_MSG_OPTIM:
+      array = charm.arrays[me.aid]
+      if (me.elemIdx in array) and (len(args) > 1): destObj = array[me.elemIdx]
     msg = charm.packMsg(destObj, args[1:])
     charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
   proxy_entry_method.ep = ep
