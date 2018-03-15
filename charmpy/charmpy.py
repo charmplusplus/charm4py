@@ -64,7 +64,7 @@ class EntryMethod(object):
 
 class ReadOnlies(object): # for backwards-compatibility. TODO Remove eventually
   def __new__(cls):
-    return readonlies
+    raise CharmPyError('This ReadOnlies API is deprecated. Please refer to documentation/examples for correct usage')
 
 class __ReadOnlies(object): pass
 
