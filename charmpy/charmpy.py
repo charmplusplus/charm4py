@@ -231,7 +231,6 @@ class Charm(object):
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
       if migration:
         obj = cPickle.loads(msg)
-        obj.AtSync = types.MethodType(ArrayElem_AtSync, obj) # reset AtSync instance method
         obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
         obj = object.__new__(em.C)  # create object but don't call __init__
@@ -420,7 +419,6 @@ class Charm(object):
     if sizing:
       obj = self.arrays[aid][index]
       del obj._contributeInfo  # don't want to pickle this
-      del obj.AtSync # method exists only in instance, not in class. remove to avoid error when unpickling
       obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
       return obj.migMsg
     else:
@@ -595,12 +593,15 @@ class Chare(object):
   def gather(self, data, target):
     charm.contribute(data, Reducer.gather, target, self)
 
-  def AtSync(self): pass  # chares which are members of an Array will have this replaced with ArrayElem_AtSync
+  def AtSync(self):
+    # NOTE this will fail if called from a chare that is not in an array (as it should be)
+    charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'',[]))
 
   def migrate(self, toPe):
     # print("[charmpy] Calling migrate, aid: ", self.thisProxy.aid, "ndims",
               # self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
     charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
+
 # ----------------- Mainchare and Proxy --------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -772,11 +773,6 @@ def array_proxy_contribute(proxy, contributeInfo):
 def array_proxy_doneInserting(proxy):
   charm.lib.CkDoneInserting(proxy.aid)
 
-def ArrayElem_AtSync(obj):
-  # directly call CkArraySend to bypass Python code
-  # the call is equivalent to obj.thisProxy[obj.thisIndex].AtSync()
-  charm.CkArraySend(obj.thisProxy.aid, obj.thisIndex, obj.thisProxy.AtSync.ep, (b'',[]))
-
 class Array(object):
 
   type_id = ARRAY
@@ -793,7 +789,6 @@ class Array(object):
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     obj.usesAtSync = False
     obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
-    obj.AtSync = types.MethodType(ArrayElem_AtSync, obj)
 
   @classmethod
   def __baseEntryMethods__(cls):
