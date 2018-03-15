@@ -106,7 +106,7 @@ class Charm(object):
     self.entryMethods = {}    # ep_idx -> EntryMethod object
     self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
     self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
-    self.proxyTimes = 0.0     # for profiling
+    self.sendTime = 0.0       # for profiling
     self.msg_send_sizes = []  # for profiling
     self.msg_recv_sizes = []  # for profiling
     self.activeChares = set() # for profiling (active chares on this PE)
@@ -193,12 +193,12 @@ class Charm(object):
         reducer = getattr(self.reducers, header[b"custom_reducer"])
         if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
     if Options.PROFILING:
-      recv_overhead, initTime, self.proxyTimes = (time.time() - t0), time.time(), 0.0
+      recv_overhead, initTime, self.sendTime = (time.time() - t0), time.time(), 0.0
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
     getattr(obj, em.name)(*args)  # invoke entry method
     if Options.AUTO_FLUSH_WHEN and (len(obj._checkWhen) > 0): obj.__flushWhen__()
     if Options.PROFILING:
-      em.addTimes([time.time() - initTime - self.proxyTimes, self.proxyTimes, recv_overhead])
+      em.addTimes([time.time() - initTime - self.sendTime, self.sendTime, recv_overhead])
 
   def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
     obj = self.chares[chare_id]
@@ -394,6 +394,7 @@ class Charm(object):
                  always search module '__main__' for Charm classes even if no
                  arguments are passed to this method.
     """
+    if Options.PROFILING: self.contribute = profile_send_function(self.contribute)
     if "++quiet" in sys.argv: Options.QUIET = True
     for C in classes: self.register(C)
     M = list(modules)
@@ -510,12 +511,12 @@ CkNumPes = charm.numPes
 CkExit   = charm.exit
 CkAbort  = charm.abort
 
-def profile_proxy(func):
+def profile_send_function(func):
   def func_with_profiling(*args, **kwargs):
-    proxyInitTime = time.time()
+    sendInitTime = time.time()
     func(*args, **kwargs)
     charm.msg_send_sizes.append(charm.lastMsgLen)
-    charm.proxyTimes += (time.time() - proxyInitTime)
+    charm.sendTime += (time.time() - sendInitTime)
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
 
@@ -637,7 +638,7 @@ class Mainchare(Chare):
     M = dict()  # proxy methods
     for m in charm.classEntryMethods[MAINCHARE][cls]:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-      if Options.PROFILING: M[m.name] = profile_proxy(mainchare_proxy_method_gen(m.epIdx))
+      if Options.PROFILING: M[m.name] = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
       else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
     M["__init__"] = mainchare_proxy_ctor
     M["ckContribute"] = mainchare_proxy_contribute # function called when target proxy is Mainchare
@@ -693,7 +694,6 @@ class Group(object):
     obj.thisIndex = CkMyPe()
     obj.thisProxy = charm.proxyClasses[GROUP][obj.__class__](gid)
     obj._contributeInfo = charm.lib.initContributeInfo(gid, obj.thisIndex, CONTRIBUTOR_TYPE_GROUP)
-    if Options.PROFILING: obj.contribute = profile_proxy(obj.contribute)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
@@ -705,7 +705,7 @@ class Group(object):
     entryMethods = charm.classEntryMethods[GROUP][cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-      if Options.PROFILING: M[m.name] = profile_proxy(group_proxy_method_gen(m.epIdx))
+      if Options.PROFILING: M[m.name] = profile_send_function(group_proxy_method_gen(m.epIdx))
       else: M[m.name] = group_proxy_method_gen(m.epIdx)
     M["__init__"] = group_proxy_ctor
     M["__getitem__"] = group_proxy_elem
@@ -793,7 +793,6 @@ class Array(object):
     # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
     obj.usesAtSync = False
     obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
-    if Options.PROFILING: obj.contribute = profile_proxy(obj.contribute)
     obj.AtSync = types.MethodType(ArrayElem_AtSync, obj)
 
   @classmethod
@@ -808,7 +807,7 @@ class Array(object):
     entryMethods = charm.classEntryMethods[ARRAY][cls]
     for m in entryMethods:
       if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-      if Options.PROFILING: M[m.name] = profile_proxy(array_proxy_method_gen(m.epIdx))
+      if Options.PROFILING: M[m.name] = profile_send_function(array_proxy_method_gen(m.epIdx))
       else: M[m.name] = array_proxy_method_gen(m.epIdx)
     M["__init__"] = array_proxy_ctor
     M["__getitem__"] = array_proxy_elem
