@@ -281,17 +281,16 @@ class CharmLib(object):
   def arrayElemLeave(aid, ndims, arrayIndex, pdata, sizing):
     try:
       if charm.opts.PROFILING: t0 = time.time()
-      arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      msg = charm.arrayElemLeave(aid, arrIndex, bool(sizing))
       if sizing:
+        arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
+        CharmLib.tempData = charm.arrayElemLeave(aid, arrIndex)
         pdata[0] = ffi.NULL
       else:
-        CharmLib.tempData = msg # save msg, else it might be deleted before returning control to libcharm
         pdata[0] = ffi.from_buffer(CharmLib.tempData)
       if charm.opts.PROFILING:
         global times
         times[2] += (time.time() - t0)
-      return len(msg)
+      return len(CharmLib.tempData)
     except:
       charm.handleGeneralError()
 
@@ -303,7 +302,7 @@ class CharmLib(object):
         t0 = time.time()
         charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, -1, migration=True)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, -1)
     except:
       charm.handleGeneralError()
 
@@ -315,7 +314,7 @@ class CharmLib(object):
         t0 = time.time()
         charm.msg_recv_sizes.append(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, -1, migration=True)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, -1)
     except:
       charm.handleGeneralError()
 

@@ -200,7 +200,7 @@ class Charm(object):
       self.groups[gid] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Group))
 
-  def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start, migration=False):
+  def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
     if index in self.arrays[aid]:
       obj = self.arrays[aid][index]
@@ -211,7 +211,7 @@ class Charm(object):
       # TODO profile this code path
       em = self.entryMethods[ep]
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
-      if migration:
+      if len(msg) > 0:  # obj migrating in
         obj = cPickle.loads(msg)
         obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
@@ -409,18 +409,10 @@ class Charm(object):
       raise CharmPyError("Can't start Charm program because no Charm classes registered")
     self.lib.start()
 
-  def arrayElemLeave(self, aid, index, sizing):
-    if sizing:
-      obj = self.arrays[aid][index]
-      del obj._contributeInfo  # don't want to pickle this
-      obj.migMsg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
-      return obj.migMsg
-    else:
-      obj = self.arrays[aid].pop(index)
-      if hasattr(obj,"migMsg"): msg = obj.migMsg
-      else:
-        msg = cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
-      return msg
+  def arrayElemLeave(self, aid, index):
+    obj = self.arrays[aid].pop(index)
+    del obj._contributeInfo  # don't want to pickle this
+    return cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
 
   # Charm class level contribute function used by Array, Group for reductions
   def contribute(self, data, reducer, target, contributor):

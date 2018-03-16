@@ -200,6 +200,7 @@ class CharmLib(object):
         self.charm.msg_recv_sizes.append(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
+      else: msg = b''
       self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, dcopy_start)
     except:
       self.charm.handleGeneralError()
@@ -274,18 +275,15 @@ class CharmLib(object):
   def arrayElemLeave(self, aid, ndims, arrayIndex, pdata, sizing):
     try:
       if self.opts.PROFILING: t0 = time.time()
-      arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
-      msg = self.charm.arrayElemLeave(aid, arrIndex, bool(sizing))
       if sizing:
-        pdata = None
+        arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
+        self.tempData = ctypes.create_string_buffer(self.charm.arrayElemLeave(aid, arrIndex))
       else:
-        data = ctypes.create_string_buffer(msg)
         #pdata[0] = ctypes.cast(data, c_void_p).value
         pdata = ctypes.cast(pdata, POINTER(POINTER(c_char)))
-        pdata[0] = data
-        # TODO could Python garbage collect the msg before charm++ copies it?
+        pdata[0] = self.tempData
       if self.opts.PROFILING: self.times[2] += (time.time() - t0)
-      return len(msg)
+      return len(self.tempData)
     except:
       self.charm.handleGeneralError()
 
@@ -297,7 +295,7 @@ class CharmLib(object):
         self.charm.msg_recv_sizes.append(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, -1, migration=True)
+      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, -1)
     except:
       self.charm.handleGeneralError()
 
