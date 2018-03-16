@@ -40,7 +40,7 @@ def getNumParticles(pos, dims):  # assigns more particles to cells closer to cen
 
 class Cell(Chare):
   def __init__(self):
-    self.iteration = 0
+    self.iteration = -1
     self.particles = []
     self.msgsRcvd = 0
     lo_x = self.thisIndex[0] * ro.cellSize[0]
@@ -51,6 +51,7 @@ class Cell(Chare):
     self.neighbors = self.getNbIndexes() # list of neighbor indexes as tuples
 
   def run(self):
+    self.iteration += 1
     outgoingParticles = {nb: array.array('d') for nb in self.neighbors}
     i = 0
     while i < len(self.particles):
@@ -75,7 +76,6 @@ class Cell(Chare):
     if self.msgsRcvd == len(self.neighbors):
       self.msgsRcvd = 0
       self.contribute(len(self.particles), Reducer.max, ro.mainProxy.collectMax)
-      self.iteration += 1
       if self.iteration >= NUM_ITER: self.contribute(None, None, ro.mainProxy.done)
       elif self.iteration % 10 == 2: self.AtSync() # do load balancing
       else: self.run() # keep running
