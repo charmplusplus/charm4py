@@ -20,6 +20,7 @@ except ImportError:
 
 
 index_ctype = ('', 'int[1]', 'int[2]', 'int[3]', 'short[4]', 'short[5]', 'short[6]')
+emptyMsg = cPickle.dumps(({},[]))
 
 class ContributeInfo:
   def __init__(self, args):
@@ -321,10 +322,9 @@ class CharmLib(object):
   @ffi.def_extern()
   def resumeFromSync(aid, ndims, arrayIndex):
     try:
-      t0 = None
-      if charm.opts.PROFILING: t0 = time.time()
-      arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, -1, None, t0, -1, resumeFromSync=True)
+      index = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
+      lib.CkArrayExtSend(aid, index, ndims, charm.arrays[aid][index].thisProxy.resumeFromSync.ep,
+                         emptyMsg, len(emptyMsg))
     except:
       charm.handleGeneralError()
 

@@ -200,13 +200,10 @@ class Charm(object):
       self.groups[gid] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Group))
 
-  def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start, migration=False, resumeFromSync=False):
+  def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start, migration=False):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
     if index in self.arrays[aid]:
       obj = self.arrays[aid][index]
-      if resumeFromSync:
-        msg = cPickle.dumps(({},[]))
-        ep = obj.thisProxy.resumeFromSync.ep
       args = self.unpackMsg(msg, dcopy_start, obj)
       self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
     else:

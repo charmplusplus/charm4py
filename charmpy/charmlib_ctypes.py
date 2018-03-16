@@ -105,6 +105,7 @@ class CharmLib(object):
     self.c_type_table[red.C_ULONG] = c_ulong
     self.c_type_table[red.C_FLOAT] = c_float
     self.c_type_table[red.C_DOUBLE] = c_double
+    self.emptyMsg = cPickle.dumps(({},[]))
 
   def sizeof(self, c_type_id):
     return ctypes.sizeof(self.c_type_table[c_type_id])
@@ -302,10 +303,9 @@ class CharmLib(object):
 
   def resumeFromSync(self, aid, ndims, arrayIndex):
     try:
-      t0 = None
-      if self.opts.PROFILING: t0 = time.time()
-      arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
-      self.charm.recvArrayMsg(aid, arrIndex, -1, 0, t0, -1, resumeFromSync=True)
+      index = self.arrayIndexToTuple(ndims, arrayIndex)
+      self.CkArraySend(aid, index, self.charm.arrays[aid][index].thisProxy.resumeFromSync.ep,
+                       (self.emptyMsg, []))
     except:
       self.charm.handleGeneralError()
 
