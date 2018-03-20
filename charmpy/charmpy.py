@@ -53,6 +53,10 @@ class EntryMethod(object):
     self.profile = profile  # true if profiling this entry method's times
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
 
+    self.whenAttrib = None   # name of chare attribute used to evaluate 'when' condition on msg receive
+    method = getattr(C, name)
+    if hasattr(method, 'when_attrib_name'): self.whenAttrib = getattr(method, 'when_attrib_name')
+
   def startMeasuringTime(self):
     self.startTime = time.time()
     charm.sendTime = 0.0
@@ -182,27 +186,40 @@ class Charm(object):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
-  def invokeEntryMethod(self, obj, em, args, t0):
+  def invokeEntryMethod(self, obj, ep, args, t0):
+    em = self.entryMethods[ep]
     if Options.PROFILING:
       em.addRecvTime(time.time() - t0)
       em.startMeasuringTime()
 
-    if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
-    getattr(obj, em.name)(*args)  # invoke entry method
-    if Options.AUTO_FLUSH_WHEN and (len(obj._checkWhen) > 0): obj.__flushWhen__()
+    checkWhen = len(obj._when_buffer) > 0
+    if len(args) > 0: tag = args[0]
+    if (em.whenAttrib is not None) and (tag != getattr(obj, em.whenAttrib)):
+      # store, don't expect msg now
+      if ep not in obj._when_buffer: obj._when_buffer[ep] = defaultdict(list)
+      obj._when_buffer[ep][tag].append(args)
+      checkWhen = False # no entry method ran, so no need to check when buffers
+    else:
+      getattr(obj, em.name)(*args)  # invoke entry method
+
+    if Options.AUTO_FLUSH_WHEN and checkWhen:
+      obj._checkWhen = set(obj._when_buffer.keys())
+      if (ep in obj._checkWhen) and (tag == getattr(obj, em.whenAttrib)):
+        obj._checkWhen.remove(ep) # when attribute for this method hasn't changed, so no need to check
+      if len(obj._checkWhen) > 0: obj.__flushWhen__()
 
     if Options.PROFILING: em.stopMeasuringTime()
 
   def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
     obj = self.chares[chare_id]
     args = self.unpackMsg(msg, dcopy_start, obj)
-    self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
+    self.invokeEntryMethod(obj, ep, args, t0)
 
   def recvGroupMsg(self, gid, ep, msg, t0, dcopy_start):
     if gid in self.groups:
       obj = self.groups[gid]
       args = self.unpackMsg(msg, dcopy_start, obj)
-      self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
+      self.invokeEntryMethod(obj, ep, args, t0)
     else:
       em = self.entryMethods[ep]
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
@@ -219,7 +236,7 @@ class Charm(object):
     if index in self.arrays[aid]:
       obj = self.arrays[aid][index]
       args = self.unpackMsg(msg, dcopy_start, obj)
-      self.invokeEntryMethod(obj, self.entryMethods[ep], args, t0)
+      self.invokeEntryMethod(obj, ep, args, t0)
     else:
       #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(index) + " not instantiated yet")
       # TODO profile this code path
@@ -518,7 +535,7 @@ def profile_send_function(func):
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
 
-# This decorator makes a wrapper for the chosen entry method 'func'.
+# This decorator sets a 'when' condition for the chosen entry method 'func'.
 # It is used so that the entry method is invoked only if the chare's member
 # 'attrib_name' is equal to the first argument of the entry method.
 # Entry method is guaranteed to be invoked (for any message order) as long as there
@@ -526,18 +543,8 @@ def profile_send_function(func):
 # must call chare.flushWhen() when a chare modifies its condition attribute
 def when(attrib_name):
   def _when(func):
-    def entryMethod(self, *args, **kwargs):
-      tag = args[0]
-      if tag == getattr(self, attrib_name):
-        func(self, *args) # expected msg, invoke entry method
-        if Options.AUTO_FLUSH_WHEN and (tag == getattr(self, attrib_name)): self._checkWhen.discard(func.__name__)
-      else:
-        msgs = self._when_buffer.setdefault(func.__name__, {})
-        msgs.setdefault(tag, []).append(args) # store, don't expect msg now
-        self._checkWhen = set() # no entry method ran, so no need to check when buffers
-    entryMethod.when_attrib_name = attrib_name
-    entryMethod.func = func
-    return entryMethod
+    func.when_attrib_name = attrib_name
+    return func
   return _when
 
 # ---------------------- Chare -----------------------
@@ -576,16 +583,17 @@ class Chare(object):
       self._checkWhen = set()
 
   def __flushWhen__(self):
-    for method_name in self._checkWhen:
-      msgs = self._when_buffer[method_name]
-      method = getattr(self, method_name)
+    for ep in self._checkWhen:
+      em = charm.entryMethods[ep]
+      msgs = self._when_buffer[ep]
+      method = getattr(self, em.name)
       while True:
-        attrib = getattr(self, method.when_attrib_name)
+        attrib = getattr(self, em.whenAttrib)
         msgs_now = msgs.pop(attrib, []) # check if expected msgs are stored
         if len(msgs_now) == 0:
-          if len(msgs) == 0: self._when_buffer.pop(method_name)
+          if len(msgs) == 0: self._when_buffer.pop(ep)
           break
-        for m in msgs_now: method.func(self, *m)
+        for m in msgs_now: method(*m)
 
   def contribute(self, data, reducer_type, target):
     charm.contribute(data, reducer_type, target, self)
