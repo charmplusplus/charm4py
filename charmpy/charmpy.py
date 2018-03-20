@@ -593,6 +593,12 @@ class Chare(object):
 def mainchare_proxy_ctor(proxy, cid):
   proxy.cid = cid
 
+def mainchare_proxy__getstate__(proxy):
+  return proxy.cid
+
+def mainchare_proxy__setstate__(proxy, state):
+  proxy.cid = state
+
 def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
@@ -630,6 +636,8 @@ class Mainchare(Chare):
       else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
     M["__init__"] = mainchare_proxy_ctor
     M["ckContribute"] = mainchare_proxy_contribute # function called when target proxy is Mainchare
+    M["__getstate__"] = mainchare_proxy__getstate__
+    M["__setstate__"] = mainchare_proxy__setstate__
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
 class DefaultMainchare(Mainchare):
@@ -640,7 +648,13 @@ class DefaultMainchare(Mainchare):
 
 def group_proxy_ctor(proxy, gid):
   proxy.gid = gid
-  proxy.elemIdx = -1 # next entry method call will be to elemIdx PE (broadcast if -1)
+  proxy.elemIdx = -1 # entry method calls will be to elemIdx PE (broadcast if -1)
+
+def group_proxy__getstate__(proxy):
+  return (proxy.gid, proxy.elemIdx)
+
+def group_proxy__setstate__(proxy, state):
+  proxy.gid, proxy.elemIdx = state
 
 def group_proxy_elem(proxy, pe):  # group proxy [] overload method
   proxy_clone = proxy.__class__(proxy.gid)
@@ -700,6 +714,8 @@ class Group(object):
     M["__getitem__"] = group_proxy_elem
     M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
     M["ckContribute"] = group_proxy_contribute # function called when target proxy is Group
+    M["__getstate__"] = group_proxy__getstate__
+    M["__setstate__"] = group_proxy__setstate__
     return type(cls.__name__ + 'GroupProxy', (), M) # create and return proxy class
 
 # -------------------- Array and Proxy -----------------------
@@ -707,7 +723,13 @@ class Group(object):
 def array_proxy_ctor(proxy, aid, ndims):
   proxy.aid = aid
   proxy.ndims = ndims
-  proxy.elemIdx = () # next entry method call will be to elemIdx array element (broadcast if empty tuple)
+  proxy.elemIdx = () # entry method calls will be to elemIdx array element (broadcast if empty tuple)
+
+def array_proxy__getstate__(proxy):
+  return (proxy.aid, proxy.ndims, proxy.elemIdx)
+
+def array_proxy__setstate__(proxy, state):
+  proxy.aid, proxy.ndims, proxy.elemIdx = state
 
 def array_proxy_elem(proxy, idx): # array proxy [] overload method
   proxy_clone = proxy.__class__(proxy.aid, proxy.ndims)
@@ -800,6 +822,8 @@ class Array(object):
     M["ckInsert"] = array_ckInsert_gen(entryMethods[0].epIdx)
     M["ckContribute"] = array_proxy_contribute # function called when target proxy is Array
     M["ckDoneInserting"] = array_proxy_doneInserting
+    M["__getstate__"] = array_proxy__getstate__
+    M["__setstate__"] = array_proxy__setstate__
     return type(cls.__name__ + 'ArrayProxy', (), M) # create and return proxy class
 
 
