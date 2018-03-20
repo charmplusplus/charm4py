@@ -53,8 +53,10 @@ class EntryMethod(object):
     self.profile = profile  # true if profiling this entry method's times
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
 
+    self.isThreaded = False  # true if entry method runs in its own thread
     self.whenAttrib = None   # name of chare attribute used to evaluate 'when' condition on msg receive
     method = getattr(C, name)
+    if hasattr(method, '_ck_threaded'): self.isThreaded = True
     if hasattr(method, 'when_attrib_name'): self.whenAttrib = getattr(method, 'when_attrib_name')
 
   def startMeasuringTime(self):
@@ -186,8 +188,8 @@ class Charm(object):
       #print("Registering readonly data of size " + str(len(msg)))
       self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
 
-  def invokeEntryMethod(self, obj, ep, args, t0):
-    em = self.entryMethods[ep]
+  def invokeEntryMethod(self, obj, ep, header, args, t0):
+    self.currentEntryMethod = em = self.entryMethods[ep]
     if Options.PROFILING:
       em.addRecvTime(time.time() - t0)
       em.startMeasuringTime()
@@ -197,10 +199,15 @@ class Charm(object):
     if (em.whenAttrib is not None) and (tag != getattr(obj, em.whenAttrib)):
       # store, don't expect msg now
       if ep not in obj._when_buffer: obj._when_buffer[ep] = defaultdict(list)
-      obj._when_buffer[ep][tag].append(args)
+      obj._when_buffer[ep][tag].append((args,header.get(b'block')))
       checkWhen = False # no entry method ran, so no need to check when buffers
+    elif not em.isThreaded:
+      ret = getattr(obj, em.name)(*args)  # invoke entry method
+      if b'block' in header:
+        proxy, remote_tid = header[b'block']
+        proxy._thread_deposit_result(remote_tid, ret) # send result back to remote
     else:
-      getattr(obj, em.name)(*args)  # invoke entry method
+      self.threadMgr.startThread(obj, em, args, header.get(b'block'))
 
     if Options.AUTO_FLUSH_WHEN and checkWhen:
       obj._checkWhen = set(obj._when_buffer.keys())
@@ -212,14 +219,14 @@ class Charm(object):
 
   def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
     obj = self.chares[chare_id]
-    args = self.unpackMsg(msg, dcopy_start, obj)
-    self.invokeEntryMethod(obj, ep, args, t0)
+    header, args = self.unpackMsg(msg, dcopy_start, obj)
+    self.invokeEntryMethod(obj, ep, header, args, t0)
 
   def recvGroupMsg(self, gid, ep, msg, t0, dcopy_start):
     if gid in self.groups:
       obj = self.groups[gid]
-      args = self.unpackMsg(msg, dcopy_start, obj)
-      self.invokeEntryMethod(obj, ep, args, t0)
+      header, args = self.unpackMsg(msg, dcopy_start, obj)
+      self.invokeEntryMethod(obj, ep, header, args, t0)
     else:
       em = self.entryMethods[ep]
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
@@ -235,8 +242,8 @@ class Charm(object):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
     if index in self.arrays[aid]:
       obj = self.arrays[aid][index]
-      args = self.unpackMsg(msg, dcopy_start, obj)
-      self.invokeEntryMethod(obj, ep, args, t0)
+      header, args = self.unpackMsg(msg, dcopy_start, obj)
+      self.invokeEntryMethod(obj, ep, header, args, t0)
     else:
       #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(index) + " not instantiated yet")
       # TODO profile this code path
@@ -255,22 +262,31 @@ class Charm(object):
 
   def unpackMsg(self, msg, dcopy_start, dest_obj):
     if msg[:7] == b"_local:":
-      return dest_obj.__removeLocal__(int(msg[7:]))
+      header, args = dest_obj.__removeLocal__(int(msg[7:]))
+    else:
+      header, args = cPickle.loads(msg)
+      if b'dcopy' in header:
+        rel_offset = dcopy_start
+        buf = memoryview(msg)
+        for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
+          arg_buf = buf[rel_offset:rel_offset + size]
+          args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
+          rel_offset += size
+      elif b"custom_reducer" in header:
+        reducer = getattr(self.reducers, header[b"custom_reducer"])
+        if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
 
-    header, args = cPickle.loads(msg)
-    if b'dcopy' in header:
-      rel_offset = dcopy_start
-      buf = memoryview(msg)
-      for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
-        arg_buf = buf[rel_offset:rel_offset + size]
-        args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
-        rel_offset += size
-    elif b"custom_reducer" in header:
-      reducer = getattr(self.reducers, header[b"custom_reducer"])
-      if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
-    return args
+    if b'block' in header:
+      # reconstruct return handle (proxy and remote thread ID) of blocked remote thread
+      proxy_class_name, proxy_state, remote_tid = header[b'block']
+      proxy_class = getattr(self, proxy_class_name)
+      proxy = proxy_class.__new__(proxy_class)
+      proxy.__setstate__(proxy_state)
+      header[b'block'] = proxy, remote_tid
 
-  def packMsg(self, destObj, msgArgs):
+    return header, args
+
+  def packMsg(self, destObj, msgArgs, block):
     """Prepares a message for sending, given arguments to an entry method invocation.
 
       The message is the result of pickling `(header,args)` where header is a dict,
@@ -294,11 +310,12 @@ class Charm(object):
     """
     direct_copy_buffers = []
     dcopy_size = 0
+    header = {}           # msg header
+    if block: header[b'block'] = self.threadMgr.getReturnHandle()
     if destObj: # if dest obj is local
-      localTag = destObj.__addLocal__(msgArgs)
+      localTag = destObj.__addLocal__((header, msgArgs))
       msg = ("_local:" + str(localTag)).encode()
     else:
-      header = {}           # msg header
       direct_copy_hdr = []  # goes to header
       args = list(msgArgs)
       if self.lib.direct_copy_supported:
@@ -420,6 +437,8 @@ class Charm(object):
     """
     if Options.PROFILING: self.contribute = profile_send_function(self.contribute)
     if "++quiet" in sys.argv: Options.QUIET = True
+    from ckthread import EntryMethodThreadManager
+    self.threadMgr = EntryMethodThreadManager()
     for C in classes: self.register(C)
     M = list(modules)
     if '__main__' not in M: M.append('__main__')
@@ -442,6 +461,7 @@ class Charm(object):
 
   def arrayElemLeave(self, aid, index):
     obj = self.arrays[aid].pop(index)
+    self.threadMgr.objMigrating(obj)
     del obj._contributeInfo  # don't want to pickle this
     return cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
 
@@ -529,9 +549,11 @@ CkAbort  = charm.abort
 def profile_send_function(func):
   def func_with_profiling(*args, **kwargs):
     sendInitTime = time.time()
-    func(*args, **kwargs)
+    charm.blockedTime = 0.0
+    ret = func(*args, **kwargs)
     charm.msg_send_sizes.append(charm.lastMsgLen)
-    charm.sendTime += (time.time() - sendInitTime)
+    charm.sendTime += (time.time() - sendInitTime - charm.blockedTime)
+    return ret
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
 
@@ -546,6 +568,10 @@ def when(attrib_name):
     func.when_attrib_name = attrib_name
     return func
   return _when
+
+def threaded(func):
+  func._ck_threaded = True
+  return func
 
 # ---------------------- Chare -----------------------
 
@@ -593,7 +619,15 @@ class Chare(object):
         if len(msgs_now) == 0:
           if len(msgs) == 0: self._when_buffer.pop(ep)
           break
-        for m in msgs_now: method(*m)
+        if not em.isThreaded:
+          for m,retHandle in msgs_now:
+            ret = method(*m)
+            if retHandle:
+              proxy, remote_tid = retHandle
+              proxy._thread_deposit_result(remote_tid, ret)
+        else:
+          for m,retHandle in msgs_now:
+            charm.threadMgr.startThread(self, em, m, retHandle)
 
   def contribute(self, data, reducer_type, target):
     charm.contribute(data, reducer_type, target, self)
@@ -610,6 +644,11 @@ class Chare(object):
               # self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
     charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
+  # deposit result that one of this chare's threads is waiting on
+  def _thread_deposit_result(self, tid, result):
+    assert tid in charm.threadMgr.obj_threads[self]   # TODO comment this out eventually
+    charm.threadMgr.resumeThread(tid, result)
+
 # ----------------- Mainchare and Proxy --------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -624,11 +663,16 @@ def mainchare_proxy__setstate__(proxy, state):
 def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
+    block = False
+    if 'block' in kwargs: block = kwargs['block']
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (me.cid in charm.chares) and (len(args) > 1):
       destObj = charm.chares[me.cid]
-    msg = charm.packMsg(destObj, args[1:])
+    msg = charm.packMsg(destObj, args[1:], block)
     charm.CkChareSend(me.cid, ep, msg)
+    if block:
+      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
+      return result
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -686,11 +730,18 @@ def group_proxy_elem(proxy, pe):  # group proxy [] overload method
 def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
+    block = False
+    if 'block' in kwargs: block = kwargs['block']
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()) and (len(args) > 1):
       destObj = charm.groups[me.gid]
-    msg = charm.packMsg(destObj, args[1:])
+    msg = charm.packMsg(destObj, args[1:], block)
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
+    if block:
+      if me.elemIdx == -1:
+        raise CharmPyError("Blocking calls can only invoke methods on single chares")
+      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
+      return result
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -764,12 +815,19 @@ def array_proxy_elem(proxy, idx): # array proxy [] overload method
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
+    block = False
+    if 'block' in kwargs: block = kwargs['block']
     destObj = None
     if Options.LOCAL_MSG_OPTIM:
       array = charm.arrays[me.aid]
       if (me.elemIdx in array) and (len(args) > 1): destObj = array[me.elemIdx]
-    msg = charm.packMsg(destObj, args[1:])
+    msg = charm.packMsg(destObj, args[1:], block)
     charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
+    if block:
+      if me.elemIdx == ():
+        raise CharmPyError("Blocking calls can only invoke methods on single chares")
+      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
+      return result
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
