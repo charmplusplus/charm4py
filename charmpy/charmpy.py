@@ -50,10 +50,22 @@ class EntryMethod(object):
     self.name = name    # entry method name
     self.isCtor = False # true if method is constructor
     self.epIdx = -1     # entry method index assigned by Charm
-    self.profile = profile
+    self.profile = profile  # true if profiling this entry method's times
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
-  def addTimes(self, times):
-    for i,t in enumerate(times): self.times[i] += t
+
+  def startMeasuringTime(self):
+    self.startTime = time.time()
+    charm.sendTime = 0.0
+
+  def stopMeasuringTime(self):
+    total = time.time() - self.startTime
+    self.times[0] += total - charm.sendTime
+    self.times[1] += charm.sendTime
+    charm.sendTime = 0.0
+
+  def addRecvTime(self, t):
+    self.times[2] += t
+
 
 class ReadOnlies(object): # for backwards-compatibility. TODO Remove eventually
   def __new__(cls):
@@ -99,7 +111,7 @@ class Charm(object):
     self.entryMethods = {}    # ep_idx -> EntryMethod object
     self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
     self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
-    self.sendTime = 0.0       # for profiling
+    self.sendTime = 0.0       # for profiling, used to record send overhead
     self.msg_send_sizes = []  # for profiling
     self.msg_recv_sizes = []  # for profiling
     self.activeChares = set() # for profiling (active chares on this PE)
@@ -172,12 +184,14 @@ class Charm(object):
 
   def invokeEntryMethod(self, obj, em, args, t0):
     if Options.PROFILING:
-      recv_overhead, initTime, self.sendTime = (time.time() - t0), time.time(), 0.0
+      em.addRecvTime(time.time() - t0)
+      em.startMeasuringTime()
+
     if Options.AUTO_FLUSH_WHEN: obj._checkWhen = set(obj._when_buffer.keys())
     getattr(obj, em.name)(*args)  # invoke entry method
     if Options.AUTO_FLUSH_WHEN and (len(obj._checkWhen) > 0): obj.__flushWhen__()
-    if Options.PROFILING:
-      em.addTimes([time.time() - initTime - self.sendTime, self.sendTime, recv_overhead])
+
+    if Options.PROFILING: em.stopMeasuringTime()
 
   def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
     obj = self.chares[chare_id]
