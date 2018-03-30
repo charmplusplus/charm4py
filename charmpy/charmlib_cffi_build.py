@@ -5,6 +5,7 @@ ffibuilder = FFI()
 ffibuilder.set_source("_charmlib",
    r""" // passed to the real C compiler
         #include "charm.h"
+        #include "spanningTree.h"
 
         // import reduction structures defined on Charm side
 
@@ -86,6 +87,9 @@ ffibuilder.cdef("""
     int CkNumPesHook();
     void CkExit(void);
     void CmiAbort(const char *);
+    void free(void *ptr);
+    void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
+                            int *parent, int *child_count, int **children);
 
     struct CkReductionTypesExt {
         int nop;

@@ -532,6 +532,13 @@ class Charm(object):
       raise CharmPyError("Charm++ version >= " + req_str + " required. " +
                          "Existing version is " + cur_str)
 
+  def getTopoTreeEdges(self, pe, root_pe, pes=None, bfactor=4):
+    """ Returns (parent, children) of 'pe' in a tree spanning the given 'pes',
+        or all PEs if 'pes' is None
+        If 'pes' is specified, 'root_pe' must be in the first position of 'pes',
+        and 'pe' must be a member of 'pes' """
+    return self.lib.getTopoTreeEdges(pe, root_pe, pes, bfactor)
+
   # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
   def myPe(self): return self._myPe
   def numPes(self): return self._numPes

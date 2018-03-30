@@ -273,6 +273,21 @@ class CharmLib(object):
   def CkDoneInserting(self, aid):
     lib.CkArrayDoneInsertingExt(aid)
 
+  def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
+    parent       = ffi.new('int*')
+    child_count  = ffi.new('int*')
+    children_ptr = ffi.new("int**")
+    if pes is not None:
+      pes_c = ffi.new('int[]', pes)
+      lib.getPETopoTreeEdges(pe, root_pe, pes_c, len(pes), bfactor, parent, child_count, children_ptr)
+    else:
+      lib.getPETopoTreeEdges(pe, root_pe, ffi.NULL, 0, bfactor, parent, child_count, children_ptr)
+    children = [children_ptr[0][i] for i in range(child_count[0])]
+    if len(children) > 0: lib.free(children_ptr[0])
+    parent = parent[0]
+    if parent == -1: parent = None
+    return parent, children
+
   def start(self):
     argv_bufs = [ffi.new("char[]", arg.encode()) for arg in sys.argv]
     lib.StartCharmExt(len(sys.argv), argv_bufs)

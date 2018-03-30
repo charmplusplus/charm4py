@@ -263,6 +263,23 @@ class CharmLib(object):
   def CkDoneInserting(self, aid):
     self.lib.CkArrayDoneInsertingExt(aid)
 
+  def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
+    parent       = c_int(0)
+    child_count  = c_int(0)
+    children_ptr = ctypes.POINTER(ctypes.c_int)()
+    if pes is not None:
+      pes_c = (c_int*len(pes))(*pes)
+      self.lib.getPETopoTreeEdges(pe, root_pe, pes_c, len(pes), bfactor, ctypes.byref(parent),
+                                  ctypes.byref(child_count), ctypes.byref(children_ptr))
+    else:
+      self.lib.getPETopoTreeEdges(pe, root_pe, 0, 0, bfactor, ctypes.byref(parent),
+                                  ctypes.byref(child_count), ctypes.byref(children_ptr))
+    children = [children_ptr[i] for i in range(int(child_count.value))]
+    if len(children) > 0: self.lib.free(children_ptr)
+    parent = int(parent.value)
+    if parent == -1: parent = None
+    return parent, children
+
   def start(self):
     self.argv_bufs = [ctypes.create_string_buffer(arg.encode()) for arg in sys.argv]
     LP_c_char = POINTER(c_char)
