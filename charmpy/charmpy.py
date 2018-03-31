@@ -130,17 +130,24 @@ class Charm(object):
       cfgPath = os.path.dirname(__file__) + '/charmpy.cfg' # look in folder where charmpy.py is
       if not os.path.exists(cfgPath): cfgPath = None
     if cfgPath is None:
-      print("charmpy.cfg not found")
-      exit(1)
+      raise CharmPyError("charmpy.cfg not found")
     cfg = json.load(open(cfgPath, 'r'))
-    if cfg['libcharm_interface'] == 'ctypes':
+    interface = cfg['libcharm_interface']
+    args = sys.argv
+    if '+libcharm_interface' in args:
+      arg_idx = args.index('+libcharm_interface')
+      interface = args.pop(arg_idx + 1)
+      args.pop(arg_idx)
+    if interface == 'ctypes':
       from charmlib_ctypes import CharmLib
-    elif cfg['libcharm_interface'] == 'cffi':
+    elif interface == 'cffi':
       sys.path.append(os.path.dirname(__file__) + '/__cffi_objs__')
       from charmlib_cffi import CharmLib
+    elif interface == 'cython':
+      sys.path.append(os.path.dirname(__file__) + '/__cython_objs__')
+      from charmlib_cython import CharmLib
     else:
-      print("Unrecognized interface " + cfg['libcharm_interface'])
-      exit(1)
+      raise CharmPyError("Unrecognized interface " + interface)
     self.lib = CharmLib(self, Options, cfg.get('libcharm_path'))
     self.ReducerType = self.lib.ReducerType
     self.CkContributeToChare = self.lib.CkContributeToChare
@@ -153,6 +160,10 @@ class Charm(object):
     self.redMgr   = ckreduction.ReductionManager(self, self.reducers)
     self.mainchareRegistered = False
     self.entry_func = None  # entry point to Charm program. can be used in place of defining a Mainchare
+    if self.lib.name == 'cython':
+      # replace these methods with the fast cython versions
+      self.packMsg   = self.lib.packMsg
+      self.unpackMsg = self.lib.unpackMsg
 
   def handleGeneralError(self):
     import traceback
@@ -381,7 +392,7 @@ class Charm(object):
       out_msg = ("CharmPy> Running on Python " + str(platform.python_version()) +
                 " (" + str(platform.python_implementation()) + "). Using '" +
                 self.lib.name + "' interface to access Charm++")
-      if self.lib.name != "cffi": out_msg += ", **WARNING**: cffi recommended for best performance"
+      if self.lib.name != "cython": out_msg += ", **WARNING**: cython recommended for best performance"
       print(out_msg)
 
     for C in self.register_order:
@@ -469,7 +480,7 @@ class Charm(object):
   def contribute(self, data, reducer, target, contributor):
     contribution = self.redMgr.prepare(data, reducer, contributor)
     contributeInfo = self.lib.getContributeInfo(target.ep, contribution, contributor)
-    self.lastMsgLen = contributeInfo.dataSize
+    self.lastMsgLen = contributeInfo.getDataSize()
     target.__self__.ckContribute(contributeInfo)
 
   def printTable(self, table, sep):

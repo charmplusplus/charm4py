@@ -83,6 +83,9 @@ class ContributeInfo(Structure):
     ("contributorType", c_int)        # type of contributor
   ]
 
+  def getDataSize(self):
+    return self.dataSize
+
 class CharmLib(object):
 
   def __init__(self, charm, opts, libcharm_path):

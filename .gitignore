@@ -1,9 +1,11 @@
 #ignore changes to config file
 charmpy.cfg
 
-#ignore cffi build files
+#ignore build files
 docs/_build/
 __cffi_objs__
+__cython_objs__
+charmpy/charmlib_cython.c
 __pycache__
 
 #ignore some common tmp files

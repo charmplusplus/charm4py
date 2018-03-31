@@ -31,6 +31,9 @@ class ContributeInfo:
     self.c_idx  = args[6]
     self.data = ffi.new("struct ContributeInfo*", args)
 
+  def getDataSize(self):
+    return self.dataSize
+
 class CharmLib(object):
 
   def __init__(self, _charm, opts, libcharm_path):

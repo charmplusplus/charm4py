@@ -5,6 +5,7 @@ if sys.version_info[0] < 3:
   print("auto_test requires Python 3")
   exit(1)
 import shutil
+from collections import defaultdict
 
 if len(sys.argv) == 2 and sys.argv[1] == '-version_check':
   exit(sys.version_info[0])
@@ -21,13 +22,13 @@ def searchForPython(python_implementations):
   if py2_exec is None:
     print("WARNING: Python 2 executable not found for auto_test. If desired, set manually")
   else:
-    python_implementations.add(py2_exec)
+    python_implementations.add((2,py2_exec))
   if py3_exec is None:
     py3_exec = shutil.which('python3')
   if py3_exec is None:
     print("WARNING: Python 3 executable not found for auto_test. If desired, set manually")
   else:
-    python_implementations.add(py3_exec)
+    python_implementations.add((3,py3_exec))
 
 # ----------------------------------------------------------------------------------
 TIMEOUT=60  # in seconds
@@ -66,31 +67,41 @@ commonArgs = ['++local', '+p4']
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-durations = {}
-for test in tests:
-  durations[test[0]] = []
-  for python in sorted(python_implementations):
-    cmd = ['./charmrun']
-    cmd += [python]
-    cmd += test
-    cmd += commonArgs
-    print("Test command is " + str(cmd))
-    startTime = time.time()
-    p = subprocess.Popen(cmd)
-    try:
-      rc = p.wait(TIMEOUT)
-    except subprocess.TimeoutExpired:
-      print("Timeout (" + str(TIMEOUT) + " secs) expired when running " + str(test) + ", Killing process")
-      p.kill()
-      rc = -1
-    if rc != 0:
-      print("ERROR running test " + str(test) + " with " + python)
-      exit(1)
-    else:
-      elapsed = round(time.time() - startTime,3)
-      durations[test[0]].append(elapsed)
-      print("\n\n--------------------- TEST PASSED (in " + str(elapsed) + " secs) ---------------------\n\n")
+interfaces = ['ctypes', 'cffi', 'cython']
+supported_py_versions = {'ctypes': {2, 3},
+                         'cffi'  : {2, 3},
+                         'cython': {3} }
+
+durations = defaultdict(dict)
+for interface in interfaces:
+  for test in tests:
+    durations[interface][test[0]] = []
+    for version,python in sorted(python_implementations):
+      if version not in supported_py_versions[interface]: continue
+      cmd = ['./charmrun']
+      cmd += [python]
+      cmd += test
+      cmd += commonArgs
+      cmd += ['+libcharm_interface', interface]
+      print("Test command is " + str(cmd))
+      startTime = time.time()
+      p = subprocess.Popen(cmd)
+      try:
+        rc = p.wait(TIMEOUT)
+      except subprocess.TimeoutExpired:
+        print("Timeout (" + str(TIMEOUT) + " secs) expired when running " + str(test) + ", Killing process")
+        p.kill()
+        rc = -1
+      if rc != 0:
+        print("ERROR running test " + str(test) + " with " + python)
+        exit(1)
+      else:
+        elapsed = round(time.time() - startTime,3)
+        durations[interface][test[0]].append(elapsed)
+        print("\n\n--------------------- TEST PASSED (in " + str(elapsed) + " secs) ---------------------\n\n")
 
 print("ALL TESTS PASSED")
 print("Durations:")
-for test,results in sorted(durations.items()): print(test + ": " + str(results))
+for interface in interfaces:
+  print("\n---", interface, "---")
+  for test,results in sorted(durations[interface].items()): print(test + ": " + str(results))
