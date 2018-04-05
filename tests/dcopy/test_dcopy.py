@@ -1,28 +1,29 @@
 import charmpy
-from charmpy import charm, Chare, Mainchare, Array, CkNumPes
+from charmpy import charm, Chare, Mainchare, Array
 from charmpy import readonlies as ro
 import time
 import array
 import numpy
 from numpy.testing import assert_allclose
+from collections import defaultdict
 
 charmpy.Options.PROFILING = True
 charmpy.Options.LOCAL_MSG_OPTIM = False
 
-MAX_ITER = 10
+MAX_ITER = 50
 DATA_LEN = 15000        # number of doubles
 CHARES_PER_PE = 10
 
 class Main(Mainchare):
 
     def __init__(self, args):
-        ro.numChares = CkNumPes() * CHARES_PER_PE
-        ro.arrayIndexes = [(i,) for i in range(ro.numChares)]
-        ro.testProxy = Array(Test, ro.numChares)
         ro.mainProxy = self.thisProxy
-        ro.testProxy.doIteration()
+        ro.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
+
+    def start(self):
         self.iterations = 0
         self.startTime = time.time()
+        ro.testProxy.doIteration()
 
     def iterationComplete(self):
         self.iterations += 1
@@ -33,6 +34,7 @@ class Main(Mainchare):
             charm.exit()
         else:
             ro.testProxy.doIteration()
+
 
 class Test(Chare):
     def __init__(self):
@@ -46,10 +48,22 @@ class Test(Chare):
 
         self.msgsRcvd = 0
 
+        self.gather(charm.myPe(), self.thisProxy.recvLocations)
+
+    def recvLocations(self, locations):
+      loc = defaultdict(list)
+      for chare_idx, pe in enumerate(locations): loc[pe].append(chare_idx)
+      myPe = charm.myPe()
+      myPos = loc[myPe].index(self.thisIndex[0])
+      # i-th chare in a PE sends to i-th chare in PE-1 and PE+1 and to itself
+      nb1 = self.thisProxy[loc[(myPe - 1) % charm.numPes()][myPos]]
+      nb2 = self.thisProxy[loc[(myPe + 1) % charm.numPes()][myPos]]
+      self.nbs = [nb1, nb2, self.thisProxy[self.thisIndex]]
+      self.contribute(None, None, ro.mainProxy.start)
+
     def doIteration(self):
-        for idx in ro.arrayIndexes:
-            if idx != self.thisIndex:
-                self.thisProxy[idx].recvData(self.thisIndex, self.S1, self.S2, self.S3)
+        for nb in self.nbs:
+            nb.recvData(self.thisIndex, self.S1, self.S2, self.S3)
 
     def recvData(self, src, d1, d2, d3):
 
@@ -65,7 +79,7 @@ class Test(Chare):
 
         assert_allclose(d3, desired, atol=1e-07)
 
-        if self.msgsRcvd == (ro.numChares - 1):
+        if self.msgsRcvd == 3:
             self.msgsRcvd = 0
             self.contribute(None, None, ro.mainProxy.iterationComplete)
 

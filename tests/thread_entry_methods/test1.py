@@ -38,7 +38,8 @@ class Test2(Chare):
 
 
 def main(args):
-    ro.numChares = charm.numPes() * 8
+    # every chare sends to every other so don't want a ton of chares
+    ro.numChares = min(charm.numPes() * 8, 32)
     ro.testGroup = Group(Test2)
     Array(Test, ro.numChares)
 

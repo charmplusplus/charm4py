@@ -3,8 +3,10 @@
 A program to test migration of chares.
 """
 
-from charmpy import charm, Mainchare, Chare, Array, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Mainchare, Chare, Array, CkMyPe
 
+
+CHARES_PER_PE = 1
 
 class Main(Mainchare):
     """
@@ -12,9 +14,9 @@ class Main(Mainchare):
     """
 
     def __init__(self, args):
-        if CkNumPes() != 4:
-            CkAbort("Run program with only 4 PEs")
-        array_proxy = Array(Migrate, 4)
+        if charm.numPes() == 1:
+            charm.abort("Run program with more than 1 PE")
+        array_proxy = Array(Migrate, CHARES_PER_PE * charm.numPes())
         array_proxy.start()
 
 
@@ -28,9 +30,13 @@ class Migrate(Chare):
         Test method called after migration to assert that the
         chare has migrated.
         """
-        print("Test called on PE ", CkMyPe())
-        assert CkMyPe() == 1
-        CkExit()
+        if self.thisIndex == (0,):
+            print("Test called on PE ", CkMyPe())
+        assert CkMyPe() == self.toPe
+        self.contribute(None, None, self.thisProxy[0].done)
+
+    def done(self):
+        charm.exit()
 
     def start(self):
         """
@@ -38,8 +44,9 @@ class Migrate(Chare):
         """
         if CkMyPe() == 0:
             print("On PE", CkMyPe(), "before migration")
-            self.thisProxy[self.thisIndex].test()
-            self.migrate(1)
+        self.thisProxy[self.thisIndex].test()
+        self.toPe = (charm.myPe() + 1) % charm.numPes()
+        self.migrate(self.toPe)
 
 
 # ---- start charm ----

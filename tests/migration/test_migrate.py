@@ -1,6 +1,7 @@
 from charmpy import charm, Chare, Group, Array
 from charmpy import readonlies as ro
 import numpy
+import math
 
 MAX_ITER = 100
 all_created = False
@@ -35,7 +36,7 @@ class Test(Chare):
         if self.thisIndex == (0,): print("Iteration " + str(self.iteration))
         self.check()
         A = numpy.arange(1000, dtype='float64')
-        work = 1000 * (charm.myPe() + 1)  # elements in higher PEs do more work
+        work = 1000 * int(round(math.log(charm.myPe() + 1) + 1))  # elements in higher PEs do more work
         for i in range(work): A += 1.33
         self.iteration += 1
         if self.iteration == MAX_ITER:

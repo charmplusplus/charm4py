@@ -1,11 +1,12 @@
-from charmpy import charm, Chare, Mainchare, Group, CkMyPe, CkNumPes, when
+from charmpy import charm, Chare, Mainchare, Group, CkMyPe, when
 from charmpy import readonlies as ro
 
 GRP_TO_SEND = 20
 
 class Main(Mainchare):
   def __init__(self, args):
-    if CkNumPes() < 3: charm.abort("Run program with at least 3 PEs")
+    if charm.numPes() < 3: charm.abort("Run program with at least 3 PEs")
+    ro.numParticipants = min(charm.numPes()-1, 31)
     Group(Test).run()
 
 class Test(Chare):
@@ -23,10 +24,10 @@ class Test(Chare):
     if self.msgsRcvd >= GRP_TO_SEND:
       self.msgsRcvd = 0
       self.current += 1
-      if self.current == CkNumPes(): charm.exit()
+      if self.current > ro.numParticipants: charm.exit()
 
   def run(self):
-    if CkMyPe() == 0: return
+    if CkMyPe() == 0 or charm.myPe() > ro.numParticipants: return
     #print("Group " + str(self.thisIndex) + " sending msg " + str(self.msgsSent))
     self.thisProxy[0].testWhen(CkMyPe(), "hi")
     self.msgsSent += 1
