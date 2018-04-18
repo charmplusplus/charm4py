@@ -82,4 +82,4 @@ are shown below (for 10 iterations):
 |  Bytes sent (MB)         |     1339.892    |   1339.323   |     1.0004     |
 +--------------------------+-----------------+--------------+----------------+
 
-Note: this feature is enabled by default with Python 3 and CFFI.
+Note: this feature is enabled by default with Python 3 and Cython/CFFI layers.

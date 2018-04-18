@@ -7,7 +7,7 @@ Running
 Prerequisites
 -------------
 
-1. If using the *CFFI* interface, make sure that the Charm++ shared library can be found
+1. Make sure that the Charm++ shared library can be found
    and loaded by the system's dynamic linker before running Charmpy programs.
 
    On Linux there are multiple ways to accomplish this. One way is::
@@ -17,7 +17,8 @@ Prerequisites
    On macOS, try the equivalent ``DYLD_LIBRARY_PATH``, or place or symlink the library on a
    system directory, like ``/usr/local/lib``. More macOS information is in the troubleshooting section below.
 
-   If using *ctypes*, verify that the path to the shared library is correct in ``charmpy.cfg``.
+   If using the ``ctypes`` layer, verify that the path to the shared library is
+   correct in ``charmpy.cfg``.
 
 2. The Charmpy module (``charmpy.py``) must be in the Python search path. One way to
    set it is::

@@ -7,21 +7,22 @@ Install
 Requirements
 ------------
 
-  - Python 2.7 or higher. Python 3 is *highly* recommended for best performance, and
+  - Python 2.7 or 3.3+. Python 3 is *highly* recommended for best performance, and
     for continued support.
     Charmpy has been tested with the following implementations: CPython (most common
     Python implementation) and PyPy_.
 
   - `Charm++`_ shared library. See below for instructions on building the shared library.
 
-  - There are currently two modes to access the shared library from Charmpy: cffi and ctypes.
-    ctypes is part of the Python standard library, but cffi is the recommended mode
-    for best performance (see below for installation instructions).
+  - (Optional, but *recommended*): Cython_ allows compilation of parts of the runtime,
+    and is highly recommended for best performance.
 
   - Charmpy can run on the wide variety of systems supported by Charm++, which includes
     many supercomputers in the TOP500.
     To date it has been tested on Linux (including the `Windows Subsystem for Linux`_),
-    macOS and Cray XE.
+    macOS and Cray XC/XE.
+
+.. _Cython: http://cython.org/
 
 .. _PyPy: http://pypy.org
 
@@ -47,7 +48,7 @@ First download Charm++::
 Next, build the library. Below are instructions for regular Linux and macOS
 environments. These generally apply to Linux clusters as well.
 On Unix-like environments, you will need these packages: ``autoconf``, ``automake``,
-and gnu or Intel C/C++ compilers.
+and a C++ compiler.
 
 Linux::
 
@@ -79,17 +80,32 @@ Updating the Charm++ shared library
 -----------------------------------
 
 If you update your version of Charmpy, you might find that it requires a more
-recent version of Charm++/libcharm. Charmpy will inform the user if this is the case.
+recent version of Charm++ (libcharm). Charmpy will inform the user if this is the case.
 
 In this situation, you can clone a recent version of Charm++ or update your git repository,
 and rebuild the library (as explained in the previous section).
 
 After this, make sure to rerun Charmpy :doc:`setup`.
 
+Using Charmpy with Cython
+-------------------------
+
+The Cython layer is currently only supported with Python 3+.
+
+Make sure Cython is installed for your Python distribution:
+http://docs.cython.org/en/latest/src/quickstart/install.html
+
+In addition, development files for your Python distribution may be required
+(e.g. ``Python.h``) to compile the cython layer. On Ubuntu Linux, these are
+usually provided by ``python3-dev`` or similar package.
+
+
 Using Charmpy with CFFI
 -----------------------
 
 **CFFI version >= 1.7 required**
+
+CFFI is the recommended layer if using PyPy (note that ``cffi`` comes builtin with PyPy).
 
 To install a recent version, please see:
 https://cffi.readthedocs.io/en/latest/installation.html

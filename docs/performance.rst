@@ -4,9 +4,9 @@ Performance
 
 .. contents::
 
-Python 3 with the CFFI interface is currently the recommended way to run Charmpy
+Python 3 with the Cython interface layer is currently the recommended way to run Charmpy
 programs to get the best performance. Please see section :doc:`install` and
-:doc:`setup` for details on setting up Charmpy with CFFI.
+:doc:`setup` for details on setting up Charmpy with Cython.
 
 Performance analysis
 --------------------
@@ -103,7 +103,7 @@ use inside the critical path is not recommended.
 Bypassing pickling
 ~~~~~~~~~~~~~~~~~~
 
-**This feature is currently only fully supported with Python 3 and CFFI**.
+**This feature is currently only fully supported with Python 3 and Cython/CFFI**.
 
 Best performance is achieved when passing arguments that support the buffer protocol
 (`byte arrays`_, array.array_ and `NumPy arrays`_). These bypass pickling altogether and

@@ -10,12 +10,13 @@ in the previous section. Next, enter the Charmpy source code directory and run::
     $ python setup.py CHARM_DIR
 
 where ``CHARM_DIR`` is the root folder of your Charm++ installation.
-
 A configuration file (``charmpy.cfg``) will be automatically created after setup.
-If a valid version of CFFI is installed, setup will compile a module to access the
-shared library and set CFFI as the default interface in ``charmpy.cfg``. Make sure that you
-use the same compiler to build both the Charm++ library and the CFFI module.
-If there are issues compiling the library wrapper module, please refer to the "Troubleshooting"
+
+Setup will look for ``cython`` or ``cffi`` and select the best mode. If one of those is
+found, it will compile a module to access the shared library and set it as
+the default interface in ``charmpy.cfg``. Make sure that you
+use the same compiler to build both the Charm++ library and the interface module.
+If there are issues compiling the interface module, please refer to the "Troubleshooting"
 section below.
 
 Cleanup
