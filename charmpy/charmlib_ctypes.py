@@ -244,19 +244,28 @@ class CharmLib(object):
     self.lib.CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
     return int(chareIdx.value), int(startEpIdx.value)
 
-  def CkCreateGroup(self, chareIdx, epIdx):
-    return self.lib.CkCreateGroupExt(chareIdx, epIdx, None, 0)
+  def CkCreateGroup(self, chareIdx, epIdx, msg):
+    msg0, dcopy = msg
+    msgLenArray = (c_int*1)(len(msg0))
+    msgArray = (c_char_p*1)(msg0)
+    return self.lib.CkCreateGroupExt(chareIdx, epIdx, 1, msgArray, msgLenArray)
 
-  def CkCreateArray(self, chareIdx, dims, epIdx):
+  def CkCreateArray(self, chareIdx, dims, epIdx, msg):
+    msg0, dcopy = msg
     ndims = len(dims)
     dimsArray = (c_int*ndims)(*dims)
+    msgLenArray = (c_int*1)(len(msg0))
+    msgArray = (c_char_p*1)(msg0)
     if all(v == 0 for v in dims): ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
-    return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, None, 0)
+    return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, 1, msgArray, msgLenArray)
 
-  def CkInsert(self, aid, index, epIdx, onPE):
+  def CkInsert(self, aid, index, epIdx, onPE, msg):
+    msg0, dcopy = msg
     indexDims = len(index)
     c_index = (c_int*indexDims)(*index)
-    self.lib.CkInsertArrayExt(aid, indexDims, c_index, epIdx, onPE, None, 0)
+    msgLenArray = (c_int*1)(len(msg0))
+    msgArray = (c_char_p*1)(msg0)
+    self.lib.CkInsertArrayExt(aid, indexDims, c_index, epIdx, onPE, 1, msgArray, msgLenArray)
 
   def CkMigrate(self, aid, index, toPe):
     indexDims = len(index)

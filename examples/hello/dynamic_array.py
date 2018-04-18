@@ -26,7 +26,7 @@ class Main(Mainchare):
     indices = list(itertools.product(range(ro.ARRAY_SIZE[0]), repeat=ro.nDims))
     assert len(indices) == self.nElements
     for i in indices:
-      self.arrProxy.ckInsert(i)
+      self.arrProxy.ckInsert(i, args=[42, "testing"])
 
     self.arrProxy.ckDoneInserting()
     self.arrProxy[ro.firstIdx].SayHi(17)
@@ -41,7 +41,8 @@ class Main(Mainchare):
     charm.exit()
 
 class Hello(Chare):
-  def __init__(self):
+  def __init__(self, arg0, arg1):
+    assert [arg0, arg1] == [42, "testing"], "Constructor args for dynamic array insertion failed."
     print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
   def SayHi(self, hiNo):

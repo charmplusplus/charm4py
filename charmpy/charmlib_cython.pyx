@@ -250,7 +250,7 @@ cdef extern const char * const CmiCommitID
 # supports up to NUM_DCOPY_BUFS direct-copy entry method arguments
 cdef (char*)[NUM_DCOPY_BUFS] send_bufs  # ?TODO bounds checking is needed where this is used
 cdef int[NUM_DCOPY_BUFS] send_buf_sizes # ?TODO bounds checking is needed where this is used
-cdef int cur_buf = 0
+cdef int cur_buf = 1
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
@@ -372,7 +372,7 @@ class CharmLib(object):
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
       CkChareExtSend_multi(<int>chare_id[0], objPtr, ep, cur_buf, send_bufs, send_buf_sizes)
-      cur_buf = 0
+      cur_buf = 1
 
   def CkGroupSend(self, int group_id, int index, int ep, msg not None):
     global cur_buf
@@ -383,7 +383,7 @@ class CharmLib(object):
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
       CkGroupExtSend_multi(group_id, index, ep, cur_buf, send_bufs, send_buf_sizes)
-      cur_buf = 0
+      cur_buf = 1
 
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):
     global cur_buf
@@ -397,7 +397,7 @@ class CharmLib(object):
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
       CkArrayExtSend_multi(array_id, c_index, ndims, ep, cur_buf, send_bufs, send_buf_sizes)
-      cur_buf = 0
+      cur_buf = 1
 
   def CkRegisterReadonly(self, bytes n1, bytes n2, msg):
     if msg is None: CkRegisterReadonlyExt(n1, n2, 0, NULL)
@@ -421,10 +421,18 @@ class CharmLib(object):
     CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
-  def CkCreateGroup(self, int chareIdx, int epIdx):
-    return CkCreateGroupExt(chareIdx, epIdx, NULL, 0)
+  def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):
+    global cur_buf
+    msg0, dcopy = msg
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    group_id = CkCreateGroupExt(chareIdx, epIdx, cur_buf, send_bufs, send_buf_sizes)
+    cur_buf = 1
+    return group_id
 
-  def CkCreateArray(self, int chareIdx, dims not None, int epIdx):
+  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None):
+    global cur_buf
+    msg0, dcopy = msg
     cdef int ndims = len(dims)
     cdef int i = 0
     cdef int all_zero = 1
@@ -432,13 +440,22 @@ class CharmLib(object):
       c_index[i] = dims[i]
       if c_index[i] != 0: all_zero = 0
     if all_zero: ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
-    return CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, NULL, 0)
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes)
+    cur_buf = 1
+    return array_id
 
-  def CkInsert(self, int aid, index, int epIdx, int onPE):
+  def CkInsert(self, int aid, index, int epIdx, int onPE, msg not None):
+    global cur_buf
+    msg0, dcopy = msg
     cdef int ndims = len(index)
     cdef int i = 0
     for i in range(ndims): c_index[i] = index[i]
-    CkInsertArrayExt(aid, ndims, c_index, epIdx, onPE, NULL, 0)
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkInsertArrayExt(aid, ndims, c_index, epIdx, onPE, cur_buf, send_bufs, send_buf_sizes)
+    cur_buf = 1
 
   def CkDoneInserting(self, int aid):
     CkArrayDoneInsertingExt(aid)
@@ -535,7 +552,7 @@ class CharmLib(object):
   def CkExit(self): return CkExit()
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
 
-  def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj not None):
+  def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0
     cdef int buf_size
     cdef int typeId

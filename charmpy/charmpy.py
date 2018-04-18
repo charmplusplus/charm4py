@@ -242,10 +242,11 @@ class Charm(object):
       em = self.entryMethods[ep]
       #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
       if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
+      header, args = self.unpackMsg(msg, dcopy_start, None)
       obj = object.__new__(em.C)  # create object but don't call __init__
       Group.initMember(obj, gid)
       super(em.C, obj).__init__() # call Chare class __init__ first
-      obj.__init__()              # now call the user's __init__
+      obj.__init__(*args)              # now call the user's __init__
       self.groups[gid] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Group))
 
@@ -260,14 +261,15 @@ class Charm(object):
       # TODO profile this code path
       em = self.entryMethods[ep]
       if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
-      if len(msg) > 0:  # obj migrating in
-        obj = cPickle.loads(msg)
+      header, args = self.unpackMsg(msg, dcopy_start, None)
+      if isinstance(args, Chare):  # obj migrating in
+        obj = args
         obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
       else:
         obj = object.__new__(em.C)  # create object but don't call __init__
         Array.initMember(obj, aid, index)
         super(em.C, obj).__init__() # call Chare class __init__ first
-        obj.__init__()              # now call the user's array element __init__
+        obj.__init__(*args)         # now call the user's array element __init__
       self.arrays[aid][index] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Array))
 
@@ -474,7 +476,7 @@ class Charm(object):
     obj = self.arrays[aid].pop(index)
     self.threadMgr.objMigrating(obj)
     del obj._contributeInfo  # don't want to pickle this
-    return cPickle.dumps(obj, Options.PICKLE_PROTOCOL)
+    return cPickle.dumps(({},obj), Options.PICKLE_PROTOCOL)
 
   # Charm class level contribute function used by Array, Group for reductions
   def contribute(self, data, reducer, target, contributor):
@@ -765,9 +767,10 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
 
 def group_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
-  def group_ckNew(cls):
+  def group_ckNew(cls, args):
     #print("calling ckNew for class " + C.__name__ + " cIdx= " + str(C.idx))
-    gid = charm.lib.CkCreateGroup(C.idx, epIdx)
+    msg = charm.packMsg(None, args, False)
+    gid = charm.lib.CkCreateGroup(C.idx, epIdx, msg)
     return charm.groups[gid].thisProxy # return instance of Proxy
   return group_ckNew
 
@@ -778,10 +781,10 @@ class Group(object):
 
   type_id = GROUP
 
-  def __new__(cls, C):
+  def __new__(cls, C, args=[]):
     if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
       raise CharmPyError("Only subclasses of Chare can be member of Group")
-    return charm.proxyClasses[GROUP][C].ckNew()
+    return charm.proxyClasses[GROUP][C].ckNew(args)
 
   @classmethod
   def initMember(cls, obj, gid):
@@ -854,7 +857,7 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
 # arrProxy.ckNew(ndims=2) - create an empty array of 2 dimensions
 def array_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
-  def array_ckNew(cls, dims=None, ndims=-1):
+  def array_ckNew(cls, dims=None, ndims=-1, args=[]):
     #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
     if type(dims) == int: dims = (dims,)
@@ -866,15 +869,17 @@ def array_ckNew_gen(C, epIdx):
     elif dims is None and ndims != -1: # create an empty array
       dims = (0,)*ndims
 
-    aid = charm.lib.CkCreateArray(C.idx, dims, epIdx)
+    msg = charm.packMsg(None, args, False)
+    aid = charm.lib.CkCreateArray(C.idx, dims, epIdx, msg)
     return cls(aid, len(dims)) # return instance of Proxy
   return array_ckNew
 
 def array_ckInsert_gen(epIdx):
-  def array_ckInsert(proxy, index, onPE=-1):
+  def array_ckInsert(proxy, index, onPE=-1, args=[]):
     if type(index) == int: index = (index,)
     assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
-    charm.lib.CkInsert(proxy.aid, index, epIdx, onPE) #TODO: add constructor params
+    msg = charm.packMsg(None, args, False)
+    charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg)
   return array_ckInsert
 
 def array_proxy_contribute(proxy, contributeInfo):
@@ -887,10 +892,10 @@ class Array(object):
 
   type_id = ARRAY
 
-  def __new__(cls, C, dims=None, ndims=-1):
+  def __new__(cls, C, dims=None, ndims=-1, args=[]):
     if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
       raise CharmPyError("Only subclasses of Chare can be member of Array")
-    return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims)
+    return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args)
 
   @classmethod
   def initMember(cls, obj, aid, index):

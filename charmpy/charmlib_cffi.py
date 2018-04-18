@@ -259,16 +259,34 @@ class CharmLib(object):
     lib.CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
     return chareIdx[0], startEpIdx[0]
 
-  def CkCreateGroup(self, chareIdx, epIdx):
-    return lib.CkCreateGroupExt(chareIdx, epIdx, ffi.NULL, 0)
+  def CkCreateGroup(self, chareIdx, epIdx, msg):
+    msg0, dcopy = msg
+    self.send_bufs[0] = ffi.from_buffer(msg0)
+    self.send_buf_sizes[0] = len(msg0)
+    for i, buf in enumerate(dcopy):
+      self.send_bufs[i+1] = ffi.from_buffer(buf)
+      self.send_buf_sizes[i+1] = buf.nbytes
+    return lib.CkCreateGroupExt(chareIdx, epIdx, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
-  def CkCreateArray(self, chareIdx, dims, epIdx):
+  def CkCreateArray(self, chareIdx, dims, epIdx, msg):
+    msg0, dcopy = msg
     ndims = len(dims)
     if all(v == 0 for v in dims): ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
-    return lib.CkCreateArrayExt(chareIdx, ndims, dims, epIdx, ffi.NULL, 0)
+    self.send_bufs[0] = ffi.from_buffer(msg0)
+    self.send_buf_sizes[0] = len(msg0)
+    for i, buf in enumerate(dcopy):
+      self.send_bufs[i+1] = ffi.from_buffer(buf)
+      self.send_buf_sizes[i+1] = buf.nbytes
+    return lib.CkCreateArrayExt(chareIdx, ndims, dims, epIdx, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
-  def CkInsert(self, aid, index, epIdx, onPE):
-    lib.CkInsertArrayExt(aid, len(index), index, epIdx, onPE, ffi.NULL, 0)
+  def CkInsert(self, aid, index, epIdx, onPE, msg):
+    msg0, dcopy = msg
+    self.send_bufs[0] = ffi.from_buffer(msg0)
+    self.send_buf_sizes[0] = len(msg0)
+    for i, buf in enumerate(dcopy):
+      self.send_bufs[i+1] = ffi.from_buffer(buf)
+      self.send_buf_sizes[i+1] = buf.nbytes
+    lib.CkInsertArrayExt(aid, len(index), index, epIdx, onPE, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
   def CkMigrate(self, aid, index, toPe):
     lib.CkMigrateExt(aid, len(index), index, toPe)

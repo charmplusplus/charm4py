@@ -159,9 +159,9 @@ ffibuilder.cdef("""
     void CkRegisterGroupExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
     void CkRegisterArrayExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
 
-    int CkCreateGroupExt(int cIdx, int eIdx, char *msg, int msgSize);
-    int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, char *msg, int msgSize);
-    void CkInsertArrayExt(int aid, int ndims, int *index, int epIdx, int onPE, char *msg, int msgSize);
+    int CkCreateGroupExt(int cIdx, int eIdx, int num_bufs, char **bufs, int *buf_sizes);
+    int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, int num_bufs, char **bufs, int *buf_sizes);
+    void CkInsertArrayExt(int aid, int ndims, int *index, int epIdx, int onPE, int num_bufs, char **bufs, int *buf_sizes);
     void CkArrayDoneInsertingExt(int aid);
     void CkMigrateExt(int aid, int ndims, int *index, int toPe);
 
