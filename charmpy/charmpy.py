@@ -366,8 +366,8 @@ class Charm(object):
     charm_type_id = charm_type.type_id
     entryMethods = self.classEntryMethods[charm_type_id][C]
     #if CkMyPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
-    C.idx, startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
-    #if CkMyPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx) + " ctor Idx=" + str(startEpIdx))
+    C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
+    #if CkMyPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
     for i,em in enumerate(entryMethods):
       if i == 0: em.isCtor = True
       em.epIdx = startEpIdx + i
@@ -398,10 +398,11 @@ class Charm(object):
       print(out_msg)
 
     for C in self.register_order:
+      C.idx = [None] * len(CHARM_TYPES)
       charm_types = self.registered[C]
       if Mainchare in charm_types: self.registerInCharm(C, Mainchare, self.lib.CkRegisterMainchare)
-      if Group in charm_types: self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
-      if Array in charm_types: self.registerInCharm(C, Array, self.lib.CkRegisterArray)
+      if Group     in charm_types: self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
+      if Array     in charm_types: self.registerInCharm(C, Array, self.lib.CkRegisterArray)
 
   def registerAs(self, C, charm_type_id):
     if charm_type_id == MAINCHARE:
@@ -768,9 +769,9 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
 def group_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
   def group_ckNew(cls, args):
-    #print("calling ckNew for class " + C.__name__ + " cIdx= " + str(C.idx))
+    #print("GROUP calling ckNew for class " + C.__name__ + " cIdx= " + C.idx[GROUP], "epIdx=", epIdx)
     msg = charm.packMsg(None, args, False)
-    gid = charm.lib.CkCreateGroup(C.idx, epIdx, msg)
+    gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
     return charm.groups[gid].thisProxy # return instance of Proxy
   return group_ckNew
 
@@ -858,7 +859,7 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
 def array_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
   def array_ckNew(cls, dims=None, ndims=-1, args=[]):
-    #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx))
+    #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
     if type(dims) == int: dims = (dims,)
 
@@ -870,7 +871,7 @@ def array_ckNew_gen(C, epIdx):
       dims = (0,)*ndims
 
     msg = charm.packMsg(None, args, False)
-    aid = charm.lib.CkCreateArray(C.idx, dims, epIdx, msg)
+    aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg)
     return cls(aid, len(dims)) # return instance of Proxy
   return array_ckNew
 
