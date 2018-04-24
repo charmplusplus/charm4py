@@ -245,6 +245,23 @@ cdef class ReceiveMsgBuffer:
 #    return <bytes>self.msg[0:self.shape[0]]
 
 
+cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
+  cdef int i = 0
+  # TODO: not sure if there is cleaner way to make cython generate similar code
+  arrIndex = PyTuple_New(ndims)
+  if ndims <= 3:
+    for i in range(ndims):
+      d = PyInt_FromSsize_t(arrayIndex[i])
+      Py_INCREF(d)
+      PyTuple_SET_ITEM(arrIndex, i, d)
+  else:
+    for i in range(ndims):
+      d = PyInt_FromSsize_t((<short*>arrayIndex)[i])
+      Py_INCREF(d)
+      PyTuple_SET_ITEM(arrIndex, i, d)
+  return arrIndex
+
+
 cdef extern const char * const CmiCommitID
 
 # supports up to NUM_DCOPY_BUFS direct-copy entry method arguments
@@ -696,14 +713,8 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     if PROFILING:
       t0 = time.time()
       charm.msg_recv_sizes.append(msgSize)
-    # TODO: not sure if there is cleaner way to make cython generate similar code
-    arrIndex = PyTuple_New(ndims)
-    for i in range(ndims):
-      d = PyInt_FromSsize_t(arrayIndex[i])
-      Py_INCREF(d)
-      PyTuple_SET_ITEM(arrIndex, i, d)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvArrayMsg(aid, arrIndex, ep, recv_buffer, t0, dcopy_start)
+    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, dcopy_start)
   except:
     charm.handleGeneralError()
 
@@ -713,12 +724,7 @@ cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int s
   try:
     if PROFILING: t0 = time.time()
     if sizing:
-      arrIndex = PyTuple_New(ndims)
-      for i in range(ndims):
-        d = PyInt_FromSsize_t(arrayIndex[i])
-        Py_INCREF(d)
-        PyTuple_SET_ITEM(arrIndex, i, d)
-      tempData = charm.arrayElemLeave(aid, arrIndex)
+      tempData = charm.arrayElemLeave(aid, array_index_to_tuple(ndims, arrayIndex))
       pdata[0] = NULL
     else:
       pdata[0] = <char*>tempData
@@ -735,24 +741,15 @@ cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, 
     if PROFILING:
       t0 = time.time()
       charm.msg_recv_sizes.append(msgSize)
-    arrIndex = PyTuple_New(ndims)
-    for i in range(ndims):
-      d = PyInt_FromSsize_t(arrayIndex[i])
-      Py_INCREF(d)
-      PyTuple_SET_ITEM(arrIndex, i, d)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvArrayMsg(aid, arrIndex, ep, recv_buffer, t0, -1)
+    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, -1)
   except:
     charm.handleGeneralError()
 
 cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
   cdef int i = 0
   try:
-    index = PyTuple_New(ndims)
-    for i in range(ndims):
-      d = PyInt_FromSsize_t(arrayIndex[i])
-      Py_INCREF(d)
-      PyTuple_SET_ITEM(index, i, d)
+    index = array_index_to_tuple(ndims, arrayIndex)
     CkArrayExtSend(aid, arrayIndex, ndims, charm.arrays[aid][index].thisProxy.resumeFromSync.ep,
                        emptyMsg, len(emptyMsg))
   except:
