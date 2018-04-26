@@ -49,6 +49,7 @@ tests.append(['tests/migration/test_migrate.py', '+balancer', 'GreedyRefineLB', 
 tests.append(['tests/migration/chare_migration.py'])
 tests.append(['tests/thread_entry_methods/test1.py'])
 tests.append(['tests/thread_entry_methods/test1_when.py'])
+tests.append(['tests/thread_entry_methods/test_main.py'])
 tests.append(['examples/hello/group_hello.py'])
 tests.append(['examples/hello/group_hello2.py'])
 tests.append(['examples/hello/array_hello.py'])

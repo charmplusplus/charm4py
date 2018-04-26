@@ -187,7 +187,7 @@ class Charm(object):
     obj = object.__new__(em.C)  # create object but don't call __init__
     super(em.C, obj).__init__() # call Mainchare class __init__ first
     if self.entry_func is not None: obj.main = self.entry_func
-    obj.__init__(args)          # now call the user's __init__
+    self.threadMgr.startThread(obj, em, [args], None) # now call user's __init__ in a new thread
     self.chares[cid] = obj
     if Options.PROFILING: self.activeChares.add((em.C, Mainchare))
     if CkMyPe() == 0: # broadcast readonlies
