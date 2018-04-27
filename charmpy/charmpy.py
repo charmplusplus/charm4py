@@ -597,6 +597,16 @@ def threaded(func):
 # ---------------------- Chare -----------------------
 
 class Chare(object):
+
+  def __new__(cls, chare_type=None, args=[], onPE=-1):
+    # this method is only invoked when unpickling a chare (invoked with no arguments), or
+    # when creating a singleton chare with `Chare(ChareType, args=[...], onPE=p)`
+    if chare_type is not None:
+      arr = Array(chare_type, ndims=1)
+      arr.ckInsert(0, onPE, args)
+      return arr[0]
+    return object.__new__(cls)
+
   def __init__(self):
     if hasattr(self, '_chare_initialized'): return
     # messages to this chare from chares in the same PE are stored here without copying
