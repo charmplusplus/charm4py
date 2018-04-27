@@ -256,6 +256,9 @@ class Charm(object):
       self.groups[gid] = obj
       if Options.PROFILING: self.activeChares.add((em.C, Group))
 
+  def arrayMapProcNum(self, gid, index):
+    return self.groups[gid].procNum(index)
+
   def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start):
     #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
     if index in self.arrays[aid]:
@@ -410,7 +413,9 @@ class Charm(object):
       C.idx = [None] * len(CHARM_TYPES)
       charm_types = self.registered[C]
       if Mainchare in charm_types: self.registerInCharm(C, Mainchare, self.lib.CkRegisterMainchare)
-      if Group     in charm_types: self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
+      if Group     in charm_types:
+        if ArrayMap in C.mro(): self.registerInCharm(C, Group, self.lib.CkRegisterArrayMap)
+        else: self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
       if Array     in charm_types: self.registerInCharm(C, Array, self.lib.CkRegisterArray)
 
   def registerAs(self, C, charm_type_id):
@@ -469,7 +474,9 @@ class Charm(object):
       if module_name not in sys.modules: importlib.import_module(module_name)
       for C_name,C in inspect.getmembers(sys.modules[module_name], inspect.isclass):
         if C.__module__ != __name__ and hasattr(C, 'mro'):
-          if Chare in C.mro():
+          if ArrayMap in C.mro():
+            self.register(C, (GROUP,))  # register ArrayMap only as Group
+          elif Chare in C.mro():
             self.register(C)
           elif Group in C.mro() or Array in C.mro():
             raise CharmPyError("Refer to new API to create Arrays and Groups")
@@ -834,6 +841,10 @@ class Group(object):
     M["__setstate__"] = group_proxy__setstate__
     return type(cls.__name__ + 'GroupProxy', (), M) # create and return proxy class
 
+class ArrayMap(Chare):
+  def __init__(self):
+    super(ArrayMap,self).__init__()
+
 # -------------------- Array and Proxy -----------------------
 
 def array_proxy_ctor(proxy, aid, ndims):
@@ -879,7 +890,7 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
 # arrProxy.ckNew(ndims=2) - create an empty array of 2 dimensions
 def array_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
-  def array_ckNew(cls, dims=None, ndims=-1, args=[]):
+  def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None):
     #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
     # FIXME?, for now, if dims contains all zeros, will assume no bounds given
     if type(dims) == int: dims = (dims,)
@@ -891,8 +902,10 @@ def array_ckNew_gen(C, epIdx):
     elif dims is None and ndims != -1: # create an empty array
       dims = (0,)*ndims
 
+    map_gid = -1
+    if map is not None: map_gid = map.gid
     msg = charm.packMsg(None, args, False)
-    aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg)
+    aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid)
     return cls(aid, len(dims)) # return instance of Proxy
   return array_ckNew
 
@@ -914,10 +927,10 @@ class Array(object):
 
   type_id = ARRAY
 
-  def __new__(cls, C, dims=None, ndims=-1, args=[]):
+  def __new__(cls, C, dims=None, ndims=-1, args=[], map=None):
     if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
       raise CharmPyError("Only subclasses of Chare can be member of Array")
-    return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args)
+    return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map)
 
   @classmethod
   def initMember(cls, obj, aid, index):

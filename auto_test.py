@@ -34,6 +34,7 @@ def searchForPython(python_implementations):
 TIMEOUT=60  # in seconds
 
 tests = []
+tests.append(['tests/array_maps/test1.py'])
 tests.append(['tests/when/when_test.py'])
 tests.append(['tests/reductions/group_reduction.py'])
 tests.append(['tests/reductions/array_reduction.py'])

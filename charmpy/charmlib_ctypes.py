@@ -218,6 +218,13 @@ class CharmLib(object):
     except:
       self.charm.handleGeneralError()
 
+  def arrayMapProcNum(self, gid, ndims, arrayIndex):
+    try:
+      arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
+      return self.charm.arrayMapProcNum(gid, arrIndex)
+    except:
+      self.charm.handleGeneralError()
+
   def CkChareSend(self, chare_id, ep, msg):
     msg0, dcopy = msg
     self.lib.CkChareExtSend(chare_id[0], chare_id[1], ep, msg0, len(msg0))
@@ -248,6 +255,12 @@ class CharmLib(object):
     self.lib.CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
     return int(chareIdx.value), int(startEpIdx.value)
 
+  def CkRegisterArrayMap(self, name, numEntryMethods):
+    self.chareNames.append(ctypes.create_string_buffer(name.encode()))
+    chareIdx, startEpIdx = c_int(0), c_int(0)
+    self.lib.CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
+    return int(chareIdx.value), int(startEpIdx.value)
+
   def CkRegisterArray(self, name, numEntryMethods):
     self.chareNames.append(ctypes.create_string_buffer(name.encode()))
     chareIdx, startEpIdx = c_int(0), c_int(0)
@@ -260,14 +273,14 @@ class CharmLib(object):
     msgArray = (c_char_p*1)(msg0)
     return self.lib.CkCreateGroupExt(chareIdx, epIdx, 1, msgArray, msgLenArray)
 
-  def CkCreateArray(self, chareIdx, dims, epIdx, msg):
+  def CkCreateArray(self, chareIdx, dims, epIdx, msg, map_gid):
     msg0, dcopy = msg
     ndims = len(dims)
     dimsArray = (c_int*ndims)(*dims)
     msgLenArray = (c_int*1)(len(msg0))
     msgArray = (c_char_p*1)(msg0)
     if all(v == 0 for v in dims): ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
-    return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, 1, msgArray, msgLenArray)
+    return self.lib.CkCreateArrayExt(chareIdx, ndims, dimsArray, epIdx, 1, msgArray, msgLenArray, map_gid)
 
   def CkInsert(self, aid, index, epIdx, onPE, msg):
     msg0, dcopy = msg
@@ -483,6 +496,10 @@ class CharmLib(object):
     self.RECV_ARRAY_CB_TYPE = CFUNCTYPE(None, c_int, c_int, POINTER(c_int), c_int, c_int, POINTER(c_char), c_int)
     self.recvArrayCb = self.RECV_ARRAY_CB_TYPE(self.recvArrayMsg)
     self.lib.registerArrayMsgRecvExtCallback(self.recvArrayCb)
+
+    self.ARRAY_MAP_PROCNUM_CB_TYPE = CFUNCTYPE(c_int, c_int, c_int, POINTER(c_int))
+    self.arrayMapProcNumCb = self.ARRAY_MAP_PROCNUM_CB_TYPE(self.arrayMapProcNum)
+    self.lib.registerArrayMapProcNumExtCallback(self.arrayMapProcNumCb)
 
     self.ARRAY_ELEM_LEAVE_CB_TYPE = CFUNCTYPE(c_int, c_int, c_int, POINTER(c_int), POINTER(c_char_p), c_int)
     #self.ARRAY_ELEM_LEAVE_CB_TYPE = CFUNCTYPE(c_int, c_int, c_int, POINTER(c_int), POINTER(POINTER(c_char)), c_int)

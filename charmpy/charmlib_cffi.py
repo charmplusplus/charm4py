@@ -202,6 +202,14 @@ class CharmLib(object):
     except:
       charm.handleGeneralError()
 
+  @ffi.def_extern()
+  def arrayMapProcNum(gid, ndims, arrayIndex):
+    try:
+      arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
+      return charm.arrayMapProcNum(gid, arrIndex)
+    except:
+      charm.handleGeneralError()
+
   def CkChareSend(self, chare_id, ep, msg):
     msg0, dcopy = msg
     objPtr = ffi.cast("void*", chare_id[1])
@@ -255,6 +263,12 @@ class CharmLib(object):
     lib.CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
     return chareIdx[0], startEpIdx[0]
 
+  def CkRegisterArrayMap(self, name, numEntryMethods):
+    self.chareNames.append(ffi.new("char[]", name.encode()))
+    chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
+    lib.CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    return chareIdx[0], startEpIdx[0]
+
   def CkRegisterArray(self, name, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
@@ -270,7 +284,7 @@ class CharmLib(object):
       self.send_buf_sizes[i+1] = buf.nbytes
     return lib.CkCreateGroupExt(chareIdx, epIdx, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
-  def CkCreateArray(self, chareIdx, dims, epIdx, msg):
+  def CkCreateArray(self, chareIdx, dims, epIdx, msg, map_gid):
     msg0, dcopy = msg
     ndims = len(dims)
     if all(v == 0 for v in dims): ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
@@ -279,7 +293,7 @@ class CharmLib(object):
     for i, buf in enumerate(dcopy):
       self.send_bufs[i+1] = ffi.from_buffer(buf)
       self.send_buf_sizes[i+1] = buf.nbytes
-    return lib.CkCreateArrayExt(chareIdx, ndims, dims, epIdx, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
+    return lib.CkCreateArrayExt(chareIdx, ndims, dims, epIdx, len(dcopy)+1, self.send_bufs, self.send_buf_sizes, map_gid)
 
   def CkInsert(self, aid, index, epIdx, onPE, msg):
     msg0, dcopy = msg
@@ -530,6 +544,7 @@ class CharmLib(object):
     lib.registerMainchareCtorExtCallback(lib.buildMainchare)
     lib.registerArrayElemLeaveExtCallback(lib.arrayElemLeave)
     lib.registerArrayResumeFromSyncExtCallback(lib.resumeFromSync)
+    lib.registerArrayMapProcNumExtCallback(lib.arrayMapProcNum)
     if sys.version_info[0] < 3:
       lib.registerReadOnlyRecvExtCallback(lib.recvReadOnly_py2)
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py2)

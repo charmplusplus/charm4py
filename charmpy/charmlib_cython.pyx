@@ -448,6 +448,12 @@ class CharmLib(object):
     CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
+  def CkRegisterArrayMap(self, str name, int numEntryMethods):
+    self.chareNames.append(name.encode())
+    cdef int chareIdx, startEpIdx
+    CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    return chareIdx, startEpIdx
+
   def CkRegisterArray(self, str name, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
@@ -463,7 +469,7 @@ class CharmLib(object):
     cur_buf = 1
     return group_id
 
-  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None):
+  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None, int map_gid):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(dims)
@@ -475,7 +481,7 @@ class CharmLib(object):
     if all_zero: ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes)
+    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid)
     cur_buf = 1
     return array_id
 
@@ -577,6 +583,7 @@ class CharmLib(object):
     registerChareMsgRecvExtCallback(recvChareMsg)
     registerGroupMsgRecvExtCallback(recvGroupMsg)
     registerArrayMsgRecvExtCallback(recvArrayMsg)
+    registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
     registerPyReductionExtCallback(pyReduction)
     registerCPickleDataExtCallback(cpickleData)
@@ -735,6 +742,12 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
       charm.msg_recv_sizes.append(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, dcopy_start)
+  except:
+    charm.handleGeneralError()
+
+cdef int arrayMapProcNum(int gid, int ndims, const int *arrayIndex):
+  try:
+    return charm.arrayMapProcNum(gid, array_index_to_tuple(ndims, arrayIndex))
   except:
     charm.handleGeneralError()
 
