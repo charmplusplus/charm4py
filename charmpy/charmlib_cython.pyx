@@ -514,7 +514,8 @@ class CharmLib(object):
 
     global charm_reducer_to_ctype, rev_np_array_type_map, rev_array_type_map
     charm_reducer_to_ctype = charm.redMgr.charm_reducer_to_ctype
-    rev_np_array_type_map = charm.redMgr.rev_np_array_type_map
+    IF HAVE_NUMPY:
+      rev_np_array_type_map = charm.redMgr.rev_np_array_type_map
     rev_array_type_map = charm.redMgr.rev_array_type_map
 
     args = [arg.encode() for arg in sys.argv]
