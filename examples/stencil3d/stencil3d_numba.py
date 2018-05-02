@@ -2,20 +2,26 @@
 # This version uses NumPy and Numba
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Chare, Mainchare, Array, CkNumPes, when
+from charmpy import charm, Chare, Mainchare, Group, Array, when
 from charmpy import readonlies as ro
 import time
 import math
 import numpy as np
 import numba
 
-ro.initTime = time.time()
+import sys
+sys.argv += ['+LBPeriod', '0.001', '+LBOff', '+LBCommOff']
+
+from charmpy import Options
+Options.PROFILING = False
+
 
 MAX_ITER = 100
-LBPERIOD_ITER = 200     # LB is called every LBPERIOD_ITER number of program iterations
+LBPERIOD_ITER = 30     # LB is called every LBPERIOD_ITER number of program iterations
 CHANGELOAD = 30
 LEFT,RIGHT,TOP,BOTTOM,FRONT,BACK = range(6)
 DIVIDEBY7 = 0.14285714285714285714
+PRINT_ITERATIONS = False # print msg after each iteration
 
 class Main(Mainchare):
   def __init__(self, args):
@@ -41,156 +47,204 @@ class Main(Mainchare):
     ro.num_chare_z = ro.arrayDimZ // ro.blockDimZ
 
     print("\nSTENCIL COMPUTATION WITH BARRIERS\n")
-    print("Running Stencil on " + str(CkNumPes()) + " processors with " + str((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z)) + " chares")
+    print("Running Stencil on " + str(charm.numPes()) + " processors with " + str((ro.num_chare_x, ro.num_chare_y, ro.num_chare_z)) + " chares")
     print("Array Dimensions: " + str((ro.arrayDimX, ro.arrayDimY, ro.arrayDimZ)))
     print("Block Dimensions: " + str((ro.blockDimX, ro.blockDimY, ro.blockDimZ)))
 
-    # Create new array of worker chares
+    self.start_count = 0
+
     ro.mainProxy = self.thisProxy
     self.array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z))
+    Group(NumbaPrecompiler)
 
-    # Start the computation
-    self.array.begin_iteration()
+  def start(self):
+    self.start_count += 1
+    if self.start_count == 2:
+      print("Starting simulation")
+      self.initTime = time.time()
+      # Start the computation
+      self.array.start()
 
   def report(self):
+    totalTime = time.time() - self.initTime
+    print(MAX_ITER, "iterations completed, total time=", round(totalTime,3), "secs, time per iteration (ms) =", round(totalTime / MAX_ITER * 1000, 3))
     charm.printStats()
     charm.exit()
 
-@numba.jit(nopython=True, cache=True)
-def index(a,b,c,X,Y): return (a + b*(X+2) + c*(X+2)*(Y+2))
 
-@numba.jit(nopython=True, cache=True)
-def compute_kernel_fast(work, X, Y, Z, new_temperature, temperature):
-  W = int(work)
-  for k in range(1, Z+1):
-    for j in range(1, Y+1):
-      for i in range(1, X+1):
-        # update my value based on the surrounding values
-        for w in range(W):
-          new_temperature[index(i, j, k, X, Y)] = (temperature[index(i-1, j, k, X, Y)] \
-              +  temperature[index(i+1, j, k, X, Y)] \
-              +  temperature[index(i, j-1, k, X, Y)] \
-              +  temperature[index(i, j+1, k, X, Y)] \
-              +  temperature[index(i, j, k-1, X, Y)] \
-              +  temperature[index(i, j, k+1, X, Y)] \
-              +  temperature[index(i, j, k, X, Y)] ) \
-              *  DIVIDEBY7
+def make_numba_functions():
 
-@numba.jit(nopython=True, cache=True)
-def constrainBC_fast(T,X,Y,Z):
-  # Heat left, top and front faces of each chare's block
-  for k in range(1,Z+1):
-    for i in range(1,X+1):
-      T[index(i, 1, k, X, Y)] = 255.0
+  if 'index' in globals(): return # numba functions already generated
 
-  for k in range(1, Z+1):
-    for j in range(1, Y+1):
-      T[index(1, j, k, X, Y)] = 255.0
+  global blockDimX, blockDimY, blockDimZ
+  # numba functions will be compiled with blockDimX, blockDimY, blockDimZ as constants
+  blockDimX = ro.blockDimX
+  blockDimY = ro.blockDimY
+  blockDimZ = ro.blockDimZ
 
-  for j in range(1, Y+1):
-    for i in range(1, X+1):
-      T[index(i, j, 1, X, Y)] = 255.0
+  @numba.jit(nopython=True, cache=False)
+  def index(a,b,c): return (a + b*(blockDimX+2) + c*(blockDimX+2)*(blockDimY+2))
 
-@numba.jit(nopython=True, cache=True)
-def fillGhostData(T, leftGhost, rightGhost, topGhost, bottomGhost, frontGhost, backGhost, blockDimX, blockDimY, blockDimZ):
-  for k in range(blockDimZ):
+  @numba.jit(nopython=True, cache=False)
+  def compute_kernel_fast(work, new_temperature, temperature):
+    for k in range(1, blockDimZ+1):
+      for j in range(1, blockDimY+1):
+        for i in range(1, blockDimX+1):
+          for w in range(work):
+            # update my value based on the surrounding values
+            new_temperature[index(i, j, k)] = (temperature[index(i-1, j, k)] \
+                +  temperature[index(i+1, j, k)] \
+                +  temperature[index(i, j-1, k)] \
+                +  temperature[index(i, j+1, k)] \
+                +  temperature[index(i, j, k-1)] \
+                +  temperature[index(i, j, k+1)] \
+                +  temperature[index(i, j, k)] ) \
+                *  DIVIDEBY7
+
+  @numba.jit(nopython=True, cache=False)
+  def constrainBC_fast(T):
+    # Heat left, top and front faces of each chare's block
+    for k in range(1, blockDimZ+1):
+      for i in range(1, blockDimX+1):
+        T[index(i, 1, k)] = 255.0
+
+    for k in range(1, blockDimZ+1):
+      for j in range(1, blockDimY+1):
+        T[index(1, j, k)] = 255.0
+
+    for j in range(1, blockDimY+1):
+      for i in range(1, blockDimX+1):
+        T[index(i, j, 1)] = 255.0
+
+  @numba.jit(nopython=True, cache=False)
+  def fillGhostData(T, leftGhost, rightGhost, topGhost, bottomGhost, frontGhost, backGhost):
+    for k in range(blockDimZ):
+      for j in range(blockDimY):
+        leftGhost[k*blockDimY+j] = T[index(1, j+1, k+1)]
+        rightGhost[k*blockDimY+j] = T[index(blockDimX, j+1, k+1)]
+
+    for k in range(blockDimZ):
+      for i in range(blockDimX):
+        topGhost[k*blockDimX+i] = T[index(i+1, 1, k+1)]
+        bottomGhost[k*blockDimX+i] = T[index(i+1, blockDimY, k+1)]
+
     for j in range(blockDimY):
-      leftGhost[k*blockDimY+j] = T[index(1, j+1, k+1, blockDimX, blockDimY)]
-      rightGhost[k*blockDimY+j] = T[index(blockDimX, j+1, k+1, blockDimX, blockDimY)]
+      for i in range(blockDimX):
+        frontGhost[j*blockDimX+i] = T[index(i+1, j+1, 1)];
+        backGhost[j*blockDimX+i] = T[index(i+1, j+1, blockDimZ)]
 
-  for k in range(blockDimZ):
-    for i in range(blockDimX):
-      topGhost[k*blockDimX+i] = T[index(i+1, 1, k+1, blockDimX, blockDimY)]
-      bottomGhost[k*blockDimX+i] = T[index(i+1, blockDimY, k+1, blockDimX, blockDimY)]
+  @numba.jit(nopython=True, cache=False)
+  def processGhosts_fast(T, direction, width, height, gh):
+    if direction == LEFT:
+      for k in range(width):
+        for j in range(height):
+          T[index(0, j+1, k+1)] = gh[k*height+j]
+    elif direction == RIGHT:
+      for k in range(width):
+        for j in range(height):
+          T[index(blockDimX+1, j+1, k+1)] = gh[k*height+j]
+    elif direction == BOTTOM:
+      for k in range(width):
+        for i in range(height):
+          T[index(i+1, 0, k+1)] = gh[k*height+i]
+    elif direction == TOP:
+      for k in range(width):
+        for i in range(height):
+          T[index(i+1, blockDimY+1, k+1)] = gh[k*height+i]
+    elif direction == FRONT:
+      for j in range(width):
+        for i in range(height):
+          T[index(i+1, j+1, 0)] = gh[j*height+i]
+    elif direction == BACK:
+      for j in range(width):
+        for i in range(height):
+          T[index(i+1, j+1, blockDimZ+1)] = gh[j*height+i]
 
-  for j in range(blockDimY):
-    for i in range(blockDimX):
-      frontGhost[j*blockDimX+i] = T[index(i+1, j+1, 1, blockDimX, blockDimY)];
-      backGhost[j*blockDimX+i] = T[index(i+1, j+1, blockDimZ, blockDimX, blockDimY)]
+  globals()['index'] = index
+  globals()['compute_kernel_fast'] = compute_kernel_fast
+  globals()['constrainBC_fast']    = constrainBC_fast
+  globals()['fillGhostData']       = fillGhostData
+  globals()['processGhosts_fast']  = processGhosts_fast
 
-@numba.jit(nopython=True, cache=True)
-def processGhosts_fast(T, direction, width, height, gh, X, Y, Z):
-  if direction == LEFT:
-    for k in range(width):
-      for j in range(height):
-        T[index(0, j+1, k+1, X, Y)] = gh[k*height+j]
-  elif direction == RIGHT:
-    for k in range(width):
-      for j in range(height):
-        T[index(X+1, j+1, k+1, X, Y)] = gh[k*height+j]
-  elif direction == BOTTOM:
-    for k in range(width):
-      for i in range(height):
-        T[index(i+1, 0, k+1, X, Y)] = gh[k*height+i]
-  elif direction == TOP:
-    for k in range(width):
-      for i in range(height):
-        T[index(i+1, Y+1, k+1, X, Y)] = gh[k*height+i]
-  elif direction == FRONT:
-    for j in range(width):
-      for i in range(height):
-        T[index(i+1, j+1, 0, X, Y)] = gh[j*height+i]
-  elif direction == BACK:
-    for j in range(width):
-      for i in range(height):
-        T[index(i+1, j+1, Z+1, X, Y)] = gh[j*height+i]
+
+# This is just used to ensure more consistent benchmarking results,
+# by compiling/loading all Numba functions on each PE once before any actual computations start
+class NumbaPrecompiler(Chare):
+
+  def __init__(self):
+    #print("Numba warmup in PE", charm.myPe())
+    make_numba_functions()
+    size = (ro.blockDimX+2) * (ro.blockDimY+2) * (ro.blockDimZ+2)
+    T = np.zeros(size, dtype='float64')
+    compute_kernel_fast(10, T, T)
+    constrainBC_fast(T)
+    fillGhostData(T, T, T, T, T, T, T)
+    processGhosts_fast(T, LEFT, 1, 1, T)
+    del T
+    self.contribute(None, None, ro.mainProxy.start)
+
 
 class Stencil(Chare):
   def __init__(self):
     #print("Element " + str(self.thisIndex) + " created")
 
+    make_numba_functions()
+
     arrSize = (ro.blockDimX+2) * (ro.blockDimY+2) * (ro.blockDimZ+2)
     if self.thisIndex == (0,0,0): print("array size=" + str(arrSize))
-    self.temperature = np.zeros(arrSize)
-    self.new_temperature = np.zeros(arrSize)
+    self.temperature     = np.zeros(arrSize, dtype='float64')
+    self.new_temperature = np.zeros(arrSize, dtype='float64')
     self.iterations = 0
     self.msgsRcvd = 0
-    constrainBC_fast(self.temperature,ro.blockDimX,ro.blockDimY,ro.blockDimZ)
+    constrainBC_fast(self.temperature)
 
     # start measuring time
-    if self.thisIndex == (0,0,0): self.startTime = time.time()
+    if PRINT_ITERATIONS and self.thisIndex == (0,0,0): self.startTime = time.time()
+
+    X,Y,Z = ro.num_chare_x, ro.num_chare_y, ro.num_chare_z
+    i = self.thisIndex
+    self.left_nb   = self.thisProxy[(i[0]-1)%X, i[1], i[2]]
+    self.right_nb  = self.thisProxy[(i[0]+1)%X, i[1], i[2]]
+    self.bottom_nb = self.thisProxy[i[0], (i[1]-1)%Y, i[2]]
+    self.top_nb    = self.thisProxy[i[0], (i[1]+1)%Y, i[2]]
+    self.front_nb  = self.thisProxy[i[0], i[1], (i[2]-1)%Z]
+    self.back_nb   = self.thisProxy[i[0], i[1], (i[2]+1)%Z]
+    self.me = self.thisProxy[self.thisIndex]
+
+    self.contribute(None, None, ro.mainProxy.start)
+
+  def start(self):
+    charm.LBTurnInstrumentOn()
+    self.begin_iteration()
 
   def begin_iteration(self):
     self.iterations += 1
     blockDimX, blockDimY, blockDimZ = ro.blockDimX, ro.blockDimY, ro.blockDimZ
-    X,Y,Z = ro.blockDimX, ro.blockDimY, ro.blockDimZ
 
     # Copy different faces into messages
-    leftGhost = np.zeros((blockDimY*blockDimZ))
-    rightGhost = np.zeros((blockDimY*blockDimZ))
-    topGhost = np.zeros((blockDimX*blockDimZ))
+    leftGhost   = np.zeros((blockDimY*blockDimZ))
+    rightGhost  = np.zeros((blockDimY*blockDimZ))
+    topGhost    = np.zeros((blockDimX*blockDimZ))
     bottomGhost = np.zeros((blockDimX*blockDimZ))
-    frontGhost = np.zeros((blockDimX*blockDimY))
-    backGhost = np.zeros((blockDimX*blockDimY))
+    frontGhost  = np.zeros((blockDimX*blockDimY))
+    backGhost   = np.zeros((blockDimX*blockDimY))
 
-    fillGhostData(self.temperature, leftGhost, rightGhost, topGhost, bottomGhost, frontGhost, backGhost, blockDimX, blockDimY, blockDimZ)
-    X,Y,Z = ro.num_chare_x, ro.num_chare_y, ro.num_chare_z
-    i = self.thisIndex
+    fillGhostData(self.temperature, leftGhost, rightGhost, topGhost, bottomGhost, frontGhost, backGhost)
 
-    # Send my left face
-    self.thisProxy[(i[0]-1)%X, i[1], i[2]].receiveGhosts(self.iterations, RIGHT, blockDimY, blockDimZ, leftGhost)
-    # Send my right face
-    self.thisProxy[(i[0]+1)%X, i[1], i[2]].receiveGhosts(self.iterations, LEFT, blockDimY, blockDimZ, rightGhost)
-    # Send my bottom face
-    self.thisProxy[i[0], (i[1]-1)%Y, i[2]].receiveGhosts(self.iterations, TOP, blockDimX, blockDimZ, bottomGhost)
-    # Send my top face
-    self.thisProxy[i[0], (i[1]+1)%Y, i[2]].receiveGhosts(self.iterations, BOTTOM, blockDimX, blockDimZ, topGhost)
-    # Send my front face
-    self.thisProxy[i[0], i[1], (i[2]-1)%Z].receiveGhosts(self.iterations, BACK, blockDimX, blockDimY, frontGhost)
-    # Send my back face
-    self.thisProxy[i[0], i[1], (i[2]+1)%Z].receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)
+    self.left_nb.receiveGhosts(self.iterations, RIGHT, blockDimY, blockDimZ, leftGhost)   # Send my left face
+    self.right_nb.receiveGhosts(self.iterations, LEFT, blockDimY, blockDimZ, rightGhost)  # Send my right face
+    self.bottom_nb.receiveGhosts(self.iterations, TOP, blockDimX, blockDimZ, bottomGhost) # Send my bottom face
+    self.top_nb.receiveGhosts(self.iterations, BOTTOM, blockDimX, blockDimZ, topGhost)    # Send my top face
+    self.front_nb.receiveGhosts(self.iterations, BACK, blockDimX, blockDimY, frontGhost)  # Send my front face
+    self.back_nb.receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)   # Send my back face
 
   @when("iterations")
   def receiveGhosts(self, iteration, direction, height, width, gh):
-    self.processGhosts(direction, height, width, gh)
+    processGhosts_fast(self.temperature, direction, width, height, gh)
     self.msgsRcvd += 1
     if self.msgsRcvd == 6:
       self.msgsRcvd = 0
-      self.thisProxy[self.thisIndex].check_and_compute()
-
-  def processGhosts(self, direction, height, width, gh):
-    blockDimX, blockDimY, blockDimZ = ro.blockDimX, ro.blockDimY, ro.blockDimZ
-    processGhosts_fast(self.temperature, direction, width, height, gh, blockDimX, blockDimY, blockDimZ)
+      self.me.check_and_compute()
 
   def check_and_compute(self):
     self.compute_kernel()
@@ -200,17 +254,17 @@ class Stencil(Chare):
 
     self.temperature,self.new_temperature = self.new_temperature,self.temperature
 
-    constrainBC_fast(self.temperature,ro.blockDimX,ro.blockDimY,ro.blockDimZ)
+    constrainBC_fast(self.temperature)
 
-    if self.thisIndex == (0,0,0):
+    if PRINT_ITERATIONS and self.thisIndex == (0,0,0):
       endTime = time.time()
-      print("[" + str(self.iterations) + "] Time per iteration: " + str(endTime-self.startTime) + " " + str(endTime-ro.initTime))
+      print("[" + str(self.iterations) + "] Time per iteration: " + str(endTime-self.startTime))
 
     if self.iterations == MAX_ITER:
       self.contribute(None, None, ro.mainProxy.report)
     else:
-      if self.thisIndex == (0,0,0): self.startTime = time.time()
-      if self.iterations % LBPERIOD_ITER == 0:
+      if PRINT_ITERATIONS and self.thisIndex == (0,0,0): self.startTime = time.time()
+      if self.iterations == 1 or self.iterations % LBPERIOD_ITER == 0:
         self.AtSync()
       else:
         self.contribute(None, None, self.thisProxy.begin_iteration)
@@ -230,8 +284,7 @@ class Stencil(Chare):
     else:
       work = 10.0
 
-    blockDimX, blockDimY, blockDimZ = ro.blockDimX, ro.blockDimY, ro.blockDimZ
-    compute_kernel_fast(work, blockDimX, blockDimY, blockDimZ, self.new_temperature, self.temperature)
+    compute_kernel_fast(int(work), self.new_temperature, self.temperature)
 
   def resumeFromSync(self):
     self.begin_iteration()
