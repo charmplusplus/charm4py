@@ -603,7 +603,7 @@ class Chare(object):
     # when creating a singleton chare with `Chare(ChareType, args=[...], onPE=p)`
     if chare_type is not None:
       arr = Array(chare_type, ndims=1)
-      arr.ckInsert(0, onPE, args)
+      arr.ckInsert(0, args, onPE)
       return arr[0]
     return object.__new__(cls)
 
@@ -886,7 +886,7 @@ def array_ckNew_gen(C, epIdx):
   return array_ckNew
 
 def array_ckInsert_gen(epIdx):
-  def array_ckInsert(proxy, index, onPE=-1, args=[]):
+  def array_ckInsert(proxy, index, args=[], onPE=-1):
     if type(index) == int: index = (index,)
     assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
     msg = charm.packMsg(None, args, False)

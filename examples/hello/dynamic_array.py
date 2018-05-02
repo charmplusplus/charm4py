@@ -26,7 +26,7 @@ class Main(Mainchare):
     indices = list(itertools.product(range(ro.ARRAY_SIZE[0]), repeat=ro.nDims))
     assert len(indices) == self.nElements
     for i in indices:
-      self.arrProxy.ckInsert(i, args=[42, "testing"])
+      self.arrProxy.ckInsert(i, [42, "testing"])
 
     self.arrProxy.ckDoneInserting()
     self.arrProxy[ro.firstIdx].SayHi(17)
