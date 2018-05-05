@@ -49,15 +49,17 @@ class CharmLib(object):
     self.times = times
     self.send_bufs = ffi.new("char*[]", 60)  # supports up to 60 direct-copy entry method arguments
     self.send_buf_sizes = ffi.new("int[]", [0] * 60)
-    c_type_table = [None] * 10
+    c_type_table = [None] * 12
     c_type_table[red.C_CHAR] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
     c_type_table[red.C_SHORT] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
     c_type_table[red.C_INT] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
     c_type_table[red.C_LONG] = ('long', 'long[]', 'long*', ffi.sizeof('long'))
+    c_type_table[red.C_LONG_LONG] = ('long long', 'long long[]', 'long long*', ffi.sizeof('long long'))
     c_type_table[red.C_UCHAR] = ('unsigned char', 'unsigned char[]', 'unsigned char*', ffi.sizeof('unsigned char'))
     c_type_table[red.C_USHORT] = ('unsigned short', 'unsigned short[]', 'unsigned short*', ffi.sizeof('unsigned short'))
     c_type_table[red.C_UINT] = ('unsigned int', 'unsigned int[]', 'unsigned int*', ffi.sizeof('unsigned int'))
     c_type_table[red.C_ULONG] = ('unsigned long', 'unsigned long[]', 'unsigned long*', ffi.sizeof('unsigned long'))
+    c_type_table[red.C_ULONG_LONG] = ('unsigned long long', 'unsigned long long[]', 'unsigned long long*', ffi.sizeof('unsigned long long'))
     c_type_table[red.C_FLOAT] = ('float', 'float[]', 'float*', ffi.sizeof('float'))
     c_type_table[red.C_DOUBLE] = ('double', 'double[]', 'double*', ffi.sizeof('double'))
 

@@ -19,14 +19,15 @@ except ImportError:
 # identifiers for Charm internal reducers
 (SUM, PRODUCT, MAX, MIN) = range(4)
 
+NUM_C_TYPES = 12
 # Set of integer identifiers for C types used with internal reducers
-(C_CHAR,  C_SHORT,  C_INT,  C_LONG,
- C_UCHAR, C_USHORT, C_UINT, C_ULONG,
- C_FLOAT, C_DOUBLE) = range(10)
+(C_CHAR,  C_SHORT,  C_INT,  C_LONG,  C_LONG_LONG,
+ C_UCHAR, C_USHORT, C_UINT, C_ULONG, C_ULONG_LONG,
+ C_FLOAT, C_DOUBLE) = range(NUM_C_TYPES)
 
 # map names of C types (as they appear in CkReductionTypesExt) to their identifiers
-c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long':  C_LONG,
-                    'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG,
+c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long':  C_LONG,  'long_long':  C_LONG_LONG,
+                    'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG, 'ulong_long': C_ULONG_LONG,
                     'float': C_FLOAT, 'double': C_DOUBLE}
 
 
@@ -104,10 +105,10 @@ class ReductionManager(object):
     #     - c_type is identifier for C type (C_CHAR, C_SHORT, etc)
     #     - charm_reducer_type is value for internal reducer type as they appear in CkReductionTypesExt
     self.red_table = [[]] * 4
-    self.red_table[SUM]     = [0] * 10
-    self.red_table[PRODUCT] = [0] * 10
-    self.red_table[MAX]     = [0] * 10
-    self.red_table[MIN]     = [0] * 10
+    self.red_table[SUM]     = [0] * NUM_C_TYPES
+    self.red_table[PRODUCT] = [0] * NUM_C_TYPES
+    self.red_table[MAX]     = [0] * NUM_C_TYPES
+    self.red_table[MIN]     = [0] * NUM_C_TYPES
 
     fields = self.charm.lib.getReductionTypesFields() # get names of fields in CkReductionTypesExt
     maxFieldVal = max([getattr(self.charm.ReducerType, f) for f in fields])
@@ -119,7 +120,7 @@ class ReductionManager(object):
       elif f == 'external_py':
         op, c_type_str = None, 'char'
       else:
-        op, c_type_str = f.split('_')             # e.g. from 'sum_long' extracts 'sum' and 'long'
+        op, c_type_str = f.split('_', 1)          # e.g. from 'sum_long' extracts 'sum' and 'long'
       ctype_code = c_typename_to_id[c_type_str]   # e.g. map 'long' to C_LONG
       f_val = getattr(self.charm.ReducerType, f)  # value of the field in CkReductionTypesExt
       #print(f, "ctype_code", ctype_code, "f_val=", f_val)
@@ -143,9 +144,11 @@ class ReductionManager(object):
       for dt, c_type in self.numpy_type_map.items():
         assert np.dtype(dt).itemsize == self.charm.lib.sizeof(c_type)
 
-      self.rev_np_array_type_map = ['int8', 'int16', 'int32', 'int64',
-                                    'uint8', 'uint16', 'uint32', 'uint64',
-                                    'float32', 'float64']
+      self.rev_np_array_type_map = [None] * NUM_C_TYPES
+      reverse_lookup = {v: k for k, v in self.numpy_type_map.items()}
+      for c_type in range(NUM_C_TYPES):
+        if c_type in reverse_lookup:
+          self.rev_np_array_type_map[c_type] = reverse_lookup[c_type]
 
     # ------ array.array data types ------
 
@@ -153,12 +156,15 @@ class ReductionManager(object):
     self.array_type_map = { 'b': C_CHAR, 'B': C_UCHAR, 'h': C_SHORT, 'H': C_USHORT,
                             'i': C_INT, 'I': C_UINT, 'l': C_LONG, 'L': C_ULONG,
                             'f': C_FLOAT, 'd': C_DOUBLE }
+    if sys.version_info >= (3,3,0):
+      self.array_type_map['q'] = C_LONG_LONG
+      self.array_type_map['Q'] = C_ULONG_LONG
 
     # verify that mapping is correct
     for dt, c_type in self.array_type_map.items():
       assert array.array(dt).itemsize == self.charm.lib.sizeof(c_type)
 
-    self.rev_array_type_map = ['b', 'h', 'i', 'l', 'B', 'H', 'I', 'L', 'f', 'd']
+    self.rev_array_type_map = ['b', 'h', 'i', 'l', 'q', 'B', 'H', 'I', 'L', 'Q', 'f', 'd']
 
     # ------ python data types ------
 

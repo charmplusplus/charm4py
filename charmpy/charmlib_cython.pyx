@@ -48,40 +48,48 @@ ctypedef struct CkReductionTypesExt:
   int sum_short
   int sum_int
   int sum_long
+  int sum_long_long
   int sum_uchar
   int sum_ushort
   int sum_uint
   int sum_ulong
+  int sum_ulong_long
   int sum_float
   int sum_double
   int product_char
   int product_short
   int product_int
   int product_long
+  int product_long_long
   int product_uchar
   int product_ushort
   int product_uint
   int product_ulong
+  int product_ulong_long
   int product_float
   int product_double
   int max_char
   int max_short
   int max_int
   int max_long
+  int max_long_long
   int max_uchar
   int max_ushort
   int max_uint
   int max_ulong
+  int max_ulong_long
   int max_float
   int max_double
   int min_char
   int min_short
   int min_int
   int min_long
+  int min_long_long
   int min_uchar
   int min_ushort
   int min_uint
   int min_ulong
+  int min_ulong_long
   int min_float
   int min_double
   int external_py
@@ -98,21 +106,25 @@ class CkReductionTypesExt_Wrapper:
               'sum_uchar': charm_reducers.sum_uchar, 'sum_ushort': charm_reducers.sum_ushort,
               'sum_uint': charm_reducers.sum_uint, 'sum_ulong': charm_reducers.sum_ulong,
               'sum_float': charm_reducers.sum_float, 'sum_double': charm_reducers.sum_double,
+              'sum_long_long': charm_reducers.sum_long_long, 'sum_ulong_long': charm_reducers.sum_ulong_long,
               'product_char': charm_reducers.product_char, 'product_short': charm_reducers.product_short,
               'product_int': charm_reducers.product_int, 'product_long': charm_reducers.product_long,
               'product_uchar': charm_reducers.product_uchar, 'product_ushort': charm_reducers.product_ushort,
               'product_uint': charm_reducers.product_uint, 'product_ulong': charm_reducers.product_ulong,
               'product_float': charm_reducers.product_float, 'product_double': charm_reducers.product_double,
+              'product_long_long': charm_reducers.product_long_long, 'product_ulong_long': charm_reducers.product_ulong_long,
               'max_char': charm_reducers.max_char, 'max_short': charm_reducers.max_short,
               'max_int': charm_reducers.max_int, 'max_long': charm_reducers.max_long,
               'max_uchar': charm_reducers.max_uchar, 'max_ushort': charm_reducers.max_ushort,
               'max_uint': charm_reducers.max_uint, 'max_ulong': charm_reducers.max_ulong,
               'max_float': charm_reducers.max_float, 'max_double': charm_reducers.max_double,
+              'max_long_long': charm_reducers.max_long_long, 'max_ulong_long': charm_reducers.max_ulong_long,
               'min_char': charm_reducers.min_char, 'min_short': charm_reducers.min_short,
               'min_int': charm_reducers.min_int, 'min_long': charm_reducers.min_long,
               'min_uchar': charm_reducers.min_uchar, 'min_ushort': charm_reducers.min_ushort,
               'min_uint': charm_reducers.min_uint, 'min_ulong': charm_reducers.min_ulong,
               'min_float': charm_reducers.min_float, 'min_double': charm_reducers.min_double,
+              'min_long_long': charm_reducers.min_long_long, 'min_ulong_long': charm_reducers.min_ulong_long,
               'external_py': charm_reducers.external_py}
     for f,val in self.fields.items():
       setattr(self, f, val)
@@ -271,8 +283,8 @@ cdef int cur_buf = 1
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
-cdef c_type_table_typecodes = [None] * 10
-cdef int c_type_table_sizes[10]
+cdef c_type_table_typecodes = [None] * 12
+cdef int c_type_table_sizes[12]
 
 cdef object charm
 cdef object charm_reducer_to_ctype
@@ -304,10 +316,12 @@ class CharmLib(object):
     c_type_table_typecodes[red.C_SHORT] = 'h'
     c_type_table_typecodes[red.C_INT] = 'i'
     c_type_table_typecodes[red.C_LONG] = 'l'
+    c_type_table_typecodes[red.C_LONG_LONG] = 'q'
     c_type_table_typecodes[red.C_UCHAR] = 'B'
     c_type_table_typecodes[red.C_USHORT] = 'H'
     c_type_table_typecodes[red.C_UINT] = 'I'
     c_type_table_typecodes[red.C_ULONG] = 'L'
+    c_type_table_typecodes[red.C_ULONG_LONG] = 'Q'
     c_type_table_typecodes[red.C_FLOAT] = 'f'
     c_type_table_typecodes[red.C_DOUBLE] = 'd'
 
@@ -315,10 +329,12 @@ class CharmLib(object):
     c_type_table_sizes[red.C_SHORT] = sizeof(short)
     c_type_table_sizes[red.C_INT] = sizeof(int)
     c_type_table_sizes[red.C_LONG] = sizeof(long)
+    c_type_table_sizes[red.C_LONG_LONG] = sizeof(long long)
     c_type_table_sizes[red.C_UCHAR] = sizeof(unsigned char)
     c_type_table_sizes[red.C_USHORT] = sizeof(unsigned short)
     c_type_table_sizes[red.C_UINT] = sizeof(unsigned int)
     c_type_table_sizes[red.C_ULONG] = sizeof(unsigned long)
+    c_type_table_sizes[red.C_ULONG_LONG] = sizeof(unsigned long long)
     c_type_table_sizes[red.C_FLOAT] = sizeof(float)
     c_type_table_sizes[red.C_DOUBLE] = sizeof(double)
 
