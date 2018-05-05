@@ -95,6 +95,7 @@ ffibuilder.cdef("""
     int CkNumPesHook();
     void CkExit(void);
     void CmiAbort(const char *);
+    void CmiPrintf(const char *);
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
     void free(void *ptr);
