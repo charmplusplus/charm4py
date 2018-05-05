@@ -106,6 +106,12 @@ def rebuildNumpyArray(data, shape, dt):
 # Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
 class Charm(object):
 
+  if os.name == 'nt':
+    class PrintStream(object):
+
+      def write(self, msg):
+        charm.lib.CkPrintf(msg.encode())
+
   def __init__(self):
     self._myPe = -1
     self._numPes = -1
@@ -385,8 +391,11 @@ class Charm(object):
 
     # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
     # policy that ensures that messages reach Charm++ in a timely fashion
-    sys.stdout = os.fdopen(1,'wt',1)
-    sys.stderr = os.fdopen(2,'wt',1)
+    if os.name == 'nt':
+      sys.stdout = Charm.PrintStream()
+    else:
+      sys.stdout = os.fdopen(1,'wt',1)
+      sys.stderr = os.fdopen(2,'wt',1)
     if self.myPe() != 0: self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
 
     if (self.myPe() == 0) and (not Options.QUIET):

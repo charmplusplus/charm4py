@@ -3,6 +3,7 @@ if sys.version_info[0] < 3:
   import cPickle
 else:
   import pickle as cPickle
+import os
 import itertools
 import array
 try:
@@ -139,6 +140,9 @@ class ReductionManager(object):
                               'uint16': C_USHORT, 'uint32': C_UINT, 'uint64': C_ULONG,
                               #'float16': ?
                               'float32': C_FLOAT, 'float64': C_DOUBLE}
+      if os.name == 'nt':
+        self.numpy_type_map['int64']  = C_LONG_LONG
+        self.numpy_type_map['uint64'] = C_ULONG_LONG
 
       # verify that mapping is correct
       for dt, c_type in self.numpy_type_map.items():
@@ -169,7 +173,10 @@ class ReductionManager(object):
     # ------ python data types ------
 
     # map python types to internal reduction C code identifier
-    self.python_type_map = {int: C_LONG, float: C_DOUBLE, bool: C_CHAR}
+    if os.name == 'nt':
+      self.python_type_map = {int: C_LONG_LONG, float: C_DOUBLE, bool: C_CHAR}
+    else:
+      self.python_type_map = {int: C_LONG, float: C_DOUBLE, bool: C_CHAR}
 
   # return Charm internal reducer type code and data ready to be sent to Charm
   def prepare(self, data, reducer, contributor):

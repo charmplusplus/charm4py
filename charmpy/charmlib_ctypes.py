@@ -446,12 +446,16 @@ class CharmLib(object):
     self.charm.lib_version_check(commit_id)
 
   def init(self, libcharm_path):
-    p = os.environ.get("LIBCHARM_PATH")
-    if p is not None: libcharm_path = p
-    if libcharm_path != None:
-      self.lib = ctypes.CDLL(libcharm_path + '/libcharm.so')
+    if os.name != 'nt':
+      p = os.environ.get("LIBCHARM_PATH")
+      if p is not None: libcharm_path = p
+      if libcharm_path != None:
+        self.lib = ctypes.CDLL(libcharm_path + '/libcharm.so')
+      else:
+        self.lib = ctypes.CDLL("libcharm.so")
     else:
-      self.lib = ctypes.CDLL("libcharm.so")
+      # looks for DLL in current working directory, or PATH
+      self.lib = ctypes.CDLL("charm.dll")
 
     self.lib_version_check()
 
@@ -505,9 +509,11 @@ class CharmLib(object):
 
     # the following line decreases performance, don't know why. seems to work fine without it
     #self.lib.CkArrayExtSend.argtypes = (c_int, POINTER(c_int), c_int, c_int, c_char_p, c_int)
+    self.lib.CkChareExtSend.argtypes = (c_int, c_void_p, c_int, c_char_p, c_int)
     self.CkArrayExtSend = self.lib.CkArrayExtSend
     self.CkGroupExtSend = self.lib.CkGroupExtSend
     self.CkChareExtSend = self.lib.CkChareExtSend
+    self.lib.CkExtContributeToChare.argtypes = (c_void_p, c_int, c_void_p)
 
     self.CkMyPe = self.lib.CkMyPeHook
     self.CkNumPes = self.lib.CkNumPesHook
