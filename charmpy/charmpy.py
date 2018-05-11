@@ -558,6 +558,8 @@ class Charm(object):
   def numPes(self): return self._numPes
   def exit(self): self.lib.CkExit()
   def abort(self, msg): self.lib.CkAbort(msg)
+  def LBTurnInstrumentOn(self):  self.lib.LBTurnInstrumentOn()
+  def LBTurnInstrumentOff(self): self.lib.LBTurnInstrumentOff()
 
 charm    = Charm()
 readonlies = __ReadOnlies()

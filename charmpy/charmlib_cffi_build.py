@@ -87,6 +87,8 @@ ffibuilder.cdef("""
     int CkNumPesHook();
     void CkExit(void);
     void CmiAbort(const char *);
+    void LBTurnInstrumentOn();
+    void LBTurnInstrumentOff();
     void free(void *ptr);
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);

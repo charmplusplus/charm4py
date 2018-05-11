@@ -555,3 +555,9 @@ class CharmLib(object):
 
   def CkAbort(self, msg):
     lib.CmiAbort(msg.encode())
+
+  def LBTurnInstrumentOn(self):
+    lib.LBTurnInstrumentOn()
+
+  def LBTurnInstrumentOff(self):
+    lib.LBTurnInstrumentOff()

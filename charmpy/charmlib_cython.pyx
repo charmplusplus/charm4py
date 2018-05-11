@@ -569,6 +569,8 @@ class CharmLib(object):
   def CkNumPes(self): return CkNumPesHook()
   def CkExit(self): return CkExit()
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
+  def LBTurnInstrumentOn(self):  LBTurnInstrumentOn()
+  def LBTurnInstrumentOff(self): LBTurnInstrumentOff()
 
   def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0
