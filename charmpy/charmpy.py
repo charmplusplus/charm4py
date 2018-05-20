@@ -73,10 +73,6 @@ class EntryMethod(object):
     self.times[2] += t
 
 
-class ReadOnlies(object): # for backwards-compatibility. TODO Remove eventually
-  def __new__(cls):
-    raise CharmPyError('This ReadOnlies API is deprecated. Please refer to documentation/examples for correct usage')
-
 class __ReadOnlies(object): pass
 
 ## Constants to detect type of contributors for reduction. Order should match enum extContributorType ##
