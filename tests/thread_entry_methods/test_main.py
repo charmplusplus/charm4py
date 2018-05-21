@@ -14,4 +14,4 @@ def main(args):
         print("Test " + str(i) + " sent data: " + str(data))
     charm.exit()
 
-charm.start(entry=main)
+charm.start(main)

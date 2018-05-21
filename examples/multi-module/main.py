@@ -1,8 +1,8 @@
-from charmpy import charm, Mainchare, Group
+from charmpy import charm, Chare, Group
 from charmpy import readonlies as ro
 import hello, goodbye
 
-class Main(Mainchare):
+class Main(Chare):
     def __init__(self, args):
         ro.mainProxy = self.thisProxy
         hellos  = Group(hello.Hello)
@@ -13,4 +13,4 @@ class Main(Mainchare):
         charm.exit()
 
 
-charm.start(modules=['hello', 'goodbye'])
+charm.start(Main, modules=['hello', 'goodbye'])

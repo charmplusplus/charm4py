@@ -179,15 +179,14 @@ class Charm(object):
     for name,obj in roData.items(): setattr(readonlies, name, obj)
 
   def buildMainchare(self, onPe, objPtr, ep, args):
-    cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int or long)
-    if onPe != CkMyPe():  # TODO this check can probably be removed as I assume the runtime already does it
-      raise CharmPyError("Received msg for chare not on this PE")
-    if cid in self.chares: raise CharmPyError("Chare " + str(cid) + " already instantiated")
+    cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int)
+    assert onPe == CkMyPe()
+    assert cid not in self.chares, "Chare " + str(cid) + " already instantiated"
     em = self.entryMethods[ep]
-    if not em.isCtor: raise CharmPyError("Specified mainchare entry method not constructor")
-    self.currentChareId = cid
+    assert em.isCtor, "Specified mainchare entry method is not constructor"
     obj = object.__new__(em.C)  # create object but don't call __init__
-    super(em.C, obj).__init__() # call Mainchare class __init__ first
+    Mainchare.initMember(obj, cid)
+    super(em.C, obj).__init__() # call Chare class __init__ first
     if self.entry_func is not None: obj.main = self.entry_func
     self.threadMgr.startThread(obj, em, [args], None) # now call user's __init__ in a new thread
     self.chares[cid] = obj
@@ -199,7 +198,7 @@ class Charm(object):
         roData[attr] = getattr(readonlies, attr)
       msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
       #print("Registering readonly data of size " + str(len(msg)))
-      self.lib.CkRegisterReadonly(b"python_ro", b"python_ro", msg)
+      self.lib.CkRegisterReadonly(b"charmpy_ro", b"charmpy_ro", msg)
 
   def invokeEntryMethod(self, obj, ep, header, args, t0):
     self.currentEntryMethod = em = self.entryMethods[ep]
@@ -416,8 +415,7 @@ class Charm(object):
 
   def registerAs(self, C, charm_type_id):
     if charm_type_id == MAINCHARE:
-      if self.mainchareRegistered:
-        raise CharmPyError("More than one entry point has been specified")
+      assert not self.mainchareRegistered, "More than one entry point has been specified"
       self.mainchareRegistered = True
     charm_type = charm_type_id_to_class[charm_type_id]
     #print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
@@ -433,26 +431,25 @@ class Charm(object):
   # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
   # by default a class is registered to work with both Groups and Arrays
   def register(self, C, collections=(GROUP, ARRAY)):
-    if C in self.registered: return # already registered
+    if C in self.registered: return
     if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
       raise CharmPyError("Only subclasses of Chare can be registered")
 
     self.registered[C] = set()
-    if Mainchare in C.mro():
-      self.registerAs(C, MAINCHARE)
-    else:
-      for charm_type_id in collections: self.registerAs(C, charm_type_id)
+    for charm_type_id in collections:
+      self.registerAs(C, charm_type_id)
     self.register_order.append(C)
 
-  def start(self, classes=[], modules=[], entry=None):
+  def start(self, entry, classes=[], modules=[]):
     """
-    Start Charm++ program.
+    Start Charmpy program.
 
     IMPORTANT: classes must be registered in the same order on all processes. In
     other words, the arguments to this method must have the same ordering on all
     processes.
 
     Args:
+        entry:   program entry point (function or Chare class)
         classes: list of Charm classes to register with runtime
         modules: list of names of modules containing Charm classes (all of the Charm
                  classes defined in the module will be registered). method will
@@ -463,7 +460,22 @@ class Charm(object):
     if "++quiet" in sys.argv: Options.QUIET = True
     from ckthread import EntryMethodThreadManager
     self.threadMgr = EntryMethodThreadManager()
-    for C in classes: self.register(C)
+
+    if hasattr(entry, 'mro') and Chare in entry.mro():
+      self.register(entry, (MAINCHARE,))
+    else:
+      assert callable(entry), "Specified entry point is not a function or Chare"
+      self.entry_func = entry
+      self.register(DefaultMainchare, (MAINCHARE,))
+
+    for C in classes:
+      if ArrayMap in C.mro():
+        self.register(C, (GROUP,))  # register ArrayMap only as Group
+      elif Chare in C.mro():
+        self.register(C)
+      else:
+        raise CharmPyError("Class", C, "is not a Chare (can't register)")
+
     M = list(modules)
     if '__main__' not in M: M.append('__main__')
     for module_name in M:
@@ -474,15 +486,8 @@ class Charm(object):
             self.register(C, (GROUP,))  # register ArrayMap only as Group
           elif Chare in C.mro():
             self.register(C)
-          elif Group in C.mro() or Array in C.mro():
-            raise CharmPyError("Refer to new API to create Arrays and Groups")
-    if entry is not None:
-      self.entry_func = entry
-      self.register(DefaultMainchare)
-    if not self.mainchareRegistered:
-      raise CharmPyError("Can't start program because no main entry point has been specified")
-    if len(self.registered) == 0:
-      raise CharmPyError("Can't start Charm program because no Charm classes registered")
+          elif Group in C.mro() or Array in C.mro() or Mainchare in C.mro():
+            raise CharmPyError("Chares must not inherit from Group, Array or Mainchare. Refer to new API")
     self.lib.start()
 
   def arrayElemLeave(self, aid, index):
@@ -724,15 +729,14 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
 def mainchare_proxy_contribute(proxy, contributeInfo):
   charm.CkContributeToChare(contributeInfo, proxy.cid)
 
-class Mainchare(Chare):
+class Mainchare(object):
 
   type_id = MAINCHARE
 
-  def __init__(self):
-    if hasattr(self, '_chare_initialized'): return
-    super(Mainchare,self).__init__()
-    self._cid = charm.currentChareId
-    self.thisProxy = charm.proxyClasses[MAINCHARE][self.__class__](self._cid)
+  @classmethod
+  def initMember(cls, obj, cid):
+    obj._cid = cid
+    obj.thisProxy = charm.proxyClasses[MAINCHARE][obj.__class__](cid)
 
   @classmethod
   def __baseEntryMethods__(cls): return ["__init__"]
@@ -751,7 +755,7 @@ class Mainchare(Chare):
     M["__setstate__"] = mainchare_proxy__setstate__
     return type(cls.__name__ + 'Proxy', (), M) # create and return proxy class
 
-class DefaultMainchare(Mainchare):
+class DefaultMainchare(Chare):
   def __init__(self, args):
     self.main(args)
 

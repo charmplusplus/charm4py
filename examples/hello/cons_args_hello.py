@@ -57,5 +57,5 @@ def main(args):
 
   arrProxy[ro.firstIdx].SayHi(17)
 
-# ---- start charm ----
-charm.start(entry=main)
+
+charm.start(main)

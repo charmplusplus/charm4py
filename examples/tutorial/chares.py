@@ -20,4 +20,4 @@ def main(args):
     my_2d_array = Array(MyChare, (2, 2))
 
 if __name__ == '__main__':
-    charm.start(entry=main)
+    charm.start(main)

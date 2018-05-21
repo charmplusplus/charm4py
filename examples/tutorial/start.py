@@ -6,4 +6,4 @@ def main(args):
     charm.exit()
 
 if __name__ == '__main__':
-    charm.start(entry=main)
+    charm.start(main)

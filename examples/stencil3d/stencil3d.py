@@ -3,7 +3,7 @@
 # performs much better
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Chare, Mainchare, Array, CkNumPes, when
+from charmpy import charm, Chare, Array, CkNumPes, when
 from charmpy import readonlies as ro
 import time
 import math
@@ -19,7 +19,7 @@ DIVIDEBY7 = 0.14285714285714285714
 def index(a,b,c):
   return (a + b*(ro.blockDimX+2) + c*(ro.blockDimX+2)*(ro.blockDimY+2))
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     if (len(args) != 3) and (len(args) != 7):
@@ -230,6 +230,5 @@ class Stencil(Chare):
   def resumeFromSync(self):
     self.begin_iteration()
 
-# ------ start charm -------
 
-charm.start()
+charm.start(Main)

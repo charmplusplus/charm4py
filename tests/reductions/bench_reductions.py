@@ -1,5 +1,5 @@
 import charmpy
-from charmpy import charm, Chare, Mainchare, Array, CkExit, CkNumPes, Reducer
+from charmpy import charm, Chare, Array, CkExit, CkNumPes, Reducer
 from charmpy import readonlies as ro
 import time
 import numpy
@@ -14,7 +14,7 @@ VAL_CHECK = float(sum(range(DATA_LEN)))
 def assert_almost_equal(actual, desired, tol):
   assert abs(actual - desired) <= tol
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     ro.mainProxy = self.thisProxy
@@ -45,4 +45,5 @@ class Test(Chare):
       self.contribute(self.data, Reducer.sum, ro.mainProxy.collectSum)
       self.reductions += 1
 
-charm.start()
+
+charm.start(Main)

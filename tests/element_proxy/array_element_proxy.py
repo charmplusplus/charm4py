@@ -2,16 +2,8 @@
 Tests the index proxy for a particular array element.
 """
 
-from charmpy import charm, Chare, Mainchare, Array, CkMyPe
+from charmpy import charm, Chare, Array
 
-class Main(Mainchare):
-    """
-    Main chare.
-    """
-
-    def __init__(self, args):
-        arr_proxy = Array(Test, 6)
-        arr_proxy[0].start()
 
 class Test(Chare):
     """
@@ -29,7 +21,7 @@ class Test(Chare):
         """
 
         self.count += 1
-        print("Say", msg, "called on", self.thisIndex, "on PE", CkMyPe())
+        print("Say", msg, "called on", self.thisIndex, "on PE", charm.myPe())
         if self.count == 2:
             assert self.thisIndex == (3,)
             charm.exit()
@@ -43,5 +35,10 @@ class Test(Chare):
         proxy.say("bye")
         proxy.say("bye")
 
-# ---- start charm ----
-charm.start()
+
+def main(args):
+    arr_proxy = Array(Test, 6)
+    arr_proxy[0].start()
+
+
+charm.start(main)

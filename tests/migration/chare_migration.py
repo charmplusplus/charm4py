@@ -3,21 +3,10 @@
 A program to test migration of chares.
 """
 
-from charmpy import charm, Mainchare, Chare, Array, CkMyPe
+from charmpy import charm, Chare, Array
 
 
 CHARES_PER_PE = 1
-
-class Main(Mainchare):
-    """
-    Main chare.
-    """
-
-    def __init__(self, args):
-        if charm.numPes() == 1:
-            charm.abort("Run program with more than 1 PE")
-        array_proxy = Array(Migrate, CHARES_PER_PE * charm.numPes())
-        array_proxy.start()
 
 
 class Migrate(Chare):
@@ -31,8 +20,8 @@ class Migrate(Chare):
         chare has migrated.
         """
         if self.thisIndex == (0,):
-            print("Test called on PE ", CkMyPe())
-        assert CkMyPe() == self.toPe
+            print("Test called on PE ", charm.myPe())
+        assert charm.myPe() == self.toPe
         self.contribute(None, None, self.thisProxy[0].done)
 
     def done(self):
@@ -42,12 +31,18 @@ class Migrate(Chare):
         """
         Invoke the starter code for test.
         """
-        if CkMyPe() == 0:
-            print("On PE", CkMyPe(), "before migration")
+        if charm.myPe() == 0:
+            print("On PE", charm.myPe(), "before migration")
         self.thisProxy[self.thisIndex].test()
         self.toPe = (charm.myPe() + 1) % charm.numPes()
         self.migrate(self.toPe)
 
 
-# ---- start charm ----
-charm.start()
+def main(args):
+    if charm.numPes() == 1:
+        charm.abort("Run program with more than 1 PE")
+    array_proxy = Array(Migrate, CHARES_PER_PE * charm.numPes())
+    array_proxy.start()
+
+
+charm.start(main)

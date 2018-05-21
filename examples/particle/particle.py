@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Chare, Array, when, Reducer
+from charmpy import charm, Chare, Array, when, Reducer
 from charmpy import readonlies as ro
 import random
 import math
@@ -17,7 +17,7 @@ class Particle:
       if self.coords[i] > SIM_BOX_SIZE: self.coords[i] -= SIM_BOX_SIZE
       elif self.coords[i] < 0: self.coords[i] += SIM_BOX_SIZE
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     if len(args) == 3: ro.arrayDims = (int(args[1]), int(args[2]))
@@ -92,6 +92,5 @@ class Cell(Chare):
         if (nb_x,nb_y) != self.thisIndex: nbs.add((nb_x,nb_y))
     return list(nbs)
 
-# ------ start charm -------
 
-charm.start()
+charm.start(Main)

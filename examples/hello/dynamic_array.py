@@ -1,10 +1,9 @@
-from charmpy import charm, Chare, Mainchare, Array, CkMyPe, CkNumPes
+from charmpy import charm, Chare, Array, CkMyPe, CkNumPes, Reducer
 from charmpy import readonlies as ro
-from charmpy import Reducer
 import itertools
 
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     if len(args) <= 1:
@@ -59,6 +58,5 @@ class Hello(Chare):
   def TestReduction(self):
     self.contribute(1, Reducer.sum, ro.mainProxy.doneReduction)
 
-# ---- start charm ----
-charm.start()
 
+charm.start(Main)

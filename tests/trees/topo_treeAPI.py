@@ -50,4 +50,4 @@ def main(args):
     charm.exit()
 
 
-charm.start(entry=main)
+charm.start(main)

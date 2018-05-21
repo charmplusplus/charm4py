@@ -1,6 +1,15 @@
-from charmpy import Chare, Mainchare, Group, charm
+from charmpy import Chare, Group, charm
 
-class Main(Mainchare):
+
+class Hello(Chare):
+
+    def SayHi(self, main):
+        print("Hello World from element", self.thisIndex)
+        # contribute to empty reduction to end program
+        self.contribute(None, None, main.done)
+
+
+class Main(Chare):
 
     def __init__(self, args):
         # create Group of Hello objects (one object exists and runs on each core)
@@ -12,14 +21,5 @@ class Main(Mainchare):
     def done(self):
         charm.exit()
 
-class Hello(Chare):
 
-    def __init__(self):
-        pass
-
-    def SayHi(self, main):
-        print("Hello World from element", self.thisIndex)
-        # contribute to empty reduction to end program
-        self.contribute(None, None, main.done)
-
-charm.start()
+charm.start(Main)

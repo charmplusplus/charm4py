@@ -16,4 +16,4 @@ def main(args):
     my_group.work(3)
 
 if __name__ == '__main__':
-    charm.start(entry=main)
+    charm.start(main)

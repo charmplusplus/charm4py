@@ -1,11 +1,9 @@
-from charmpy import Chare, CkMyPe
+from charmpy import charm, Chare
 from charmpy import readonlies as ro
 import time
 
 class Goodbye(Chare):
-    def __init__(self):
-        pass
 
     def SayGoodbye(self):
-        print("Goodbye from PE", CkMyPe())
+        print("Goodbye from PE", charm.myPe())
         self.contribute(None, None, ro.mainProxy.done)

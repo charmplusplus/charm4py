@@ -1,4 +1,4 @@
-from charmpy import charm, Mainchare, Chare, Group, Array, Reducer
+from charmpy import charm, Chare, Group, Array, Reducer
 import charmpy
 
 # Test same Chare class (Test) used in multiple collection types (Group, Array)
@@ -6,7 +6,7 @@ import charmpy
 CHARES_PER_PE = 5
 
 
-class Main(Mainchare):
+class Main(Chare):
     def __init__(self, args):
         Group(Test).work(self.thisProxy)
         Array(Test, charm.numPes() * CHARES_PER_PE).work(self.thisProxy)
@@ -33,4 +33,4 @@ class Test(Chare):
         self.contribute(1, Reducer.sum, main.done)
 
 
-charm.start()
+charm.start(Main)

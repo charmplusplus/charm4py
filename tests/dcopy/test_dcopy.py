@@ -1,5 +1,5 @@
 import charmpy
-from charmpy import charm, Chare, Mainchare, Array
+from charmpy import charm, Chare, Array
 from charmpy import readonlies as ro
 import time
 import array
@@ -14,7 +14,7 @@ MAX_ITER = 50
 DATA_LEN = 15000        # number of doubles
 CHARES_PER_PE = 10
 
-class Main(Mainchare):
+class Main(Chare):
 
     def __init__(self, args):
         ro.mainProxy = self.thisProxy
@@ -84,4 +84,4 @@ class Test(Chare):
             self.contribute(None, None, ro.mainProxy.iterationComplete)
 
 
-charm.start()
+charm.start(Main)

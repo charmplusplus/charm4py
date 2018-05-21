@@ -38,4 +38,4 @@ def main(args):
             dyn_array.ckDoneInserting()
 
 
-charm.start(entry=main)
+charm.start(main)

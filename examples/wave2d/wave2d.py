@@ -4,7 +4,7 @@
 # Original author: Isaac Dooley (2008)
 # Converted to Python from examples/charm++/wave2d in Charm++ codebase
 
-from charmpy import charm, Chare, Mainchare, Array, CkMyPe, CkNumPes
+from charmpy import charm, Chare, Array, CkMyPe, CkNumPes
 from charmpy import readonlies as ro
 import time
 import math
@@ -19,7 +19,7 @@ numInitialPertubations = 5
 LEFT, RIGHT, UP, DOWN = range(4)
 
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     if len(args) <= 1:
@@ -184,6 +184,5 @@ class Wave(Chare):
     sy = self.thisIndex[1] * h
     ro.mainProxy.iterationCompleted(data, (sx,sy), (w,h))
 
-# ------ start charm -------
 
-charm.start()
+charm.start(Main)

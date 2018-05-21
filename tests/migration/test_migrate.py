@@ -60,4 +60,4 @@ def main(args):
     ro.array       = Array(Test, charm.numPes() * 4)
 
 
-charm.start(entry=main)
+charm.start(main)

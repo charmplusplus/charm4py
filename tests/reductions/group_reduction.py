@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
@@ -10,7 +10,7 @@ def assert_allclose(actual, desired, tol):
 def assert_almost_equal(actual, desired, tol):
   assert abs(actual -desired) <= tol
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     self.expectedReductions = 7
@@ -122,5 +122,5 @@ class TestArray(Chare):
     assert reduction_result == -4*CkNumPes(), "Group-to-array bcast reduction failed."
     self.contribute(None, None, ro.mainProxy.done_group_to_array_bcast)
 
-# ---- start charm ----
-charm.start()
+
+charm.start(Main)

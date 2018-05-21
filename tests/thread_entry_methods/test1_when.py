@@ -52,4 +52,4 @@ def main(args):
     Array(Test, ro.numChares)
 
 
-charm.start(entry=main)
+charm.start(main)

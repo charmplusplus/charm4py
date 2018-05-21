@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
@@ -11,7 +11,7 @@ def myReducer(contribs):
 
 Reducer.addReducer(myReducer)
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
     self.recvdReductions = 0
     self.expectedReductions = 4
@@ -84,5 +84,4 @@ class Test(Chare):
     self.contribute([1,self.thisIndex[0],self.thisIndex[0]], Reducer.myReducer, ro.mainProxy.done_python_custom)
 
 
-# ---- start charm ----
-charm.start()
+charm.start(Main)

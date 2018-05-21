@@ -2,7 +2,7 @@
 # This version uses NumPy and Numba
 # NOTE: set LBPeriod very small so that AtSync doesn't wait
 
-from charmpy import charm, Chare, Mainchare, Group, Array, when
+from charmpy import charm, Chare, Group, Array, when
 from charmpy import readonlies as ro
 import time
 import math
@@ -23,7 +23,7 @@ LEFT,RIGHT,TOP,BOTTOM,FRONT,BACK = range(6)
 DIVIDEBY7 = 0.14285714285714285714
 PRINT_ITERATIONS = False # print msg after each iteration
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     if (len(args) != 3) and (len(args) != 7):
@@ -289,6 +289,5 @@ class Stencil(Chare):
   def resumeFromSync(self):
     self.begin_iteration()
 
-# ------ start charm -------
 
-charm.start()
+charm.start(Main)

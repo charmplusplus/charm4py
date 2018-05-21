@@ -1,8 +1,8 @@
-from charmpy import charm, Chare, Mainchare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
+from charmpy import charm, Chare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
 from charmpy import readonlies as ro
 from charmpy import Reducer
 
-class Main(Mainchare):
+class Main(Chare):
   def __init__(self, args):
 
     self.recvdReductions = 0
@@ -61,6 +61,4 @@ class TestGroup(Chare):
     self.gather([self.thisIndex, 42], ro.mainProxy.done_gather_array)
 
 
-
-# ---- start charm ----
-charm.start()
+charm.start(Main)
