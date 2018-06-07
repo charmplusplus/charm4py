@@ -20,7 +20,7 @@ Requirements
   - Charmpy can run on the wide variety of systems supported by Charm++, which includes
     many supercomputers in the TOP500.
     To date it has been tested on Linux (including the `Windows Subsystem for Linux`_),
-    macOS and Cray XC/XE.
+    Windows, macOS and Cray XC/XE.
 
 .. _Cython: http://cython.org/
 
@@ -45,34 +45,29 @@ First download Charm++::
     $ git clone https://charm.cs.illinois.edu/gerrit/charm
     $ cd charm
 
-Next, build the library. Below are instructions for regular Linux and macOS
-environments. These generally apply to Linux clusters as well.
-On Unix-like environments, you will need these packages: ``autoconf``, ``automake``,
-and a C++ compiler.
+Next, build the library. The build command syntax is::
+
+    $ ./build charmpy <version> -j<N> --with-production
+
+where ``<version>`` varies based on OS and communication layer, and ``<N>`` is the number
+of cores to use during build.
+
+Below are example build commands for regular Linux and macOS environments. These generally
+apply to Linux clusters as well. On Unix-like environments,
+you will need these packages: ``autoconf``, ``automake``, and a C++ compiler.
 
 Linux::
 
-    $ ./build charm++ netlrts-linux-x86_64 -j4 --with-production --build-shared --enable-charmpy
-    $ cd lib
-    $ gcc -shared -o libcharm.so -Wl,--whole-archive libck.a libconv-core.a libconv-util.a \
-      libmemory-default.a libconv-machine.a libthreads-default.a libconv-partition.a libtmgr.a \
-      libhwloc_embedded.a libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,--no-whole-archive -lstdc++
+    $ ./build charmpy netlrts-linux-x86_64 -j4 --with-production
 
 macOS::
 
-    $ ./build charm++ netlrts-darwin-x86_64 -j4 --with-production --build-shared --enable-charmpy
-    $ cd lib
-    $ gcc -shared -o libcharm.so -Wl,-all_load libck.a libconv-core.a libconv-util.a \
-      libmemory-default.a libconv-machine.a libthreads-default.a libconv-partition.a libtmgr.a \
-      libhwloc_embedded.a libldb-rand.a libconv-ldb.a libmoduleGreedyRefineLB.a -Wl,-noall_load -lstdc++
+    $ ./build charmpy netlrts-darwin-x86_64 -j4 --with-production
 
 .. note::
     Charm++ can be built on specialized enviroments, like Cray XE, and you can refer to the
     Charm++ manual_ and the README in Charm++'s root directory for more
-    information.
-    However, the last step above that generates ``libcharm.so`` may not work on some
-    specialized environments. Providing
-    a generic way to generate the shared library on these systems is work in progress.
+    information on choosing the correct ``<version>`` to use in the build command.
 
 .. _manual: http://charm.cs.illinois.edu/manuals/html/charm++/A.html
 
@@ -103,9 +98,10 @@ usually provided by ``python3-dev`` or similar package.
 Using Charmpy with CFFI
 -----------------------
 
-**CFFI version >= 1.7 required**
+CFFI is the recommended mode if using PyPy (note that ``cffi`` comes builtin with PyPy).
+If using CPython, Cython is the recommended mode and you can skip this step.
 
-CFFI is the recommended layer if using PyPy (note that ``cffi`` comes builtin with PyPy).
+**CFFI version >= 1.7 required**
 
 To install a recent version, please see:
 https://cffi.readthedocs.io/en/latest/installation.html
