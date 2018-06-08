@@ -9,7 +9,7 @@ Most of the code throughout this section can be found in ``examples/tutorial``.
 Program start and exit
 ----------------------
 
-To start a Charm program, you need to invoke the ``charm.start()`` method.
+To start a Charm program, you need to invoke the ``charm.start(entry)`` method.
 We will begin with a simple usage pattern [#]_:
 
 .. code-block:: python
@@ -23,7 +23,8 @@ We will begin with a simple usage pattern [#]_:
         charm.exit()
 
     if __name__ == '__main__':
-        charm.start(entry=main)
+        charm.start(main)
+
 
 We need to define an entry point to the Charmpy program, which we refer to as the
 Charm *main* function.
@@ -32,8 +33,7 @@ The main function runs on only one processor, typically processor 0, and is in c
 of creating and distributing work across the system. The main function must take
 one argument to get the list of command-line arguments.
 In this example, we are specifying the
-function ``main`` as the main function by passing it to ``start`` method using the
-``entry`` keyword argument.
+function ``main`` as the main function by passing it to ``start`` method.
 
 The method ``numPes`` returns the number of processors (aka Processing Elements) on
 which the distributed program is running. The method ``myPe`` returns the processor
@@ -83,7 +83,7 @@ For easy management of distributed objects, the user can create distributed coll
         # create one instance of MyChare on every processor
         my_group = Group(MyChare)
 
-        # create 3 instances of MyChare, distributed among all cores by the runtime
+        # create 3 instances of MyChare, distributed among the cores by the runtime
         my_array = Array(MyChare, 3)
 
         # create 2 x 2 instances of MyChare, indexed using 2D index and distributed
@@ -91,7 +91,7 @@ For easy management of distributed objects, the user can create distributed coll
         my_2d_array = Array(MyChare, (2, 2))
 
     if __name__ == '__main__':
-        charm.start(entry=main)
+        charm.start(main)
 
 The above program will create P + 3 + 2\*2 chares and print a message for each created
 chare, where P is the number of processors used to launch the program.
@@ -115,7 +115,7 @@ If running the example, note that it will not exit because a suitable exit point
 not been defined (more on this below). For now, press CTRL-C to exit.
 
 .. note::
-    Chares can only be created once the Charm *main* function has been reached.
+    Chares can be created at any point **after** the Charm *main* function has been reached.
 
 Distributed method invocation
 -----------------------------
@@ -218,8 +218,6 @@ any chare of your choice.
     from charmpy import charm, Chare, Group, Reducer
 
     class MyChare(Chare):
-        def __init__(self):
-          pass
 
         def work(self, data):
             self.contribute(data, Reducer.sum, self.thisProxy[0].collectResult)
@@ -233,7 +231,7 @@ any chare of your choice.
         my_group.work(3)
 
     if __name__ == '__main__':
-        charm.start(entry=main)
+        charm.start(main)
 
 
 In the above code, every element in the group contributes the data received from
@@ -296,9 +294,17 @@ Now we will show a full *Hello World* example:
 .. code-block:: python
 
     # examples/tutorial/hello_world.py
-    from charmpy import Chare, Mainchare, Group, charm
+    from charmpy import Chare, Group, charm
 
-    class Main(Mainchare):
+    class Hello(Chare):
+
+        def SayHi(self, main):
+            print("Hello World from element", self.thisIndex)
+            # contribute to empty reduction to end program
+            self.contribute(None, None, main.done)
+
+
+    class Main(Chare):
 
         def __init__(self, args):
             # create Group of Hello objects (one object exists and runs on each core)
@@ -310,25 +316,19 @@ Now we will show a full *Hello World* example:
         def done(self):
             charm.exit()
 
-    class Hello(Chare):
 
-        def __init__(self):
-            pass
+    charm.start(Main)
 
-        def SayHi(self, main):
-            print("Hello World from element", self.thisIndex)
-            # contribute to empty reduction to end program
-            self.contribute(None, None, main.done)
 
-    charm.start()
 
 This program prints a "Hello World" message from all processors.
 
-Here we introduce a new type of chare called ``Mainchare``. A Mainchare constructor
-serves as a Charm *main* function. A Mainchare is also frequently
-used as a program exit point. An instance of ``Mainchare`` is a chare that exists only on PE 0.
+Here, we are using a chare to start the program instead of a function.
+In this mode, the given chare is initialized on PE 0 and its constructor serves as the
+Charm *main* function.
+This type of chare (aka "main chare") is also frequently used as a program exit point.
 
-The Mainchare requests the creation of a ``Group`` of chares of type ``Hello``.
+The ``Main`` chare requests the creation of a ``Group`` of chares of type ``Hello``.
 Here it is important to note that group creation is asynchronous and as
 such the chares in the group have not been created yet when the call returns.
 It then tells all the members of the group to say hello, also passing a proxy to
