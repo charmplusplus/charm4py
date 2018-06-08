@@ -48,6 +48,7 @@ on any processor.
 Defining Chares
 ---------------
 
+Chares are distributed objects that make up the parallel application (see :doc:`overview`).
 To define a Chare, simply define a class that is a subclass of ``Chare``.
 
 .. code-block:: python
@@ -63,7 +64,7 @@ To define a Chare, simply define a class that is a subclass of ``Chare``.
 
 Methods of ``MyChare`` will be remotely callable by other chares.
 
-For easy management of distributed objects, the user can create distributed collections:
+For easy management of distributed objects, the user can organize chares into distributed collections:
 
 
 .. code-block:: python
@@ -90,8 +91,7 @@ For easy management of distributed objects, the user can create distributed coll
         # among all cores by the runtime
         my_2d_array = Array(MyChare, (2, 2))
 
-    if __name__ == '__main__':
-        charm.start(main)
+    charm.start(main)
 
 The above program will create P + 3 + 2\*2 chares and print a message for each created
 chare, where P is the number of processors used to launch the program.
@@ -117,8 +117,8 @@ not been defined (more on this below). For now, press CTRL-C to exit.
 .. note::
     Chares can be created at any point **after** the Charm *main* function has been reached.
 
-Distributed method invocation
------------------------------
+Remote method invocation
+------------------------
 
 To invoke methods on chares, a remote reference or *proxy* is needed. A proxy has the same
 methods as the chare that it references. For example, assuming we have a proxy to a
@@ -202,6 +202,10 @@ conveniently wait for a result) by using the keyword ``block``:
       self.data += x  # apply parameter
       return self.data.copy() # return result to caller
 
+This will block the thread on the caller side while it waits for the result, but it
+is important to note that it does not block the whole process. Other available work
+(including of the same chare that blocked) will continue to be executed.
+
 .. tip::
     Proxies can be sent to other chares as arguments of methods. We will see this in
     the *Hello World* example below.
@@ -230,8 +234,7 @@ any chare of your choice.
         my_group = Group(MyChare)
         my_group.work(3)
 
-    if __name__ == '__main__':
-        charm.start(main)
+    charm.start(main)
 
 
 In the above code, every element in the group contributes the data received from
@@ -289,7 +292,7 @@ For example:
 Hello World
 -----------
 
-Now we will show a full *Hello World* example:
+Now we will show a full *Hello World* example, that prints a message from all processors:
 
 .. code-block:: python
 
@@ -303,7 +306,6 @@ Now we will show a full *Hello World* example:
             # contribute to empty reduction to end program
             self.contribute(None, None, main.done)
 
-
     class Main(Chare):
 
         def __init__(self, args):
@@ -316,12 +318,9 @@ Now we will show a full *Hello World* example:
         def done(self):
             charm.exit()
 
-
     charm.start(Main)
 
 
-
-This program prints a "Hello World" message from all processors.
 
 Here, we are using a chare to start the program instead of a function.
 In this mode, the given chare is initialized on PE 0 and its constructor serves as the
@@ -364,8 +363,8 @@ This is an example of the output running of 4 processors:
 The output brings us to an important fact:
 
 .. note::
-    By default, Charm does not enforce or guarantee any particular order of delivery of messages
-    (remote method invocations) or order in which chare instances are created on remote
-    processes. There are multiple mechanisms to sequence messages, like using the
-    ``when`` decorator or by including an identifier as part of a method invocation
+    For performance reasons, by default Charm does not enforce or guarantee any particular
+    order of delivery of messages (remote method invocations) or order in which chare
+    instances are created on remote processes. There are multiple mechanisms to sequence
+    messages, like using the ``when`` decorator or by including an identifier as part of a method invocation
     to sequence message processing.
