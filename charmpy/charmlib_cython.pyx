@@ -686,7 +686,7 @@ class CharmLib(object):
         cur_buf += 1
       if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
       msg = dumps((header, args), PICKLE_PROTOCOL)
-    if PROFILING: charm.lastMsgLen = len(msg) + dcopy_size
+    if PROFILING: charm.recordSend(len(msg) + dcopy_size)
     return msg, None
 
 
@@ -716,7 +716,7 @@ cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, i
     t0 = None
     if PROFILING:
       t0 = time.time()
-      charm.msg_recv_sizes.append(msgSize)
+      charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvChareMsg((onPe, <uintptr_t>objPtr), ep, recv_buffer, t0, dcopy_start)
   except:
@@ -727,7 +727,7 @@ cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start)
     t0 = None
     if PROFILING:
       t0 = time.time()
-      charm.msg_recv_sizes.append(msgSize)
+      charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvGroupMsg(gid, ep, recv_buffer, t0, dcopy_start)
   except:
@@ -739,7 +739,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     t0 = None
     if PROFILING:
       t0 = time.time()
-      charm.msg_recv_sizes.append(msgSize)
+      charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, dcopy_start)
   except:
@@ -773,7 +773,7 @@ cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, 
     t0 = None
     if PROFILING:
       t0 = time.time()
-      charm.msg_recv_sizes.append(msgSize)
+      charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, -1)
   except:
@@ -839,7 +839,7 @@ cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer)
     currentReducer = None
     for i in range(nMsgs):
       msgSize = msgSizes[i]
-      if PROFILING: charm.msg_recv_sizes.append(msgSize)
+      if PROFILING: charm.recordReceive(msgSize)
       if msgSize > 0:
         recv_buffer.setMsg(msgs[i], msgSize)
         header, args = loads(recv_buffer)

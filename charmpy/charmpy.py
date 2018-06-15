@@ -45,8 +45,9 @@ MAINCHARE, GROUP, ARRAY = range(3)
 CHARM_TYPES = (MAINCHARE, GROUP, ARRAY)
 
 class EntryMethod(object):
+
   def __init__(self, C, name, charm_type_id, profile=False):
-    self.C = C          # class to which method belongs to
+    self.C = C          # chare class to which this method belongs to
     self.name = name    # entry method name
     self.isCtor = False # true if method is constructor
     self.epIdx = -1     # entry method index assigned by Charm
@@ -60,14 +61,26 @@ class EntryMethod(object):
     if hasattr(method, 'when_attrib_name'): self.whenAttrib = getattr(method, 'when_attrib_name')
 
   def startMeasuringTime(self):
+    charm.runningEntryMethod = self
     self.startTime = time.time()
-    charm.sendTime = 0.0
+    self.sendTime  = 0.0
+    self.measuringSendTime = False
 
   def stopMeasuringTime(self):
+    charm.runningEntryMethod = None
+    self.stopMeasuringSendTime()
     total = time.time() - self.startTime
-    self.times[0] += total - charm.sendTime
-    self.times[1] += charm.sendTime
-    charm.sendTime = 0.0
+    self.times[0] += total - self.sendTime
+    self.times[1] += self.sendTime
+
+  def startMeasuringSendTime(self):
+    self.sendStartTime = time.time()
+    self.measuringSendTime = True
+
+  def stopMeasuringSendTime(self):
+    if self.measuringSendTime:
+      self.sendTime += time.time() - self.sendStartTime
+      self.measuringSendTime = False
 
   def addRecvTime(self, t):
     self.times[2] += t
@@ -119,9 +132,11 @@ class Charm(object):
     self.entryMethods = {}    # ep_idx -> EntryMethod object
     self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
     self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
-    self.sendTime = 0.0       # for profiling, used to record send overhead
     self.msg_send_sizes = []  # for profiling
     self.msg_recv_sizes = []  # for profiling
+    self.runningEntryMethod = None  # currently running entry method (only used with profiling)
+    # track chare constructor call stack that occurs in mainchare due to inlining of constructor calls (only used with profiling)
+    self.mainchareEmStack = []
     self.activeChares = set() # for profiling (active chares on this PE)
     self.opts = Options
     self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
@@ -188,9 +203,13 @@ class Charm(object):
     Mainchare.initMember(obj, cid)
     super(em.C, obj).__init__() # call Chare class __init__ first
     if self.entry_func is not None: obj.main = self.entry_func
+    if Options.PROFILING:
+      self.activeChares.add((em.C, Mainchare))
+      em.startMeasuringTime()
     self.threadMgr.startThread(obj, em, [args], None) # now call user's __init__ in a new thread
     self.chares[cid] = obj
-    if Options.PROFILING: self.activeChares.add((em.C, Mainchare))
+    if Options.PROFILING:
+      em.stopMeasuringTime()
     if CkMyPe() == 0: # broadcast readonlies
       roData = {}
       for attr in dir(readonlies):   # attr is string
@@ -201,7 +220,7 @@ class Charm(object):
       self.lib.CkRegisterReadonly(b"charmpy_ro", b"charmpy_ro", msg)
 
   def invokeEntryMethod(self, obj, ep, header, args, t0):
-    self.currentEntryMethod = em = self.entryMethods[ep]
+    em = self.entryMethods[ep]
     if Options.PROFILING:
       em.addRecvTime(time.time() - t0)
       em.startMeasuringTime()
@@ -214,6 +233,7 @@ class Charm(object):
       obj._when_buffer[ep][tag].append((args,header.get(b'block')))
       checkWhen = False # no entry method ran, so no need to check when buffers
     elif not em.isThreaded:
+      self.mainThreadEntryMethod = em
       ret = getattr(obj, em.name)(*args)  # invoke entry method
       if b'block' in header:
         proxy, remote_tid = header[b'block']
@@ -241,15 +261,24 @@ class Charm(object):
       self.invokeEntryMethod(obj, ep, header, args, t0)
     else:
       em = self.entryMethods[ep]
-      #if CkMyPe() == 0: print("Group " + str(gid) + " not instantiated yet")
-      if not em.isCtor: raise CharmPyError("Specified group entry method not constructor")
+      assert em.isCtor, "Specified group entry method not constructor"
       header, args = self.unpackMsg(msg, dcopy_start, None)
       obj = object.__new__(em.C)  # create object but don't call __init__
       Group.initMember(obj, gid)
       super(em.C, obj).__init__() # call Chare class __init__ first
+      if Options.PROFILING:
+        self.activeChares.add((em.C, Group))
+        if self.runningEntryMethod is not None:
+          self.mainchareEmStack.append(self.runningEntryMethod)
+          self.runningEntryMethod.stopMeasuringTime()
+        em.addRecvTime(time.time() - t0)
+        em.startMeasuringTime()
       obj.__init__(*args)              # now call the user's __init__
       self.groups[gid] = obj
-      if Options.PROFILING: self.activeChares.add((em.C, Group))
+      if Options.PROFILING:
+        em.stopMeasuringTime()
+        if len(self.mainchareEmStack) > 0:
+          self.mainchareEmStack.pop().startMeasuringTime()
 
   def arrayMapProcNum(self, gid, index):
     return self.groups[gid].procNum(index)
@@ -261,11 +290,12 @@ class Charm(object):
       header, args = self.unpackMsg(msg, dcopy_start, obj)
       self.invokeEntryMethod(obj, ep, header, args, t0)
     else:
-      #if CkMyPe() == 0: print("Array element " + str(aid) + " index " + str(index) + " not instantiated yet")
-      # TODO profile this code path
       em = self.entryMethods[ep]
-      if not em.isCtor: raise CharmPyError("Specified array entry method not constructor")
+      assert em.isCtor, "Specified array entry method not constructor"
       header, args = self.unpackMsg(msg, dcopy_start, None)
+      if Options.PROFILING:
+        self.activeChares.add((em.C, Array))
+        em.addRecvTime(time.time() - t0)
       if isinstance(args, Chare):  # obj migrating in
         obj = args
         obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
@@ -273,9 +303,17 @@ class Charm(object):
         obj = object.__new__(em.C)  # create object but don't call __init__
         Array.initMember(obj, aid, index)
         super(em.C, obj).__init__() # call Chare class __init__ first
+        if Options.PROFILING:
+          if self.runningEntryMethod is not None:
+            self.mainchareEmStack.append(self.runningEntryMethod)
+            self.runningEntryMethod.stopMeasuringTime()
+          em.startMeasuringTime()
         obj.__init__(*args)         # now call the user's array element __init__
+        if Options.PROFILING:
+          em.stopMeasuringTime()
+          if len(self.mainchareEmStack) > 0:
+            self.mainchareEmStack.pop().startMeasuringTime()
       self.arrays[aid][index] = obj
-      if Options.PROFILING: self.activeChares.add((em.C, Array))
 
   def unpackMsg(self, msg, dcopy_start, dest_obj):
     if msg[:7] == b"_local:":
@@ -362,7 +400,7 @@ class Charm(object):
         if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
       msg = (header, args)
       msg = cPickle.dumps(msg, Options.PICKLE_PROTOCOL)
-    self.lastMsgLen = len(msg) + dcopy_size
+    if Options.PROFILING: self.recordSend(len(msg) + dcopy_size)
     return (msg, direct_copy_buffers)
 
   # register class C in Charm
@@ -419,7 +457,7 @@ class Charm(object):
       self.mainchareRegistered = True
     charm_type = charm_type_id_to_class[charm_type_id]
     #print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-    self.classEntryMethods[charm_type_id][C] = [EntryMethod(C,m,charm_type_id) for m in charm_type.__baseEntryMethods__()]
+    self.classEntryMethods[charm_type_id][C] = [EntryMethod(C,m,charm_type_id,profile=Options.PROFILING) for m in charm_type.__baseEntryMethods__()]
     for m in dir(C):
       if not callable(getattr(C,m)): continue
       if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
@@ -500,8 +538,17 @@ class Charm(object):
   def contribute(self, data, reducer, target, contributor):
     contribution = self.redMgr.prepare(data, reducer, contributor)
     contributeInfo = self.lib.getContributeInfo(target.ep, contribution, contributor)
-    self.lastMsgLen = contributeInfo.getDataSize()
+    if Options.PROFILING: self.recordSend(contributeInfo.getDataSize())
     target.__self__.ckContribute(contributeInfo)
+
+  def recordSend(self, size):
+    # TODO? might be better (certainly more memory efficient) to update msg stats
+    # like min, max, total, each time a send is recorded instead of storing the msg
+    # size of all sent messages and calculating stats at the end. same applies to receives
+    self.msg_send_sizes.append(size)
+
+  def recordReceive(self, size):
+    self.msg_recv_sizes.append(size)
 
   def printTable(self, table, sep):
     col_width = [max(len(x) for x in col) for col in zip(*table)]
@@ -513,6 +560,12 @@ class Charm(object):
     if not Options.PROFILING:
       print("NOTE: called charm.printStats() but profiling is disabled")
       return
+    if self.runningEntryMethod is not None:
+      # record elapsed time of current entry method so that it is part of displayed stats
+      em = self.runningEntryMethod
+      assert not em.measuringSendTime
+      em.stopMeasuringTime()
+      em.startMeasuringTime()
     print("Timings for PE " + str(self.myPe()) + ":")
     table = [["","em","send","recv","total"]]
     lineNb = 1
@@ -588,11 +641,10 @@ CkAbort  = charm.abort
 
 def profile_send_function(func):
   def func_with_profiling(*args, **kwargs):
-    sendInitTime = time.time()
-    charm.blockedTime = 0.0
+    em = charm.runningEntryMethod
+    em.startMeasuringSendTime()
     ret = func(*args, **kwargs)
-    charm.msg_send_sizes.append(charm.lastMsgLen)
-    charm.sendTime += (time.time() - sendInitTime - charm.blockedTime)
+    em.stopMeasuringSendTime()
     return ret
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
@@ -721,8 +773,7 @@ def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
     msg = charm.packMsg(destObj, args[1:], block)
     charm.CkChareSend(me.cid, ep, msg)
     if block:
-      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
-      return result
+      return charm.threadMgr.pauseThread() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -789,8 +840,7 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
     if block:
       if me.elemIdx == -1:
         raise CharmPyError("Blocking calls can only invoke methods on single chares")
-      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
-      return result
+      return charm.threadMgr.pauseThread() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -880,8 +930,7 @@ def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
     if block:
       if me.elemIdx == ():
         raise CharmPyError("Blocking calls can only invoke methods on single chares")
-      result, charm.blockedTime = charm.threadMgr.pauseThread() # block here until result arrives
-      return result
+      return charm.threadMgr.pauseThread() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 

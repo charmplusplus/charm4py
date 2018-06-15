@@ -38,9 +38,8 @@ class EntryMethodThreadManager(object):
             t = threading.Thread(target=self.entryMethodRun_thread,
                                  args=(obj, entry_method, args, caller))
             t.start()
-            tid = t.ident
             self.entryMethodRunning.wait()  # wait until entry method finishes OR pauses
-            self.threadStopped(tid)
+            self.threadStopped(t.ident)
 
     def threadStopped(self, tid):
         """ Called by main thread when entry method thread has finished/paused """
@@ -82,8 +81,8 @@ class EntryMethodThreadManager(object):
             self.entryMethodRunning.notify() # notify main thread that done
 
     def throwNotThreadedError(self):
-        raise CharmPyError("Entry method '" + charm.currentEntryMethod.C.__name__ + "." +
-                           charm.currentEntryMethod.name +
+        raise CharmPyError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
+                           charm.mainThreadEntryMethod.name +
                            "' must be marked as 'threaded' to block")
 
     def pauseThread(self):
@@ -94,17 +93,14 @@ class EntryMethodThreadManager(object):
         if tid == self.main_thread_id: self.throwNotThreadedError() # verify that not running on main thread
         # thread has entryMethodRunning lock already because it's running an entry method
         thread_state = self.threads[tid]
-        wait_time = 0.0
         with thread_state.wait_cv:
-            if self.PROFILING: t0 = time.time()
             self.entryMethodRunning.notify()    # notify main thread that I'm pausing
             self.entryMethodRunning.release()
             thread_state.wait_cv.wait()
-            if self.PROFILING: wait_time = time.time() - t0
             self.entryMethodRunning.acquire()   # got what I was waiting for, resuming
             #print("result got here", tid, thread_state.wait_result)
         #self.entryMethodRunning.acquire()
-        return thread_state.wait_result, wait_time
+        return thread_state.wait_result
 
     def resumeThread(self, tid, arg):
         """ Deposit a result or signal that a local entry method thread is waiting on,
@@ -118,12 +114,12 @@ class EntryMethodThreadManager(object):
             self.entryMethodRunning.acquire()
         #with self.entryMethodRunning:
         if self.PROFILING:
-            charm.currentEntryMethod.stopMeasuringTime()
+            charm.mainThreadEntryMethod.stopMeasuringTime()
             thread_state.em.startMeasuringTime()
         self.entryMethodRunning.wait() # main thread waits because threaded entry method resumes
         if self.PROFILING:
             thread_state.em.stopMeasuringTime()
-            charm.currentEntryMethod.startMeasuringTime()
+            charm.mainThreadEntryMethod.startMeasuringTime()
         self.threadStopped(tid)
 
     def getReturnHandle(self):
