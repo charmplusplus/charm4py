@@ -631,17 +631,9 @@ class CharmLib(object):
         reducer = getattr(charm.reducers, header[b"custom_reducer"])
         if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
 
-    if b'block' in header:
-      # reconstruct return handle (proxy and remote thread ID) of blocked remote thread
-      proxy_class_name, proxy_state, remote_tid = header[b'block']
-      proxy_class = getattr(charm, proxy_class_name)
-      proxy = proxy_class.__new__(proxy_class)
-      proxy.__setstate__(proxy_state)
-      header[b'block'] = proxy, remote_tid
-
     return header, args
 
-  def packMsg(self, destObj, msgArgs not None, bint block):
+  def packMsg(self, destObj, msgArgs not None, blockFuture):
     cdef int i = 0
     cdef int localTag
     cdef array.array a
@@ -649,7 +641,7 @@ class CharmLib(object):
       cdef np.ndarray np_array
     dcopy_size = 0
     header = {}           # msg header
-    if block: header[b'block'] = charm.threadMgr.getReturnHandle()
+    if blockFuture is not None: header[b'block'] = blockFuture
     if destObj is not None: # if dest obj is local
       localTag = destObj.__addLocal__((header, msgArgs))
       memcpy(localMsg_ptr+2, &localTag, sizeof(int))

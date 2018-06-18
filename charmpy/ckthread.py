@@ -8,6 +8,57 @@ from charmpy import CharmPyError, charm, Options
 from collections import defaultdict
 import time
 
+class Future(object):
+    def __init__(self, fid, tid, proxy_class_name, proxy_state, nsenders):
+        self.fid = fid                    # unique future ID within process
+        self.tid = tid                    # thread ID where the future is created
+        self.proxy_class_name = proxy_class_name  # creator object's proxy class name
+        self.proxy_state = proxy_state    # creator object's proxy state
+        self.num_senders = nsenders       # number of senders
+        self.value = []                   # value of the future, it can be a bag of values in case of multiple senders
+        self.thread_paused = False        # flag to check if creator thread is blocked on future
+        self.value_received = False       # flag to check if value has been received
+
+    def get(self):
+        """ Blocking call on current entry method's thread to obtain the value of the
+            future. If the value is already available then it is returned immediately.
+        """
+        if not self.value_received:
+            self.thread_paused = True
+            self.value = charm.threadMgr.pauseThread()
+
+        if len(self.value) == 1: return self.value[0]
+
+        return self.value
+
+    def send(self, result):
+        """ Set the value of a future either from remote or current thread.
+            NOTE: For correct semantics, only one unique thread can send to a future. Not
+            multiple.
+        """
+        proxy_class = getattr(charm, self.proxy_class_name)
+        proxy = proxy_class.__new__(proxy_class)
+        proxy.__setstate__(self.proxy_state)
+        proxy._future_deposit_result(self.fid, result)
+
+    def deposit(self, result):
+        """ Deposit a value for this future and resume any blocked threads waiting on this
+            future.
+        """
+        self.value.append(result)
+        if len(self.value) == self.num_senders:
+            self.value_received = True
+            if self.thread_paused:
+                self.thread_paused = False
+                charm.threadMgr.resumeThread(self.tid, self.value)
+
+
+    def __getstate__(self):
+        return (self.fid, self.proxy_class_name, self.proxy_state)
+
+    def __setstate__(self, state):
+        self.fid, self.proxy_class_name, self.proxy_state = state
+
 
 class EntryMethodThreadManager(object):
     """ Creates and manages entry method threads """
@@ -28,6 +79,8 @@ class EntryMethodThreadManager(object):
                                                         # pause while threaded entry method is running
         self.threads = {}                   # thread ID -> ThreadState object
         self.obj_threads = defaultdict(set) # stores active thread IDs of chares
+        self.futures_count = 0              # counter used as IDs for futures created by this ThreadManager
+        self.futures = {}                   # future ID -> Future object
 
     def startThread(self, obj, entry_method, args, caller):
         """ Called by main thread to spawn an entry method thread """
@@ -61,7 +114,7 @@ class EntryMethodThreadManager(object):
             if len(self.obj_threads.pop(obj)) > 0:
                 raise CharmPyError("Migration of chares with active threads is not yet supported")
 
-    def entryMethodRun_thread(self, obj, entry_method, args, caller):
+    def entryMethodRun_thread(self, obj, entry_method, args, caller_future):
         """ Entry method thread main function """
 
         with self.entryMethodRunning:
@@ -71,10 +124,9 @@ class EntryMethodThreadManager(object):
             try:
                 self.obj_threads[obj].add(tid)
                 ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
-                if caller is not None:
-                    proxy, remote_tid = caller
+                if caller_future is not None:
                     assert ret is not None, str(ret) + " " + thread_state.em.name
-                    proxy._thread_deposit_result(remote_tid, ret)
+                    caller_future.send(ret)
                 thread_state.finished = True
             except Exception:
                 thread_state.error = sys.exc_info()[1] # store exception for main thread
@@ -122,19 +174,31 @@ class EntryMethodThreadManager(object):
             charm.mainThreadEntryMethod.startMeasuringTime()
         self.threadStopped(tid)
 
-    def getReturnHandle(self):
-        """ Get handle in order to be able to send remote results to the calling thread
-            in this PE.
-            The handle contains the proxy to the chare that owns the thread and the thread ID
-            of the waiting thread. Result is delivered to an entry method of the chare
-            that owns the thread, so that the CPU load of the thread, once it resumes,
-            is counted towards that object.
-            NOTE: if chare that is waiting for result migrates, tid is not valid.
-            We are not supporting migration of chares with active threads for now.
+    def createFuture(self, senders=1):
+        """ Creates a new Future object by obtaining/creating a unique future ID. The
+            future also has some attributes related to the creator object's proxy to allow
+            remote chares to send values to the future's creator. The new future object is
+            saved in the self.futures map, and will be deleted whenever its value is received.
         """
         tid = get_ident()
-        if tid == self.main_thread_id: self.throwNotThreadedError() # verify that not running on main thread
+        if tid == self.main_thread_id: self.throwNotThreadedError()
+        self.futures_count += 1
+        fid = self.futures_count
         obj = self.threads[tid].obj
         if hasattr(obj, 'thisIndex'): proxy = obj.thisProxy[obj.thisIndex]
         else: proxy = obj.thisProxy
-        return (proxy.__class__.__name__, proxy.__getstate__(), tid)
+
+        f = Future(fid, tid, proxy.__class__.__name__, proxy.__getstate__(), senders)
+        self.futures[fid] = f
+        return f
+
+    def depositFuture(self, fid, result):
+        """ Set a value of a future that is being managed by this ThreadManager. The flag to
+            track receipt of all values, tied to this future, is also updated and any thread
+            that is blocking on this future's value is resumed.
+        """
+        future = self.futures[fid]
+        future.deposit(result)
+
+        if future.value_received:
+            del self.futures[fid]

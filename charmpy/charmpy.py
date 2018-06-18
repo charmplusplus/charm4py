@@ -236,8 +236,8 @@ class Charm(object):
       self.mainThreadEntryMethod = em
       ret = getattr(obj, em.name)(*args)  # invoke entry method
       if b'block' in header:
-        proxy, remote_tid = header[b'block']
-        proxy._thread_deposit_result(remote_tid, ret) # send result back to remote
+        blockFuture = header[b'block']
+        blockFuture.send(ret) # send result back to remote
     else:
       self.threadMgr.startThread(obj, em, args, header.get(b'block'))
 
@@ -331,17 +331,9 @@ class Charm(object):
         reducer = getattr(self.reducers, header[b"custom_reducer"])
         if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
 
-    if b'block' in header:
-      # reconstruct return handle (proxy and remote thread ID) of blocked remote thread
-      proxy_class_name, proxy_state, remote_tid = header[b'block']
-      proxy_class = getattr(self, proxy_class_name)
-      proxy = proxy_class.__new__(proxy_class)
-      proxy.__setstate__(proxy_state)
-      header[b'block'] = proxy, remote_tid
-
     return header, args
 
-  def packMsg(self, destObj, msgArgs, block):
+  def packMsg(self, destObj, msgArgs, blockFuture):
     """Prepares a message for sending, given arguments to an entry method invocation.
 
       The message is the result of pickling `(header,args)` where header is a dict,
@@ -366,7 +358,7 @@ class Charm(object):
     direct_copy_buffers = []
     dcopy_size = 0
     header = {}           # msg header
-    if block: header[b'block'] = self.threadMgr.getReturnHandle()
+    if blockFuture is not None: header[b'block'] = blockFuture
     if destObj: # if dest obj is local
       localTag = destObj.__addLocal__((header, msgArgs))
       msg = ("_local:" + str(localTag)).encode()
@@ -498,6 +490,7 @@ class Charm(object):
     if "++quiet" in sys.argv: Options.QUIET = True
     from ckthread import EntryMethodThreadManager
     self.threadMgr = EntryMethodThreadManager()
+    self.createFuture = self.threadMgr.createFuture
 
     if hasattr(entry, 'mro') and Chare in entry.mro():
       self.register(entry, (MAINCHARE,))
@@ -722,11 +715,10 @@ class Chare(object):
           if len(msgs) == 0: self._when_buffer.pop(ep)
           break
         if not em.isThreaded:
-          for m,retHandle in msgs_now:
+          for m, blockFuture in msgs_now:
             ret = method(*m)
-            if retHandle:
-              proxy, remote_tid = retHandle
-              proxy._thread_deposit_result(remote_tid, ret)
+            if blockFuture:
+              blockFuture.send(ret)
         else:
           for m,retHandle in msgs_now:
             charm.threadMgr.startThread(self, em, m, retHandle)
@@ -746,10 +738,9 @@ class Chare(object):
               # self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
     charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
-  # deposit result that one of this chare's threads is waiting on
-  def _thread_deposit_result(self, tid, result):
-    assert tid in charm.threadMgr.obj_threads[self]   # TODO comment this out eventually
-    charm.threadMgr.resumeThread(tid, result)
+  # deposit value of one of the futures that was created on this chare
+  def _future_deposit_result(self, fid, result):
+    charm.threadMgr.depositFuture(fid, result)
 
 # ----------------- Mainchare and Proxy --------------
 
@@ -765,15 +756,16 @@ def mainchare_proxy__setstate__(proxy, state):
 def mainchare_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
-    block = False
-    if 'block' in kwargs: block = kwargs['block']
+    blockFuture = None
+    if 'block' in kwargs and kwargs['block']:
+      blockFuture = charm.createFuture()
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (me.cid in charm.chares) and (len(args) > 1):
       destObj = charm.chares[me.cid]
-    msg = charm.packMsg(destObj, args[1:], block)
+    msg = charm.packMsg(destObj, args[1:], blockFuture)
     charm.CkChareSend(me.cid, ep, msg)
-    if block:
-      return charm.threadMgr.pauseThread() # block here until result arrives
+    if blockFuture is not None:
+      return blockFuture.get() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -830,17 +822,18 @@ def group_proxy_elem(proxy, pe):  # group proxy [] overload method
 def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0] # proxy
-    block = False
-    if 'block' in kwargs: block = kwargs['block']
+    blockFuture = None
+    if 'block' in kwargs and kwargs['block']:
+      blockFuture = charm.createFuture()
     destObj = None
     if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()) and (len(args) > 1):
       destObj = charm.groups[me.gid]
-    msg = charm.packMsg(destObj, args[1:], block)
+    msg = charm.packMsg(destObj, args[1:], blockFuture)
     charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
-    if block:
+    if blockFuture is not None:
       if me.elemIdx == -1:
         raise CharmPyError("Blocking calls can only invoke methods on single chares")
-      return charm.threadMgr.pauseThread() # block here until result arrives
+      return blockFuture.get() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
@@ -919,18 +912,19 @@ def array_proxy_elem(proxy, idx): # array proxy [] overload method
 def array_proxy_method_gen(ep): # decorator, generates proxy entry methods
   def proxy_entry_method(*args, **kwargs):
     me = args[0]  # proxy
-    block = False
-    if 'block' in kwargs: block = kwargs['block']
+    blockFuture = None
+    if 'block' in kwargs and kwargs['block']:
+      blockFuture = charm.createFuture()
     destObj = None
     if Options.LOCAL_MSG_OPTIM:
       array = charm.arrays[me.aid]
       if (me.elemIdx in array) and (len(args) > 1): destObj = array[me.elemIdx]
-    msg = charm.packMsg(destObj, args[1:], block)
+    msg = charm.packMsg(destObj, args[1:], blockFuture)
     charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
-    if block:
+    if blockFuture is not None:
       if me.elemIdx == ():
         raise CharmPyError("Blocking calls can only invoke methods on single chares")
-      return charm.threadMgr.pauseThread() # block here until result arrives
+      return blockFuture.get() # block here until result arrives
   proxy_entry_method.ep = ep
   return proxy_entry_method
 
