@@ -125,7 +125,6 @@ class EntryMethodThreadManager(object):
                 self.obj_threads[obj].add(tid)
                 ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                 if caller_future is not None:
-                    assert ret is not None, str(ret) + " " + thread_state.em.name
                     caller_future.send(ret)
                 thread_state.finished = True
             except Exception:
