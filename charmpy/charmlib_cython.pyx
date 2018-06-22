@@ -132,6 +132,7 @@ class CkReductionTypesExt_Wrapper:
 
 ctypedef struct ContributeInfo_struct:
   int cbEpIdx            # index of entry point at reduction target
+  int fid                # future ID (used when reduction target is a future)
   void *data             # data contributed for reduction
   int numelems           # number of elements in data
   int dataSize           # size of data in bytes
@@ -164,6 +165,7 @@ cdef class ContributeInfo:
     self.bufSet = False
 
     self.internal.cbEpIdx = -1
+    self.internal.fid = 0
     self.internal.data = NULL
     self.internal.numelems = 0
     self.internal.dataSize = 0
@@ -173,9 +175,10 @@ cdef class ContributeInfo:
     self.internal.ndims = index_len
     self.internal.contributorType = elemType
 
-  cdef inline void setContribute(self, int ep, void *data, int numelems, int dataSize, int redType):
+  cdef inline void setContribute(self, int ep, int fid, void *data, int numelems, int dataSize, int redType):
     #self.dataSize = dataSize
     self.internal.cbEpIdx = ep
+    self.internal.fid = fid
     self.internal.data = data
     self.internal.numelems = numelems
     self.internal.dataSize = dataSize
@@ -349,7 +352,7 @@ class CharmLib(object):
   def initContributeInfo(self, elemId, index, elemType):
     return ContributeInfo(elemId, index, elemType)
 
-  def getContributeInfo(self, int ep, tuple contribution not None, contributor not None):
+  def getContributeInfo(self, int ep, int fid, tuple contribution not None, contributor not None):
     cdef ContributeInfo c_info = contributor._contributeInfo
     data = contribution[1]
     cdef int reducer_type = <int>contribution[0]
@@ -392,7 +395,7 @@ class CharmLib(object):
         c_data_size = numElems * c_type_table_sizes[c_type]
         c_data = <char*>a.data.as_voidptr
 
-    c_info.setContribute(ep, c_data, numElems, c_data_size, reducer_type)
+    c_info.setContribute(ep, fid, c_data, numElems, c_data_size, reducer_type)
     return c_info
 
   def CkChareSend(self, tuple chare_id not None, int ep, msg not None):
@@ -586,7 +589,7 @@ class CharmLib(object):
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
     registerPyReductionExtCallback(pyReduction)
-    registerCPickleDataExtCallback(cpickleData)
+    registerCreateReductionTargetMsgExtCallback(createReductionTargetMsg)
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
@@ -780,39 +783,64 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
   except:
     charm.handleGeneralError()
 
-cdef void cpickleData(void *data, int dataSize, int reducerType, char **returnBuffers, int *returnBufferSizes):
+cdef void createReductionTargetMsg(void *data, int dataSize, int reducerType, int fid, char **returnBuffers, int *returnBufferSizes):
   cdef int numElems
   cdef array.array a
   cdef int item_size
   global tempData
   try:
     if PROFILING: t0 = time.time()
-    if reducerType != charm_reducers.nop:
-      header = {}
-      ctype = charm_reducer_to_ctype[reducerType]
-      item_size = c_type_table_sizes[ctype]
-      numElems = dataSize / item_size
-      if numElems == 1:
-        a = array.array(c_type_table_typecodes[ctype], [0])
-        memcpy(a.data.as_voidptr, data, item_size)
-        pyData = [a[0]]
-      else:
-        IF HAVE_NUMPY:
-          dtype = rev_np_array_type_map[ctype]
-          header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
-        ELSE:
-          array_typecode = rev_array_type_map[ctype]
-          header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
-        returnBuffers[1]     = <char*>data
-        returnBufferSizes[1] = dataSize
-        pyData = [None]
-      # save msg, else it might be deleted before returning control to libcharm
-      tempData = dumps((header, pyData), PICKLE_PROTOCOL)
-    else:
-      tempData = emptyMsg
 
-    returnBuffers[0]     = <char*>tempData
-    returnBufferSizes[0] = len(tempData)
+    if reducerType != charm_reducers.external_py:
+
+      if reducerType != charm_reducers.nop:
+        header = {}
+        ctype = charm_reducer_to_ctype[reducerType]
+        item_size = c_type_table_sizes[ctype]
+        numElems = dataSize / item_size
+        pyData = []
+        if fid > 0: pyData.append(fid)
+        if numElems == 1:
+          a = array.array(c_type_table_typecodes[ctype], [0])
+          memcpy(a.data.as_voidptr, data, item_size)
+          pyData.append(a[0])
+        else:
+          IF HAVE_NUMPY:
+            dtype = rev_np_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+          ELSE:
+            array_typecode = rev_array_type_map[ctype]
+            header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+          returnBuffers[1]     = <char*>data
+          returnBufferSizes[1] = dataSize
+          pyData.append(None)
+        # save msg, else it might be deleted before returning control to libcharm
+        tempData = dumps((header, pyData), PICKLE_PROTOCOL)
+      elif fid > 0:
+        tempData = dumps(({}, [fid]), PICKLE_PROTOCOL)
+      else:
+        tempData = emptyMsg
+
+      returnBuffers[0]     = <char*>tempData
+      returnBufferSizes[0] = len(tempData)
+
+    elif fid > 0:
+      # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
+      # as first argument, and then repickles it
+      # this code path is only used when the result of a reduction using a
+      # Python-defined (custom) reducer is sent to a Future, which right now appears to
+      # be a rare use case. But if it turns out to be critical we should consider
+      # a more efficient solution
+      recv_buffer.setMsg(<char*>data, dataSize)
+      header, args = loads(recv_buffer)
+      args.insert(0, fid)
+      tempData = dumps((header,args), PICKLE_PROTOCOL)
+      returnBuffers[0]     = <char*>tempData
+      returnBufferSizes[0] = len(tempData)
+    else:
+      # do nothing, use message as is (was created by charmpy)
+      returnBuffers[0]     = <char*>data
+      returnBufferSizes[0] = dataSize
 
     if PROFILING:
       times[0] += (time.time() - t0)

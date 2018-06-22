@@ -74,6 +74,7 @@ ffibuilder.set_source("_charmlib",
 
         struct ContributeInfo {
           int cbEpIdx;            // index of entry point at reduction target
+          int fid;                // future ID (used when reduction target is a future)
           void *data;             // data contributed for reduction
           int numelems;           // number of elements in data
           int dataSize;           // size of data in bytes
@@ -158,6 +159,7 @@ ffibuilder.cdef("""
 
     struct ContributeInfo {
       int cbEpIdx;            // index of entry point at reduction target
+      int fid;                // future ID (used when reduction target is a future)
       void *data;             // data contributed for reduction
       int numelems;           // number of elements in data
       int dataSize;           // size of data in bytes
@@ -201,7 +203,7 @@ ffibuilder.cdef("""
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
     void registerArrayElemJoinExtCallback(void (*cb)(int, int, int *, int, char*, int));
     void registerArrayResumeFromSyncExtCallback(void (*cb)(int, int, int *));
-    void registerCPickleDataExtCallback(void (*cb)(void*, int, int, char**, int*));
+    void registerCreateReductionTargetMsgExtCallback(void (*cb)(void*, int, int, int, char**, int*));
     void registerPyReductionExtCallback(int (*cb)(char**, int*, int, char**));
     void registerArrayMapProcNumExtCallback(int (*cb)(int, int, const int *));
 
@@ -224,8 +226,8 @@ ffibuilder.cdef("""
     extern "Python" void arrayElemJoin_py2(int, int, int *, int, char*, int);
     extern "Python" void arrayElemJoin_py3(int, int, int *, int, char*, int);
     extern "Python" void resumeFromSync(int, int, int *);
-    extern "Python" void cpickleData_py2(void*, int, int, char**, int*);
-    extern "Python" void cpickleData_py3(void*, int, int, char**, int*);
+    extern "Python" void createReductionTargetMsg_py2(void*, int, int, int, char**, int*);
+    extern "Python" void createReductionTargetMsg_py3(void*, int, int, int, char**, int*);
     extern "Python" int pyReduction_py2(char**, int*, int, char**);
     extern "Python" int pyReduction_py3(char**, int*, int, char**);
     extern "Python" int arrayMapProcNum(int, int, const int*);

@@ -488,7 +488,6 @@ class Charm(object):
     """
     if Options.PROFILING: self.contribute = profile_send_function(self.contribute)
     if "++quiet" in sys.argv: Options.QUIET = True
-    from ckthread import EntryMethodThreadManager
     self.threadMgr = EntryMethodThreadManager()
     self.createFuture = self.threadMgr.createFuture
 
@@ -530,7 +529,14 @@ class Charm(object):
   # Charm class level contribute function used by Array, Group for reductions
   def contribute(self, data, reducer, target, contributor):
     contribution = self.redMgr.prepare(data, reducer, contributor)
-    contributeInfo = self.lib.getContributeInfo(target.ep, contribution, contributor)
+    fid = 0
+    if isinstance(target, Future):
+      fid = target.fid
+      proxy_class = getattr(self, target.proxy_class_name)
+      proxy = proxy_class.__new__(proxy_class)
+      proxy.__setstate__(target.proxy_state)
+      target = proxy._future_deposit_result
+    contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
     if Options.PROFILING: self.recordSend(contributeInfo.getDataSize())
     target.__self__.ckContribute(contributeInfo)
 
@@ -638,6 +644,8 @@ def checkCharmStarted():
 
 import atexit
 atexit.register(checkCharmStarted)
+
+from ckthread import EntryMethodThreadManager, Future
 
 def profile_send_function(func):
   def func_with_profiling(*args, **kwargs):

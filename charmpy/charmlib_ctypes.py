@@ -81,6 +81,7 @@ class ReducerTypes(Structure):
 class ContributeInfo(Structure):
   _fields_ = [
     ("cbEpIdx", c_int),               # index of entry point at reduction target
+    ("fid", c_int),                   # future ID (used when reduction target is a future)
     ("data", c_void_p),               # data contributed for reduction
     ("numelems", c_int),              # number of elements in data
     ("dataSize", c_int),              # size of data in bytes
@@ -130,10 +131,10 @@ class CharmLib(object):
     if type(index) == int: index = (index,)
     ndims = len(index)
     c_elemIdx = (c_int*ndims)(*index)
-    return ContributeInfo(-1, 0, 0, 0, self.ReducerType.nop, elemId, c_elemIdx,
+    return ContributeInfo(-1, 0, 0, 0, 0, self.ReducerType.nop, elemId, c_elemIdx,
                           ndims, elemType)
 
-  def getContributeInfo(self, ep, contribution, contributor):
+  def getContributeInfo(self, ep, fid, contribution, contributor):
     reducer_type, data, c_type = contribution
     if reducer_type == self.ReducerType.external_py:
       numElems = len(data)
@@ -160,6 +161,7 @@ class CharmLib(object):
 
     c_info = contributor._contributeInfo
     c_info.cbEpIdx = ep
+    c_info.fid = fid
     c_info.data = ctypes.cast(c_data, c_void_p)
     c_info.numelems = numElems
     c_info.dataSize = c_data_size
@@ -370,43 +372,64 @@ class CharmLib(object):
     c_elemIdx = (ctypes.c_int * ndims)(*index)
     self.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), aid, c_elemIdx, ndims)
 
-  def cpickleData(self, data, dataSize, reducerType, returnBuffers, returnBufferSizes):
+  def createReductionTargetMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if self.opts.PROFILING: t0 = time.time()
-      header = {}
-      if reducerType != self.ReducerType.nop:
-        ctype = self.charm.redMgr.charm_reducer_to_ctype[reducerType]
-        dataType = self.c_type_table[ctype]
-        numElems = dataSize // sizeof(dataType)
-        if numElems == 1:
-          pyData = [ctypes.cast(data, POINTER(dataType))[0]]
-        elif sys.version_info[0] < 3:
-          data = ctypes.cast(data, POINTER(dataType * numElems)).contents
-          if haveNumpy:
-            dt = self.charm.redMgr.rev_np_array_type_map[ctype]
-            a = numpy.fromstring(data, dtype=numpy.dtype(dt))
-          else:
-            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
-            a = array.array(array_typecode, data)
-          pyData = [a]
-        else:
-          if haveNumpy:
-            dtype = self.charm.redMgr.rev_np_array_type_map[ctype]
-            header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
-          else:
-            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
-            header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
-          returnBuffers[1] = ctypes.cast(data, c_char_p)
-          returnBufferSizes[1] = dataSize
-          pyData = [None]
-      else:
-        pyData = []
 
-      msg = (header, pyData)
-      pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
-      returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
-      returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
-      returnBufferSizes[0] = len(pickledData)
+      if reducerType != self.ReducerType.external_py:
+        header = {}
+        pyData = []
+        if fid > 0: pyData.append(fid)
+        if reducerType != self.ReducerType.nop:
+          ctype = self.charm.redMgr.charm_reducer_to_ctype[reducerType]
+          dataType = self.c_type_table[ctype]
+          numElems = dataSize // sizeof(dataType)
+          if numElems == 1:
+            pyData.append(ctypes.cast(data, POINTER(dataType))[0])
+          elif sys.version_info[0] < 3:
+            data = ctypes.cast(data, POINTER(dataType * numElems)).contents
+            if haveNumpy:
+              dt = self.charm.redMgr.rev_np_array_type_map[ctype]
+              a = numpy.fromstring(data, dtype=numpy.dtype(dt))
+            else:
+              array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+              a = array.array(array_typecode, data)
+            pyData.append(a)
+          else:
+            if haveNumpy:
+              dtype = self.charm.redMgr.rev_np_array_type_map[ctype]
+              header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+            else:
+              array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+              header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+            returnBuffers[1] = ctypes.cast(data, c_char_p)
+            returnBufferSizes[1] = dataSize
+            pyData.append(None)
+
+        msg = (header, pyData)
+        pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
+        returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
+        returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
+        returnBufferSizes[0] = len(pickledData)
+
+      elif fid > 0:
+        # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
+        # as first argument, and then repickles it
+        # this code path is only used when the result of a reduction using a
+        # Python-defined (custom) reducer is sent to a Future, which right now appears to
+        # be a rare use case. But if it turns out to be critical we should consider
+        # a more efficient solution
+        data = ctypes.cast(data, POINTER(c_char * dataSize)).contents.raw
+        header, args = cPickle.loads(data)
+        args.insert(0, fid)
+        pickledData = cPickle.dumps((header,args), self.opts.PICKLE_PROTOCOL)
+        returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
+        returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
+        returnBufferSizes[0] = len(pickledData)
+      else:
+        # do nothing, use message as is (was created by charmpy)
+        returnBuffers[0]     = ctypes.cast(data, c_char_p)
+        returnBufferSizes[0] = dataSize
 
       if self.opts.PROFILING: self.times[0] += (time.time() - t0)
     except:
@@ -514,10 +537,10 @@ class CharmLib(object):
     self.resumeFromSyncCb = self.RESUME_FROM_SYNC_CB_TYPE(self.resumeFromSync)
     self.lib.registerArrayResumeFromSyncExtCallback(self.resumeFromSyncCb)
 
-    # Args to cpickleData: data, return_buffer, data_size, reducer_type
-    self.CPICKLE_DATA_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, POINTER(c_char_p), POINTER(c_int))
-    self.cpickleDataCb = self.CPICKLE_DATA_CB_TYPE(self.cpickleData)
-    self.lib.registerCPickleDataExtCallback(self.cpickleDataCb)
+    # Args to createReductionTargetMsg: data, return_buffer, data_size, reducer_type
+    self.CREATE_RED_TARG_MSG_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, c_int, POINTER(c_char_p), POINTER(c_int))
+    self.createReductionTargetMsgCb = self.CREATE_RED_TARG_MSG_CB_TYPE(self.createReductionTargetMsg)
+    self.lib.registerCreateReductionTargetMsgExtCallback(self.createReductionTargetMsgCb)
 
     # Args to pyReduction: msgs, msgSizes, nMsgs, returnBuffer
     self.PY_REDUCTION_CB_TYPE = CFUNCTYPE(c_int, POINTER(c_void_p), POINTER(c_int), c_int, POINTER(c_char_p))
