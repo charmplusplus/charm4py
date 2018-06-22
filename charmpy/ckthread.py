@@ -82,14 +82,14 @@ class EntryMethodThreadManager(object):
         self.futures_count = 0              # counter used as IDs for futures created by this ThreadManager
         self.futures = {}                   # future ID -> Future object
 
-    def startThread(self, obj, entry_method, args, caller):
+    def startThread(self, obj, entry_method, args, header):
         """ Called by main thread to spawn an entry method thread """
 
         assert get_ident() == self.main_thread_id       # TODO comment out eventually
 
         with self.entryMethodRunning:
             t = threading.Thread(target=self.entryMethodRun_thread,
-                                 args=(obj, entry_method, args, caller))
+                                 args=(obj, entry_method, args, header))
             t.start()
             self.entryMethodRunning.wait()  # wait until entry method finishes OR pauses
             self.threadStopped(t.ident)
@@ -114,7 +114,7 @@ class EntryMethodThreadManager(object):
             if len(self.obj_threads.pop(obj)) > 0:
                 raise CharmPyError("Migration of chares with active threads is not yet supported")
 
-    def entryMethodRun_thread(self, obj, entry_method, args, caller_future):
+    def entryMethodRun_thread(self, obj, entry_method, args, header):
         """ Entry method thread main function """
 
         with self.entryMethodRunning:
@@ -124,8 +124,11 @@ class EntryMethodThreadManager(object):
             try:
                 self.obj_threads[obj].add(tid)
                 ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
-                if caller_future is not None:
-                    caller_future.send(ret)
+                if b'block' in header:
+                    if b'bcast' in header:
+                        obj.contribute(None, None, header[b'block'])
+                    else:
+                        header[b'block'].send(ret)
                 thread_state.finished = True
             except Exception:
                 thread_state.error = sys.exc_info()[1] # store exception for main thread

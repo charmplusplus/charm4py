@@ -636,15 +636,13 @@ class CharmLib(object):
 
     return header, args
 
-  def packMsg(self, destObj, msgArgs not None, blockFuture):
+  def packMsg(self, destObj, msgArgs not None, dict header):
     cdef int i = 0
     cdef int localTag
     cdef array.array a
     IF HAVE_NUMPY:
       cdef np.ndarray np_array
     dcopy_size = 0
-    header = {}           # msg header
-    if blockFuture is not None: header[b'block'] = blockFuture
     if destObj is not None: # if dest obj is local
       localTag = destObj.__addLocal__((header, msgArgs))
       memcpy(localMsg_ptr+2, &localTag, sizeof(int))

@@ -20,7 +20,7 @@ class Test(Chare):
     def start(self, pes):
         for j in range(ITERATIONS):
             for i in range(ro.numChares):
-                x = self.thisProxy[i].getVal(j, block=True)
+                x = self.thisProxy[i].getVal(j, ret=True).get()
                 assert x == 53 * i * (73 + pes[i]) * j
 
         self.contribute(None, None, self.thisProxy[0].done)
@@ -28,7 +28,7 @@ class Test(Chare):
     @threaded
     @when("iteration")
     def getVal(self, iteration):
-        result = 53 * ro.testGroup[charm.myPe()].getVal(block=True) * self.thisIndex[0] * self.iteration
+        result = 53 * ro.testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0] * self.iteration
         #assert result == 53 * (73 + charm.myPe()) * self.thisIndex[0] * self.iteration
         self.msgsRcvd += 1
         if self.msgsRcvd == ro.numChares:

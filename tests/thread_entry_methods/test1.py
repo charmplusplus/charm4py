@@ -18,14 +18,14 @@ class Test(Chare):
     def start(self, pes):
         for j in range(ITERATIONS):
             for i in range(ro.numChares):
-                x = self.thisProxy[i].getVal(block=True)
+                x = self.thisProxy[i].getVal(ret=True).get()
                 assert x == 53 * i * (73 + pes[i])
 
         self.contribute(None, None, self.thisProxy[0].done)
 
     @threaded
     def getVal(self):
-        return 53 * ro.testGroup[charm.myPe()].getVal(block=True) * self.thisIndex[0]
+        return 53 * ro.testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0]
 
     def done(self):
         charm.printStats()
