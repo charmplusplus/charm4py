@@ -632,6 +632,13 @@ CkNumPes = charm.numPes
 CkExit   = charm.exit
 CkAbort  = charm.abort
 
+def checkCharmStarted():
+  if len(charm.register_order) == 0:
+    print('Charmpy program is exiting but charm was never started. Did you forget to call charm.start()?')
+
+import atexit
+atexit.register(checkCharmStarted)
+
 def profile_send_function(func):
   def func_with_profiling(*args, **kwargs):
     em = charm.runningEntryMethod
