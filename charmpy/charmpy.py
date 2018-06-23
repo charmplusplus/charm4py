@@ -641,7 +641,7 @@ CkAbort  = charm.abort
 
 def checkCharmStarted():
   if len(charm.register_order) == 0:
-    print('Charmpy program is exiting but charm was never started. Did you forget to call charm.start()?')
+    print('Program is exiting but charm was not started: charm.start() was not called or error happened before start')
 
 import atexit
 atexit.register(checkCharmStarted)
