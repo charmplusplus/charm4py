@@ -21,6 +21,10 @@ import inspect
 import types
 import ckreduction
 import array
+if sys.version_info[0] < 3:
+    from thread import get_ident
+else:
+    from threading import get_ident
 try:
   import numpy
 except ImportError:
@@ -278,6 +282,8 @@ class Charm(object):
         em.startMeasuringTime()
       obj.__init__(*args)              # now call the user's __init__
       self.groups[gid] = obj
+      if b'block' in header:
+        obj.contribute(None, None, header[b'block'])
       if Options.PROFILING:
         em.stopMeasuringTime()
         if len(self.mainchareEmStack) > 0:
@@ -312,6 +318,8 @@ class Charm(object):
             self.runningEntryMethod.stopMeasuringTime()
           em.startMeasuringTime()
         obj.__init__(*args)         # now call the user's array element __init__
+        if b'block' in header:
+          obj.contribute(None, None, header[b'block'])
         if Options.PROFILING:
           em.stopMeasuringTime()
           if len(self.mainchareEmStack) > 0:
@@ -540,6 +548,11 @@ class Charm(object):
     contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
     if Options.PROFILING: self.recordSend(contributeInfo.getDataSize())
     target.__self__.ckContribute(contributeInfo)
+
+  def awaitCreation(self, *proxies):
+    for proxy in proxies:
+      proxy.creation_future.get()
+      del proxy.creation_future
 
   def recordSend(self, size):
     # TODO? might be better (certainly more memory efficient) to update msg stats
@@ -860,10 +873,16 @@ def group_proxy_method_gen(ep): # decorator, generates proxy entry methods
 def group_ckNew_gen(C, epIdx):
   @classmethod    # make ckNew a class (not instance) method of proxy
   def group_ckNew(cls, args):
-    #print("GROUP calling ckNew for class " + C.__name__ + " cIdx= " + C.idx[GROUP], "epIdx=", epIdx)
-    msg = charm.packMsg(None, args, {})
+    #print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
+    header, creation_future = {}, None
+    if get_ident() != charm.threadMgr.main_thread_id and ArrayMap not in C.mro():
+      creation_future  = charm.createFuture()
+      header[b'block'] = creation_future
+    msg = charm.packMsg(None, args, header)
     gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
-    return charm.groups[gid].thisProxy # return instance of Proxy
+    proxy = charm.groups[gid].thisProxy
+    proxy.creation_future = creation_future
+    return proxy
   return group_ckNew
 
 def group_proxy_contribute(proxy, contributeInfo):
@@ -967,9 +986,17 @@ def array_ckNew_gen(C, epIdx):
 
     map_gid = -1
     if map is not None: map_gid = map.gid
-    msg = charm.packMsg(None, args, {})
+
+    header, creation_future = {}, None
+    if get_ident() != charm.threadMgr.main_thread_id:
+      creation_future  = charm.createFuture()
+      header[b'block'] = creation_future
+
+    msg = charm.packMsg(None, args, header)
     aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid)
-    return cls(aid, len(dims)) # return instance of Proxy
+    proxy = cls(aid, len(dims))
+    proxy.creation_future = creation_future
+    return proxy
   return array_ckNew
 
 def array_ckInsert_gen(epIdx):

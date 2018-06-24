@@ -19,5 +19,8 @@ def main(args):
     # among all cores by the runtime
     my_2d_array = Array(MyChare, (2, 2))
 
+    charm.awaitCreation(my_group, my_array, my_2d_array)
+    charm.exit()
+
 if __name__ == '__main__':
     charm.start(main)
