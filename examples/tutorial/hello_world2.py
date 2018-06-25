@@ -1,17 +1,19 @@
-# examples/tutorial/hello_world.py
+# examples/tutorial/hello_world2.py
 from charmpy import Chare, Group, charm
 
 class Hello(Chare):
 
-    def SayHi(self):
+    def SayHi(self, future):
         print("Hello World from element", self.thisIndex)
+        self.contribute(None, None, future)
 
 def main(args):
     # create Group of Hello objects (one object exists and runs on each core)
     hellos = Group(Hello)
     # call method 'SayHello' of all group members, wait for method to be invoked on all
-    hellos.SayHi(ret=True).get()
+    f = charm.createFuture()
+    hellos.SayHi(f)
+    f.get()
     charm.exit()
 
 charm.start(main)
-

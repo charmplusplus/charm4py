@@ -1,8 +1,6 @@
 from charmpy import charm, Chare, Group, Reducer
 
 class MyChare(Chare):
-    def __init__(self):
-      pass
 
     def work(self, data):
         self.contribute(data, Reducer.sum, self.thisProxy[0].collectResult)

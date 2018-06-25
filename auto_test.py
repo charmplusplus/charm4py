@@ -61,13 +61,14 @@ tests.append(['examples/hello/array_hello.py'])
 tests.append(['examples/hello/dynamic_array.py'])
 tests.append(['examples/hello/cons_args_hello.py'])
 tests.append(['examples/multi-module/main.py'])
-tests.append(['examples/particle/particle.py'])
+tests.append(['examples/particle/particle.py', '+balancer', 'GreedyRefineLB'])
 tests.append(['examples/stencil3d/stencil3d_numba.py', '64', '32', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
 tests.append(['examples/wave2d/wave2d.py', '1500'])
 tests.append(['examples/tutorial/start.py'])
 tests.append(['examples/tutorial/chares.py'])
 tests.append(['examples/tutorial/reduction.py'])
 tests.append(['examples/tutorial/hello_world.py'])
+tests.append(['examples/tutorial/hello_world2.py'])
 
 commonArgs = ['++local', '+p4']
 
