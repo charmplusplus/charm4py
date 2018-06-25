@@ -1,6 +1,5 @@
 # Port of examples/charm++/load_balancing/stencil3d from Charm++ codebase
 # This version uses NumPy and Numba
-# NOTE: set LBPeriod very small so that AtSync doesn't wait
 
 from charmpy import charm, Chare, Group, Array, when
 from charmpy import readonlies as ro

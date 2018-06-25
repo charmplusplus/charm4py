@@ -10,7 +10,7 @@ Program start and exit
 ----------------------
 
 To start a Charm program, you need to invoke the ``charm.start(entry)`` method.
-We will begin with a simple usage pattern [#]_:
+We will begin with a simple example:
 
 .. code-block:: python
 
@@ -42,8 +42,12 @@ number on which the caller resides.
 ``charm.exit()`` is called to exit a Charm program. It can be called from any chare
 on any processor.
 
-.. [#] More advanced use cases like what to do if Chares are defined in multiple
-       modules are discussed in the manual.
+If a program defines new Chare types in files other than the one used to launch the
+application, the user needs to pass the names of those modules. For example:
+
+.. code-block:: python
+
+    charm.start(main, ['module1', 'module2'])
 
 Defining Chares
 ---------------
@@ -117,7 +121,7 @@ This is the output for 2 PEs:
 It is important to note that creation of chares across the system happens asynchronously.
 In other words, when the above calls to create collections return,
 the chares have not yet been created on all PEs. The ``awaitCreation`` method is
-used to wait for all the chares in the specified collections to be created in the system.
+used to wait for all the chares in the specified collections to be created.
 
 .. note::
     Chares can be created at any point once the Charm *main* function has been reached.
@@ -183,7 +187,7 @@ resource utilization (which translates to more speed). Note that this does not m
 that we cannot obtain a result from a remote chare as a result of calling
 one of its methods. There are two ways of doing this:
 
-**1. Using Futures:**
+*1. Using Futures:*
 
 The user can request to obtain a future_ as a result of calling a remote method, by
 using the keyword ``ret``:
@@ -194,17 +198,22 @@ using the keyword ``ret``:
 .. code-block:: python
 
     def work(self):
-        # call method 'apply' of chare with index (10,10), requesting a future
-        future = my_array[10,10].apply(3, ret=True)
+        # call method 'apply' of chares with index (10,10) and (20,20), requesting futures
+        future1 = my_array[10,10].apply(3, ret=True)
+        future2 = my_array[20,20].apply(3, ret=True)
+
         # ... do more work ...
-        # I need the result now, call 'get' to obtain it. Will block until it arrives,
+
+        # I need the results now, call 'get' to obtain them. Will block until they arrive,
         # or return immediately if the result has already arrived
-        x = future.get()
+        x = future1.get()
+        y = future2.get()
+
         # call 'apply' and block until result arrives
-        y = my_array[10,10].apply(5, ret=True).get()
+        z = my_array[10,10].apply(5, ret=True).get()
 
     def apply(self, x):
-        self.data += x  # apply parameter
+        self.data += x          # apply parameter
         return self.data.copy() # return result to caller
 
 The ``get`` method of a future will block the thread on the caller side while it waits for the result, but it
@@ -212,7 +221,7 @@ is important to note that it does not block the whole process. Other available w
 the process (including of the same chare that blocked) will continue to be executed.
 
 
-**2. With remote method invocation:**
+*2. With remote method invocation:*
 
 .. code-block:: python
 
