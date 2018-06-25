@@ -33,7 +33,7 @@ The main function runs on only one processor, typically processor 0, and is in c
 of creating and distributing work across the system. The main function must take
 one argument to get the list of command-line arguments.
 In this example, we are specifying the
-function ``main`` as the main function by passing it to ``start`` method.
+function ``main`` as the main function by passing it to the ``start`` method.
 
 The method ``numPes`` returns the number of processors (aka Processing Elements) on
 which the distributed program is running. The method ``myPe`` returns the processor
@@ -56,13 +56,14 @@ To define a Chare, simply define a class that is a subclass of ``Chare``.
     from charmpy import Chare
 
     class MyChare(Chare):
+
         def __init__(self):
-            pass
+            # user initialization code here
 
         def work(self, data):
             # ... do something ...
 
-Methods of ``MyChare`` will be remotely callable by other chares.
+Any methods of ``MyChare`` will be remotely callable by other chares.
 
 For easy management of distributed objects, the user can organize chares into distributed collections:
 
@@ -91,11 +92,13 @@ For easy management of distributed objects, the user can organize chares into di
         # among all cores by the runtime
         my_2d_array = Array(MyChare, (2, 2))
 
+        charm.awaitCreation(my_group, my_array, my_2d_array)
+        charm.exit()
+
     charm.start(main)
 
 The above program will create P + 3 + 2\*2 chares and print a message for each created
 chare, where P is the number of processors used to launch the program.
-
 This is the output for 2 PEs:
 
 .. code-block:: text
@@ -111,11 +114,13 @@ This is the output for 2 PEs:
     Hello from MyChare instance in processor 1
     Hello from MyChare instance in processor 1
 
-If running the example, note that it will not exit because a suitable exit point has
-not been defined (more on this below). For now, press CTRL-C to exit.
+It is important to note that creation of chares across the system happens asynchronously.
+In other words, when the above calls to create collections return,
+the chares have not yet been created on all PEs. The ``awaitCreation`` method is
+used to wait for all the chares in the specified collections to be created in the system.
 
 .. note::
-    Chares can be created at any point **after** the Charm *main* function has been reached.
+    Chares can be created at any point once the Charm *main* function has been reached.
 
 Remote method invocation
 ------------------------
@@ -167,18 +172,52 @@ The above also applies to Chare Arrays. In the case of N-dimensional array index
 
     my_array[10,10].work(x)	# call 'work' on element (10,10)
 
-By default, method invocation is *asynchronous*, i.e. it returns immediately without
-waiting for the actual method to be invoked on the remote object, and therefore
-without returning any result. Asynchronous method invocation is desirable in many
-cases because it leads to better overlap of computation and communication and better
+.. tip::
+    Proxies can be sent to other chares as arguments of methods.
+
+For performance reasons, method invocation is always *asynchronous* in Charmpy, i.e. methods
+return immediately without waiting for the actual method to be invoked on the remote
+object, and therefore without returning any result. Asynchronous method invocation
+is desirable because it leads to better overlap of computation and communication, and better
 resource utilization (which translates to more speed). Note that this does not mean
 that we cannot obtain a result from a remote chare as a result of calling
-one of its methods. For example:
+one of its methods. There are two ways of doing this:
+
+**1. Using Futures:**
+
+The user can request to obtain a future_ as a result of calling a remote method, by
+using the keyword ``ret``:
+
+.. _future: https://en.wikipedia.org/wiki/Futures_and_promises
+
+
+.. code-block:: python
+
+    def work(self):
+        # call method 'apply' of chare with index (10,10), requesting a future
+        future = my_array[10,10].apply(3, ret=True)
+        # ... do more work ...
+        # I need the result now, call 'get' to obtain it. Will block until it arrives,
+        # or return immediately if the result has already arrived
+        x = future.get()
+        # call 'apply' and block until result arrives
+        y = my_array[10,10].apply(5, ret=True).get()
+
+    def apply(self, x):
+        self.data += x  # apply parameter
+        return self.data.copy() # return result to caller
+
+The ``get`` method of a future will block the thread on the caller side while it waits for the result, but it
+is important to note that it does not block the whole process. Other available work in
+the process (including of the same chare that blocked) will continue to be executed.
+
+
+**2. With remote method invocation:**
 
 .. code-block:: python
 
     # --- in chare 0 ---
-    def doWork(self):
+    def work(self):
         group[1].apply(3) # tell chare 1 to apply 3 to its data, returns immediately
 
     def storeResult(self, data):
@@ -190,31 +229,12 @@ one of its methods. For example:
       self.data += x  # apply parameter
       group[0].storeResult(self.data.copy())  # return result to caller
 
-However, the user can also invoke methods synchronously if desired (e.g. to more
-conveniently wait for a result) by using the keyword ``block``:
-
-.. code-block:: python
-
-    # wait for a value from chare with index (10,10)
-    x = my_array[10,10].apply(3, block=True)
-
-    def apply(self, x):
-      self.data += x  # apply parameter
-      return self.data.copy() # return result to caller
-
-This will block the thread on the caller side while it waits for the result, but it
-is important to note that it does not block the whole process. Other available work
-(including of the same chare that blocked) will continue to be executed.
-
-.. tip::
-    Proxies can be sent to other chares as arguments of methods. We will see this in
-    the *Hello World* example below.
 
 Reductions 101
 --------------
 
 Reductions can be performed by members of a collection with the result being sent to
-any chare of your choice.
+any chare or future of your choice.
 
 .. code-block:: python
 
@@ -301,56 +321,68 @@ Now we will show a full *Hello World* example, that prints a message from all pr
 
     class Hello(Chare):
 
-        def SayHi(self, main):
+        def SayHi(self):
             print("Hello World from element", self.thisIndex)
-            # contribute to empty reduction to end program
-            self.contribute(None, None, main.done)
 
-    class Main(Chare):
+    def main(args):
+        # create Group of Hello objects (one object exists and runs on each core)
+        hellos = Group(Hello)
+        # call method 'SayHello' of all group members, wait for method to be invoked on all
+        hellos.SayHi(ret=True).get()
+        charm.exit()
 
-        def __init__(self, args):
-            # create Group of Hello objects (one object exists and runs on each core)
-            hellos = Group(Hello)
-            # call method 'SayHello' of all group members, passing proxy to myself
-            hellos.SayHi(self.thisProxy)
-
-        # called when every element has contributed
-        def done(self):
-            charm.exit()
-
-    charm.start(Main)
+    charm.start(main)
 
 
 
-Here, we are using a chare to start the program instead of a function.
-In this mode, the given chare is initialized on PE 0 and its constructor serves as the
-Charm *main* function.
-This type of chare (aka "main chare") is also frequently used as a program exit point.
-
-The ``Main`` chare requests the creation of a ``Group`` of chares of type ``Hello``.
-Here it is important to note that group creation is asynchronous and as
+The *main* function requests the creation of a ``Group`` of chares of type ``Hello``.
+As explained above, group creation is asynchronous and as
 such the chares in the group have not been created yet when the call returns.
-It then tells all the members of the group to say hello, also passing a proxy to
-itself (``self.thisProxy``).
+Next, *main* tells all the members of the group to say hello, and blocks until
+the method is invoked on all members, because we don't want to exit the program
+until this happens. This is achieved by requesting a future (using
+``ret=True``), and waiting until the future resolves by calling ``get``.
 
-When the method is invoked on the remote chares, they print their message along
+When the ``SayHi`` method is invoked on the remote chares, they print their message along
 with their index in the collection (which is stored in the attribute ``thisIndex``).
 For groups, the index is an ``int`` and coincides with the PE number on which the chare
 is located. For arrays, the index is a ``tuple``.
 
-We want to exit the program only after all the chares have printed their message.
-However, since they reside on different processes, we need to communicate this
-fact to a central point.
-To know when they have concluded,
-we could have each of them individually send a message to ``main`` using its proxy.
-However, we use an "empty" reduction (with no data) instead. A reduction is preferable
-because, like explained earlier, they are optimized to be scalable on very large systems,
-and also because it removes bookkeeping burden from the programmer, as the target
-receives only one method invocation as opposed to N, where N is the number of elements
-in the collection.
+In this example, the runtime internally performs a reduction to know when all the group
+elements have concluded and sends the result to the *future*. The same effect can be achieved
+explicitly by the user like this:
 
+.. code-block:: python
 
-This is an example of the output running of 4 processors:
+    # examples/tutorial/hello_world2.py
+    from charmpy import Chare, Group, charm
+
+    class Hello(Chare):
+
+        def SayHi(self, future):
+            print("Hello World from element", self.thisIndex)
+            self.contribute(None, None, future)
+
+    def main(args):
+        # create Group of Hello objects (one object exists and runs on each core)
+        hellos = Group(Hello)
+        # call method 'SayHello' of all group members, wait for method to be invoked on all
+        f = charm.createFuture()
+        hellos.SayHi(f)
+        f.get()
+        charm.exit()
+
+    charm.start(main)
+
+As we can see, here the user explicitly creates a future and sends it to the group,
+who then initiate a reduction using the future as reduction target.
+
+Note that using a reduction to know when all the group members have finished is preferable
+to sending multiple point-to-point messages because, like explained earlier,
+reductions are optimized to be scalable on very large systems,
+and also simplify code.
+
+This is an example of the output of Hello World running of 4 processors:
 
 .. code-block:: text
 
