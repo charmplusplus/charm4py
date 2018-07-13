@@ -33,6 +33,12 @@ def searchForPython(python_implementations):
 # ----------------------------------------------------------------------------------
 TIMEOUT=60  # in seconds
 
+try:
+  import numba
+  numbaInstalled = True
+except:
+  numbaInstalled = False
+
 tests = []
 tests.append(['tests/array_maps/test1.py'])
 tests.append(['tests/when/when_test.py'])
@@ -62,8 +68,11 @@ tests.append(['examples/hello/dynamic_array.py'])
 tests.append(['examples/hello/cons_args_hello.py'])
 tests.append(['examples/multi-module/main.py'])
 tests.append(['examples/particle/particle.py', '+balancer', 'GreedyRefineLB'])
-tests.append(['examples/stencil3d/stencil3d_numba.py', '64', '32', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
-tests.append(['examples/wave2d/wave2d.py', '1500'])
+if numbaInstalled:
+  tests.append(['examples/stencil3d/stencil3d_numba.py', '64', '32', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
+  tests.append(['examples/wave2d/wave2d.py', '1500'])
+else:
+  tests.append(['examples/stencil3d/stencil3d.py', '16', '8', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
 tests.append(['examples/tutorial/start.py'])
 tests.append(['examples/tutorial/chares.py'])
 tests.append(['examples/tutorial/reduction.py'])
