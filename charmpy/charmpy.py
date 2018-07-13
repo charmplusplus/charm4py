@@ -639,7 +639,7 @@ class Charm(object):
   # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
   def myPe(self): return self._myPe
   def numPes(self): return self._numPes
-  def exit(self): self.lib.CkExit()
+  def exit(self, exitCode=0): self.lib.CkExit(exitCode)
   def abort(self, msg): self.lib.CkAbort(msg)
   def LBTurnInstrumentOn(self):  self.lib.LBTurnInstrumentOn()
   def LBTurnInstrumentOff(self): self.lib.LBTurnInstrumentOff()

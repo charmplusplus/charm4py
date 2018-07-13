@@ -557,7 +557,7 @@ class CharmLib(object):
 
     self.CkMyPe = self.lib.CkMyPeHook
     self.CkNumPes = self.lib.CkNumPesHook
-    self.CkExit = self.lib.CkExit
+    self.CkExit = self.lib.realCkExit
     self.CkPrintf = self.lib.CmiPrintf
 
   def CkAbort(self, msg):

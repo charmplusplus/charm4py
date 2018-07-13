@@ -7,7 +7,7 @@ cdef extern from "charm.h":
     int CkMyPeHook();
     int CkNumPesHook();
     double CkWallTimerHook();
-    void CkExit();
+    void realCkExit(int exitcode);
     void CmiAbort(const char *);
     void CmiPrintf(const char *);
     void LBTurnInstrumentOn();

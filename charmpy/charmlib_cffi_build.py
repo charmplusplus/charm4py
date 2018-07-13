@@ -94,7 +94,7 @@ ffibuilder.cdef("""
     void StartCharmExt(int argc, char **argv);
     int CkMyPeHook();
     int CkNumPesHook();
-    void CkExit(void);
+    void realCkExit(int exitcode);
     void CmiAbort(const char *);
     void CmiPrintf(const char *);
     void LBTurnInstrumentOn();

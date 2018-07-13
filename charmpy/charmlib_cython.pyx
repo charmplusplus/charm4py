@@ -593,7 +593,7 @@ class CharmLib(object):
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
-  def CkExit(self): return CkExit()
+  def CkExit(self, exitCode): return realCkExit(exitCode);
   def CkPrintf(self, bytes msg): CmiPrintf(msg)
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
   def LBTurnInstrumentOn(self):  LBTurnInstrumentOn()
