@@ -20,6 +20,7 @@ import importlib
 import inspect
 import types
 import ckreduction
+import wait
 import array
 if sys.version_info[0] < 3:
     from thread import get_ident
@@ -38,7 +39,7 @@ class Options:
   PICKLE_PROTOCOL = -1    # -1 is highest protocol number
   LOCAL_MSG_OPTIM = True
   LOCAL_MSG_BUF_SIZE = 50
-  AUTO_FLUSH_WHEN = True
+  AUTO_FLUSH_WAIT_QUEUES = True
   QUIET = False
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form groups,
@@ -58,11 +59,33 @@ class EntryMethod(object):
     self.profile = profile  # true if profiling this entry method's times
     if profile: self.times = [0.0, 0.0, 0.0]    # (time inside entry method, py send overhead, py recv overhead)
 
-    self.isThreaded = False  # true if entry method runs in its own thread
-    self.whenAttrib = None   # name of chare attribute used to evaluate 'when' condition on msg receive
     method = getattr(C, name)
-    if hasattr(method, '_ck_threaded'): self.isThreaded = True
-    if hasattr(method, 'when_attrib_name'): self.whenAttrib = getattr(method, 'when_attrib_name')
+
+    if hasattr(method, '_ck_threaded'):
+      self.isThreaded = True  # true if entry method runs in its own thread
+      self.run = self.run_threaded
+    else:
+      self.isThreaded = False
+      self.run = self.run_non_threaded
+
+    self.when_cond = None
+    if hasattr(method, 'when_cond'):
+      # template object specifying the 'when' condition clause for this entry method
+      self.when_cond = getattr(method, 'when_cond')
+
+  def run_threaded(self, obj, header, args):
+    """ run entry method of the given object in its own thread """
+    charm.threadMgr.startThread(obj, self, args, header)
+
+  def run_non_threaded(self, obj, header, args):
+    """ run entry method of the given object in main thread """
+    ret = getattr(obj, self.name)(*args)
+    if b'block' in header:
+      blockFuture = header[b'block']
+      if b'bcast' in header:
+        obj.contribute(None, None, blockFuture)
+      else:
+        blockFuture.send(ret) # send result back to remote
 
   def startMeasuringTime(self):
     charm.runningEntryMethod = self
@@ -88,6 +111,12 @@ class EntryMethod(object):
 
   def addRecvTime(self, t):
     self.times[2] += t
+
+  def __getstate__(self):
+    return self.epIdx
+
+  def __setstate__(self, ep):
+    self.__dict__.update(charm.entryMethods[ep].__dict__)
 
 
 class __ReadOnlies(object): pass
@@ -185,6 +214,10 @@ class Charm(object):
       # replace these methods with the fast cython versions
       self.packMsg   = self.lib.packMsg
       self.unpackMsg = self.lib.unpackMsg
+    # cache of template condition objects for `chare.wait(cond_str)` calls
+    # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
+    # TODO: remove old/unused condition strings
+    self.wait_conditions = {}
 
   def handleGeneralError(self):
     import traceback
@@ -229,30 +262,23 @@ class Charm(object):
       em.addRecvTime(time.time() - t0)
       em.startMeasuringTime()
 
-    checkWhen = len(obj._when_buffer) > 0
-    if len(args) > 0: tag = args[0]
-    if (em.whenAttrib is not None) and (tag != getattr(obj, em.whenAttrib)):
-      # store, don't expect msg now
-      if ep not in obj._when_buffer: obj._when_buffer[ep] = defaultdict(list)
-      obj._when_buffer[ep][tag].append((args,header))
-      checkWhen = False # no entry method ran, so no need to check when buffers
-    elif not em.isThreaded:
-      self.mainThreadEntryMethod = em
-      ret = getattr(obj, em.name)(*args)  # invoke entry method
-      if b'block' in header:
-        blockFuture = header[b'block']
-        if b'bcast' in header:
-          obj.contribute(None, None, blockFuture)
-        else:
-          blockFuture.send(ret) # send result back to remote
+    if (em.when_cond is not None) and (not em.when_cond.evaluateWhen(obj, args)):
+      obj._waitEnqueue(em.when_cond, (0, em, header, args))
     else:
-      self.threadMgr.startThread(obj, em, args, header)
+      if not em.isThreaded:
+        self.mainThreadEntryMethod = em
+        ret = getattr(obj, em.name)(*args)  # invoke entry method
+        if b'block' in header:
+          blockFuture = header[b'block']
+          if b'bcast' in header:
+            obj.contribute(None, None, blockFuture)
+          else:
+            blockFuture.send(ret) # send result back to remote
+      else:
+        self.threadMgr.startThread(obj, em, args, header)
 
-    if Options.AUTO_FLUSH_WHEN and checkWhen:
-      obj._checkWhen = set(obj._when_buffer.keys())
-      if (ep in obj._checkWhen) and (tag == getattr(obj, em.whenAttrib)):
-        obj._checkWhen.remove(ep) # when attribute for this method hasn't changed, so no need to check
-      if len(obj._checkWhen) > 0: obj.__flushWhen__()
+      if Options.AUTO_FLUSH_WAIT_QUEUES and obj._cond_next is not None:
+        obj.__flush_wait_queues__()
 
     if Options.PROFILING: em.stopMeasuringTime()
 
@@ -674,14 +700,23 @@ def profile_send_function(func):
   return func_with_profiling
 
 # This decorator sets a 'when' condition for the chosen entry method 'func'.
-# It is used so that the entry method is invoked only if the chare's member
-# 'attrib_name' is equal to the first argument of the entry method.
+# It is used so that the entry method is invoked only when the condition is true.
 # Entry method is guaranteed to be invoked (for any message order) as long as there
-# are messages satisfying the condition if AUTO_FLUSH_WHEN = True. Otherwise user
-# must call chare.flushWhen() when a chare modifies its condition attribute
-def when(attrib_name):
+# are messages satisfying the condition if AUTO_FLUSH_WAIT_QUEUES = True. Otherwise user
+# must manually call chare.__flush_wait_queues__() when the condition becomes true
+def when(cond_str):
   def _when(func):
-    func.when_attrib_name = attrib_name
+    import ast
+    # check cond_str for syntax errors
+    syntax_tree = ast.parse(cond_str)
+    if 'args[' in cond_str:
+      tag_cond = wait.is_tag_cond(syntax_tree)
+      if tag_cond is not None:
+        func.when_cond = wait.MsgTagCond(tag_cond[0], tag_cond[1], tag_cond[2])
+      else:
+        func.when_cond = wait.ChareStateMsgCond(cond_str)
+    else:
+      func.when_cond = wait.ChareStateCond(cond_str, charm)
     return func
   return _when
 
@@ -712,7 +747,11 @@ class Chare(object):
     self._local = [i for i in range(1, Options.LOCAL_MSG_BUF_SIZE+1)]
     self._local[-1] = None
     self._local_free_head = 0
-    self._when_buffer = {}
+    # stores condition objects which group all elements waiting on same condition string
+    self._active_grp_conds = {}
+    # linked list of active wait condition objects
+    self._cond_next = None
+    self._cond_last = self
     self._chare_initialized = True
 
   def __addLocal__(self, msg):
@@ -728,35 +767,52 @@ class Chare(object):
     self._local_free_head = tag
     return msg
 
-  def flushWhen(self):
-    if len(self._when_buffer) > 0:
-      self._checkWhen = set(self._when_buffer.keys())
-      self.__flushWhen__()
-      self._checkWhen = set()
-
-  def __flushWhen__(self):
-    for ep in self._checkWhen:
-      em = charm.entryMethods[ep]
-      msgs = self._when_buffer[ep]
-      method = getattr(self, em.name)
-      while True:
-        attrib = getattr(self, em.whenAttrib)
-        msgs_now = msgs.pop(attrib, []) # check if expected msgs are stored
-        if len(msgs_now) == 0:
-          if len(msgs) == 0: self._when_buffer.pop(ep)
-          break
-        if not em.isThreaded:
-          for m, header in msgs_now:
-            ret = method(*m)
-            if b'block' in header:
-              blockFuture = header[b'block']
-              if b'bcast' in header:
-                self.contribute(None, None, blockFuture)
-              else:
-                blockFuture.send(ret) # send result back to remote
+  def __flush_wait_queues__(self):
+    while True:
+      # go through linked list of active wait condition objects
+      cond, prev = self._cond_next, self
+      if cond is None: break
+      dequeued = False
+      while cond is not None:
+        deq, done = cond.check(self)
+        dequeued |= deq
+        if done:
+          # all elements waiting on this condition have been flushed, remove the condition
+          prev._cond_next = cond._cond_next
+          if cond == self._cond_last:
+            self._cond_last = prev
+          if cond.group:
+            del self._active_grp_conds[cond.cond_str]
         else:
-          for m,header in msgs_now:
-            charm.threadMgr.startThread(self, em, m, header)
+          prev = cond
+        cond = cond._cond_next
+      if not dequeued: break
+      # if I dequeued waiting elements, chare state might have changed as a result of
+      # activating them, so I need to continue flushing wait queues
+
+  def _waitEnqueue(self, cond_template, elem):
+    cond_str = cond_template.cond_str
+    if cond_template.group and cond_str in self._active_grp_conds:
+      self._active_grp_conds[cond_str].enqueue(elem)
+    else:
+      c = cond_template.createWaitCondition()
+      c.enqueue(elem)
+      # add to end of linked list of wait condition objects
+      self._cond_last._cond_next = c
+      self._cond_last = c
+      c._cond_next = None
+      if cond_template.group:
+        self._active_grp_conds[cond_str] = c
+
+  def wait(self, cond_str):
+    if cond_str not in charm.wait_conditions:
+      cond_template = wait.ChareStateCond(cond_str, charm)
+      charm.wait_conditions[cond_str] = cond_template
+    else:
+      cond_template = charm.wait_conditions[cond_str]
+    if not cond_template.cond_func(self):
+      self._waitEnqueue(cond_template, (1, get_ident()))
+      charm.threadMgr.pauseThread()
 
   def contribute(self, data, reducer_type, target):
     charm.contribute(data, reducer_type, target, self)
