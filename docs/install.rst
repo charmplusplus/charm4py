@@ -9,7 +9,7 @@ Requirements
 
   - Python 2.7 or 3.3+. Python 3 is *highly* recommended for best performance, and
     for continued support.
-    Charmpy has been tested with the following implementations: CPython (most common
+    CharmPy has been tested with the following implementations: CPython (most common
     Python implementation) and PyPy_.
 
   - `Charm++`_ shared library. See below for instructions on building the shared library.
@@ -17,7 +17,7 @@ Requirements
   - (Optional, but *recommended*): Cython_ allows compilation of parts of the runtime,
     and is highly recommended for best performance.
 
-  - Charmpy can run on the wide variety of systems supported by Charm++, which includes
+  - CharmPy can run on the wide variety of systems supported by Charm++, which includes
     many supercomputers in the TOP500.
     To date it has been tested on Linux (including the `Windows Subsystem for Linux`_),
     Windows, macOS and Cray XC/XE.
@@ -30,10 +30,10 @@ Requirements
 
 .. _Windows Subsystem for Linux: https://docs.microsoft.com/en-us/windows/wsl/about
 
-Download Charmpy
+Download CharmPy
 ----------------
 
-Get the Charmpy source code here_.
+Get the CharmPy source code here_.
 
 .. _here: https://github.com/UIUC-PPL/charmpy
 
@@ -58,11 +58,11 @@ you will need these packages: ``autoconf``, ``automake``, and a C++ compiler.
 
 Linux::
 
-    $ ./build charmpy netlrts-linux-x86_64 -j4 --with-production
+    $ ./build charmpy netlrts-linux-x86_64 tcp -j4 --with-production
 
 macOS::
 
-    $ ./build charmpy netlrts-darwin-x86_64 -j4 --with-production
+    $ ./build charmpy netlrts-darwin-x86_64 tcp -j4 --with-production
 
 .. note::
     Charm++ can be built on specialized enviroments, like Cray XE, and you can refer to the
@@ -74,15 +74,15 @@ macOS::
 Updating the Charm++ shared library
 -----------------------------------
 
-If you update your version of Charmpy, you might find that it requires a more
-recent version of Charm++ (libcharm). Charmpy will inform the user if this is the case.
+If you update your version of CharmPy, you might find that it requires a more
+recent version of Charm++ (libcharm). CharmPy will inform the user if this is the case.
 
 In this situation, you can clone a recent version of Charm++ or update your git repository,
 and rebuild the library (as explained in the previous section).
 
-After this, make sure to rerun Charmpy :doc:`setup`.
+After this, make sure to rerun CharmPy :doc:`setup`.
 
-Using Charmpy with Cython
+Using CharmPy with Cython
 -------------------------
 
 The Cython layer is currently only supported with Python 3+.
@@ -95,7 +95,7 @@ In addition, development files for your Python distribution may be required
 usually provided by ``python3-dev`` or similar package.
 
 
-Using Charmpy with CFFI
+Using CharmPy with CFFI
 -----------------------
 
 CFFI is the recommended mode if using PyPy (note that ``cffi`` comes builtin with PyPy).
@@ -109,7 +109,7 @@ Typically, ``pip install cffi`` will suffice.
 
 .. note::
     If you have multiple versions of Python installed (e.g. python2, python3,
-    pypy), make sure CFFI is installed for the version that you will use to run Charmpy.
+    pypy), make sure CFFI is installed for the version that you will use to run CharmPy.
     For example, if you are installing CFFI with pip, make sure that you use the version of
     pip that corresponds to the interpreter you'll be using (for Python 3 it is ``pip3``
     by default on Ubuntu 16.04).

@@ -8,7 +8,7 @@ Prerequisites
 -------------
 
 1. Make sure that the Charm++ shared library can be found
-   and loaded by the system's dynamic linker before running Charmpy programs.
+   and loaded by the system's dynamic linker before running CharmPy programs.
 
    On Linux there are multiple ways to accomplish this. One way is::
 
@@ -20,16 +20,16 @@ Prerequisites
    If using the ``ctypes`` layer, verify that the path to the shared library is
    correct in ``charmpy.cfg``.
 
-2. The Charmpy module (``charmpy.py``) must be in the Python search path. One way to
+2. The CharmPy module (``charmpy.py``) must be in the Python search path. One way to
    set it is::
 
    $ export PYTHONPATH=path_to_charmpy_folder  # NOTE: the folder containing charmpy.py
 
-Launching Charmpy programs
+Launching CharmPy programs
 --------------------------
 
 There are many example programs included with this distribution.
-To launch Charmpy programs on a Linux or Mac desktop, use the ``charmrun`` binary
+To launch CharmPy programs on a Linux or Mac desktop, use the ``charmrun`` binary
 that was generated when building Charm++::
 
   $ ./charmrun +p4 /usr/bin/python3 examples/hello/group_hello.py ++local
@@ -37,11 +37,11 @@ that was generated when building Charm++::
 The charmrun option ``+pN`` specifies how many processors to run the program with. It
 will launch one process per processor.
 
-Charmpy programs accept the `same command-line parameters`_ as Charm++.
+CharmPy programs accept the `same command-line parameters`_ as Charm++.
 
-charmrun can also be used to launch a program on `a network of workstations`_.
+charmrun can also be used to launch a program on `a network of computers`_.
 
-.. _a network of workstations: http://charm.cs.illinois.edu/manuals/html/charm++/C.html#SECTION05330000000000000000
+.. _a network of computers: http://charm.cs.illinois.edu/manuals/html/charm++/C.html#SECTION05330000000000000000
 
 .. _same command-line parameters: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
 
@@ -50,15 +50,13 @@ Troubleshooting
 ---------------
 
 Issue
-    I get these or similar errors when launching a Charmpy program::
+    I get these or similar errors when launching a CharmPy program::
 
     ... libcharm.so: undefined symbol: __executable_start
     ... libcharm.so: undefined symbol: CkRegisterMainModule
 
 Solution
-    Please make sure that you have built Charm++ with these flags:
-    ``--build-shared --enable-charmpy``
-    See :doc:`install` for more information.
+    Please make sure that you have built Charm++ as explained in :doc:`install`.
 
 |
 
@@ -69,11 +67,9 @@ Issue
 Solution
     - If running **with** ``++local``:
 
-      Please make sure that you have built Charm++ with these flags:
-      ``--build-shared --enable-charmpy``
-      and that you are using the version of ``charmrun`` that is generated
-      with the above flags.
-      See :doc:`install` for more information.
+      Please make sure that you have built Charm++ as explained in :doc:`install`,
+      and that you are using the version of ``charmrun`` that is generated from
+      this build.
 
     - If running **without** ``++local``:
 
@@ -85,7 +81,7 @@ Solution
 
       If problems persist, this typically indicates that an error ocurred in
       the program before handling control to libcharm (e.g. a Python syntax
-      error). Please run with ``++local`` to debug.
+      error). You can run with ``++local`` to debug.
 
 Running with CFFI interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -97,7 +93,7 @@ Running with CFFI interface
 
      $ ln -s /path/to/libcharm.so /usr/local/lib
 
-  2. When executing a Charmpy program with the CFFI interface, if an error related
+  2. When executing a CharmPy program with the CFFI interface, if an error related
      to unsafe use of relative rpath libcharm.so appears, try the following::
 
      $ cd charmpy/__cffi_objs__

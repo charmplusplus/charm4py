@@ -1,19 +1,19 @@
 =======
-Charmpy
+CharmPy
 =======
 
-Charmpy is a high-level parallel and distributed programming framework with a simple
+CharmPy is a high-level parallel and distributed programming framework with a simple
 and powerful API, based on migratable Python objects and remote method invocation;
 built on top of an adaptive C/C++ runtime system providing *speed*, *scalability* and
 *dynamic load balancing*.
 
-Charmpy allows writing parallel and distributed applications in Python based on
+CharmPy allows writing parallel and distributed applications in Python based on
 the `Charm++ programming model`_. Charm++ has seen extensive use in the
 scientific and high performance computing (HPC) communities across a wide variety of
 computing disciplines, and has been used to produce several large parallel applications
 that run on the largest supercomputers, like NAMD_.
 
-With Charmpy, all the application code can be written in Python. The core Charm++
+With CharmPy, all the application code can be written in Python. The core Charm++
 runtime is implemented in a C/C++ shared library which the ``charmpy``
 module interfaces with.
 
@@ -24,9 +24,9 @@ instructions using Numba_; or accessing C or Fortran code using f2py_.
 Another option for increased speed is to run the program using a fast Python
 implementation (e.g. PyPy_).
 
-We have found that using charmpy + numba, it is possible to build parallel applications
-entirely in Python that have the same or similar performance as the equivalent C++ Charm
-application, and that scale to hundreds of thousands of cores.
+We have found that using CharmPy + Numba, it is possible to build parallel applications
+entirely in Python that have the same or similar performance as the equivalent C++
+application (whether based on Charm++ or MPI), and that scale to hundreds of thousands of cores.
 
 Example applications are in the ``examples`` subdirectory.
 

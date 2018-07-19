@@ -21,7 +21,7 @@ increasing resource utilization and minimizing idle times [#]_.
 
 .. [#] We also refer to processors as cores.
 
-.. [#] Charmpy supports reference passing for objects in the same process,
+.. [#] CharmPy supports reference passing for objects in the same process,
        Cross Memory Attach for objects in the same host, RDMA for network communications,
        collectives optimized for network topology, among other performance features.
 ..       Please refer to section TODO for an explanation of these performance features.

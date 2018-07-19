@@ -51,15 +51,15 @@ class Test(Chare):
         self.gather(charm.myPe(), self.thisProxy.recvLocations)
 
     def recvLocations(self, locations):
-      loc = defaultdict(list)
-      for chare_idx, pe in enumerate(locations): loc[pe].append(chare_idx)
-      myPe = charm.myPe()
-      myPos = loc[myPe].index(self.thisIndex[0])
-      # i-th chare in a PE sends to i-th chare in PE-1 and PE+1 and to itself
-      nb1 = self.thisProxy[loc[(myPe - 1) % charm.numPes()][myPos]]
-      nb2 = self.thisProxy[loc[(myPe + 1) % charm.numPes()][myPos]]
-      self.nbs = [nb1, nb2, self.thisProxy[self.thisIndex]]
-      self.contribute(None, None, ro.mainProxy.start)
+        loc = defaultdict(list)
+        for chare_idx, pe in enumerate(locations): loc[pe].append(chare_idx)
+        myPe = charm.myPe()
+        myPos = loc[myPe].index(self.thisIndex[0])
+        # i-th chare in a PE sends to i-th chare in PE-1 and PE+1 and to itself
+        nb1 = self.thisProxy[loc[(myPe - 1) % charm.numPes()][myPos]]
+        nb2 = self.thisProxy[loc[(myPe + 1) % charm.numPes()][myPos]]
+        self.nbs = [nb1, nb2, self.thisProxy[self.thisIndex]]
+        self.contribute(None, None, ro.mainProxy.start)
 
     def doIteration(self):
         for nb in self.nbs:

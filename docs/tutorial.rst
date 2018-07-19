@@ -26,7 +26,7 @@ We will begin with a simple example:
         charm.start(main)
 
 
-We need to define an entry point to the Charmpy program, which we refer to as the
+We need to define an entry point to the CharmPy program, which we refer to as the
 Charm *main* function.
 In our example, it is the function called ``main`` .
 The main function runs on only one processor, typically processor 0, and is in charge
@@ -62,7 +62,7 @@ To define a Chare, simply define a class that is a subclass of ``Chare``.
     class MyChare(Chare):
 
         def __init__(self):
-            # user initialization code here
+            # chare initialization code here
 
         def work(self, data):
             # ... do something ...
@@ -179,7 +179,7 @@ The above also applies to Chare Arrays. In the case of N-dimensional array index
 .. tip::
     Proxies can be sent to other chares as arguments of methods.
 
-For performance reasons, method invocation is always *asynchronous* in Charmpy, i.e. methods
+For performance reasons, method invocation is always *asynchronous* in CharmPy, i.e. methods
 return immediately without waiting for the actual method to be invoked on the remote
 object, and therefore without returning any result. Asynchronous method invocation
 is desirable because it leads to better overlap of computation and communication, and better
@@ -287,13 +287,13 @@ to finish.
 Reductions are useful when data that is distributed among many objects across the
 system needs to be aggregated in some way, for example to obtain the maximum value
 in a distributed data set or to concatenate data in some fashion. The aggregation
-operations that are applied to the data are called *reducers*, and Charmpy includes
+operations that are applied to the data are called *reducers*, and CharmPy includes
 several built-in reducers (including ``sum``, ``max``, ``min``, ``product``, ``gather``),
 as well as allowing users to easily define their own custom reducers for use in reductions.
 Please refer to the manual for more information.
 
 Arrays (array.array_) and `NumPy arrays`_ can be passed as contribution to many of
-Charmpy's built-in reducers. The reducer will be applied to elements
+CharmPy's built-in reducers. The reducer will be applied to elements
 having the same index in the array. The size of the result will thus be the same as
 that of each contribution.
 
@@ -336,7 +336,7 @@ Now we will show a full *Hello World* example, that prints a message from all pr
     def main(args):
         # create Group of Hello objects (one object exists and runs on each core)
         hellos = Group(Hello)
-        # call method 'SayHello' of all group members, wait for method to be invoked on all
+        # call method 'SayHi' of all group members, wait for method to be invoked on all
         hellos.SayHi(ret=True).get()
         charm.exit()
 
@@ -375,7 +375,7 @@ explicitly by the user like this:
     def main(args):
         # create Group of Hello objects (one object exists and runs on each core)
         hellos = Group(Hello)
-        # call method 'SayHello' of all group members, wait for method to be invoked on all
+        # call method 'SayHi' of all group members, wait for method to be invoked on all
         f = charm.createFuture()
         hellos.SayHi(f)
         f.get()

@@ -10,7 +10,7 @@ class Hello(Chare):
 def main(args):
     # create Group of Hello objects (one object exists and runs on each core)
     hellos = Group(Hello)
-    # call method 'SayHello' of all group members, wait for method to be invoked on all
+    # call method 'SayHi' of all group members, wait for method to be invoked on all
     f = charm.createFuture()
     hellos.SayHi(f)
     f.get()

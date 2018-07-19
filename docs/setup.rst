@@ -4,8 +4,8 @@ Setup
 
 .. .. contents::
 
-Before Charmpy setup, please download and build the Charm++ shared library as explained
-in the previous section. Next, enter the Charmpy source code directory and run::
+Before CharmPy setup, please download and build the Charm++ shared library as explained
+in the previous section. Next, enter the CharmPy source code directory and run::
 
     $ python setup.py CHARM_DIR
 

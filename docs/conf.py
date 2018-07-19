@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Charmpy documentation build configuration file, created by
+# CharmPy documentation build configuration file, created by
 # sphinx-quickstart on Fri Jan 26 11:38:51 2018.
 #
 # This file is execfile()d with the current directory set to its
@@ -48,7 +48,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Charmpy'
+project = 'CharmPy'
 copyright = '2018, University of Illinois'
 author = 'Juan Galvez'
 

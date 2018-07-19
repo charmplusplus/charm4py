@@ -4,7 +4,7 @@ Benchmarks
 
 .. contents::
 
-This section presents Charmpy benchmark results using: (a) real examples and miniapps;
+This section presents CharmPy benchmark results using: (a) real examples and miniapps;
 (b) synthetic test cases to evaluate specific features.
 
 Mini-apps
@@ -13,9 +13,9 @@ Mini-apps
 LeanMD - Molecular Dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We have ported the LeanMD_ Charm++ mini-app to Charmpy, with all the code written
+We have ported the LeanMD_ Charm++ mini-app to CharmPy, with all the code written
 in Python. The physics functions are JIT compiled by Numba_. The code is currently
-available in the ``leanmd-experimental`` branch of Charmpy.
+available in the ``leanmd-experimental`` branch of CharmPy.
 
 Here we compare the performance between the C++ and Python versions.
 First we ran a *strong scaling* problem on `Blue Waters`_ with 8 million particles,
@@ -26,10 +26,10 @@ obtaining the following results:
    :width: 60%
    :align: center
 
-As we can see, the performance and scaling characteristics of Charmpy closely mimic
+As we can see, the performance and scaling characteristics of CharmPy closely mimic
 the behavior of the C++ program. The y axis is logarithmic scale, and we can see that
 performance scales linearly with the number of cores. The average performance difference
-between Charmpy and Charm++ is 19%.
+between CharmPy and Charm++ is 19%.
 
 We also ran a different problem size (51 million particles) and configuration to
 evaluate performance with very high core counts (131k cores on Blue Waters),
@@ -38,13 +38,13 @@ obtaining the following results:
 +---------------+----------------------+
 |    Version    |  Time per step (ms)  |
 +===============+======================+
-|  Charmpy      |      438             |
+|  CharmPy      |      438             |
 +---------------+----------------------+
 |  Charm++      |      458             |
 +---------------+----------------------+
 
-Here we can see that Charmpy performs better than C++. At this core count, parallel
-overhead becomes significant and Charmpy benefits from a feature that is not yet implemented
+Here we can see that CharmPy performs better than C++. At this core count, parallel
+overhead becomes significant and CharmPy benefits from a feature that is not yet implemented
 in the C++ version of Charm. The feature allows aggregation of receives to local objects
 in the same *section*, thus reducing overhead.
 
