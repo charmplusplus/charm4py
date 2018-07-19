@@ -19,7 +19,7 @@ The following computes Pi in parallel, using any number of machines and processo
 
 .. code-block:: python
 
-    from charmpy import charm, Chare, Group, Reducer
+    from charmpy import *
     from math import pi
     import time
 
@@ -42,8 +42,8 @@ The following computes Pi in parallel, using any number of machines and processo
         workers = Group(Worker)  # create one instance of Worker on every processor
         t0 = time.time()
         workers.work(n_steps, mypi)  # invoke 'work' method on every worker
-        print("Approximated value of pi is:", mypi.get(),  # 'get' blocks until result arrives
-              "Error is", abs(mypi.get() - pi), "Elapsed time=", time.time() - t0)
+        print('Approximated value of pi is:', mypi.get(),  # 'get' blocks until result arrives
+              'Error is', abs(mypi.get() - pi), 'Elapsed time=', time.time() - t0)
         charm.exit()
 
     charm.start(main)
