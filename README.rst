@@ -15,9 +15,11 @@ Please see the Documentation_.
 Short Example
 -------------
 
-The following computes Pi in parallel, using any number of machines and processors::
+The following computes Pi in parallel, using any number of machines and processors:
 
-    from charmpy import charm, Chare, Group, Reducer
+.. code-block:: python
+
+    from charmpy import *
     from math import pi
     import time
 
@@ -40,24 +42,24 @@ The following computes Pi in parallel, using any number of machines and processo
         workers = Group(Worker)  # create one instance of Worker on every processor
         t0 = time.time()
         workers.work(n_steps, mypi)  # invoke 'work' method on every worker
-        print("Approximated value of pi is:", mypi.get(),  # 'get' blocks until result arrives
-              "Error is", abs(mypi.get() - pi), "Elapsed time=", time.time() - t0)
+        print('Approximated value of pi is:', mypi.get(),  # 'get' blocks until result arrives
+              'Error is', abs(mypi.get() - pi), 'Elapsed time=', time.time() - t0)
         charm.exit()
 
     charm.start(main)
 
 
-This is a simple example and demonstrates only a few features CharmPy. Some things to note
+This is a simple example and demonstrates only a few features of CharmPy. Some things to note
 from this example:
 
-  - *Chares* are distributed Python objects.
-  - A *Group* is a type of distributed collection where one instance of the specified
-    chare type is created on each processor.
-  - Remote method invocation in CharmPy is *asynchronous*.
+- *Chares* are distributed Python objects.
+- A *Group* is a type of distributed collection where one instance of the specified
+  chare type is created on each processor.
+- Remote method invocation in CharmPy is *asynchronous*.
 
 In this example, there is only one chare per processor, but multiple chares (of the same
 or different type) can exist on any given processor, which can bring performance
-benefits. Please refer to the documentation for more information.
+benefits. Please refer to the documentation_ for more information.
 
 
 Contact
