@@ -59,7 +59,7 @@ from this example:
 
 In this example, there is only one chare per processor, but multiple chares (of the same
 or different type) can exist on any given processor, which can bring performance
-benefits. Please refer to the documentation for more information.
+benefits. Please refer to the documentation_ for more information.
 
 
 Contact
