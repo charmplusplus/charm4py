@@ -49,13 +49,13 @@ The following computes Pi in parallel, using any number of machines and processo
     charm.start(main)
 
 
-This is a simple example and demonstrates only a few features CharmPy. Some things to note
+This is a simple example and demonstrates only a few features of CharmPy. Some things to note
 from this example:
 
-  - *Chares* are distributed Python objects.
-  - A *Group* is a type of distributed collection where one instance of the specified
-    chare type is created on each processor.
-  - Remote method invocation in CharmPy is *asynchronous*.
+- *Chares* are distributed Python objects.
+- A *Group* is a type of distributed collection where one instance of the specified
+  chare type is created on each processor.
+- Remote method invocation in CharmPy is *asynchronous*.
 
 In this example, there is only one chare per processor, but multiple chares (of the same
 or different type) can exist on any given processor, which can bring performance
