@@ -15,7 +15,9 @@ Please see the Documentation_.
 Short Example
 -------------
 
-The following computes Pi in parallel, using any number of machines and processors::
+The following computes Pi in parallel, using any number of machines and processors:
+
+.. code-block:: python
 
     from charmpy import charm, Chare, Group, Reducer
     from math import pi
