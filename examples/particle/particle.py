@@ -76,7 +76,7 @@ class Cell(Chare):
         for nb in self.neighbors:
             self.thisProxy[nb].updateNeighbor(self.iteration, outgoingParticles[nb])
 
-    @when("iteration")
+    @when("self.iteration == iter")
     def updateNeighbor(self, iter, particles):
         self.particles += [Particle(float(particles[i]), float(particles[i+1])) for i in range(0,len(particles),2)]
         self.msgsRcvd += 1

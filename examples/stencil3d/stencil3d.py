@@ -127,7 +127,7 @@ class Stencil(Chare):
         # Send my back face
         self.thisProxy[i[0], i[1], (i[2]+1)%Z].receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)
 
-    @when("iterations")
+    @when("self.iterations == iteration")
     def receiveGhosts(self, iteration, direction, height, width, gh):
         self.processGhosts(direction, height, width, gh)
         self.msgsRcvd += 1

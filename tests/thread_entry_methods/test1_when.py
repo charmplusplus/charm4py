@@ -26,7 +26,7 @@ class Test(Chare):
         self.contribute(None, None, self.thisProxy[0].done)
 
     @threaded
-    @when("iteration")
+    @when("self.iteration == iteration")
     def getVal(self, iteration):
         result = 53 * ro.testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0] * self.iteration
         #assert result == 53 * (73 + charm.myPe()) * self.thisIndex[0] * self.iteration

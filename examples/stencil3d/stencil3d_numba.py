@@ -15,7 +15,7 @@ from charmpy import Options
 Options.PROFILING = False
 
 
-MAX_ITER = 1000
+MAX_ITER = 100
 LBPERIOD_ITER = 30     # LB is called every LBPERIOD_ITER number of program iterations
 CHANGELOAD = 30
 LEFT, RIGHT, TOP, BOTTOM, FRONT, BACK = range(6)
@@ -231,7 +231,7 @@ class Stencil(Chare):
         self.front_nb.receiveGhosts(self.iterations, BACK, blockDimX, blockDimY, frontGhost)  # Send my front face
         self.back_nb.receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)   # Send my back face
 
-    @when("iterations")
+    @when("self.iterations == iteration")
     def receiveGhosts(self, iteration, direction, height, width, gh):
         processGhosts_fast(self.temperature, direction, width, height, gh)
         self.msgsRcvd += 1
