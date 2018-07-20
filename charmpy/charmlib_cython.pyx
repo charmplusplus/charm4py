@@ -632,7 +632,9 @@ class CharmLib(object):
           msg.advance(buf_size)
       elif b"custom_reducer" in header:
         reducer = getattr(charm.reducers, header[b"custom_reducer"])
-        if reducer.hasPostprocess: args[0] = reducer.postprocess(args[0])
+        # reduction result won't always be in position 0, but will always be last
+        # (e.g. if reduction target is a future, the reduction result will be 2nd argument)
+        if reducer.hasPostprocess: args[-1] = reducer.postprocess(args[-1])
 
     return header, args
 

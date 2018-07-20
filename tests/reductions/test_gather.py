@@ -6,7 +6,7 @@ class Main(Chare):
   def __init__(self, args):
 
     self.recvdReductions = 0
-    self.expectedReductions = 4
+    self.expectedReductions = 5
 
     ro.nDims = 1
     ro.ARRAY_SIZE = [10] * ro.nDims
@@ -21,6 +21,9 @@ class Main(Chare):
     ro.grpProxy = Group(TestGroup)
     ro.arrProxy.doGather()
     ro.grpProxy.doGather()
+    red_future = charm.createFuture()
+    ro.arrProxy.doGather(red_future)
+    self.done_gather_single(red_future.get())
 
   def done_gather_single(self, result):
     gather_arr_indices = list(range(self.nElements))
@@ -44,11 +47,14 @@ class Test(Chare):
   def __init__(self):
     print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
 
-  def doGather(self):
-    # gather single elements
-    self.gather(self.thisIndex[0], ro.mainProxy.done_gather_single)
-    # gather arrays
-    self.gather(self.thisIndex, ro.mainProxy.done_gather_array)
+  def doGather(self, red_future=None):
+    if red_future is None:
+      # gather single elements
+      self.gather(self.thisIndex[0], ro.mainProxy.done_gather_single)
+      # gather arrays
+      self.gather(self.thisIndex, ro.mainProxy.done_gather_array)
+    else:
+      self.gather(self.thisIndex[0], red_future)
 
 class TestGroup(Chare):
   def __init__(self):
