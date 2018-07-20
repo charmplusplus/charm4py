@@ -187,13 +187,7 @@ def is_tag_cond(root_ast):
         if args.value.id != 'args':
             return None
 
-        if isinstance(args.slice.value, ast.UnaryOp):
-            if not isinstance(args.slice.value.op, ast.USub):
-                return None
-            else:
-                idx = -args.slice.value.operand.n
-        else:
-            idx = args.slice.value.n
+        idx = args.slice.value.n
         if not isinstance(idx, int):
             return None
 

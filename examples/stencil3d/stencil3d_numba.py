@@ -15,7 +15,7 @@ from charmpy import Options
 Options.PROFILING = False
 
 
-MAX_ITER = 1000
+MAX_ITER = 100
 LBPERIOD_ITER = 30     # LB is called every LBPERIOD_ITER number of program iterations
 CHANGELOAD = 30
 LEFT, RIGHT, TOP, BOTTOM, FRONT, BACK = range(6)
