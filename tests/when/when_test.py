@@ -12,7 +12,7 @@ class Test(Chare):
         self.msgsSent = 0   # for PEs != 0
         #print("Group constructed " + str(self.thisIndex))
 
-    @when("self.current == args[0]")
+    @when("self.current == id")
     def testWhen(self, id, msg):
         assert (charm.myPe() == 0) and (self.current == id) and (msg == "hi")
         print(str(id) + " " + str(self.msgsRcvd))

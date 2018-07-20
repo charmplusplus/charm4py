@@ -1,46 +1,79 @@
 from charmpy import charm
+import wait
+import re
 
-# NOTE: this is not really a charm program
+
+# This program tests that different types of @when conditional statements (given
+# by strings) are transformed into the correct objects (from wait module) that
+# handle that type of condition
+
+# NOTE: this is not a parallel program
+
+def parseMethodArgs(s):
+    arg_names = re.split(', *', s[1:-1])
+    method_args = {}
+    for i in range(1, len(arg_names)):
+      method_args[arg_names[i]] = i-1
+    return method_args
+
 
 def main(args):
 
-    import ast
-    import wait
+    when_cond = 'self.iterations == iter'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.MsgTagCond)
+    assert cond.attrib_name == 'iterations'
+    assert cond.arg_idx == 0
 
-    good = []
-    good.append(("self.xyz == args[0]", 'xyz', 0))
-    good.append(("self.xyz == args[3]", 'xyz', 3))
-    good.append(("self.xyz  ==  args[3 ]", 'xyz', 3))
-    good.append(("args[0] == self.xyz", 'xyz', 0))
-    good.append(("args[3] == self.abc", 'abc', 3))
-    good.append(("args[ 3 ] == self.abc", 'abc', 3))
-    good.append(("args[ 3]  ==   self.abc  ", 'abc', 3))
-    good.append(("args[-1]  ==  self.my_iterations", 'my_iterations', -1))
+    when_cond = 'self.x == x'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.MsgTagCond)
+    assert cond.attrib_name == 'x'
+    assert cond.arg_idx == 1
 
-    for cond_str, attrib_name, idx in good:
-        r = wait.is_tag_cond(ast.parse(cond_str))
-        assert (r is not None) and (r[1] == attrib_name) and (r[2] == idx), cond_str
+    when_cond = 'y    ==    self.x  '
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.MsgTagCond)
+    assert cond.attrib_name == 'x'
+    assert cond.arg_idx == 2
 
-    bad = []
-    bad.append("xyz")
-    bad.append("xyz == args[0]")
-    bad.append("args[3] == xyz")
-    bad.append("self.xyz <= args[0]")
-    bad.append("self.xyz + args[0]")
-    bad.append("self.xyz == abc")
-    bad.append("self.xyz == args[0] + args[1]")
-    bad.append("self.xyz == args[0")
-    bad.append("self.xyz == arg[0]")
-    bad.append("self.xyz == x[0]")
-    bad.append("self.xyz + 2 == args[0]")
+    when_cond = 'self.x == x + y'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateMsgCond)
 
-    for cond_str in bad:
-        try:
-            syntax_tree = ast.parse(cond_str)
-            r = wait.is_tag_cond(syntax_tree)
-        except:
-            r = None
-        assert r is None
+    when_cond = 'x < y'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateMsgCond)
+
+    when_cond = 'y == y'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateMsgCond)
+
+    when_cond = 'iter'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateMsgCond)
+
+    when_cond = 'self.x'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateCond)
+
+    when_cond = 'self.x + self.y == 3'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateCond)
+
+    when_cond = 'self.x > (self.y + 2/3 + self.z + error)'
+    method    = '(self, iter, x, y)'
+    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    assert isinstance(cond, wait.ChareStateCond)
 
     charm.exit()
 

@@ -72,6 +72,8 @@ class EntryMethod(object):
     if hasattr(method, 'when_cond'):
       # template object specifying the 'when' condition clause for this entry method
       self.when_cond = getattr(method, 'when_cond')
+      if isinstance(self.when_cond, wait.ChareStateMsgCond):
+        self.when_cond_func = self.when_cond.cond_func
 
   def run_threaded(self, obj, header, args):
     """ run entry method of the given object in its own thread """
@@ -699,6 +701,7 @@ def profile_send_function(func):
   if hasattr(func, 'ep'): func_with_profiling.ep = func.ep
   return func_with_profiling
 
+
 # This decorator sets a 'when' condition for the chosen entry method 'func'.
 # It is used so that the entry method is invoked only when the condition is true.
 # Entry method is guaranteed to be invoked (for any message order) as long as there
@@ -706,17 +709,10 @@ def profile_send_function(func):
 # must manually call chare.__flush_wait_queues__() when the condition becomes true
 def when(cond_str):
   def _when(func):
-    import ast
-    # check cond_str for syntax errors
-    syntax_tree = ast.parse(cond_str)
-    if 'args[' in cond_str:
-      tag_cond = wait.is_tag_cond(syntax_tree)
-      if tag_cond is not None:
-        func.when_cond = wait.MsgTagCond(tag_cond[0], tag_cond[1], tag_cond[2])
-      else:
-        func.when_cond = wait.ChareStateMsgCond(cond_str)
-    else:
-      func.when_cond = wait.ChareStateCond(cond_str, charm)
+    method_args = {}
+    for i in range(1, func.__code__.co_argcount):
+      method_args[func.__code__.co_varnames[i]] = i-1
+    func.when_cond = wait.parse_cond_str(cond_str, method_args)
     return func
   return _when
 
@@ -806,7 +802,7 @@ class Chare(object):
 
   def wait(self, cond_str):
     if cond_str not in charm.wait_conditions:
-      cond_template = wait.ChareStateCond(cond_str, charm)
+      cond_template = wait.ChareStateCond(cond_str)
       charm.wait_conditions[cond_str] = cond_template
     else:
       cond_template = charm.wait_conditions[cond_str]

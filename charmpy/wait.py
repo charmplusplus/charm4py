@@ -5,7 +5,7 @@ import ast
 # This condition object is used to match one argument of a @when entry method to
 # an attribute of a chare
 # Example:
-#           @when("self.cur_iteration == args[0]")
+#           @when("self.cur_iteration == iter")
 #           def method(self, iter, x, y, z)
 #               # invoke method only if self.cur_iteration == iter
 class MsgTagCond(object):
@@ -52,7 +52,7 @@ class MsgTagCond(object):
 
 # Manage a conditional statement involving a chare's state and the contents of a message
 # Example:
-#           @when("self.check == args[0] + args[1]")
+#           @when("self.check == x + y")
 #           def method(self, x, y, z)
 #               # invoke method only if self.check == x + y
 class ChareStateMsgCond(object):
@@ -60,9 +60,9 @@ class ChareStateMsgCond(object):
     # these condition objects don't group elements because each can have different msg arguments
     group = False
 
-    def __init__(self, cond_str):
+    def __init__(self, cond_str, cond_func):
         self.cond_str  = cond_str
-        self.cond_func = eval('lambda self, args: ' + cond_str)
+        self.cond_func = cond_func
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateMsgCond)
@@ -90,7 +90,8 @@ class ChareStateMsgCond(object):
 
     def __setstate__(self, state):
         self.cond_str, self.elem, self._cond_next = state
-        self.cond_func = eval('lambda self, args: ' + self.cond_str)
+        em = self.elem[1]
+        self.cond_func = em.when_cond_func
 
 
 # Conditional statements involving only a chare's state
@@ -109,7 +110,8 @@ class ChareStateCond(object):
 
     group = True
 
-    def __init__(self, cond_str, charm):
+    def __init__(self, cond_str):
+        from charmpy import charm
         self.charm     = charm
         self.cond_str  = cond_str
         self.cond_func = eval('lambda self: ' + cond_str)
@@ -162,13 +164,9 @@ def is_tag_cond(root_ast):
         integer. if True, returns the condition string, the name of the attribute
         (e.g. xyz) and the integer index (e.g. x). Otherwise returns None """
     try:
-        if len(root_ast.body) != 1:
+        if not isinstance(root_ast.body, ast.Compare):
             return None
-        expr = root_ast.body[0]
-        if not isinstance(expr, ast.Expr):
-            return None
-
-        compare = expr.value
+        compare = root_ast.body
         if (len(compare.ops) != 1) or (not isinstance(compare.ops[0], ast.Eq)):
             return None
 
@@ -202,3 +200,66 @@ def is_tag_cond(root_ast):
         return ('self.' + attrib.attr + ' == args[' + str(idx) + ']', attrib.attr, idx)
     except:
       return None
+
+
+class MsgArgsTransformer(ast.NodeTransformer):
+
+    def __init__(self, method_arguments):
+        self.method_arguments = method_arguments
+        self.num_msg_args = 0
+
+    def visit_Attribute(self, node):
+        if isinstance(node.value, ast.Name) and node.value.id in self.method_arguments and node.value.id != 'self':
+            idx = self.method_arguments[node.value.id]
+            self.num_msg_args += 1
+            return ast.copy_location(ast.Attribute(
+                value=ast.Subscript(
+                    value=ast.Name(id='args', ctx=ast.Load()),
+                    slice=ast.Index(value=ast.Num(n=idx)),
+                    ctx=node.ctx
+                ),
+                attr=node.attr,
+                ctx=node.ctx
+            ), node)
+        else:
+            return self.generic_visit(node)
+
+    def visit_Name(self, node):
+        if node.id in self.method_arguments:
+            idx = self.method_arguments[node.id]
+            self.num_msg_args += 1
+            return ast.copy_location(ast.Subscript(
+                value=ast.Name(id='args', ctx=ast.Load()),
+                slice=ast.Index(value=ast.Num(n=idx)),
+                ctx=node.ctx
+            ), node)
+        else:
+            return node
+
+#import astunparse
+
+def parse_cond_str(cond_str, method_arguments={}):
+
+    #print("Original condition string is", cond_str)
+    t = ast.parse(cond_str, filename='<string>', mode='eval')
+    if len(method_arguments) > 0:
+        # in the AST, convert names of method arguments to `args[x]`, where x is the
+        # position of the argument in the function definition
+        transformer = MsgArgsTransformer(method_arguments)
+        transformer.visit(t)
+        #print("Transformed to", astunparse.unparse(t), "num args detected=", transformer.num_msg_args)
+        if transformer.num_msg_args == 0:
+            return ChareStateCond(cond_str)
+    else:
+        return ChareStateCond(cond_str)
+
+    tag_cond = is_tag_cond(t)
+    if tag_cond is not None:
+        return MsgTagCond(*tag_cond)
+
+    # compile AST to code, then eval to a lambda function
+    new_tree = ast.parse("lambda self, args: x", filename='<string>', mode='eval')
+    new_tree.body.body = t.body
+    new_tree = ast.fix_missing_locations(new_tree)
+    lambda_func = eval(compile(new_tree, '<string>', 'eval'))
+    return ChareStateMsgCond(cond_str, lambda_func)

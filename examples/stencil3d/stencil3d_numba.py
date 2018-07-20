@@ -231,7 +231,7 @@ class Stencil(Chare):
         self.front_nb.receiveGhosts(self.iterations, BACK, blockDimX, blockDimY, frontGhost)  # Send my front face
         self.back_nb.receiveGhosts(self.iterations, FRONT, blockDimX, blockDimY, backGhost)   # Send my back face
 
-    @when("self.iterations == args[0]")
+    @when("self.iterations == iteration")
     def receiveGhosts(self, iteration, direction, height, width, gh):
         processGhosts_fast(self.temperature, direction, width, height, gh)
         self.msgsRcvd += 1

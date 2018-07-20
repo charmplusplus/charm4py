@@ -41,9 +41,9 @@ except:
 
 tests = []
 tests.append(['tests/array_maps/test1.py'])
+tests.append(['tests/when/test_when_syntax.py'])
 tests.append(['tests/when/when_test.py'])
 tests.append(['tests/when/when_test2.py'])
-tests.append(['tests/when/test_when_syntax.py'])
 tests.append(['tests/reductions/group_reduction.py'])
 tests.append(['tests/reductions/array_reduction.py'])
 tests.append(['tests/reductions/custom_reduction.py'])

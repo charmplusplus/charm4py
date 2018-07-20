@@ -12,7 +12,7 @@ class Worker(Chare):
         self.phase_cnt = 0
         self.done_future = done_future
 
-    @when("self.cur_id == args[0]")
+    @when("self.cur_id == id")
     def recv_id(self, id):
         #if self.thisIndex == 0:
         #    return self.contribute(None, None, self.done_future)
