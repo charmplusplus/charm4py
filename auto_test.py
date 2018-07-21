@@ -32,7 +32,8 @@ def searchForPython(python_implementations):
     python_implementations.add((3,py3_exec))
 
 # ----------------------------------------------------------------------------------
-TIMEOUT=60  # in seconds
+TIMEOUT = 60  # in seconds
+CHARM_QUIET_AFTER_NUM_TESTS = 4
 
 try:
   import numba
@@ -96,6 +97,7 @@ supported_py_versions = {'ctypes': {2, 3},
                          'cffi'  : {2, 3},
                          'cython': {3} }
 
+num_tests = 0
 durations = defaultdict(dict)
 for interface in interfaces:
   for test in tests:
@@ -106,11 +108,15 @@ for interface in interfaces:
     durations[interface][test[0]] = []
     for version,python in sorted(python_implementations):
       if version not in supported_py_versions[interface]: continue
+      additionalArgs = []
+      if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
+        additionalArgs.append('++quiet')
       cmd = ['./charmrun']
       cmd += [python]
       cmd += test
       cmd += commonArgs
       cmd += ['+p' + str(num_processes), '+libcharm_interface', interface]
+      cmd += additionalArgs
       print("Test command is " + str(cmd))
       startTime = time.time()
       p = subprocess.Popen(cmd)
@@ -127,8 +133,9 @@ for interface in interfaces:
         elapsed = round(time.time() - startTime,3)
         durations[interface][test[0]].append(elapsed)
         print("\n\n--------------------- TEST PASSED (in " + str(elapsed) + " secs) ---------------------\n\n")
+        num_tests += 1
 
-print("ALL TESTS PASSED")
+print("ALL TESTS (" + str(num_tests) + ") PASSED")
 print("Durations:")
 for interface in interfaces:
   print("\n---", interface, "---")
