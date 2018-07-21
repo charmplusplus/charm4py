@@ -1,0 +1,140 @@
+[
+    {
+        "force_min_processes": 4,
+        "path": "tests/array_maps/test1.py"
+    },
+    {
+        "path": "tests/when/test_when_syntax.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/when/when_test.py"
+    },
+    {
+        "path": "tests/when/when_test2.py"
+    },
+    {
+        "path": "tests/reductions/group_reduction.py"
+    },
+    {
+        "path": "tests/reductions/array_reduction.py"
+    },
+    {
+        "path": "tests/reductions/custom_reduction.py"
+    },
+    {
+        "path": "tests/reductions/test_gather.py"
+    },
+    {
+        "path": "tests/reductions/bench_reductions.py"
+    },
+    {
+        "path": "tests/dcopy/test_dcopy.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/element_proxy/array_element_proxy.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/element_proxy/group_element_proxy.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/collections/test.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/trees/topo_treeAPI.py"
+    },
+    {
+        "path": "tests/migration/test_migrate.py",
+        "args": "+balancer GreedyRefineLB +LBDebug 1"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/migration/chare_migration.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/test1.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/test1_when.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/test_main.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/future_reduction.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/future_bcast.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/test_wait.py"
+    },
+    {
+        "path": "tests/futures/test_futures.py"
+    },
+    {
+        "path": "tests/futures/multi_futures.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/group_hello.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/group_hello2.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/array_hello.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/dynamic_array.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/cons_args_hello.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/multi-module/main.py"
+    },
+    {
+        "path": "examples/particle/particle.py",
+        "args": "+balancer GreedyRefineLB"
+    },
+    {
+        "condition": "not numbaInstalled",
+        "path": "examples/stencil3d/stencil3d.py",
+        "args": "16 8 +balancer GreedyRefineLB +LBDebug 1"
+    },
+    {
+        "condition": "numbaInstalled",
+        "path": "examples/stencil3d/stencil3d_numba.py",
+        "args": "64 32 +balancer GreedyRefineLB +LBDebug 1"
+    },
+    {
+        "condition": "numbaInstalled",
+        "path": "examples/wave2d/wave2d.py",
+        "args": "1500"
+    },
+    {
+        "path": "examples/tutorial/start.py"
+    },
+    {
+        "path": "examples/tutorial/chares.py"
+    },
+    {
+        "path": "examples/tutorial/reduction.py"
+    },
+    {
+        "path": "examples/tutorial/hello_world.py"
+    },
+    {
+        "path": "examples/tutorial/hello_world2.py"
+    }
+]

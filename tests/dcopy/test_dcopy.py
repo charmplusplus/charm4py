@@ -26,8 +26,8 @@ class Main(Chare):
         ro.testProxy.doIteration()
 
     def iterationComplete(self):
+        if self.iterations % 10 == 0: print("Iteration", self.iterations, "complete")
         self.iterations += 1
-        print("Iteration", self.iterations, "complete")
         if self.iterations == MAX_ITER:
             print("Program done. Total time =", time.time() - self.startTime)
             charm.printStats()

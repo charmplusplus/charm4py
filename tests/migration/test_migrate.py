@@ -33,7 +33,7 @@ class Test(Chare):
         self.gather(charm.myPe(), ro.controllers.arrayElemsCreated)
 
     def start(self):
-        if self.thisIndex == (0,): print("Iteration " + str(self.iteration))
+        if self.thisIndex == (0,) and self.iteration % 20 == 0: print("Iteration " + str(self.iteration))
         self.check()
         A = numpy.arange(1000, dtype='float64')
         work = 1000 * int(round(math.log(charm.myPe() + 1) + 1))  # elements in higher PEs do more work
