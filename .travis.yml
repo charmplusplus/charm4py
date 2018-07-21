@@ -4,6 +4,7 @@ dist: trusty
 before_install:
   - sudo apt-get install python-dev
   - sudo apt-get install python3-dev
+  - sudo apt-get install python3-pip
 install:
   - pip install --user cffi
   - pip install --user numpy
