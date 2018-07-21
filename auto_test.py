@@ -34,7 +34,7 @@ def searchForPython(python_implementations):
     if py3_exec is None:
         print("WARNING: Python 3 executable not found for auto_test. If desired, set manually")
     else:
-        python_implementations.add((3,py3_exec))
+        python_implementations.add((3, py3_exec))
 
 
 # ----------------------------------------------------------------------------------
@@ -109,5 +109,5 @@ print("ALL TESTS (" + str(num_tests) + ") PASSED")
 print("Durations:")
 for interface in interfaces:
     print("\n---", interface, "---")
-    for test,results in sorted(durations[interface].items()):
+    for test, results in sorted(durations[interface].items()):
         print(test + ": " + str(results))
