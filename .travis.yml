@@ -3,23 +3,26 @@ os: linux
 dist: trusty
 before_install:
   - sudo apt-get install python-dev
+  - sudo apt-get install python-numpy
   - sudo apt-get install python3-dev
   - sudo apt-get install python3-pip
+  - sudo apt-get install python3-numpy
 install:
   - pip install --user cffi
-  - pip install --user numpy
+#  - pip install --user numpy
   - pip install --user cython
   - pip3 install --user cffi
-  - pip3 install --user numpy
+#  - pip3 install --user numpy
   - pip3 install --user cython
 script:
   - git clone https://github.com/UIUC-PPL/charm
   - cd charm
   - ./build charmpy netlrts-linux-x86_64 tcp -j2 --with-production --enable-error-checking
   - cd ..
-  - python3 setup.py ~/charm --with-cython
-  - python3 setup.py ~/charm --with-cffi
-  - python2 setup.py ~/charm --with-cffi
-  - export LD_LIBRARY_PATH=~/charm/lib
-  - export PYTHONPATH=~/charmpy
+  - cp charm/bin/charmrun charmrun
+  - python3 setup.py `pwd`/charm --with-cython
+  - python3 setup.py `pwd`/charm --with-cffi
+  - python2 setup.py `pwd`/charm --with-cffi
+  - export LD_LIBRARY_PATH=`pwd`/charm/lib
+  - export PYTHONPATH=`pwd`/charmpy
   - python3 auto_test.py
