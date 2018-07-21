@@ -5,9 +5,12 @@ before_install:
   - sudo apt-get install python-dev
   - sudo apt-get install python3-dev
 install:
-  - pip install cffi
-  - pip install numpy
-  - pip install cython
+  - pip install --user cffi
+  - pip install --user numpy
+  - pip install --user cython
+  - pip3 install --user cffi
+  - pip3 install --user numpy
+  - pip3 install --user cython
 script:
   - git clone https://github.com/UIUC-PPL/charm
   - cd charm
