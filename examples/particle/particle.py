@@ -94,7 +94,8 @@ class Cell(Chare):
         self.run()
 
     def collectMax(self, max_particles):
-        print("Max particles= " + str(max_particles))
+        if self.iteration % 10 == 0:
+            print("Max particles= " + str(max_particles))
 
     def getNbIndexes(self):
         nbs = set()

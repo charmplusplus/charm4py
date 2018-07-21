@@ -54,7 +54,7 @@ class Main(Chare):
         # Start the next iteration
         self.count = 0
         self.iteration += 1
-        if self.iteration % 20 == 0:
+        if self.iteration % 100 == 0:
           print("Completed " + str(self.iteration) + " iterations " + str(time.time() - self.periodStartTime))
           self.periodStartTime = time.time()
           #charm.liveViz.snapshot("examples/wave2d/wave2d-" + str(self.iteration) + ".png", "PNG")
