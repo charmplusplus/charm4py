@@ -1,0 +1,21 @@
+language: cpp
+os: linux
+dist: trusty
+before_install:
+  - sudo apt-get install python-dev
+  - sudo apt-get install python3-dev
+install:
+  - pip install cffi
+  - pip install numpy
+  - pip install cython
+script:
+  - git clone https://github.com/UIUC-PPL/charm
+  - cd charm
+  - ./build charmpy netlrts-linux-x86_64 tcp -j2 --with-production --enable-error-checking
+  - cd ..
+  - python3 setup.py ~/charm --with-cython
+  - python3 setup.py ~/charm --with-cffi
+  - python2 setup.py ~/charm --with-cffi
+  - export LD_LIBRARY_PATH=~/charm/lib
+  - export PYTHONPATH=~/charmpy
+  - python3 auto_test.py
