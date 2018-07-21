@@ -10,7 +10,6 @@ before_install:
 install:
   - pip install --user cffi
 #  - pip install --user numpy
-  - pip install --user cython
   - pip3 install --user cffi
 #  - pip3 install --user numpy
   - pip3 install --user cython

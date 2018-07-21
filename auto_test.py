@@ -42,7 +42,7 @@ except:
 tests = []
 tests.append(['tests/array_maps/test1.py'])
 tests.append(['tests/when/test_when_syntax.py'])
-tests.append(['tests/when/when_test.py'])
+#tests.append(['tests/when/when_test.py'])
 tests.append(['tests/when/when_test2.py'])
 tests.append(['tests/reductions/group_reduction.py'])
 tests.append(['tests/reductions/array_reduction.py'])
@@ -51,7 +51,7 @@ tests.append(['tests/reductions/test_gather.py'])
 tests.append(['tests/reductions/bench_reductions.py'])
 tests.append(['tests/dcopy/test_dcopy.py'])
 tests.append(['tests/element_proxy/array_element_proxy.py'])
-tests.append(['tests/element_proxy/group_element_proxy.py'])
+#tests.append(['tests/element_proxy/group_element_proxy.py'])
 tests.append(['tests/collections/test.py'])
 tests.append(['tests/trees/topo_treeAPI.py'])
 tests.append(['tests/migration/test_migrate.py', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
@@ -82,7 +82,7 @@ tests.append(['examples/tutorial/reduction.py'])
 tests.append(['examples/tutorial/hello_world.py'])
 tests.append(['examples/tutorial/hello_world2.py'])
 
-commonArgs = ['++local', '+p4']
+commonArgs = ['++local', '+p2']
 
 # search for python executables
 python_implementations = set()   # python implementations can also be added here manually
