@@ -3,15 +3,15 @@ os: linux
 dist: trusty
 before_install:
   - sudo apt-get install python-dev
-  - sudo apt-get install python-numpy
+#  - sudo apt-get install python-numpy
   - sudo apt-get install python3-dev
   - sudo apt-get install python3-pip
-  - sudo apt-get install python3-numpy
+#  - sudo apt-get install python3-numpy
 install:
   - pip install --user cffi
-#  - pip install --user numpy
+  - pip install --user numpy
   - pip3 install --user cffi
-#  - pip3 install --user numpy
+  - pip3 install --user numpy
   - pip3 install --user cython
 script:
   - git clone https://github.com/UIUC-PPL/charm
