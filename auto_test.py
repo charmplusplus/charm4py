@@ -4,6 +4,7 @@ import sys
 if sys.version_info[0] < 3:
   print("auto_test requires Python 3")
   exit(1)
+import os
 import shutil
 from collections import defaultdict
 
@@ -40,9 +41,9 @@ except:
   numbaInstalled = False
 
 tests = []
-tests.append(['tests/array_maps/test1.py'])
+tests.append((['tests/array_maps/test1.py'], 4))
 tests.append(['tests/when/test_when_syntax.py'])
-#tests.append(['tests/when/when_test.py'])
+tests.append((['tests/when/when_test.py'], 4))
 tests.append(['tests/when/when_test2.py'])
 tests.append(['tests/reductions/group_reduction.py'])
 tests.append(['tests/reductions/array_reduction.py'])
@@ -50,10 +51,10 @@ tests.append(['tests/reductions/custom_reduction.py'])
 tests.append(['tests/reductions/test_gather.py'])
 tests.append(['tests/reductions/bench_reductions.py'])
 tests.append(['tests/dcopy/test_dcopy.py'])
-tests.append(['tests/element_proxy/array_element_proxy.py'])
-#tests.append(['tests/element_proxy/group_element_proxy.py'])
-tests.append(['tests/collections/test.py'])
-tests.append(['tests/trees/topo_treeAPI.py'])
+tests.append((['tests/element_proxy/array_element_proxy.py'], 4))
+tests.append((['tests/element_proxy/group_element_proxy.py'], 4))
+tests.append((['tests/collections/test.py'], 4))
+tests.append((['tests/trees/topo_treeAPI.py'], 4))
 tests.append(['tests/migration/test_migrate.py', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
 tests.append(['tests/migration/chare_migration.py'])
 tests.append(['tests/thread_entry_methods/test1.py'])
@@ -64,12 +65,12 @@ tests.append(['tests/thread_entry_methods/future_bcast.py'])
 tests.append(['tests/thread_entry_methods/test_wait.py'])
 tests.append(['tests/futures/test_futures.py'])
 tests.append(['tests/futures/multi_futures.py'])
-tests.append(['examples/hello/group_hello.py'])
-tests.append(['examples/hello/group_hello2.py'])
-tests.append(['examples/hello/array_hello.py'])
-tests.append(['examples/hello/dynamic_array.py'])
-tests.append(['examples/hello/cons_args_hello.py'])
-tests.append(['examples/multi-module/main.py'])
+tests.append((['examples/hello/group_hello.py'], 4))
+tests.append((['examples/hello/group_hello2.py'], 4))
+tests.append((['examples/hello/array_hello.py'], 4))
+tests.append((['examples/hello/dynamic_array.py'], 4))
+tests.append((['examples/hello/cons_args_hello.py'], 4))
+tests.append((['examples/multi-module/main.py'], 4))
 tests.append(['examples/particle/particle.py', '+balancer', 'GreedyRefineLB'])
 if numbaInstalled:
   tests.append(['examples/stencil3d/stencil3d_numba.py', '64', '32', '+balancer', 'GreedyRefineLB', '+LBDebug', '1'])
@@ -82,7 +83,9 @@ tests.append(['examples/tutorial/reduction.py'])
 tests.append(['examples/tutorial/hello_world.py'])
 tests.append(['examples/tutorial/hello_world2.py'])
 
-commonArgs = ['++local', '+p2']
+commonArgs = ['++local']
+default_num_processes = int(os.environ.get('CHARMPY_TEST_NUM_PROCESSES', 4))
+
 
 # search for python executables
 python_implementations = set()   # python implementations can also be added here manually
@@ -96,6 +99,10 @@ supported_py_versions = {'ctypes': {2, 3},
 durations = defaultdict(dict)
 for interface in interfaces:
   for test in tests:
+    num_processes = default_num_processes
+    if isinstance(test, tuple):
+      test, n = test
+      num_processes = max(n, default_num_processes)
     durations[interface][test[0]] = []
     for version,python in sorted(python_implementations):
       if version not in supported_py_versions[interface]: continue
@@ -103,7 +110,7 @@ for interface in interfaces:
       cmd += [python]
       cmd += test
       cmd += commonArgs
-      cmd += ['+libcharm_interface', interface]
+      cmd += ['+p' + str(num_processes), '+libcharm_interface', interface]
       print("Test command is " + str(cmd))
       startTime = time.time()
       p = subprocess.Popen(cmd)
