@@ -111,7 +111,7 @@ class ChareStateCond(object):
     group = True
 
     def __init__(self, cond_str):
-        from charmpy import charm
+        from .charm import charm
         self.charm     = charm
         self.cond_str  = cond_str
         self.cond_func = eval('lambda self: ' + cond_str)
@@ -133,8 +133,8 @@ class ChareStateCond(object):
 
     def check(self, obj):
         dequeued = False
-        while self.cond_func(obj):
         #while eval(me.cond_str):   # eval is very slow
+        while self.cond_func(obj):
             elem = self.wait_queue.pop()
             if elem[0] == 0:
                 # is msg
@@ -145,7 +145,8 @@ class ChareStateCond(object):
                 tid = elem[1]
                 self.charm.threadMgr.resumeThread(tid, None)
             dequeued = True
-            if len(self.wait_queue) == 0: break
+            if len(self.wait_queue) == 0:
+                break
         return dequeued, len(self.wait_queue) == 0
 
     def __getstate__(self):
@@ -154,8 +155,8 @@ class ChareStateCond(object):
     def __setstate__(self, state):
         self.cond_str, self.wait_queue, self._cond_next = state
         self.cond_func = eval('lambda self: ' + self.cond_str)
-        import charmpy
-        self.charm = charmpy.charm
+        from .charm import charm
+        self.charm = charm
 
 
 def is_tag_cond(root_ast):
@@ -193,7 +194,7 @@ def is_tag_cond(root_ast):
 
         return ('self.' + attrib.attr + ' == args[' + str(idx) + ']', attrib.attr, idx)
     except:
-      return None
+        return None
 
 
 class MsgArgsTransformer(ast.NodeTransformer):
@@ -229,6 +230,7 @@ class MsgArgsTransformer(ast.NodeTransformer):
             ), node)
         else:
             return node
+
 
 #import astunparse
 

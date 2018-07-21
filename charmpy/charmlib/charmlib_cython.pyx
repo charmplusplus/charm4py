@@ -8,8 +8,8 @@ from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 
-from charmpy import CharmPyError
-import ckreduction as red
+from ..charm import CharmPyError
+from .. import reduction as red
 from cpython cimport array
 import array
 

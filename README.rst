@@ -73,4 +73,4 @@ Main author at <jjgalvez@illinois.edu>
 
 .. _Documentation: https://charmpy.readthedocs.io
 
-.. _Mailing list: https://lists.cs.illinois.edu/lists/info/charm
+.. _Mailing list: charm@cs.illinois.edu

@@ -2,7 +2,7 @@ import sys
 from cffi import FFI
 ffibuilder = FFI()
 
-ffibuilder.set_source("_charmlib",
+ffibuilder.set_source("_charmlib_cffi",
    r""" // passed to the real C compiler
         #include "charm.h"
         #include "spanningTree.h"
@@ -235,4 +235,4 @@ ffibuilder.cdef("""
 """)
 
 if __name__ == "__main__":
-    ffibuilder.compile(tmpdir='__cffi_objs__', verbose=True)
+    ffibuilder.compile(tmpdir='.', verbose=True)

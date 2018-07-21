@@ -3,9 +3,11 @@ charmpy.cfg
 
 #ignore build files
 docs/_build/
-__cffi_objs__
-__cython_objs__
-charmpy/charmlib_cython.c
+charmpy/charmlib/*.o
+charmpy/charmlib/*.so
+charmpy/charmlib/charmlib_cython.c
+charmpy/charmlib/_charmlib_cffi.c
+charmpy/charmlib/build/
 __pycache__
 
 #ignore some common tmp files
