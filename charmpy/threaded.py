@@ -4,7 +4,6 @@ if sys.version_info < (3, 0, 0):
     from thread import get_ident
 else:
     from threading import get_ident
-from .charm import CharmPyError, charm, Options
 from collections import defaultdict
 import time
 
@@ -205,3 +204,10 @@ class EntryMethodThreadManager(object):
 
         if future.value_received:
             del self.futures[fid]
+
+
+def charmStarting():
+    from .charm import charm, Options, CharmPyError
+    globals()['charm'] = charm
+    globals()['Options'] = Options
+    globals()['CharmPyError'] = CharmPyError

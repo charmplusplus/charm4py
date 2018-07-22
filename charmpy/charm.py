@@ -1,13 +1,10 @@
 #
 # @author Juan Galvez (jjgalvez@illinois.edu)
 #
-# Charm++ Python module that allows writing Charm++ programs in Python.
-# Accesses C/C++ Charm shared library for core runtime functionality.
+# This package allows writing and running Charm++ applications in Python. It
+# accesses the C/C++ Charm++ shared library for core runtime functionality.
 #
 import sys
-if sys.version_info < (2, 7, 0):
-    print("charmpy requires Python 2.7 or higher")
-    exit(1)
 import os
 if sys.version_info < (3, 0, 0):
     import cPickle
@@ -15,15 +12,15 @@ else:
     import pickle as cPickle
 import time
 from collections import defaultdict
-import json
-import importlib
-import inspect
 from . import chare
-from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES, CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
-from .chare import Chare, Mainchare, DefaultMainchare, Group, ArrayMap, Array
+from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
+from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
+from .chare import Chare, Mainchare, Group, ArrayMap, Array
+from . import entrymethod
+from . import threaded
+from .threaded import Future
 from . import reduction
 from . import wait
-from . import entrymethod
 import array
 try:
     import numpy
@@ -43,65 +40,48 @@ class Options:
     QUIET = False
 
 
-class __ReadOnlies(object): pass
-
-
 class CharmPyError(Exception):
     def __init__(self, msg):
         super(CharmPyError, self).__init__(msg)
         self.message = msg
 
 
-def rebuildByteArray(data):
-    return bytes(data)
-
-
-def rebuildArray(data, typecode):
-    #a = array.array('d', data.cast(typecode))  # this is slow
-    a = array.array(typecode)
-    a.frombytes(data)
-    return a
-
-
-def rebuildNumpyArray(data, shape, dt):
-    a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
-    a.shape = shape
-    return a.copy()
-
-
-# Acts as Charm++ runtime at the Python level, and is a wrapper for the Charm++ shared library
+# Acts as the Charm runtime at the Python level (there is one instance of this class
+# per process)
 class Charm(object):
 
     if os.name == 'nt':
         class PrintStream(object):
-
             def write(self, msg):
                 charm.lib.CkPrintf(msg.encode())
 
     def __init__(self):
+        self.started = False
         self._myPe = -1
         self._numPes = -1
         self.registered = {}      # class -> set of Charm types (Mainchare, Group, Array) for which this class is registered
         self.register_order = []  # list of classes in registration order (all processes must use same order)
         self.chares = {}
         self.groups = {}          # group ID -> group instance on this PE
-        self.arrays = defaultdict(dict)          # aid -> idx -> array element instance with index idx on this PE
+        self.arrays = defaultdict(dict)  # aid -> idx -> array element instance with index idx on this PE
         self.entryMethods = {}    # ep_idx -> EntryMethod object
-        self.classEntryMethods = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
-        self.proxyClasses      = [{} for t in CHARM_TYPES]  # charm_type_id -> class -> proxy class
+        self.classEntryMethods = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
+        self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
         self.msg_send_sizes = []  # for profiling
         self.msg_recv_sizes = []  # for profiling
         self.runningEntryMethod = None  # currently running entry method (only used with profiling)
-        # track chare constructor call stack that occurs in mainchare due to inlining of constructor calls (only used with profiling)
+        # track chare constructor call stack that occurs in mainchare due to
+        # inlining of constructor calls (only used with profiling)
         self.mainchareEmStack = []
         self.activeChares = set()  # for profiling (active chares on this PE)
         self.opts = Options
         self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
         cfgPath = os.path.expanduser("~") + '/charmpy.cfg'
         if not os.path.exists(cfgPath):
-            cfgPath = os.path.dirname(__file__) + '/charmpy.cfg'  # look in folder where charmpy.py is
+            cfgPath = os.path.dirname(__file__) + '/charmpy.cfg'  # look in folder where charm.py is
             if not os.path.exists(cfgPath):
                 raise CharmPyError("charmpy.cfg not found")
+        import json
         cfg = json.load(open(cfgPath, 'r'))
         interface = cfg['libcharm_interface']
         args = sys.argv
@@ -126,9 +106,10 @@ class Charm(object):
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
         self.reducers = reduction.ReducerContainer(self)
-        self.redMgr   = reduction.ReductionManager(self, self.reducers)
+        self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
-        self.entry_func = None  # entry point to Charm program. can be used in place of defining a Mainchare
+        # entry point to Charm program. can be used in place of defining a Mainchare
+        self.entry_func = None
         if self.lib.name == 'cython':
             # replace these methods with the fast cython versions
             self.packMsg = self.lib.packMsg
@@ -159,21 +140,24 @@ class Charm(object):
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
         super(em.C, obj).__init__()  # call Chare class __init__ first
-        if self.entry_func is not None: obj.main = self.entry_func
+        if self.entry_func is not None:
+            assert isinstance(obj, chare.DefaultMainchare)
+            obj.main = self.entry_func
+            del self.entry_func
         if Options.PROFILING:
             self.activeChares.add((em.C, Mainchare))
             em.startMeasuringTime()
-        self.threadMgr.startThread(obj, em, [args], {})  # now call user's __init__ in a new thread
+        self.threadMgr.startThread(obj, em, [args], {})  # call user's __init__ in a new thread
         self.chares[cid] = obj
         if Options.PROFILING:
             em.stopMeasuringTime()
         if self.myPe() == 0:  # broadcast readonlies
             roData = {}
-            for attr in dir(readonlies):   # attr is string
-                if attr.startswith("_") or attr.endswith("_"): continue
-                roData[attr] = getattr(readonlies, attr)
+            for attr in dir(readonlies):  # attr is string
+                if not attr.startswith("_") and not attr.endswith("_"):
+                    roData[attr] = getattr(readonlies, attr)
             msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
-            #print("Registering readonly data of size " + str(len(msg)))
+            # print("Registering readonly data of size " + str(len(msg)))
             self.lib.CkRegisterReadonly(b"charmpy_ro", b"charmpy_ro", msg)
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
@@ -227,7 +211,7 @@ class Charm(object):
                     self.runningEntryMethod.stopMeasuringTime()
                 em.addRecvTime(time.time() - t0)
                 em.startMeasuringTime()
-            obj.__init__(*args)              # now call the user's __init__
+            obj.__init__(*args)          # now call the user's __init__
             self.groups[gid] = obj
             if b'block' in header:
                 obj.contribute(None, None, header[b'block'])
@@ -240,7 +224,7 @@ class Charm(object):
         return self.groups[gid].procNum(index)
 
     def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start):
-        #print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
+        # print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
         if index in self.arrays[aid]:
             obj = self.arrays[aid][index]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
@@ -300,17 +284,18 @@ class Charm(object):
           The message is the result of pickling `(header,args)` where header is a dict,
           and args the list of arguments. If direct-copy is enabled, arguments supporting
           the buffer interface will bypass pickling and their place in 'args' will be
-          made empty. Instead, info to reconstruct these args at the destination will be
+          made empty. Instead, metadata to reconstruct these args at the destination will be
           put in the header, and this method will return a list of buffers for
           direct-copying of these args into a CkMessage at Charm side.
 
           If destination object exists on same PE as source, the args will be stored in
           '_local' buffer of destination obj (without copying), and the msg will be a
-          small "tag" to retrieve the args from '_local' when the msg is delivered.
+          small integer tag to retrieve the args from '_local' when the msg is delivered.
 
           Args:
               destObj: destination object if it exists on the same PE as source, otherwise None
               msgArgs: arguments to entry method
+              header: msg header
 
           Returns:
               2-tuple containing msg and list of direct-copy buffers
@@ -318,11 +303,11 @@ class Charm(object):
         """
         direct_copy_buffers = []
         dcopy_size = 0
-        if destObj:  # if dest obj is local
+        if destObj is not None:  # if dest obj is local
             localTag = destObj.__addLocal__((header, msgArgs))
             msg = ("_local:" + str(localTag)).encode()
         else:
-            direct_copy_hdr = []  # goes to header
+            direct_copy_hdr = []  # goes to msg header
             args = list(msgArgs)
             if self.lib.direct_copy_supported:
                 for i, arg in enumerate(msgArgs):
@@ -358,17 +343,17 @@ class Charm(object):
     def registerInCharm(self, C, charm_type, libRegisterFunc):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        #if self.myPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
+        # if self.myPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
         C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
-        #if self.myPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
+        # if self.myPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
         for i, em in enumerate(entryMethods):
-            if i == 0: em.isCtor = True
+            if i == 0:
+                em.isCtor = True
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
         proxyClass = charm_type.__getProxyClass__(C)
         self.proxyClasses[charm_type_id][C] = proxyClass
         setattr(self, proxyClass.__name__, proxyClass)   # save new class in my namespace
-        #globals()[proxyClass.__name__] = proxyClass     # save in module namespace (needed to pickle the proxy)
         setattr(chare, proxyClass.__name__, proxyClass)  # save in module namespace (needed to pickle the proxy)
 
     # first callback from Charm++ shared library
@@ -414,23 +399,27 @@ class Charm(object):
             assert not self.mainchareRegistered, "More than one entry point has been specified"
             self.mainchareRegistered = True
         charm_type = chare.charm_type_id_to_class[charm_type_id]
-        #print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-        l = [entrymethod.EntryMethod(C, m, charm_type_id, profile=Options.PROFILING)
+        # print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
+        l = [entrymethod.EntryMethod(C, m, profile=Options.PROFILING)
                                      for m in charm_type.__baseEntryMethods__()]
         self.classEntryMethods[charm_type_id][C] = l
         for m in dir(C):
-            if not callable(getattr(C, m)): continue
-            if m.startswith("__") and m.endswith("__"): continue  # filter out non-user methods
-            if m in ["AtSync", "flushWhen", "contribute", "gather"]: continue
-            #print(m)
-            em = entrymethod.EntryMethod(C, m, charm_type_id, profile=Options.PROFILING)
+            if not callable(getattr(C, m)):
+                continue
+            if m.startswith("__") and m.endswith("__"):
+                continue  # filter out non-user methods
+            if m in ["AtSync", "flushWhen", "contribute", "gather"]:
+                continue
+            # print(m)
+            em = entrymethod.EntryMethod(C, m, profile=Options.PROFILING)
             self.classEntryMethods[charm_type_id][C].append(em)
         self.registered[C].add(charm_type)
 
     # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
     # by default a class is registered to work with both Groups and Arrays
     def register(self, C, collections=(GROUP, ARRAY)):
-        if C in self.registered: return
+        if C in self.registered:
+            return
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise CharmPyError("Only subclasses of Chare can be registered")
 
@@ -455,17 +444,26 @@ class Charm(object):
                      always search module '__main__' for Charm classes even if no
                      arguments are passed to this method.
         """
-        if Options.PROFILING: self.contribute = profile_send_function(self.contribute)
-        if "++quiet" in sys.argv: Options.QUIET = True
-        self.threadMgr = EntryMethodThreadManager()
-        self.createFuture = self.threadMgr.createFuture
+
+        if self.started:
+            raise CharmPyError("charm.start() can only be called once")
+        self.started = True
+
+        if Options.PROFILING:
+            self.contribute = profile_send_function(self.contribute)
+        if "++quiet" in sys.argv:
+            Options.QUIET = True
 
         if hasattr(entry, 'mro') and Chare in entry.mro():
+            if entry.__init__.__code__.co_argcount != 2:
+                raise CharmPyError("Mainchare constructor must have only one parameter")
             self.register(entry, (MAINCHARE,))
         else:
-            assert callable(entry), "Specified entry point is not a function or Chare"
+            assert callable(entry), "Given entry point is not a function or Chare"
+            if entry.__code__.co_argcount != 1:
+                raise CharmPyError("Main function must have only one parameter")
             self.entry_func = entry
-            self.register(DefaultMainchare, (MAINCHARE,))
+            self.register(chare.DefaultMainchare, (MAINCHARE,))
 
         for C in classes:
             if ArrayMap in C.mro():
@@ -475,10 +473,14 @@ class Charm(object):
             else:
                 raise CharmPyError("Class", C, "is not a Chare (can't register)")
 
+        import importlib
+        import inspect
         M = list(modules)
-        if '__main__' not in M: M.append('__main__')
+        if '__main__' not in M:
+            M.append('__main__')
         for module_name in M:
-            if module_name not in sys.modules: importlib.import_module(module_name)
+            if module_name not in sys.modules:
+                importlib.import_module(module_name)
             for C_name, C in inspect.getmembers(sys.modules[module_name], inspect.isclass):
                 if C.__module__ != chare.__name__ and hasattr(C, 'mro'):
                     if ArrayMap in C.mro():
@@ -486,13 +488,13 @@ class Charm(object):
                     elif Chare in C.mro():
                         self.register(C)
                     elif Group in C.mro() or Array in C.mro() or Mainchare in C.mro():
-                        raise CharmPyError("Chares must not inherit from Group, Array or Mainchare. Refer to new API")
+                        raise CharmPyError("Chares must not inherit from Group, Array or"
+                                           " Mainchare. Refer to new API")
 
-        # put reference to Charm object, Reducer container and Options in other modules' global space
-        chare.charm   = self
-        chare.Reducer = self.reducers
-        chare.Options = Options
-        entrymethod.charm = self
+        for module in (chare, entrymethod, threaded, wait):
+            module.charmStarting()
+        self.threadMgr = threaded.EntryMethodThreadManager()
+        self.createFuture = self.threadMgr.createFuture
 
         self.lib.start()
 
@@ -513,11 +515,16 @@ class Charm(object):
             proxy.__setstate__(target.proxy_state)
             target = proxy._future_deposit_result
         contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
-        if Options.PROFILING: self.recordSend(contributeInfo.getDataSize())
+        if Options.PROFILING:
+            self.recordSend(contributeInfo.getDataSize())
         target.__self__.ckContribute(contributeInfo)
 
     def awaitCreation(self, *proxies):
         for proxy in proxies:
+            if not hasattr(proxy, 'creation_future'):
+                if not proxy.__class__.__name__.endswith("Proxy"):
+                    raise CharmPyError('Did not pass a proxy to awaitCreation? ' + str(type(proxy)))
+                raise CharmPyError('awaitCreation can only be used if creation triggered from threaded entry method')
             proxy.creation_future.get()
             del proxy.creation_future
 
@@ -530,15 +537,17 @@ class Charm(object):
     def recordReceive(self, size):
         self.msg_recv_sizes.append(size)
 
-    def printTable(self, table, sep):
+    def __printTable__(self, table, sep):
         col_width = [max(len(x) for x in col) for col in zip(*table)]
         for j, line in enumerate(table):
             if j in sep: print(sep[j])
             print("| " + " | ".join("{:{}}".format(x, col_width[i]) for i, x in enumerate(line)) + " |")
 
     def printStats(self):
+        if not self.started:
+            raise CharmPyError('charm was not started')
         if not Options.PROFILING:
-            print("NOTE: called charm.printStats() but profiling is disabled")
+            print('NOTE: called charm.printStats() but profiling is disabled')
             return
 
         if self.runningEntryMethod is not None:
@@ -575,7 +584,7 @@ class Charm(object):
         row_totals[3] += sum(self.lib.times)
         table.append([""] + [str(round(v, 3)) for v in row_totals])
         lineNb += 1
-        self.printTable(table, sep)
+        self.__printTable__(table, sep)
         for i in (0, 1):
             if i == 0:
                 print("\nMessages sent: " + str(len(self.msg_send_sizes)))
@@ -625,23 +634,6 @@ class Charm(object):
         self.lib.LBTurnInstrumentOff()
 
 
-charm      = Charm()
-readonlies = __ReadOnlies()
-
-
-def checkCharmStarted():
-    if len(charm.register_order) == 0:
-        print('Program is exiting but charm was not started: charm.start() was not '
-              'called or error happened before start')
-
-
-import atexit
-atexit.register(checkCharmStarted)
-
-
-from .threaded import EntryMethodThreadManager, Future
-
-
 def profile_send_function(func):
     def func_with_profiling(*args, **kwargs):
         em = charm.runningEntryMethod
@@ -652,3 +644,28 @@ def profile_send_function(func):
     if hasattr(func, 'ep'):
         func_with_profiling.ep = func.ep
     return func_with_profiling
+
+
+class __ReadOnlies(object):
+    pass
+
+
+def rebuildByteArray(data):
+    return bytes(data)
+
+
+def rebuildArray(data, typecode):
+    #a = array.array('d', data.cast(typecode))  # this is slow
+    a = array.array(typecode)
+    a.frombytes(data)
+    return a
+
+
+def rebuildNumpyArray(data, shape, dt):
+    a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
+    a.shape = shape
+    return a.copy()
+
+
+charm = Charm()
+readonlies = __ReadOnlies()

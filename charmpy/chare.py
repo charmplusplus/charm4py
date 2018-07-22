@@ -31,7 +31,8 @@ class Chare(object):
         return object.__new__(cls)
 
     def __init__(self):
-        if hasattr(self, '_chare_initialized'): return
+        if hasattr(self, '_chare_initialized'):
+            return
         # messages to this chare from chares in the same PE are stored here without copying
         # or pickling. _local is a fixed size array that implements a mem pool, where msgs
         # can be in non-consecutive positions, and the indexes of free slots are stored
@@ -48,7 +49,8 @@ class Chare(object):
         self._chare_initialized = True
 
     def __addLocal__(self, msg):
-        if self._local_free_head is None: raise CharmPyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
+        if self._local_free_head is None:
+            raise CharmPyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
         h = self._local_free_head
         self._local_free_head = self._local[self._local_free_head]
         self._local[h] = msg
@@ -126,6 +128,7 @@ class Chare(object):
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
 
+
 # ----------------- Mainchare and Proxy -----------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -156,13 +159,13 @@ def mainchare_proxy_method_gen(ep):  # decorator, generates proxy entry methods
 def mainchare_proxy_contribute(proxy, contributeInfo):
     charm.CkContributeToChare(contributeInfo, proxy.cid)
 
+
 class Mainchare(object):
 
     type_id = MAINCHARE
 
     @classmethod
     def initMember(cls, obj, cid):
-        obj._cid = cid
         obj.thisProxy = charm.proxyClasses[MAINCHARE][obj.__class__](cid)
 
     @classmethod
@@ -171,22 +174,26 @@ class Mainchare(object):
 
     @classmethod
     def __getProxyClass__(C, cls):
-        #print("Creating mainchare proxy class for class " + cls.__name__)
-        from .charm import profile_send_function
+        # print("Creating mainchare proxy class for class " + cls.__name__)
         M = dict()  # proxy methods
         for m in charm.classEntryMethods[MAINCHARE][cls]:
-            if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-            if Options.PROFILING: M[m.name] = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
-            else: M[m.name] = mainchare_proxy_method_gen(m.epIdx)
+            if m.epIdx == -1:
+                raise CharmPyError("Unregistered entry method")
+            if Options.PROFILING:
+                M[m.name] = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
+            else:
+                M[m.name] = mainchare_proxy_method_gen(m.epIdx)
         M["__init__"] = mainchare_proxy_ctor
         M["ckContribute"] = mainchare_proxy_contribute  # function called when target proxy is Mainchare
         M["__getstate__"] = mainchare_proxy__getstate__
         M["__setstate__"] = mainchare_proxy__setstate__
         return type(cls.__name__ + 'Proxy', (), M)  # create and return proxy class
 
+
 class DefaultMainchare(Chare):
     def __init__(self, args):
         self.main(args)
+
 
 # ------------------ Group and Proxy  ------------------
 
@@ -226,20 +233,22 @@ def group_proxy_method_gen(ep):  # decorator, generates proxy entry methods
 def group_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def group_ckNew(cls, args):
-        #print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
+        # print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
         header, creation_future = {}, None
         if get_ident() != charm.threadMgr.main_thread_id and ArrayMap not in C.mro():
-            creation_future  = charm.createFuture()
+            creation_future = charm.createFuture()
             header[b'block'] = creation_future
         msg = charm.packMsg(None, args, header)
         gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
         proxy = charm.groups[gid].thisProxy
-        proxy.creation_future = creation_future
+        if creation_future is not None:
+            proxy.creation_future = creation_future
         return proxy
     return group_ckNew
 
 def group_proxy_contribute(proxy, contributeInfo):
     charm.CkContributeToGroup(contributeInfo, proxy.gid, proxy.elemIdx)
+
 
 class Group(object):
 
@@ -262,14 +271,16 @@ class Group(object):
 
     @classmethod
     def __getProxyClass__(C, cls):
-        #print("Creating group proxy class for class " + cls.__name__)
-        from .charm import profile_send_function
+        # print("Creating group proxy class for class " + cls.__name__)
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[GROUP][cls]
         for m in entryMethods:
-            if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-            if Options.PROFILING: M[m.name] = profile_send_function(group_proxy_method_gen(m.epIdx))
-            else: M[m.name] = group_proxy_method_gen(m.epIdx)
+            if m.epIdx == -1:
+                raise CharmPyError("Unregistered entry method")
+            if Options.PROFILING:
+                M[m.name] = profile_send_function(group_proxy_method_gen(m.epIdx))
+            else:
+                M[m.name] = group_proxy_method_gen(m.epIdx)
         M["__init__"] = group_proxy_ctor
         M["__getitem__"] = group_proxy_elem
         M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
@@ -278,9 +289,11 @@ class Group(object):
         M["__setstate__"] = group_proxy__setstate__
         return type(cls.__name__ + 'GroupProxy', (), M)  # create and return proxy class
 
+
 class ArrayMap(Chare):
     def __init__(self):
         super(ArrayMap, self).__init__()
+
 
 # -------------------- Array and Proxy --------------------
 
@@ -329,8 +342,7 @@ def array_proxy_method_gen(ep):  # decorator, generates proxy entry methods
 def array_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None):
-        #if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
-        # FIXME?, for now, if dims contains all zeros, will assume no bounds given
+        # if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
         if type(dims) == int: dims = (dims,)
 
         if dims is None and ndims == -1:
@@ -338,20 +350,22 @@ def array_ckNew_gen(C, epIdx):
         elif dims is not None and ndims != -1 and ndims != len(dims):
             raise CharmPyError("Number of bounds should match number of dimensions")
         elif dims is None and ndims != -1:  # create an empty array
-            dims = (0,)*ndims
+            dims = (0,) * ndims
 
         map_gid = -1
-        if map is not None: map_gid = map.gid
+        if map is not None:
+            map_gid = map.gid
 
         header, creation_future = {}, None
         if get_ident() != charm.threadMgr.main_thread_id:
-            creation_future  = charm.createFuture()
+            creation_future = charm.createFuture()
             header[b'block'] = creation_future
 
         msg = charm.packMsg(None, args, header)
         aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid)
         proxy = cls(aid, len(dims))
-        proxy.creation_future = creation_future
+        if creation_future is not None:
+            proxy.creation_future = creation_future
         return proxy
     return array_ckNew
 
@@ -368,6 +382,7 @@ def array_proxy_contribute(proxy, contributeInfo):
 
 def array_proxy_doneInserting(proxy):
     charm.lib.CkDoneInserting(proxy.aid)
+
 
 class Array(object):
 
@@ -393,14 +408,16 @@ class Array(object):
 
     @classmethod
     def __getProxyClass__(C, cls):
-        #print("Creating array proxy class for class " + cls.__name__)
-        from .charm import profile_send_function
+        # print("Creating array proxy class for class " + cls.__name__)
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
-            if m.epIdx == -1: raise CharmPyError("Unregistered entry method")
-            if Options.PROFILING: M[m.name] = profile_send_function(array_proxy_method_gen(m.epIdx))
-            else: M[m.name] = array_proxy_method_gen(m.epIdx)
+            if m.epIdx == -1:
+                raise CharmPyError("Unregistered entry method")
+            if Options.PROFILING:
+                M[m.name] = profile_send_function(array_proxy_method_gen(m.epIdx))
+            else:
+                M[m.name] = array_proxy_method_gen(m.epIdx)
         M["__init__"] = array_proxy_ctor
         M["__getitem__"] = array_proxy_elem
         M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
@@ -422,3 +439,12 @@ for i in CHARM_TYPES:
         charm_type_id_to_class[i] = Group
     elif i == ARRAY:
         charm_type_id_to_class[i] = Array
+
+
+def charmStarting():
+    from .charm import charm, Options, CharmPyError, profile_send_function
+    globals()['charm'] = charm
+    globals()['Reducer'] = charm.reducers
+    globals()['Options'] = Options
+    globals()['CharmPyError'] = CharmPyError
+    globals()['profile_send_function'] = profile_send_function

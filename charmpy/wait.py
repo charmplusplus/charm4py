@@ -111,14 +111,11 @@ class ChareStateCond(object):
     group = True
 
     def __init__(self, cond_str):
-        from .charm import charm
-        self.charm     = charm
         self.cond_str  = cond_str
         self.cond_func = eval('lambda self: ' + cond_str)
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateCond)
-        c.charm      = self.charm
         c.cond_str   = self.cond_str
         c.cond_func  = self.cond_func
         c.wait_queue = []
@@ -143,7 +140,7 @@ class ChareStateCond(object):
             elif elem[0] == 1:
                 # is thread
                 tid = elem[1]
-                self.charm.threadMgr.resumeThread(tid, None)
+                charm.threadMgr.resumeThread(tid, None)
             dequeued = True
             if len(self.wait_queue) == 0:
                 break
@@ -155,8 +152,6 @@ class ChareStateCond(object):
     def __setstate__(self, state):
         self.cond_str, self.wait_queue, self._cond_next = state
         self.cond_func = eval('lambda self: ' + self.cond_str)
-        from .charm import charm
-        self.charm = charm
 
 
 def is_tag_cond(root_ast):
@@ -259,3 +254,8 @@ def parse_cond_str(cond_str, method_arguments={}):
     new_tree = ast.fix_missing_locations(new_tree)
     lambda_func = eval(compile(new_tree, '<string>', 'eval'))
     return ChareStateMsgCond(cond_str, lambda_func)
+
+
+def charmStarting():
+    from .charm import charm
+    globals()['charm'] = charm

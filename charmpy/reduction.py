@@ -3,8 +3,7 @@ if sys.version_info[0] < 3:
     import cPickle
 else:
     import pickle as cPickle
-import os
-import itertools
+from itertools import chain
 import array
 try:
     import numpy as np
@@ -54,13 +53,14 @@ def _min(contribs):
 def gather(contribs):
     # contribs will be a list of list of tuples
     # first element of tuple is always array index of chare
-    return sorted(itertools.chain(*contribs))
+    return sorted(chain(*contribs))
 
 def gather_preprocess(data, contributor):
     return [(contributor.thisIndex, data)]
 
 def gather_postprocess(contrib):
     return [tup[1] for tup in contrib]
+
 
 class ReducerContainer(object):
 
@@ -102,6 +102,9 @@ class ReductionManager(object):
         self.populateConversionTables()
 
     def populateConversionTables(self):
+
+        import os
+
         # `red_table[op][c_type]` maps to `charm_reducer_type`, where:
         #     - op is the identifier for internal reducer (SUM, PRODUCT, MAX or INT)
         #     - c_type is identifier for C type (C_CHAR, C_SHORT, etc)
@@ -125,7 +128,7 @@ class ReductionManager(object):
                 op, c_type_str = f.split('_', 1)        # e.g. from 'sum_long' extracts 'sum' and 'long'
             ctype_code = c_typename_to_id[c_type_str]   # e.g. map 'long' to C_LONG
             f_val = getattr(self.charm.ReducerType, f)  # value of the field in CkReductionTypesExt
-            #print(f, "ctype_code", ctype_code, "f_val=", f_val)
+            # print(f, "ctype_code", ctype_code, "f_val=", f_val)
             self.charm_reducer_to_ctype[f_val] = ctype_code
             if   op == 'sum':     self.red_table[SUM][ctype_code] = f_val
             elif op == 'product': self.red_table[PRODUCT][ctype_code] = f_val
@@ -214,7 +217,8 @@ class ReductionManager(object):
                 if pyReducer is None:
                     c_type = self.python_type_map[t0]
                     charm_reducer_type = self.red_table[op][c_type]
-                    if not hasattr(data, '__len__'): data = [data]
+                    if not hasattr(data, '__len__'):
+                        data = [data]
         else:
             pyReducer = reducer
 

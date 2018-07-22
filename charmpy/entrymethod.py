@@ -4,7 +4,7 @@ import time
 
 class EntryMethod(object):
 
-    def __init__(self, C, name, charm_type_id, profile=False):
+    def __init__(self, C, name, profile=False):
         self.C = C           # chare class to which this method belongs to
         self.name = name     # entry method name
         self.isCtor = False  # true if method is constructor
@@ -93,3 +93,8 @@ def when(cond_str):
 def threaded(func):
     func._ck_threaded = True
     return func
+
+
+def charmStarting():
+    from .charm import charm
+    globals()['charm'] = charm
