@@ -16,7 +16,7 @@ from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
 from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
-from . import entrymethod
+from . import entry_method
 from . import threaded
 from .threaded import Future
 from . import reduction
@@ -400,7 +400,7 @@ class Charm(object):
             self.mainchareRegistered = True
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-        l = [entrymethod.EntryMethod(C, m, profile=Options.PROFILING)
+        l = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
                                      for m in charm_type.__baseEntryMethods__()]
         self.classEntryMethods[charm_type_id][C] = l
         for m in dir(C):
@@ -411,7 +411,7 @@ class Charm(object):
             if m in ["AtSync", "flushWhen", "contribute", "gather"]:
                 continue
             # print(m)
-            em = entrymethod.EntryMethod(C, m, profile=Options.PROFILING)
+            em = entry_method.EntryMethod(C, m, profile=Options.PROFILING)
             self.classEntryMethods[charm_type_id][C].append(em)
         self.registered[C].add(charm_type)
 
@@ -491,7 +491,7 @@ class Charm(object):
                         raise CharmPyError("Chares must not inherit from Group, Array or"
                                            " Mainchare. Refer to new API")
 
-        for module in (chare, entrymethod, threaded, wait):
+        for module in (chare, entry_method, threaded, wait):
             module.charmStarting()
         self.threadMgr = threaded.EntryMethodThreadManager()
         self.createFuture = self.threadMgr.createFuture
