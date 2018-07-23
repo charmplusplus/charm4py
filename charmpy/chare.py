@@ -141,17 +141,17 @@ def mainchare_proxy__setstate__(proxy, state):
     proxy.cid = state
 
 def mainchare_proxy_method_gen(ep):  # decorator, generates proxy entry methods
-    def proxy_entry_method(*args, **kwargs):
-        me = args[0]  # proxy
+    def proxy_entry_method(proxy, *args, **kwargs):
         header = {}
         blockFuture = None
+        cid = proxy.cid  # chare ID
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.createFuture()
         destObj = None
-        if Options.LOCAL_MSG_OPTIM and (me.cid in charm.chares) and (len(args) > 1):
-            destObj = charm.chares[me.cid]
-        msg = charm.packMsg(destObj, args[1:], header)
-        charm.CkChareSend(me.cid, ep, msg)
+        if Options.LOCAL_MSG_OPTIM and (cid in charm.chares) and (len(args) > 0):
+            destObj = charm.chares[cid]
+        msg = charm.packMsg(destObj, args, header)
+        charm.CkChareSend(cid, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -213,19 +213,19 @@ def group_proxy_elem(proxy, pe):  # group proxy [] overload method
     return proxy_clone
 
 def group_proxy_method_gen(ep):  # decorator, generates proxy entry methods
-    def proxy_entry_method(*args, **kwargs):
-        me = args[0]  # proxy
+    def proxy_entry_method(proxy, *args, **kwargs):
         header = {}
         blockFuture = None
+        elemIdx = proxy.elemIdx
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.createFuture()
-            if me.elemIdx == -1:
+            if elemIdx == -1:
                 header[b'bcast'] = True
         destObj = None
-        if Options.LOCAL_MSG_OPTIM and (me.elemIdx == charm.myPe()) and (len(args) > 1):
-            destObj = charm.groups[me.gid]
-        msg = charm.packMsg(destObj, args[1:], header)
-        charm.CkGroupSend(me.gid, me.elemIdx, ep, msg)
+        if Options.LOCAL_MSG_OPTIM and (elemIdx == charm._myPe) and (len(args) > 0):
+            destObj = charm.groups[proxy.gid]
+        msg = charm.packMsg(destObj, args, header)
+        charm.CkGroupSend(proxy.gid, elemIdx, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -317,32 +317,29 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
     return proxy_clone
 
 def array_proxy_method_gen(ep):  # decorator, generates proxy entry methods
-    def proxy_entry_method(*args, **kwargs):
-        me = args[0]  # proxy
+    def proxy_entry_method(proxy, *args, **kwargs):
         header = {}
         blockFuture = None
+        elemIdx = proxy.elemIdx
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.createFuture()
-            if me.elemIdx == ():
+            if elemIdx == ():
                 header[b'bcast'] = True
         destObj = None
-        if Options.LOCAL_MSG_OPTIM:
-            array = charm.arrays[me.aid]
-            if (me.elemIdx in array) and (len(args) > 1):
-                destObj = array[me.elemIdx]
-        msg = charm.packMsg(destObj, args[1:], header)
-        charm.CkArraySend(me.aid, me.elemIdx, ep, msg)
+        if Options.LOCAL_MSG_OPTIM and (len(args) > 0):
+            array = charm.arrays[proxy.aid]
+            if elemIdx in array:
+                destObj = array[elemIdx]
+        msg = charm.packMsg(destObj, args, header)
+        charm.CkArraySend(proxy.aid, elemIdx, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
 
-# NOTE: From user side ckNew can be used as follows:
-# arrProxy.ckNew((dim1, dim2,...)) or arrProxy.ckNew(dim1)
-# arrProxy.ckNew(ndims=2) - create an empty array of 2 dimensions
 def array_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None):
-        # if CkMyPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
+        # if charm.myPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
         if type(dims) == int: dims = (dims,)
 
         if dims is None and ndims == -1:
