@@ -17,8 +17,8 @@ from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
 from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
 from . import entry_method
-from . import threaded
-from .threaded import Future
+from . import threads
+from .threads import Future
 from . import reduction
 from . import wait
 import array
@@ -491,9 +491,9 @@ class Charm(object):
                         raise CharmPyError("Chares must not inherit from Group, Array or"
                                            " Mainchare. Refer to new API")
 
-        for module in (chare, entry_method, threaded, wait):
+        for module in (chare, entry_method, threads, wait):
             module.charmStarting()
-        self.threadMgr = threaded.EntryMethodThreadManager()
+        self.threadMgr = threads.EntryMethodThreadManager()
         self.createFuture = self.threadMgr.createFuture
 
         self.lib.start()
