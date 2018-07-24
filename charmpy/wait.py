@@ -111,14 +111,11 @@ class ChareStateCond(object):
     group = True
 
     def __init__(self, cond_str):
-        from charmpy import charm
-        self.charm     = charm
         self.cond_str  = cond_str
         self.cond_func = eval('lambda self: ' + cond_str)
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateCond)
-        c.charm      = self.charm
         c.cond_str   = self.cond_str
         c.cond_func  = self.cond_func
         c.wait_queue = []
@@ -133,8 +130,8 @@ class ChareStateCond(object):
 
     def check(self, obj):
         dequeued = False
-        while self.cond_func(obj):
         #while eval(me.cond_str):   # eval is very slow
+        while self.cond_func(obj):
             elem = self.wait_queue.pop()
             if elem[0] == 0:
                 # is msg
@@ -143,9 +140,10 @@ class ChareStateCond(object):
             elif elem[0] == 1:
                 # is thread
                 tid = elem[1]
-                self.charm.threadMgr.resumeThread(tid, None)
+                charm.threadMgr.resumeThread(tid, None)
             dequeued = True
-            if len(self.wait_queue) == 0: break
+            if len(self.wait_queue) == 0:
+                break
         return dequeued, len(self.wait_queue) == 0
 
     def __getstate__(self):
@@ -154,8 +152,6 @@ class ChareStateCond(object):
     def __setstate__(self, state):
         self.cond_str, self.wait_queue, self._cond_next = state
         self.cond_func = eval('lambda self: ' + self.cond_str)
-        import charmpy
-        self.charm = charmpy.charm
 
 
 def is_tag_cond(root_ast):
@@ -193,7 +189,7 @@ def is_tag_cond(root_ast):
 
         return ('self.' + attrib.attr + ' == args[' + str(idx) + ']', attrib.attr, idx)
     except:
-      return None
+        return None
 
 
 class MsgArgsTransformer(ast.NodeTransformer):
@@ -230,6 +226,7 @@ class MsgArgsTransformer(ast.NodeTransformer):
         else:
             return node
 
+
 #import astunparse
 
 def parse_cond_str(cond_str, method_arguments={}):
@@ -257,3 +254,8 @@ def parse_cond_str(cond_str, method_arguments={}):
     new_tree = ast.fix_missing_locations(new_tree)
     lambda_func = eval(compile(new_tree, '<string>', 'eval'))
     return ChareStateMsgCond(cond_str, lambda_func)
+
+
+def charmStarting():
+    from .charm import charm
+    globals()['charm'] = charm

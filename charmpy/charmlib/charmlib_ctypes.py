@@ -7,7 +7,7 @@ if sys.version_info < (3, 0, 0):
   import cPickle
 else:
   import pickle as cPickle
-import ckreduction as red
+from .. import reduction as red
 import array
 try:
   import numpy

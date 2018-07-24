@@ -20,10 +20,10 @@ Prerequisites
    If using the ``ctypes`` layer, verify that the path to the shared library is
    correct in ``charmpy.cfg``.
 
-2. The CharmPy module (``charmpy.py``) must be in the Python search path. One way to
+2. The CharmPy package must be in the Python search path. One way to
    set it is::
 
-   $ export PYTHONPATH=path_to_charmpy_folder  # NOTE: the folder containing charmpy.py
+   $ export PYTHONPATH=path_to_charmpy  (e.g. export PYTHONPATH=/home/john/charmpy)
 
 Launching CharmPy programs
 --------------------------

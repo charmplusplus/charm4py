@@ -16,6 +16,7 @@ def check_libcharm_version(lib):
         print("Charm++ version >= " + req_str + " required. Existing version is " + cur_str)
         exit(1)
 
+
 if len(sys.argv) < 2:
     print("Usage: python setup.py CHARM_PATH")
     exit(1)
@@ -73,7 +74,7 @@ def use_cffi():
     global libcharm_interface
     libcharm_interface = 'cffi'
     cmd = [sys.executable, 'charmlib_cffi_build.py', charm_include_path, libcharmPath]
-    p = subprocess.Popen(cmd, shell=False, cwd=os.getcwd() + '/charmpy')
+    p = subprocess.Popen(cmd, shell=False, cwd=os.getcwd() + '/charmpy/charmlib')
     rc = p.wait()
     print('/////////////////////////////')
     if rc == 0:
@@ -91,14 +92,14 @@ def use_cython():
     try:
         # remove charmlib_cython.c to force rebuild. cython and/or distutils don't rebuild .c
         # or obj files in some cases even when things have changed
-        os.remove('charmpy/charmlib_cython.c')
+        os.remove('charmpy/charmlib/charmlib_cython.c')
     except:
         pass
     build_env = os.environ.copy()
     build_env['CFLAGS']  = '-I' + charm_include_path
     build_env['LDFLAGS'] = '-L' + libcharmPath
-    cmd = [sys.executable, 'charmlib_cython_build.py', 'build_ext', '--build-lib', '__cython_objs__', '--build-temp', '__cython_objs__']
-    p = subprocess.Popen(cmd, shell=False, cwd=os.getcwd() + '/charmpy', env=build_env)
+    cmd = [sys.executable, 'charmlib_cython_build.py', 'build_ext', '--build-lib', '.']
+    p = subprocess.Popen(cmd, shell=False, cwd=os.getcwd() + '/charmpy/charmlib', env=build_env)
     rc = p.wait()
     print('/////////////////////////////')
     if rc == 0:
@@ -128,7 +129,7 @@ import json
 config = {}
 config['libcharm_interface'] = libcharm_interface
 config['libcharm_path'] = libcharmPath
-json.dump(config, open('charmpy/charmpy.cfg','w'))
+json.dump(config, open('charmpy/charmpy.cfg', 'w'))
 print('charmpy.cfg file generated')
 
 print('Setup complete\n')

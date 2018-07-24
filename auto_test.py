@@ -57,7 +57,7 @@ searchForPython(python_implementations)
 interfaces = ['ctypes', 'cffi', 'cython']
 supported_py_versions = {'ctypes': {2, 3},
                          'cffi'  : {2, 3},
-                         'cython': {3} }
+                         'cython': {3}}
 
 with open('test_config.json', 'r') as infile:
     tests = json.load(infile)

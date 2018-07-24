@@ -1,5 +1,5 @@
 from charmpy import charm
-import wait
+from charmpy import wait
 import re
 
 

@@ -4,11 +4,12 @@ if sys.version_info < (3, 0, 0):
     from thread import get_ident
 else:
     from threading import get_ident
-from charmpy import CharmPyError, charm, Options
 from collections import defaultdict
 import time
 
+
 class Future(object):
+
     def __init__(self, fid, tid, proxy_class_name, proxy_state, nsenders):
         self.fid = fid                    # unique future ID within process
         self.tid = tid                    # thread ID where the future is created
@@ -52,7 +53,6 @@ class Future(object):
                 self.thread_paused = False
                 charm.threadMgr.resumeThread(self.tid, self.value)
 
-
     def __getstate__(self):
         return (self.fid, self.proxy_class_name, self.proxy_state)
 
@@ -67,20 +67,20 @@ class EntryMethodThreadManager(object):
         def __init__(self, obj, entry_method):
             self.obj = obj                  # chare that spawned the thread
             self.em = entry_method          # EntryMethod object for which this thread is running
-            self.wait_cv = threading.Condition() # condition variable to pause/resume entry method threads
+            self.wait_cv = threading.Condition()  # condition variable to pause/resume entry method threads
             self.wait_result = None         # to place data that thread was waiting on
             self.error = None               # to pass exceptions from entry method thread to main thread
             self.finished = False           # True if entry method has run to completion
 
     def __init__(self):
         self.PROFILING = Options.PROFILING
-        self.main_thread_id = get_ident()   # ID of the charmpy process main thread
-        self.entryMethodRunning = threading.Condition() # condition variable used by main thread to
-                                                        # pause while threaded entry method is running
-        self.threads = {}                   # thread ID -> ThreadState object
-        self.obj_threads = defaultdict(set) # stores active thread IDs of chares
-        self.futures_count = 0              # counter used as IDs for futures created by this ThreadManager
-        self.futures = {}                   # future ID -> Future object
+        self.main_thread_id = get_ident()    # ID of the charmpy process main thread
+        # condition variable used by main thread to pause while threaded entry method is running
+        self.entryMethodRunning = threading.Condition()
+        self.threads = {}                    # thread ID -> ThreadState object
+        self.obj_threads = defaultdict(set)  # stores active thread IDs of chares
+        self.futures_count = 0               # counter used as IDs for futures created by this ThreadManager
+        self.futures = {}                    # future ID -> Future object
 
     def startThread(self, obj, entry_method, args, header):
         """ Called by main thread to spawn an entry method thread """
@@ -131,8 +131,8 @@ class EntryMethodThreadManager(object):
                         header[b'block'].send(ret)
                 thread_state.finished = True
             except Exception:
-                thread_state.error = sys.exc_info()[1] # store exception for main thread
-            self.entryMethodRunning.notify() # notify main thread that done
+                thread_state.error = sys.exc_info()[1]  # store exception for main thread
+            self.entryMethodRunning.notify()  # notify main thread that done
 
     def throwNotThreadedError(self):
         raise CharmPyError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
@@ -144,7 +144,7 @@ class EntryMethodThreadManager(object):
             Returns data that thread was waiting for, or None if was waiting for an event
         """
         tid = get_ident()
-        if tid == self.main_thread_id: self.throwNotThreadedError() # verify that not running on main thread
+        if tid == self.main_thread_id: self.throwNotThreadedError()  # verify that not running on main thread
         # thread has entryMethodRunning lock already because it's running an entry method
         thread_state = self.threads[tid]
         with thread_state.wait_cv:
@@ -170,7 +170,7 @@ class EntryMethodThreadManager(object):
         if self.PROFILING:
             charm.mainThreadEntryMethod.stopMeasuringTime()
             thread_state.em.startMeasuringTime()
-        self.entryMethodRunning.wait() # main thread waits because threaded entry method resumes
+        self.entryMethodRunning.wait()  # main thread waits because threaded entry method resumes
         if self.PROFILING:
             thread_state.em.stopMeasuringTime()
             charm.mainThreadEntryMethod.startMeasuringTime()
@@ -204,3 +204,10 @@ class EntryMethodThreadManager(object):
 
         if future.value_received:
             del self.futures[fid]
+
+
+def charmStarting():
+    from .charm import charm, Options, CharmPyError
+    globals()['charm'] = charm
+    globals()['Options'] = Options
+    globals()['CharmPyError'] = CharmPyError

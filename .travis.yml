@@ -23,6 +23,6 @@ script:
   - python3 setup.py `pwd`/charm --with-cffi
   - python2 setup.py `pwd`/charm --with-cffi
   - export LD_LIBRARY_PATH=`pwd`/charm/lib
-  - export PYTHONPATH=`pwd`/charmpy
+  - export PYTHONPATH=`pwd`
   - export CHARMPY_TEST_NUM_PROCESSES=2
   - python3 auto_test.py

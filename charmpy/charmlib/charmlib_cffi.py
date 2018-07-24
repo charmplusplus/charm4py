@@ -1,11 +1,11 @@
-from _charmlib import ffi, lib
+from ._charmlib_cffi import ffi, lib
 import sys
 import time
 if sys.version_info[0] < 3:
   import cPickle
 else:
   import pickle as cPickle
-import ckreduction as red
+from .. import reduction as red
 import array
 try:
   import numpy
