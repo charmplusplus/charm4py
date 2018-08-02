@@ -3,16 +3,16 @@ os: linux
 dist: trusty
 before_install:
   - sudo apt-get install python-dev
-#  - sudo apt-get install python-numpy
   - sudo apt-get install python3-dev
-  - sudo apt-get install python3-pip
-#  - sudo apt-get install python3-numpy
+  - wget https://bootstrap.pypa.io/get-pip.py
+  - sudo python2 get-pip.py
+  - sudo python3 get-pip.py
 install:
-  - pip install --user cffi > /dev/null
-  - pip install --user numpy > /dev/null
-  - pip3 install --user cffi > /dev/null
-  - pip3 install --user numpy > /dev/null
-  - pip3 install --user cython > /dev/null
+  - pip2 install --user cffi
+  - pip2 install --user numpy
+  - pip3 install --user cffi
+  - pip3 install --user numpy
+  - pip3 install --user cython
 script:
   - git clone https://github.com/UIUC-PPL/charm
   - cd charm
