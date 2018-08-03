@@ -2,6 +2,7 @@ import ctypes
 from ctypes import c_int, c_short, c_char, c_long, c_longlong, c_uint, c_ushort, c_ubyte, c_ulong, c_ulonglong, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
 import sys
 import os
+import os.path
 import time
 if sys.version_info < (3, 0, 0):
   import cPickle
@@ -478,20 +479,20 @@ class CharmLib(object):
       self.charm.handleGeneralError()
 
   def lib_version_check(self):
-    commit_id = ctypes.c_char_p.in_dll(self.lib, "CmiCommitID").value.decode()
+    commit_id = ctypes.c_char_p.in_dll(self.lib, 'CmiCommitID').value.decode()
     self.charm.lib_version_check(commit_id)
 
   def init(self, libcharm_path):
     if os.name != 'nt':
-      p = os.environ.get("LIBCHARM_PATH")
+      p = os.environ.get('LIBCHARM_PATH')
       if p is not None: libcharm_path = p
       if libcharm_path != None:
         self.lib = ctypes.CDLL(libcharm_path + '/libcharm.so')
       else:
-        self.lib = ctypes.CDLL("libcharm.so")
+        self.lib = ctypes.CDLL('libcharm.so')
     else:
       # looks for DLL in current working directory, or PATH
-      self.lib = ctypes.CDLL("charm.dll")
+      self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'charm.dll'))
 
     self.lib_version_check()
 

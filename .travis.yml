@@ -14,15 +14,11 @@ install:
   - pip3 install --user numpy
   - pip3 install --user cython
 script:
-  - git clone https://github.com/UIUC-PPL/charm
-  - cd charm
-  - ./build charmpy netlrts-linux-x86_64 tcp -j2 --with-production --enable-error-checking > /dev/null
-  - cd ..
-  - cp charm/bin/charmrun charmrun
-  - python3 setup.py `pwd`/charm --with-cython
-  - python3 setup.py `pwd`/charm --with-cffi
-  - python2 setup.py `pwd`/charm --with-cffi
-  - export LD_LIBRARY_PATH=`pwd`/charm/lib
+  - git clone https://github.com/UIUC-PPL/charm charm_src/charm
+  - export CHARM_BUILD_PROCESSES=2
+  - export CHARMPY_BUILD_CFFI=1
+  - python3 setup.py build_ext --inplace
+  - python2 setup.py build_ext --inplace
   - export PYTHONPATH=`pwd`
   - export CHARMPY_TEST_NUM_PROCESSES=2
   - python3 auto_test.py
