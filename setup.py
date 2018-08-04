@@ -92,10 +92,11 @@ def build_libcharm(charm_src_dir, build_dir):
         # result in using same # cores as physical cores (therefore not all the logical cores)
         import multiprocessing
         build_num_cores = int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2))
+        extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
         if system == 'Darwin':
-            cmd = './build charmpy netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production'
+            cmd = './build charmpy netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         else:
-            cmd = './build charmpy netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production'
+            cmd = './build charmpy netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         p = subprocess.Popen(cmd.split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)

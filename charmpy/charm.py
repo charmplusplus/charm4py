@@ -628,7 +628,7 @@ def load_charm_library(charm):
         elif interface == 'cython':
             from .charmlib.charmlib_cython import CharmLib
         else:
-            raise CharmPyError("Unrecognized interface " + interface)
+            raise CharmPyError('Unrecognized interface ' + interface)
     else:
         # pick best available interface
         import platform

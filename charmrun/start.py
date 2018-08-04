@@ -1,3 +1,4 @@
+import sys
 import os
 import os.path
 
@@ -43,7 +44,6 @@ def checkNodeListLocal(args):
 
 def start():
     import subprocess
-    import sys
 
     args = sys.argv[1:]
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
@@ -56,4 +56,4 @@ def start():
 
 
 if __name__ == '__main__':
-    start()
+    sys.exit(start())

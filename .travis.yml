@@ -15,6 +15,7 @@ install:
   - pip3 install --user cython
 script:
   - git clone https://github.com/UIUC-PPL/charm charm_src/charm
+  - export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
   - export CHARM_BUILD_PROCESSES=2
   - export CHARMPY_BUILD_CFFI=1
   - python3 setup.py build_ext --inplace
