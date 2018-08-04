@@ -97,7 +97,7 @@ def build_libcharm(charm_src_dir, build_dir):
             cmd = './build charmpy netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         else:
             cmd = './build charmpy netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-        p = subprocess.Popen(cmd.split(' '),
+        p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
         rc = p.wait()
@@ -216,6 +216,7 @@ setuptools.setup(
         ],
     },
     install_requires=['numpy>=1.10.0'],
+    python_requires='>=2.7, ~=3.4',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
@@ -225,13 +226,11 @@ setuptools.setup(
         'Operating System :: POSIX :: Linux',
         'Operating System :: Microsoft :: Windows',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Clustering',
     ],
