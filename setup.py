@@ -16,6 +16,7 @@ if system == 'Windows' or system.lower().startswith('cygwin'):
     libcharm_filename = 'charm.dll'
     charmrun_filename = 'charmrun.exe'
 elif system == 'Darwin':
+    os.environ['ARCHFLAGS'] = '-arch x86_64'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
 else:
