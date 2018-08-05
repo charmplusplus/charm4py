@@ -1,8 +1,16 @@
 import sys
+import platform
 from cffi import FFI
 ffibuilder = FFI()
 
-ffibuilder.set_source("_charmlib_cffi",
+
+if platform.system() == 'Darwin':
+    extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
+else:
+    extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+
+
+ffibuilder.set_source("charmpy.charmlib._charmlib_cffi",
    r""" // passed to the real C compiler
         #include "charm.h"
         #include "spanningTree.h"
@@ -87,8 +95,10 @@ ffibuilder.set_source("_charmlib_cffi",
 
     """,
     libraries=['charm'],
-    include_dirs=[sys.argv[1]],
-    library_dirs=[sys.argv[2]])
+    include_dirs=['charm_src/charm/include'],
+    library_dirs=['charmpy/.libs'],
+    extra_compile_args=['-g0', '-O3'],
+    extra_link_args=extra_link_args)
 
 ffibuilder.cdef("""
     void StartCharmExt(int argc, char **argv);
@@ -235,4 +245,4 @@ ffibuilder.cdef("""
 """)
 
 if __name__ == "__main__":
-    ffibuilder.compile(tmpdir='.', verbose=True)
+    ffibuilder.compile()

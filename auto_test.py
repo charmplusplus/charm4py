@@ -79,7 +79,7 @@ for test in tests:
             additionalArgs = []
             if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
                 additionalArgs.append('++quiet')
-            cmd = ['./charmrun']
+            cmd = ['charmrun/charmrun']
             cmd += [python] + [test['path']]
             if 'args' in test:
                 cmd += test['args'].split(' ')

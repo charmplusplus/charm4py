@@ -54,6 +54,8 @@ class Charm(object):
         class PrintStream(object):
             def write(self, msg):
                 charm.lib.CkPrintf(msg.encode())
+            def flush(self):
+                pass
 
     def __init__(self):
         self.started = False
@@ -76,28 +78,7 @@ class Charm(object):
         self.activeChares = set()  # for profiling (active chares on this PE)
         self.opts = Options
         self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
-        cfgPath = os.path.expanduser("~") + '/charmpy.cfg'
-        if not os.path.exists(cfgPath):
-            cfgPath = os.path.dirname(__file__) + '/charmpy.cfg'  # look in folder where charm.py is
-            if not os.path.exists(cfgPath):
-                raise CharmPyError("charmpy.cfg not found")
-        import json
-        cfg = json.load(open(cfgPath, 'r'))
-        interface = cfg['libcharm_interface']
-        args = sys.argv
-        if '+libcharm_interface' in args:
-            arg_idx = args.index('+libcharm_interface')
-            interface = args.pop(arg_idx + 1)
-            args.pop(arg_idx)
-        if interface == 'ctypes':
-            from .charmlib.charmlib_ctypes import CharmLib
-        elif interface == 'cffi':
-            from .charmlib.charmlib_cffi import CharmLib
-        elif interface == 'cython':
-            from .charmlib.charmlib_cython import CharmLib
-        else:
-            raise CharmPyError("Unrecognized interface " + interface)
-        self.lib = CharmLib(self, Options, cfg.get('libcharm_path'))
+        self.lib = load_charm_library(self)
         self.ReducerType = self.lib.ReducerType
         self.CkContributeToChare = self.lib.CkContributeToChare
         self.CkContributeToGroup = self.lib.CkContributeToGroup
@@ -632,6 +613,38 @@ class Charm(object):
 
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
+
+
+def load_charm_library(charm):
+    args = sys.argv
+    if '+libcharm_interface' in args:
+        arg_idx = args.index('+libcharm_interface')
+        interface = args.pop(arg_idx + 1)
+        args.pop(arg_idx)
+        if interface == 'ctypes':
+            from .charmlib.charmlib_ctypes import CharmLib
+        elif interface == 'cffi':
+            from .charmlib.charmlib_cffi import CharmLib
+        elif interface == 'cython':
+            from .charmlib.charmlib_cython import CharmLib
+        else:
+            raise CharmPyError('Unrecognized interface ' + interface)
+    else:
+        # pick best available interface
+        import platform
+        py_impl = platform.python_implementation()
+        if py_impl != 'PyPy':
+            try:
+                from .charmlib.charmlib_cython import CharmLib
+            except:
+                try:
+                    from .charmlib.charmlib_cffi import CharmLib
+                except:
+                    from .charmlib.charmlib_ctypes import CharmLib
+        else:
+            # for PyPy we require the cffi interface (cffi comes builtin in PyPy)
+            from .charmlib.charmlib_cffi import CharmLib
+    return CharmLib(charm, Options, os.path.join(os.path.dirname(__file__), '.libs'))
 
 
 def profile_send_function(func):
