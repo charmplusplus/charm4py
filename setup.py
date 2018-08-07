@@ -132,7 +132,7 @@ def build_libcharm(charm_src_dir, build_dir):
         shutil.copy(charmrun_src_path, output_dir)
 
 
-class specialized_build_py(build_py):
+class specialized_build_py(build_py, object):
 
     def run(self):
         if not self.dry_run:
