@@ -4,7 +4,7 @@ Tutorial
 
 .. contents::
 
-Most of the code throughout this section can be found in ``examples/tutorial``.
+This tutorial assumes that you have installed CharmPy as described in :doc:`install`.
 
 Program start and exit
 ----------------------
@@ -14,7 +14,7 @@ We will begin with a simple example:
 
 .. code-block:: python
 
-    # examples/tutorial/start.py
+    # start.py
     from charmpy import charm
 
     def main(args):
@@ -22,15 +22,14 @@ We will begin with a simple example:
         print("Running on", charm.numPes(), "processors")
         charm.exit()
 
-    if __name__ == '__main__':
-        charm.start(main)
+    charm.start(main)
 
 
 We need to define an entry point to the CharmPy program, which we refer to as the
 Charm *main* function.
 In our example, it is the function called ``main`` .
 The main function runs on only one processor, typically processor 0, and is in charge
-of creating and distributing work across the system. The main function must take
+of starting the creation and distribution of work across the system. The main function must take
 one argument to get the list of command-line arguments.
 In this example, we are specifying the
 function ``main`` as the main function by passing it to the ``start`` method.
@@ -42,12 +41,10 @@ number on which the caller resides.
 ``charm.exit()`` is called to exit a Charm program. It can be called from any chare
 on any processor.
 
-If a program defines new Chare types in files other than the one used to launch the
-application, the user needs to pass the names of those modules. For example:
+To launch the example with charmrun using 4 processes::
 
-.. code-block:: python
+    $ python -m charmrun.start +p4 start.py
 
-    charm.start(main, ['module1', 'module2'])
 
 Defining Chares
 ---------------
@@ -69,12 +66,12 @@ To define a Chare, simply define a class that is a subclass of ``Chare``.
 
 Any methods of ``MyChare`` will be remotely callable by other chares.
 
-For easy management of distributed objects, the user can organize chares into distributed collections:
+For easy management of distributed objects, you can organize chares into distributed collections:
 
 
 .. code-block:: python
 
-    # examples/tutorial/chares.py
+    # chares.py
     from charmpy import charm, Chare, Group, Array
 
     class MyChare(Chare):
@@ -107,7 +104,7 @@ This is the output for 2 PEs:
 
 .. code-block:: text
 
-    $ ./charmrun +p2 /usr/bin/python3 examples/tutorial/chares.py ++local ++quiet
+    $ python -m charmrun.start +p2 chares.py ++quiet
     Hello from MyChare instance in processor 0
     Hello from MyChare instance in processor 0
     Hello from MyChare instance in processor 0
@@ -125,6 +122,15 @@ used to wait for all the chares in the specified collections to be created.
 
 .. note::
     Chares can be created at any point once the Charm *main* function has been reached.
+
+If a program defines new Chare types in files other than the one used to launch the
+application, the user needs to pass the names of those modules when starting charm.
+For example:
+
+.. code-block:: python
+
+    charm.start(main, ['module1', 'module2'])
+
 
 Remote method invocation
 ------------------------
@@ -247,7 +253,7 @@ any chare or future of your choice.
 
 .. code-block:: python
 
-    # examples/tutorial/reduction.py
+    # reduction.py
     from charmpy import charm, Chare, Group, Reducer
 
     class MyChare(Chare):
@@ -325,7 +331,7 @@ Now we will show a full *Hello World* example, that prints a message from all pr
 
 .. code-block:: python
 
-    # examples/tutorial/hello_world.py
+    # hello_world.py
     from charmpy import Chare, Group, charm
 
     class Hello(Chare):
@@ -363,7 +369,7 @@ explicitly by the user like this:
 
 .. code-block:: python
 
-    # examples/tutorial/hello_world2.py
+    # hello_world2.py
     from charmpy import Chare, Group, charm
 
     class Hello(Chare):
@@ -395,7 +401,7 @@ This is an example of the output of Hello World running of 4 processors:
 
 .. code-block:: text
 
-    $ ./charmrun +p4 /usr/bin/python3 examples/tutorial/hello_world.py ++local ++quiet
+    $ python -m charmrun.start +p4 hello_world.py ++quiet
     Hello World from element 0
     Hello World from element 2
     Hello World from element 1
@@ -407,5 +413,5 @@ The output brings us to an important fact:
     For performance reasons, by default Charm does not enforce or guarantee any particular
     order of delivery of messages (remote method invocations) or order in which chare
     instances are created on remote processes. There are multiple mechanisms to sequence
-    messages, like using the ``when`` decorator or by including an identifier as part of a method invocation
-    to sequence message processing.
+    messages. The ``when`` decorator is a simple and powerful mechanism to specify
+    when methods should be invoked.

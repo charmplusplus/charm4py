@@ -4,9 +4,9 @@ Performance
 
 .. contents::
 
-Python 3 with the Cython interface layer is currently the recommended way to run CharmPy
-programs to get the best performance. Please see section :doc:`install` and
-:doc:`setup` for details on setting up CharmPy with Cython.
+Python 3 with the Cython interface layer is currently the recommended way to run
+CharmPy programs to get the best performance (on CPython). This is the option that
+is installed when using pip.
 
 Performance analysis
 --------------------

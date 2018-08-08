@@ -28,7 +28,7 @@ We have found that using CharmPy + Numba, it is possible to build parallel appli
 entirely in Python that have the same or similar performance as the equivalent C++
 application (whether based on Charm++ or MPI), and that scale to hundreds of thousands of cores.
 
-Example applications are in the ``examples`` subdirectory.
+Example applications are in the ``examples`` subdirectory of the source code repository_.
 
 .. _numpy: http://www.numpy.org/
 
@@ -42,13 +42,14 @@ Example applications are in the ``examples`` subdirectory.
 
 .. _PyPy: http://pypy.org/
 
+.. _repository: https://github.com/UIUC-PPL/charmpy
+
 .. toctree::
    :maxdepth: 2
 
    features
    overview
    install
-   setup
    running
    tutorial
    performance
