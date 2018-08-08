@@ -52,7 +52,12 @@ def start():
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
     cmd.append(sys.executable)
     cmd.extend(args)
-    return subprocess.call(cmd)
+    try:
+        return subprocess.call(cmd)
+    except FileNotFoundError:
+        print('charmrun executable not found. You are running \"' + __file__ + '\"')
+        print('Make sure this is a built or installed version of charmrun')
+        return 1
 
 
 if __name__ == '__main__':
