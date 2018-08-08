@@ -1,5 +1,5 @@
 include MANIFEST.in
-include README.rst setup.py auto_test.py AUTHORS.md LICENSE
+include README.rst setup.py auto_test.py AUTHORS.md LICENSE CHANGES.rst
 
 include charm_src/charm.tar.gz
 
