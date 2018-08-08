@@ -55,6 +55,7 @@ Example applications are in the ``examples`` subdirectory of the source code rep
    performance
    benchmarks
    contact
+   release-notes
 
 Indices and tables
 ==================
