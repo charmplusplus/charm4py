@@ -19,7 +19,7 @@ The following computes Pi in parallel, using any number of machines and processo
 
 .. code-block:: python
 
-    from charmpy import *
+    from charmpy import charm, Chare, Group, Reducer
     from math import pi
     import time
 
