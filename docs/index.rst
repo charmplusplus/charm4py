@@ -46,14 +46,39 @@ Example applications are in the ``examples`` subdirectory of the source code rep
 
 .. toctree::
    :maxdepth: 2
+   :caption: Getting Started
 
    features
    overview
    install
    running
    tutorial
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API Reference
+
+   charm-api.rst
+   chare-api.rst
+   proxy-api.rst
+   group-api.rst
+   array-api.rst
+   reducer-api.rst
+   futures-api.rst
+   readonlies-api.rst
+   options-api.rst
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Performance
+
    performance
    benchmarks
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Misc
+
    contact
    release-notes
 
