@@ -26,6 +26,9 @@
         "path": "tests/reductions/test_gather.py"
     },
     {
+        "path": "tests/reductions/future_reduction.py"
+    },
+    {
         "path": "tests/reductions/bench_reductions.py"
     },
     {

@@ -462,10 +462,10 @@ class CharmLib(object):
           else:
             if haveNumpy:
               dtype = charm.redMgr.rev_np_array_type_map[ctype]
-              header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+              header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
             else:
               array_typecode = charm.redMgr.rev_array_type_map[ctype]
-              header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+              header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
             returnBuffers[1] = data
             returnBufferSizes[1] = dataSize
             pyData.append(None)

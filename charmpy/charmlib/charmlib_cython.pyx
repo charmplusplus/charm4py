@@ -807,10 +807,10 @@ cdef void createReductionTargetMsg(void *data, int dataSize, int reducerType, in
         else:
           IF HAVE_NUMPY:
             dtype = rev_np_array_type_map[ctype]
-            header[b'dcopy'] = [(0, 2, (numElems, dtype), dataSize)]
+            header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
           ELSE:
             array_typecode = rev_array_type_map[ctype]
-            header[b'dcopy'] = [(0, 1, (array_typecode), dataSize)]
+            header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
           returnBuffers[1]     = <char*>data
           returnBufferSizes[1] = dataSize
           pyData.append(None)
