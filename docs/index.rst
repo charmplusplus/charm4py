@@ -58,15 +58,15 @@ Example applications are in the ``examples`` subdirectory of the source code rep
    :maxdepth: 1
    :caption: API Reference
 
-   charm-api.rst
-   chare-api.rst
-   proxy-api.rst
-   group-api.rst
-   array-api.rst
-   reducer-api.rst
-   futures-api.rst
-   readonlies-api.rst
-   options-api.rst
+   charm-api
+   chare-api
+   proxy-api
+   group-api
+   array-api
+   reducer-api
+   futures-api
+   readonlies-api
+   options-api
 
 .. toctree::
    :maxdepth: 2
