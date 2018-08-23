@@ -33,7 +33,7 @@ Install from Source
 -------------------
 
 .. note::
-    This is not required if installing a binary wheel with pip, see above.
+    This is not required if installing from a binary wheel with pip (see above).
 
 Prerequisites:
     - CPython: install numpy and cython (``pip install 'numpy>=1.10.0' cython``)
@@ -43,7 +43,7 @@ To build the latest *stable* release, do::
 
   $ pip install charmpy --no-binary charmpy
 
-Or download the source distribution from PyPI and run ``python setup.py install``.
+Or download the source distribution from PyPI, uncompress and run ``python setup.py install``.
 
 To build the latest *development* version, download CharmPy and Charm++ source code
 and run setup::
