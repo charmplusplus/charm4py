@@ -8,7 +8,7 @@ invocation; built on top of an adaptive C++ runtime system providing *speed*,
 *scalability* and *dynamic load balancing*.
 
 CharmPy allows development of parallel applications that scale from laptops to
-supercomputers, using the Python language.
+supercomputers, using the Python language. It is built on top of `Charm++`_.
 
 Please see the Documentation_.
 
@@ -70,6 +70,7 @@ Contact
 Main author at <jjgalvez@illinois.edu>
 
 
+.. _Charm++: https://github.com/UIUC-PPL/charm
 
 .. _Documentation: https://charmpy.readthedocs.io
 
