@@ -200,7 +200,7 @@ with open('README.rst', 'r') as f:
 
 setuptools.setup(
     name='charmpy',
-    version='0.10.0',
+    version='0.10.1',
     author='Juan Galvez and individual contributors',
     author_email='jjgalvez@illinois.edu',
     description='CharmPy Parallel Programming Framework',
@@ -217,7 +217,7 @@ setuptools.setup(
         ],
     },
     install_requires=['numpy>=1.10.0'],
-    python_requires='>=2.7, ~=3.4',
+    #python_requires='>=2.7, ~=3.4',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

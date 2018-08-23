@@ -3,6 +3,28 @@ This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
 
+What's new in v0.10.1
+=====================
+
+This is a bugfix and documentation release:
+
+* Added core API to docs, and more details regarding installation and running
+
+* Fixed reduction to Future failing when contributing numeric arrays
+
+* CharmPy now requires Charm++ version >= ``6.8.2-890`` which, among other things,
+  includes fixes for the following Windows issues:
+
+      - Running an application without ``charmrun`` on Windows would crash
+
+      - Abort messages were sometimes not displayed on exit. On CharmPy,
+        this had the effect that Python runtime errors were sometimes not shown.
+
+      - If running with charmrun, any output prior to charm.start()
+        would not be shown. On CharmPy, this had the effect that Python
+        syntax errors were not shown.
+
+
 What's new in v0.10
 ===================
 
