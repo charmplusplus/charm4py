@@ -32,11 +32,21 @@ To install on regular Linux, macOS and Windows machines, do::
 Install from Source
 -------------------
 
+.. note::
+    This is not required if installing a binary wheel with pip, see above.
+
 Prerequisites:
     - CPython: install numpy and cython (``pip install 'numpy>=1.10.0' cython``)
     - PyPy: none
 
-Download CharmPy and Charm++ source code and run setup::
+To build the latest *stable* release, do::
+
+  $ pip install charmpy --no-binary charmpy
+
+Or download the source distribution from PyPI and run ``python setup.py install``.
+
+To build the latest *development* version, download CharmPy and Charm++ source code
+and run setup::
 
     $ git clone https://github.com/UIUC-PPL/charmpy
     $ cd charmpy
