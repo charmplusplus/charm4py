@@ -55,18 +55,10 @@ Example applications are in the ``examples`` subdirectory of the source code rep
    tutorial
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: API Reference
 
-   charm-api
-   chare-api
-   proxy-api
-   group-api
-   array-api
-   reducer-api
-   futures-api
-   readonlies-api
-   options-api
+   core-api
 
 .. toctree::
    :maxdepth: 2
@@ -82,9 +74,9 @@ Example applications are in the ``examples`` subdirectory of the source code rep
    contact
    release-notes
 
-Indices and tables
-==================
+.. Indices and tables
+.. ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`
