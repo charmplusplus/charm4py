@@ -617,6 +617,9 @@ class Charm(object):
 
 def load_charm_library(charm):
     args = sys.argv
+    libcharm_path = os.path.join(os.path.dirname(__file__), '.libs')
+    if os.name == 'nt':
+        os.environ['PATH'] += ';' + libcharm_path
     if '+libcharm_interface' in args:
         arg_idx = args.index('+libcharm_interface')
         interface = args.pop(arg_idx + 1)
@@ -644,7 +647,7 @@ def load_charm_library(charm):
         else:
             # for PyPy we require the cffi interface (cffi comes builtin in PyPy)
             from .charmlib.charmlib_cffi import CharmLib
-    return CharmLib(charm, Options, os.path.join(os.path.dirname(__file__), '.libs'))
+    return CharmLib(charm, Options, libcharm_path)
 
 
 def profile_send_function(func):
