@@ -159,7 +159,9 @@ class specialized_build_ext(build_ext, object):
 extensions = []
 py_impl = platform.python_implementation()
 
-if py_impl != 'PyPy':
+if py_impl == 'PyPy':
+    os.environ['CHARMPY_BUILD_CFFI'] = '1'
+elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
     if sys.version_info[0] >= 3:
         # compile C-extension module (from cython)
         from Cython.Build import cythonize
@@ -193,8 +195,6 @@ if py_impl != 'PyPy':
             os.environ['CHARMPY_BUILD_CFFI'] = '1'
         except:
             pass
-else:
-    os.environ['CHARMPY_BUILD_CFFI'] = '1'
 
 
 additional_setup_keywords = {}
