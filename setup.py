@@ -12,8 +12,10 @@ import distutils
 
 
 system = platform.system()
+libcharm_filename2 = None
 if system == 'Windows' or system.lower().startswith('cygwin'):
     libcharm_filename = 'charm.dll'
+    libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
 elif system == 'Darwin':
     os.environ['ARCHFLAGS'] = '-arch x86_64'
@@ -124,6 +126,11 @@ def build_libcharm(charm_src_dir, build_dir):
     for output_dir in lib_output_dirs:
         log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
         shutil.copy(lib_src_path, output_dir)
+    if libcharm_filename2 is not None:
+        lib_src_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename2)
+        for output_dir in lib_output_dirs:
+            log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
+            shutil.copy(lib_src_path, output_dir)
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
@@ -152,8 +159,10 @@ class specialized_build_ext(build_ext, object):
 extensions = []
 py_impl = platform.python_implementation()
 
-if py_impl != 'PyPy':
-    if sys.version_info[0] >= 3 and os.name != 'nt':
+if py_impl == 'PyPy':
+    os.environ['CHARMPY_BUILD_CFFI'] = '1'
+elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+    if sys.version_info[0] >= 3:
         # compile C-extension module (from cython)
         from Cython.Build import cythonize
         my_include_dirs = []
@@ -165,15 +174,17 @@ if py_impl != 'PyPy':
         except:
             log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found)')
 
-        if system == 'Darwin':
-            extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
-        else:
-            extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+        extra_link_args = []
+        if os.name != 'nt':
+            if system == 'Darwin':
+                extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
+            else:
+                extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
         extensions.extend(cythonize(setuptools.Extension('charmpy.charmlib.charmlib_cython',
                               sources=['charmpy/charmlib/charmlib_cython.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
-                              library_dirs=['charmpy/.libs'],
+                              library_dirs=[os.path.join(os.getcwd(), 'charmpy', '.libs')],
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
                               extra_link_args=extra_link_args,
@@ -184,8 +195,6 @@ if py_impl != 'PyPy':
             os.environ['CHARMPY_BUILD_CFFI'] = '1'
         except:
             pass
-else:
-    os.environ['CHARMPY_BUILD_CFFI'] = '1'
 
 
 additional_setup_keywords = {}
