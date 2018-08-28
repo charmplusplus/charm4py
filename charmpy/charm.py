@@ -148,7 +148,7 @@ class Charm(object):
             em.startMeasuringTime()
 
         if (em.when_cond is not None) and (not em.when_cond.evaluateWhen(obj, args)):
-            obj._waitEnqueue(em.when_cond, (0, em, header, args))
+            obj.__waitEnqueue__(em.when_cond, (0, em, header, args))
         else:
             if not em.isThreaded:
                 self.mainThreadEntryMethod = em
