@@ -387,9 +387,11 @@ class Charm(object):
         for m in dir(C):
             if not callable(getattr(C, m)):
                 continue
+            if m in chare.method_restrictions['reserved'] and getattr(C, m) != getattr(Chare, m):
+                raise CharmPyError(str(C) + " redefines reserved method '"  + m + "'")
             if m.startswith("__") and m.endswith("__"):
                 continue  # filter out non-user methods
-            if m in ["AtSync", "flushWhen", "contribute", "gather"]:
+            if m in chare.method_restrictions['non_entry_method']:
                 continue
             # print(m)
             em = entry_method.EntryMethod(C, m, profile=Options.PROFILING)
