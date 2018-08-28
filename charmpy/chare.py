@@ -85,7 +85,7 @@ class Chare(object):
             # if I dequeued waiting elements, chare state might have changed as a result of
             # activating them, so I need to continue flushing wait queues
 
-    def _waitEnqueue(self, cond_template, elem):
+    def __waitEnqueue__(self, cond_template, elem):
         cond_str = cond_template.cond_str
         if cond_template.group and cond_str in self._active_grp_conds:
             self._active_grp_conds[cond_str].enqueue(elem)
@@ -106,7 +106,7 @@ class Chare(object):
         else:
             cond_template = charm.wait_conditions[cond_str]
         if not cond_template.cond_func(self):
-            self._waitEnqueue(cond_template, (1, get_ident()))
+            self.__waitEnqueue__(cond_template, (1, get_ident()))
             charm.threadMgr.pauseThread()
 
     def contribute(self, data, reducer_type, target):
