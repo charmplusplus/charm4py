@@ -129,6 +129,17 @@ class Chare(object):
         charm.threadMgr.depositFuture(fid, result)
 
 
+method_restrictions = {
+    # reserved methods are those that can't be redefined in user subclass
+    'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
+                 '__waitEnqueue__', 'wait', 'contribute', 'gather', 'AtSync',
+                 'migrate', '_future_deposit_result'},
+
+    # these methods of Chare cannot be entry methods. NOTE that any methods starting
+    # and ending with '__' are automatically excluded from being entry methods
+    'non_entry_method': {'wait', 'contribute', 'gather', 'AtSync', 'migrate'}
+}
+
 # ----------------- Mainchare and Proxy -----------------
 
 def mainchare_proxy_ctor(proxy, cid):
