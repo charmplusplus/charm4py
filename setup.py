@@ -44,7 +44,10 @@ def check_libcharm_version(charm_src_dir):
         req_version = tuple(int(n) for n in f.read().split('.'))
     commit_id_str = ctypes.c_char_p.in_dll(lib, "CmiCommitID").value.decode()
     version = [int(n) for n in commit_id_str.split('-')[0][1:].split('.')]
-    version = tuple(version + [int(commit_id_str.split('-')[1])])
+    try:
+        version = tuple(version + [int(commit_id_str.split('-')[1])])
+    except:
+        version = tuple(version + [0])
     if version < req_version:
         req_str = '.'.join([str(n) for n in req_version])
         cur_str = '.'.join([str(n) for n in version])
