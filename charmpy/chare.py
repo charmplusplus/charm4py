@@ -268,6 +268,8 @@ class Group(object):
     def __new__(cls, C, args=[]):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise CharmPyError("Only subclasses of Chare can be member of Group")
+        if C not in charm.proxyClasses[GROUP]:
+            raise CharmPyError(str(C) + ' not registered for use in Groups')
         return charm.proxyClasses[GROUP][C].ckNew(args)
 
     @classmethod
@@ -399,6 +401,8 @@ class Array(object):
     def __new__(cls, C, dims=None, ndims=-1, args=[], map=None):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise CharmPyError("Only subclasses of Chare can be member of Array")
+        if C not in charm.proxyClasses[ARRAY]:
+            raise CharmPyError(str(C) + ' not registered for use in Arrays')
         return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map)
 
     @classmethod
