@@ -26,6 +26,21 @@ else:
     charmrun_filename = 'charmrun'
 
 
+try:
+    charmpy_version = subprocess.check_output(['git', 'describe']).rstrip().decode().split('-')[0]
+    if charmpy_version.startswith('v'):
+        charmpy_version = charmpy_version[1:]
+    with open(os.path.join('charmpy', '_version.py'), 'w') as f:
+        f.write("version='" + charmpy_version + "'\n")
+except:
+    try:
+        os.environ['PYTHONPATH'] = os.getcwd()
+        from charmpy import _version
+        charmpy_version = _version.version
+    except:
+        raise DistutilsSetupError('Could not determine charmpy version')
+
+
 def charm_built(charm_src_dir):
     library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
     if not os.path.exists(library_path):
@@ -212,7 +227,7 @@ with open('README.rst', 'r') as f:
 
 setuptools.setup(
     name='charmpy',
-    version='0.10.1',
+    version=charmpy_version,
     author='Juan Galvez and individual contributors',
     author_email='jjgalvez@illinois.edu',
     description='CharmPy Parallel Programming Framework',
