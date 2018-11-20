@@ -1,8 +1,7 @@
-#ignore changes to config file
-charmpy.cfg
-
 #ignore build files
 docs/_build/
+build/
+charm_src/
 charmpy/charmlib/*.o
 charmpy/charmlib/*.so
 charmpy/charmlib/charmlib_cython.c
@@ -13,6 +12,10 @@ __pycache__
 #ignore some common tmp files
 *.swp
 *.pyc
+
+#ignore binaries
+charmpy/.libs/
+charmrun/charmrun
 
 #ignore macOS specific files
 .DS_STORE
