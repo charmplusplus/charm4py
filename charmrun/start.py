@@ -42,10 +42,11 @@ def checkNodeListLocal(args):
     return True
 
 
-def start():
+def start(args=[]):
     import subprocess
 
-    args = sys.argv[1:]
+    if len(args) == 0:
+        args = sys.argv[1:]
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
         args.append('++local')
 

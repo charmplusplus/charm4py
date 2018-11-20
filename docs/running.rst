@@ -56,6 +56,23 @@ files.
 .. _charmrun manual: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
 
 
+Using charmrun from a Python program
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can launch a CharmPy application from inside a Python application,
+and wait for it to complete, in this manner:
+
+.. code-block:: python
+
+    from charmrun import start
+
+    start.start(['+p4', 'myprogram.py'])  # launch parallel application and wait for completion
+
+
+Note that you can also use Python's ``subprocess`` library and launch the same command
+as you would via the command line.
+
+
 Troubleshooting
 ~~~~~~~~~~~~~~~
 
