@@ -20,7 +20,7 @@ def main(args):
     my_2d_array = Array(MyChare, (2, 2))
 
     charm.awaitCreation(my_group, my_array, my_2d_array)
-    charm.exit()
+    exit()
 
 if __name__ == '__main__':
     charm.start(main)

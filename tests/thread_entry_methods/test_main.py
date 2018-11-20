@@ -12,6 +12,6 @@ def main(args):
         data = grpProxy[i].getData(ret=True).get()
         assert data == i**2, "Blocking call in main failed."
         print("Test " + str(i) + " sent data: " + str(data))
-    charm.exit()
+    exit()
 
 charm.start(main)

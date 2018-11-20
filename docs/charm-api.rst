@@ -31,9 +31,13 @@ charm
 
 * **charm.exit(exitCode=0)**:
 
-    Used to exit the program, and can be called from
+    Exits the parallel program, shutting down all processes. Can be called from
     any chare or process after the runtime has started. The ``exitCode`` will
     be received by the OS on exit.
+
+    .. note::
+        Calling Python's ``exit()`` function from a chare has the same effect (CharmPy
+        intercepts the SystemExit exception and calls ``charm.exit()``.
 
 * **charm.abort(message)**:
 

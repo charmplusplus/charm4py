@@ -7,7 +7,7 @@ class MyChare(Chare):
 
     def collectResult(self, result):
         print("Result is", result)
-        charm.exit()
+        exit()
 
 def main(args):
     my_group = Group(MyChare)

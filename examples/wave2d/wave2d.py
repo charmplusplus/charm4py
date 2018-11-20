@@ -49,7 +49,7 @@ class Main(Chare):
       if self.iteration == self.total_iterations:
         print("Program Done!, Total time= " + str(time.time() - self.programStartTime))
         charm.printStats()
-        charm.exit()
+        exit()
       else:
         # Start the next iteration
         self.count = 0

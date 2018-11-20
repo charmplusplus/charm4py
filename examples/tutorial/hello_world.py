@@ -11,7 +11,7 @@ def main(args):
     hellos = Group(Hello)
     # call method 'SayHi' of all group members, wait for method to be invoked on all
     hellos.SayHi(ret=True).get()
-    charm.exit()
+    exit()
 
 charm.start(main)
 

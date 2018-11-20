@@ -21,7 +21,7 @@ class Test(Chare):
             self.msgsRcvd = 0
             self.current += 1
             if self.current > ro.numParticipants:
-                charm.exit()
+                exit()
 
     def run(self):
         if charm.myPe() == 0 or charm.myPe() > ro.numParticipants: return

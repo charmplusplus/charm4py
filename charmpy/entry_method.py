@@ -1,5 +1,6 @@
 from . import wait
 import time
+import sys
 
 
 class EntryMethod(object):
@@ -35,7 +36,16 @@ class EntryMethod(object):
 
     def run_non_threaded(self, obj, header, args):
         """ run entry method of the given object in main thread """
-        ret = getattr(obj, self.name)(*args)
+        try:
+            ret = getattr(obj, self.name)(*args)
+        except SystemExit:
+            exit_code = sys.exc_info()[1].code
+            if exit_code is None:
+                exit_code = 0
+            if not isinstance(exit_code, int):
+                print(exit_code)
+                exit_code = 1
+            charm.exit(exit_code)
         if b'block' in header:
             blockFuture = header[b'block']
             if b'bcast' in header:

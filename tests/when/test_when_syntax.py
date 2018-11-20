@@ -75,7 +75,7 @@ def main(args):
     cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateCond)
 
-    charm.exit()
+    exit()
 
 
 charm.start(main)

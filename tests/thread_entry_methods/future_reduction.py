@@ -20,7 +20,7 @@ def main(args):
     Group(Test, args=[f1, f2])
     assert f1.get() == charm.numPes()
     assert f2.get() == charm.numPes()
-    charm.exit()
+    exit()
 
 
 charm.start(main)

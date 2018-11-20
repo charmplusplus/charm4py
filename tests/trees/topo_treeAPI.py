@@ -47,7 +47,7 @@ def main(args):
         assert(len(evenPes_check) == len(evenPEs) and set(evenPes_check) == set(evenPEs))
         evenPes_check = []
 
-    charm.exit()
+    exit()
 
 
 charm.start(main)

@@ -10,7 +10,7 @@ class Main(Chare):
         hellos.SayHi()
 
     def done(self):
-        charm.exit()
+        exit()
 
 
 charm.start(Main, modules=['hello', 'goodbye'])

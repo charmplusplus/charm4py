@@ -34,7 +34,7 @@ class Main(Chare):
             self.num_responses1 = self.num_responses2 = 0
             self.result = 0
         charm.printStats()
-        charm.exit()
+        exit()
 
     def collectResult(self, result, tag):
         if tag == 0:

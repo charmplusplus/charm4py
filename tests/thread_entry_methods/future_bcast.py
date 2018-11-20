@@ -33,7 +33,7 @@ def main(args):
     assert(wait_time >= max(sleepTimes))
     print(wait_time, max(sleepTimes))
 
-    charm.exit()
+    exit()
 
 
 charm.start(main)

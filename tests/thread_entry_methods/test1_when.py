@@ -38,7 +38,7 @@ class Test(Chare):
 
     def done(self):
         charm.printStats()
-        charm.exit()
+        exit()
 
 
 class Test2(Chare):

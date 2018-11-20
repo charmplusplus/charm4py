@@ -13,12 +13,12 @@ class Hello(Chare):
             self.thisProxy[self.thisIndex+1].SayHi(hiNo+1)
         else:
             print("All done")
-            charm.exit()
+            exit()
 
 
 def main(args):
-  print("Running Hello on " + str(charm.numPes()) + " processors")
-  Group(Hello)[0].SayHi(17)
+    print("Running Hello on " + str(charm.numPes()) + " processors")
+    Group(Hello)[0].SayHi(17)
 
 
 charm.start(main)

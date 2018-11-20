@@ -37,7 +37,7 @@ class Main(Chare):
   def doneReduction(self, result):
     assert result == 1*self.nElements, "Reduction for dynamic array insertion failed."
     print("All done.")
-    charm.exit()
+    exit()
 
 class Hello(Chare):
   def __init__(self, arg0, arg1):

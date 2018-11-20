@@ -24,7 +24,7 @@ class Hello(Chare):
             self.thisProxy[self.thisIndex+1].SayHi(hellos)
         else:
             print("All done " + str(hellos))
-            charm.exit()
+            exit()
 
 
 def main(args):
