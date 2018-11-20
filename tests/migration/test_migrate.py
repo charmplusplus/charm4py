@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, Array
+from charmpy import charm, Chare, Group, Array, Reducer
 from charmpy import readonlies as ro
 import numpy
 import math
@@ -30,7 +30,7 @@ class Test(Chare):
         self.originalPe = charm.myPe()
         self.data = numpy.arange(100, dtype='int64') * (self.originalPe + 1)
         # notify controllers that array elements are created and pass home PE of every element
-        self.gather(charm.myPe(), ro.controllers.arrayElemsCreated)
+        self.contribute(charm.myPe(), Reducer.gather, ro.controllers.arrayElemsCreated)
 
     def start(self):
         if self.thisIndex == (0,) and self.iteration % 20 == 0: print("Iteration " + str(self.iteration))

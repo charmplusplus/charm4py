@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Array, Group, threaded
+from charmpy import charm, Chare, Array, Group, threaded, Reducer
 from charmpy import readonlies as ro
 import time
 
@@ -12,7 +12,7 @@ class Test(Chare):
 
     def __init__(self):
         # gather list of PEs on which each array element is located and broadcast to every member
-        self.gather(charm.myPe(), self.thisProxy.start)
+        self.contribute(charm.myPe(), Reducer.gather, self.thisProxy.start)
 
     @threaded
     def start(self, pes):
