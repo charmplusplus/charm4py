@@ -345,8 +345,10 @@ class Charm(object):
 
         if (self.myPe() == 0) and (not Options.QUIET):
             import platform
-            out_msg = ("CharmPy> Running on Python " + str(platform.python_version()) +
-                       " (" + str(platform.python_implementation()) + "). Using '" +
+            from . import charmpy_version
+            out_msg = ("CharmPy> Running CharmPy version " + charmpy_version +
+                       " on Python " + str(platform.python_version()) + " (" +
+                       str(platform.python_implementation()) + "). Using '" +
                        self.lib.name + "' interface to access Charm++")
             if self.lib.name != "cython":
                 out_msg += ", **WARNING**: cython recommended for best performance"
