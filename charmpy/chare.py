@@ -112,9 +112,6 @@ class Chare(object):
     def contribute(self, data, reducer_type, target):
         charm.contribute(data, reducer_type, target, self)
 
-    def gather(self, data, target):
-        charm.contribute(data, Reducer.gather, target, self)
-
     def AtSync(self):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
         charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
@@ -132,12 +129,12 @@ class Chare(object):
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
-                 '__waitEnqueue__', 'wait', 'contribute', 'gather', 'AtSync',
+                 '__waitEnqueue__', 'wait', 'contribute', 'AtSync',
                  'migrate', '_future_deposit_result'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
-    'non_entry_method': {'wait', 'contribute', 'gather', 'AtSync', 'migrate'}
+    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrate'}
 }
 
 # ----------------- Mainchare and Proxy -----------------

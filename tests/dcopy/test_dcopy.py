@@ -1,5 +1,5 @@
 import charmpy
-from charmpy import charm, Chare, Array
+from charmpy import charm, Chare, Array, Reducer
 from charmpy import readonlies as ro
 import time
 import array
@@ -48,7 +48,7 @@ class Test(Chare):
 
         self.msgsRcvd = 0
 
-        self.gather(charm.myPe(), self.thisProxy.recvLocations)
+        self.contribute(charm.myPe(), Reducer.gather, self.thisProxy.recvLocations)
 
     def recvLocations(self, locations):
         loc = defaultdict(list)

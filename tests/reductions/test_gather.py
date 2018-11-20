@@ -50,11 +50,11 @@ class Test(Chare):
   def doGather(self, red_future=None):
     if red_future is None:
       # gather single elements
-      self.gather(self.thisIndex[0], ro.mainProxy.done_gather_single)
+      self.contribute(self.thisIndex[0], Reducer.gather, ro.mainProxy.done_gather_single)
       # gather arrays
-      self.gather(self.thisIndex, ro.mainProxy.done_gather_array)
+      self.contribute(self.thisIndex, Reducer.gather, ro.mainProxy.done_gather_array)
     else:
-      self.gather(self.thisIndex[0], red_future)
+      self.contribute(self.thisIndex[0], Reducer.gather, red_future)
 
 class TestGroup(Chare):
   def __init__(self):
@@ -62,9 +62,9 @@ class TestGroup(Chare):
 
   def doGather(self):
     # gather single elements
-    self.gather(self.thisIndex, ro.mainProxy.done_gather_single)
+    self.contribute(self.thisIndex, Reducer.gather, ro.mainProxy.done_gather_single)
     # gather arrays
-    self.gather([self.thisIndex, 42], ro.mainProxy.done_gather_array)
+    self.contribute([self.thisIndex, 42], Reducer.gather, ro.mainProxy.done_gather_array)
 
 
 charm.start(Main)
