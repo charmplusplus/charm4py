@@ -12,7 +12,7 @@ def main(args):
 
     print("[Main] Sum: " + str(sum_f.get()) + ", Min: " + str(min_f.get()) + ", Max: " + str(max_f.get()))
     print("[Main] All done.")
-    charm.exit()
+    exit()
 
 
 class Test(Chare):

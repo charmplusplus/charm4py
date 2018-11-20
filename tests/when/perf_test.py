@@ -46,7 +46,7 @@ def main(args):
             g.recv_id(id)
     done.get()
     print("Elapsed=", time.time() - t0)
-    charm.exit()
+    exit()
 
 
 charm.start(main)

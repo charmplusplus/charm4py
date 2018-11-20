@@ -25,7 +25,7 @@ class Migrate(Chare):
         self.contribute(None, None, self.thisProxy[0].done)
 
     def done(self):
-        charm.exit()
+        exit()
 
     def start(self):
         """

@@ -64,7 +64,7 @@ def main(args):
     totalTime = time.time() - initTime
     print(MAX_ITER, "iterations completed, total time=", round(totalTime,3), "secs, time per iteration (ms) =", round(totalTime / MAX_ITER * 1000, 3))
     charm.printStats()
-    charm.exit()
+    exit()
 
 
 def make_numba_functions():

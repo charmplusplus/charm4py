@@ -34,7 +34,7 @@ class HelloGroup(Chare):
       self.thisProxy[self.thisIndex+1].SayHi(hiNo+1)
     else:
       print("All done")
-      charm.exit()
+      exit()
 
 
 def main(args):

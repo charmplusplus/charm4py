@@ -56,7 +56,7 @@ class Controller(Chare):
             self.iteration += 1
             if self.iteration == NUM_ITERS:
               charm.printStats()
-              charm.exit()
+              exit()
             else:
               self.sendWork()
 

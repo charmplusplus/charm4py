@@ -15,7 +15,7 @@ def main(args):
     Array(Test, charm.numPes() * 4, args=[f2])
     np.testing.assert_allclose(f1.get(), np.arange(10, dtype='float64') * charm.numPes())
     np.testing.assert_allclose(f2.get(), np.arange(10, dtype='float64') * charm.numPes() * 4)
-    charm.exit()
+    exit()
 
 
 charm.start(main)

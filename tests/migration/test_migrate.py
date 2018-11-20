@@ -19,7 +19,7 @@ class Controller(Chare):
         self.contribute(None, None, ro.array.start)
 
     def done(self):
-        charm.exit()
+        exit()
 
 
 class Test(Chare):

@@ -44,7 +44,7 @@ The following computes Pi in parallel, using any number of machines and processo
         workers.work(n_steps, mypi)  # invoke 'work' method on every worker
         print('Approximated value of pi is:', mypi.get(),  # 'get' blocks until result arrives
               'Error is', abs(mypi.get() - pi), 'Elapsed time=', time.time() - t0)
-        charm.exit()
+        exit()
 
     charm.start(main)
 

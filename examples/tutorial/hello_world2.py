@@ -14,6 +14,6 @@ def main(args):
     f = charm.createFuture()
     hellos.SayHi(f)
     f.get()
-    charm.exit()
+    exit()
 
 charm.start(main)

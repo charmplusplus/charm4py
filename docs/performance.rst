@@ -16,7 +16,7 @@ before the program starts.
 
 ``charm.printStats()``: prints timing results and message statistics
 *for the processor where it is called*.
-A good place to use this is typically right before ``charm.exit()``.
+A good place to use this is typically right before exiting the program.
 
 Here is some example output of ``printStats()`` for ``examples/particle/particle.py``
 executed on 4 PEs:

@@ -19,7 +19,7 @@ class MyChare(Chare):
         if last: self.contribute(None, None, self.thisProxy.done)
 
     def done(self):
-        charm.exit()
+        exit()
 
 
 def main(args):

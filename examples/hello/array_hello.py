@@ -10,7 +10,7 @@ class Hello(Chare):
     print("Hi[" + str(hiNo) + "] from element " + str(self.thisIndex) + " on PE " + str(CkMyPe()))
     if self.thisIndex == ro.lastIdx:
       print("All done")
-      charm.exit()
+      exit()
     else:
       nextIndex = list(self.thisIndex)
       for i in range(ro.nDims-1,-1,-1):

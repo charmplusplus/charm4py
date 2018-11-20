@@ -85,7 +85,7 @@ def f(x):
 def main(args):
     if charm.numPes() < 5:
         print("\nRun this example with at least 5 PEs\n")
-        charm.exit()
+        exit()
     pool = Chare(Master, onPE=0) # create one Master called 'pool' on PE 0
     f1 = charm.createFuture()
     f2 = charm.createFuture()
@@ -94,6 +94,6 @@ def main(args):
     pool.map_async(f, 2, tasks1, f1)
     pool.map_async(f, 2, tasks2, f2)
     print("Final results are", f1.get(), f2.get()) # wait on futures
-    charm.exit()
+    exit()
 
 charm.start(main)

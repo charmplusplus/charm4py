@@ -126,7 +126,7 @@ def main(args):
     # wait for simulation to complete
     simDone.get()
     print("Particle simulation done, elapsed time=", round(time.time() - t0, 3), "secs")
-    charm.exit()
+    exit()
 
 
 charm.start(main)

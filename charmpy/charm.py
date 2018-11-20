@@ -150,18 +150,8 @@ class Charm(object):
         if (em.when_cond is not None) and (not em.when_cond.evaluateWhen(obj, args)):
             obj.__waitEnqueue__(em.when_cond, (0, em, header, args))
         else:
-            if not em.isThreaded:
-                self.mainThreadEntryMethod = em
-                ret = getattr(obj, em.name)(*args)  # invoke entry method
-                if b'block' in header:
-                    blockFuture = header[b'block']
-                    if b'bcast' in header:
-                        obj.contribute(None, None, blockFuture)
-                    else:
-                        blockFuture.send(ret)  # send result back to remote
-            else:
-                self.threadMgr.startThread(obj, em, args, header)
-
+            self.mainThreadEntryMethod = em
+            em.run(obj, header, args)
             if Options.AUTO_FLUSH_WAIT_QUEUES and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 

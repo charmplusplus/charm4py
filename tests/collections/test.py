@@ -18,7 +18,7 @@ class Main(Chare):
         if self.countReductions == 2:
           assert self.count == (charm.numPes() + charm.numPes() * CHARES_PER_PE)
           print("Program done")
-          charm.exit()
+          exit()
 
 
 class Test(Chare):

@@ -24,7 +24,7 @@ class Test(Chare):
         print("Say", msg, "called on", self.thisIndex, "on PE", charm.myPe())
         if self.count == 2:
             assert self.thisIndex == (3,)
-            charm.exit()
+            exit()
 
     def start(self):
         """

@@ -20,7 +20,7 @@ We will begin with a simple example:
     def main(args):
         print("Charm program started on processor", charm.myPe())
         print("Running on", charm.numPes(), "processors")
-        charm.exit()
+        exit()
 
     charm.start(main)
 
@@ -38,8 +38,8 @@ The method ``numPes`` returns the number of processors (aka Processing Elements)
 which the distributed program is running. The method ``myPe`` returns the processor
 number on which the caller resides.
 
-``charm.exit()`` is called to exit a Charm program. It can be called from any chare
-on any processor.
+An explicit call to ``exit()`` is necessary to finish the parallel program, shutting down all
+processes. It can be called from any chare on any processor.
 
 To launch the example with charmrun using 4 processes::
 
@@ -94,7 +94,7 @@ For easy management of distributed objects, you can organize chares into distrib
         my_2d_array = Array(MyChare, (2, 2))
 
         charm.awaitCreation(my_group, my_array, my_2d_array)
-        charm.exit()
+        exit()
 
     charm.start(main)
 
@@ -263,7 +263,7 @@ any chare or future of your choice.
 
         def collectResult(self, result):
             print("Result is", result)
-            charm.exit()
+            exit()
 
     def main(args):
         my_group = Group(MyChare)
@@ -344,7 +344,7 @@ Now we will show a full *Hello World* example, that prints a message from all pr
         hellos = Group(Hello)
         # call method 'SayHi' of all group members, wait for method to be invoked on all
         hellos.SayHi(ret=True).get()
-        charm.exit()
+        exit()
 
     charm.start(main)
 
@@ -385,7 +385,7 @@ explicitly by the user like this:
         f = charm.createFuture()
         hellos.SayHi(f)
         f.get()
-        charm.exit()
+        exit()
 
     charm.start(main)
 

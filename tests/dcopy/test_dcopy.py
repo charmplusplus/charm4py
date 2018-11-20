@@ -31,7 +31,7 @@ class Main(Chare):
         if self.iterations == MAX_ITER:
             print("Program done. Total time =", time.time() - self.startTime)
             charm.printStats()
-            charm.exit()
+            exit()
         else:
             ro.testProxy.doIteration()
 

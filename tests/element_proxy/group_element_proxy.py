@@ -24,7 +24,7 @@ class Test(Chare):
         print("Say", msg, "on PE", charm.myPe())
         if self.count == 2:
             assert charm.myPe() == 2
-            charm.exit()
+            exit()
 
     def start(self):
         """

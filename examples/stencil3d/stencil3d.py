@@ -60,7 +60,7 @@ def main(args):
     sim_done.get() # wait until simulation completes
     totalTime = time.time() - initTime
     print(MAX_ITER, "iterations completed, total time=", round(totalTime,3), "secs, time per iteration (ms) =", round(totalTime / MAX_ITER * 1000, 3))
-    charm.exit()
+    exit()
 
 
 class Stencil(Chare):

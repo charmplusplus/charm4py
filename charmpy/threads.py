@@ -130,6 +130,14 @@ class EntryMethodThreadManager(object):
                     else:
                         header[b'block'].send(ret)
                 thread_state.finished = True
+            except SystemExit:
+                exit_code = sys.exc_info()[1].code
+                if exit_code is None:
+                    exit_code = 0
+                if not isinstance(exit_code, int):
+                    print(exit_code)
+                    exit_code = 1
+                charm.exit(exit_code)
             except Exception:
                 thread_state.error = sys.exc_info()[1]  # store exception for main thread
             self.entryMethodRunning.notify()  # notify main thread that done

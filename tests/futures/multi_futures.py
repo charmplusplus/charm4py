@@ -13,7 +13,7 @@ def main(args):
     print("[Main] Received data: " + str(data))
     assert sorted(data) == list(range(numChares)), "Multi-futures failed!"
     print("[Main] All done.")
-    charm.exit()
+    exit()
 
 
 class Test(Chare):
