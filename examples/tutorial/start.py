@@ -1,4 +1,4 @@
-from charmpy import charm
+from charm4py import charm
 
 def main(args):
     print("Charm program started on processor", charm.myPe())

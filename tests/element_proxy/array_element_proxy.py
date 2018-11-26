@@ -2,7 +2,7 @@
 Tests the index proxy for a particular array element.
 """
 
-from charmpy import charm, Chare, Array
+from charm4py import charm, Chare, Array
 
 
 class Test(Chare):

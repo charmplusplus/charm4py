@@ -42,7 +42,7 @@ TIMEOUT = 60  # timeout for each test (in seconds)
 CHARM_QUIET_AFTER_NUM_TESTS = 5
 
 commonArgs = ['++local']
-default_num_processes = int(os.environ.get('CHARMPY_TEST_NUM_PROCESSES', 4))
+default_num_processes = int(os.environ.get('CHARM4PY_TEST_NUM_PROCESSES', 4))
 
 try:
     import numba

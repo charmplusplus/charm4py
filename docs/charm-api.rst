@@ -17,7 +17,7 @@ charm
     The entry point function (or chare constructor) must have only one parameter, which
     is used to receive the application's arguments.
 
-    On calling ``charm.start()``, CharmPy automatically registers any chare types that
+    On calling ``charm.start()``, Charm4py automatically registers any chare types that
     are defined in the ``__main__`` module. If desired, a list of chare types can also be passed
     explictly using the ``classes`` optional parameter. These must be references to the
     classes that are to be registered, and can reference classes in other modules.
@@ -25,7 +25,7 @@ charm
     in the specified list of modules. These are to be given by their names.
 
     .. note::
-        If ``charmpy`` is imported and the program exits without calling ``charm.start()``,
+        If ``charm4py`` is imported and the program exits without calling ``charm.start()``,
         a warning will be printed. This is to remind users in case they forget
         to start the runtime (otherwise the program might hang or exit without any output).
 
@@ -36,7 +36,7 @@ charm
     be received by the OS on exit.
 
     .. note::
-        Calling Python's ``exit()`` function from a chare has the same effect (CharmPy
+        Calling Python's ``exit()`` function from a chare has the same effect (Charm4py
         intercepts the SystemExit exception and calls ``charm.exit()``.
 
 * **charm.abort(message)**:
@@ -87,4 +87,4 @@ charm
 * **charm.printStats()**:
 
     Print profiling metrics and statistics.
-    ``charmpy.Options.PROFILING`` must have been set to ``True``.
+    ``charm4py.Options.PROFILING`` must have been set to ``True``.

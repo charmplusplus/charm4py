@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, Reducer
+from charm4py import charm, Chare, Group, Reducer
 
 
 def my_sum(contribs):

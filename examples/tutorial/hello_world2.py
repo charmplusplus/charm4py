@@ -1,5 +1,5 @@
 # examples/tutorial/hello_world2.py
-from charmpy import Chare, Group, charm
+from charm4py import Chare, Group, charm
 
 class Hello(Chare):
 

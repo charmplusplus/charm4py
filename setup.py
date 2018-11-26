@@ -27,18 +27,18 @@ else:
 
 
 try:
-    charmpy_version = subprocess.check_output(['git', 'describe']).rstrip().decode().split('-')[0]
-    if charmpy_version.startswith('v'):
-        charmpy_version = charmpy_version[1:]
-    with open(os.path.join('charmpy', '_version.py'), 'w') as f:
-        f.write("version='" + charmpy_version + "'\n")
+    charm4py_version = subprocess.check_output(['git', 'describe']).rstrip().decode().split('-')[0]
+    if charm4py_version.startswith('v'):
+        charm4py_version = charm4py_version[1:]
+    with open(os.path.join('charm4py', '_version.py'), 'w') as f:
+        f.write("version='" + charm4py_version + "'\n")
 except:
     try:
         os.environ['PYTHONPATH'] = os.getcwd()
-        from charmpy import _version
-        charmpy_version = _version.version
+        from charm4py import _version
+        charm4py_version = _version.version
     except:
-        raise DistutilsSetupError('Could not determine charmpy version')
+        raise DistutilsSetupError('Could not determine charm4py version')
 
 
 def charm_built(charm_src_dir):
@@ -55,7 +55,7 @@ def check_libcharm_version(charm_src_dir):
     import ctypes
     library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
     lib = ctypes.CDLL(library_path)
-    with open(os.path.join(os.getcwd(), 'charmpy', 'libcharm_version'), 'r') as f:
+    with open(os.path.join(os.getcwd(), 'charm4py', 'libcharm_version'), 'r') as f:
         req_version = tuple(int(n) for n in f.read().split('.'))
     commit_id_str = ctypes.c_char_p.in_dll(lib, "CmiCommitID").value.decode()
     version = [int(n) for n in commit_id_str.split('-')[0][1:].split('.')]
@@ -75,7 +75,7 @@ def check_cffi():
         import cffi
         version = tuple(int(v) for v in cffi.__version__.split('.'))
         if version < (1, 7):
-            raise DistutilsSetupError('charmpy requires cffi >= 1.7. '
+            raise DistutilsSetupError('charm4py requires cffi >= 1.7. '
                                       'Installed version is ' + cffi.__version__)
     except ImportError:
         raise DistutilsSetupError('cffi is not installed')
@@ -85,8 +85,8 @@ def build_libcharm(charm_src_dir, build_dir):
 
     lib_output_dirs = []
     charmrun_output_dirs = []
-    lib_output_dirs.append(os.path.join(build_dir, 'charmpy', '.libs'))
-    lib_output_dirs.append(os.path.join(os.getcwd(), 'charmpy', '.libs'))
+    lib_output_dirs.append(os.path.join(build_dir, 'charm4py', '.libs'))
+    lib_output_dirs.append(os.path.join(os.getcwd(), 'charm4py', '.libs'))
     charmrun_output_dirs.append(os.path.join(build_dir, 'charmrun'))
     charmrun_output_dirs.append(os.path.join(os.getcwd(), 'charmrun'))
     for output_dir in (lib_output_dirs + charmrun_output_dirs):
@@ -99,7 +99,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
         if system == 'Windows' or system.lower().startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
-                                      ' Please download a charmpy binary wheel (64-bit Python required)')
+                                      ' Please download a charm4py binary wheel (64-bit Python required)')
 
         if os.path.exists(os.path.join(charm_src_dir, 'charm.tar.gz')):
             log.info('Uncompressing charm.tar.gz...')
@@ -115,9 +115,9 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2))
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
         if system == 'Darwin':
-            cmd = './build charmpy netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         else:
-            cmd = './build charmpy netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -136,7 +136,7 @@ def build_libcharm(charm_src_dir, build_dir):
                 raise DistutilsSetupError('install_name_tool error')
 
     # verify that the version of charm++ that was built is same or greater than the
-    # one required by charmpy
+    # one required by charm4py
     check_libcharm_version(charm_src_dir)
 
     # ---- copy libcharm ----
@@ -162,7 +162,7 @@ class specialized_build_py(build_py, object):
     def run(self):
         if not self.dry_run:
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
-            shutil.copy(os.path.join(os.getcwd(), 'LICENSE'), os.path.join(self.build_lib, 'charmpy'))
+            shutil.copy(os.path.join(os.getcwd(), 'LICENSE'), os.path.join(self.build_lib, 'charm4py'))
         super(specialized_build_py, self).run()
 
 
@@ -178,7 +178,7 @@ extensions = []
 py_impl = platform.python_implementation()
 
 if py_impl == 'PyPy':
-    os.environ['CHARMPY_BUILD_CFFI'] = '1'
+    os.environ['CHARM4PY_BUILD_CFFI'] = '1'
 elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
     if sys.version_info[0] >= 3:
         # compile C-extension module (from cython)
@@ -199,10 +199,10 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
-        extensions.extend(cythonize(setuptools.Extension('charmpy.charmlib.charmlib_cython',
-                              sources=['charmpy/charmlib/charmlib_cython.pyx'],
+        extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
+                              sources=['charm4py/charmlib/charmlib_cython.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
-                              library_dirs=[os.path.join(os.getcwd(), 'charmpy', '.libs')],
+                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
                               extra_link_args=extra_link_args,
@@ -210,15 +210,15 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
     else:
         try:
             check_cffi()
-            os.environ['CHARMPY_BUILD_CFFI'] = '1'
+            os.environ['CHARM4PY_BUILD_CFFI'] = '1'
         except:
             pass
 
 
 additional_setup_keywords = {}
-if os.environ.get('CHARMPY_BUILD_CFFI') == '1':
+if os.environ.get('CHARM4PY_BUILD_CFFI') == '1':
     check_cffi()
-    additional_setup_keywords['cffi_modules'] = 'charmpy/charmlib/charmlib_cffi_build.py:ffibuilder'
+    additional_setup_keywords['cffi_modules'] = 'charm4py/charmlib/charmlib_cffi_build.py:ffibuilder'
 
 
 with open('README.rst', 'r') as f:
@@ -226,17 +226,17 @@ with open('README.rst', 'r') as f:
 
 
 setuptools.setup(
-    name='charmpy',
-    version=charmpy_version,
+    name='charm4py',
+    version=charm4py_version,
     author='Juan Galvez and individual contributors',
     author_email='jjgalvez@illinois.edu',
-    description='CharmPy Parallel Programming Framework',
+    description='charm4py Parallel Programming Framework',
     long_description=long_description,
-    url='https://github.com/UIUC-PPL/charmpy',
+    url='https://github.com/UIUC-PPL/charm4py',
     keywords='parallel parallel-programming distributed distributed-computing hpc HPC runtime',
     packages=setuptools.find_packages(),
     package_data={
-        'charmpy': ['libcharm_version'],
+        'charm4py': ['libcharm_version'],
     },
     entry_points={
         'console_scripts': [

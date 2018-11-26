@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, Reducer
+from charm4py import charm, Chare, Group, Reducer
 
 class MyChare(Chare):
 

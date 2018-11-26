@@ -4,14 +4,14 @@
 Group
 -----
 
-``charmpy.Group`` is a type of collection where there is one chare per PE.
+``charm4py.Group`` is a type of collection where there is one chare per PE.
 These chares are not migratable and are always bound to the PE where they are created.
 Elements in groups are indexed by integer ID, which for each element coincides with the
 PE number where it is located.
 
 Groups are created using the following syntax:
 
-``charmpy.Group(chare_type, args=[])`` where ``chare_type`` is the type of chares
+``charm4py.Group(chare_type, args=[])`` where ``chare_type`` is the type of chares
 that will constitute the group. ``args`` is the list of arguments to pass to the
 constructor of each element.
 

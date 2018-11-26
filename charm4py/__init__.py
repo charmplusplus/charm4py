@@ -1,17 +1,17 @@
 import sys
 if sys.version_info < (2, 7, 0):
-    raise RuntimeError("charmpy requires Python 2.7 or higher")
+    raise RuntimeError("charm4py requires Python 2.7 or higher")
 import atexit
 import os
 import subprocess
 
 
-charmpy_version = "unknown"
+charm4py_version = "unknown"
 try:
-    from ._version import version as charmpy_version
+    from ._version import version as charm4py_version
 except:
     try:
-        charmpy_version = subprocess.check_output(['git', 'describe'],
+        charm4py_version = subprocess.check_output(['git', 'describe'],
                                  cwd=os.path.dirname(__file__)).rstrip().decode()
     except:
         pass

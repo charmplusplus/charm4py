@@ -1,5 +1,5 @@
-from charmpy import charm, Chare, Array, when, Reducer
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array, when, Reducer
+from charm4py import readonlies as ro
 import time
 import random
 import math

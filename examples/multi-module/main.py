@@ -1,5 +1,5 @@
-from charmpy import charm, Chare, Group
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Group
+from charm4py import readonlies as ro
 import hello, goodbye
 
 class Main(Chare):

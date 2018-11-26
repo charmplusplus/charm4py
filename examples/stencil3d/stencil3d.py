@@ -2,8 +2,8 @@
 # This version doesn't use NumPy. It runs fairly well on PyPy, but NumPy+Numba version
 # (stencil3d_numba.py) performs much better
 
-from charmpy import charm, Chare, Array, when
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array, when
+from charm4py import readonlies as ro
 import time
 import math
 

@@ -50,7 +50,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
 
     @threaded
     def start(self):
-        self.write('CharmPy interactive shell\n')
+        self.write('Charm4py interactive shell\n')
         more = 0
         tick = time.time()
         while 1:

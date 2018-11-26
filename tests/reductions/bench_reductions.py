@@ -1,10 +1,10 @@
-import charmpy
-from charmpy import charm, Chare, Array, CkExit, CkNumPes, Reducer
-from charmpy import readonlies as ro
+import charm4py
+from charm4py import charm, Chare, Array, Reducer
+from charm4py import readonlies as ro
 import time
 import numpy
 
-charmpy.Options.PROFILING = True
+charm4py.Options.PROFILING = True
 
 CHARES_PER_PE = 8
 NUM_ITER = 5000
@@ -18,7 +18,7 @@ class Main(Chare):
   def __init__(self, args):
 
     ro.mainProxy = self.thisProxy
-    ro.NUM_CHARES = CkNumPes() * CHARES_PER_PE
+    ro.NUM_CHARES = charm.numPes() * CHARES_PER_PE
     ro.arrayProxy = Array(Test, ro.NUM_CHARES)
     ro.arrayProxy.run()
     self.startTime = time.time()
@@ -30,7 +30,7 @@ class Main(Chare):
   def done(self):
     print("Program done in", time.time() - self.startTime)
     charm.printStats()
-    CkExit()
+    exit()
 
 class Test(Chare):
   def __init__(self):

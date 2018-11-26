@@ -8,7 +8,7 @@ from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 
-from ..charm import CharmPyError
+from ..charm import Charm4PyError
 from .. import reduction as red
 from cpython cimport array
 import array
@@ -159,7 +159,7 @@ cdef class ContributeInfo:
     cdef int i = 0
     cdef int index_len = len(index)
     if index_len > MAX_INDEX_LEN:
-      raise CharmPyError("Element index length greater than MAX_INDEX_LEN")
+      raise Charm4PyError("Element index length greater than MAX_INDEX_LEN")
     for i in range(index_len): self.index[i] = index[i]
     self.buf = None
     self.bufSet = False
@@ -296,7 +296,7 @@ cdef object rev_array_type_map
 cdef object tempData
 cdef int PROFILING = 0
 cdef object PICKLE_PROTOCOL = -1
-cdef object emptyMsg          # pickled empty Charmpy msg
+cdef object emptyMsg          # pickled empty Charm4py msg
 cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
@@ -628,7 +628,7 @@ class CharmLib(object):
             a.shape = shape
             args[arg_pos] = a.copy()
           else:
-            raise CharmPyError("unpackMsg: wrong type id received")
+            raise Charm4PyError("unpackMsg: wrong type id received")
           msg.advance(buf_size)
       elif b"custom_reducer" in header:
         reducer = getattr(charm.reducers, header[b"custom_reducer"])
@@ -838,7 +838,7 @@ cdef void createReductionTargetMsg(void *data, int dataSize, int reducerType, in
       returnBuffers[0]     = <char*>tempData
       returnBufferSizes[0] = len(tempData)
     else:
-      # do nothing, use message as is (was created by charmpy)
+      # do nothing, use message as is (was created by charm4py)
       returnBuffers[0]     = <char*>data
       returnBufferSizes[0] = dataSize
 

@@ -2,13 +2,13 @@
 Options
 -------
 
-``charmpy.Options`` is a global object with the following attributes:
+``charm4py.Options`` is a global object with the following attributes:
 
-* **PROFILING** (default=False): if ``True``, charmpy will profile the program and
+* **PROFILING** (default=False): if ``True``, charm4py will profile the program and
   collect timing and message statistics. To print these, the application must call
   ``charm.printStats()``. Note that this will affect performance of the application.
 
-* **PICKLE_PROTOCOL** (default=-1): determines the pickle protocol used by CharmPy.
+* **PICKLE_PROTOCOL** (default=-1): determines the pickle protocol used by Charm4py.
   A value of ``-1`` tells ``pickle`` to use the highest protocol number (recommended).
   Note that not every type of argument sent to a remote method is pickled.
 

@@ -55,9 +55,9 @@ def start(args=[]):
         args[idx] = '-c'
         if os.name == 'nt':
             # workaround for how windows charmrun executable passes argument
-            args.insert(idx + 1, '\"from charmpy import charm ; charm.start(interactive=True)\"')
+            args.insert(idx + 1, '\"from charm4py import charm ; charm.start(interactive=True)\"')
         else:
-            args.insert(idx + 1, 'from charmpy import charm ; charm.start(interactive=True)')
+            args.insert(idx + 1, 'from charm4py import charm ; charm.start(interactive=True)')
     except ValueError:
         pass
 

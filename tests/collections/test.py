@@ -1,5 +1,4 @@
-from charmpy import charm, Chare, Group, Array, Reducer
-import charmpy
+from charm4py import charm, Chare, Group, Array, Reducer
 
 # Test same Chare class (Test) used in multiple collection types (Group, Array)
 

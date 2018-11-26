@@ -4,7 +4,7 @@ Tutorial
 
 .. contents::
 
-This tutorial assumes that you have installed CharmPy as described in :doc:`install`.
+This tutorial assumes that you have installed Charm4py as described in :doc:`install`.
 
 Program start and exit
 ----------------------
@@ -15,7 +15,7 @@ We will begin with a simple example:
 .. code-block:: python
 
     # start.py
-    from charmpy import charm
+    from charm4py import charm
 
     def main(args):
         print("Charm program started on processor", charm.myPe())
@@ -25,7 +25,7 @@ We will begin with a simple example:
     charm.start(main)
 
 
-We need to define an entry point to the CharmPy program, which we refer to as the
+We need to define an entry point to the Charm4py program, which we refer to as the
 Charm *main* function.
 In our example, it is the function called ``main`` .
 The main function runs on only one processor, typically processor 0, and is in charge
@@ -54,7 +54,7 @@ To define a Chare, simply define a class that is a subclass of ``Chare``.
 
 .. code-block:: python
 
-    from charmpy import Chare
+    from charm4py import Chare
 
     class MyChare(Chare):
 
@@ -72,7 +72,7 @@ For easy management of distributed objects, you can organize chares into distrib
 .. code-block:: python
 
     # chares.py
-    from charmpy import charm, Chare, Group, Array
+    from charm4py import charm, Chare, Group, Array
 
     class MyChare(Chare):
         def __init__(self):
@@ -185,7 +185,7 @@ The above also applies to Chare Arrays. In the case of N-dimensional array index
 .. tip::
     Proxies can be sent to other chares as arguments of methods.
 
-For performance reasons, method invocation is always *asynchronous* in CharmPy, i.e. methods
+For performance reasons, method invocation is always *asynchronous* in Charm4py, i.e. methods
 return immediately without waiting for the actual method to be invoked on the remote
 object, and therefore without returning any result. Asynchronous method invocation
 is desirable because it leads to better overlap of computation and communication, and better
@@ -254,7 +254,7 @@ any chare or future of your choice.
 .. code-block:: python
 
     # reduction.py
-    from charmpy import charm, Chare, Group, Reducer
+    from charm4py import charm, Chare, Group, Reducer
 
     class MyChare(Chare):
 
@@ -293,13 +293,13 @@ to finish.
 Reductions are useful when data that is distributed among many objects across the
 system needs to be aggregated in some way, for example to obtain the maximum value
 in a distributed data set or to concatenate data in some fashion. The aggregation
-operations that are applied to the data are called *reducers*, and CharmPy includes
+operations that are applied to the data are called *reducers*, and Charm4py includes
 several built-in reducers (including ``sum``, ``max``, ``min``, ``product``, ``gather``),
 as well as allowing users to easily define their own custom reducers for use in reductions.
 Please refer to the manual for more information.
 
 Arrays (array.array_) and `NumPy arrays`_ can be passed as contribution to many of
-CharmPy's built-in reducers. The reducer will be applied to elements
+Charm4py's built-in reducers. The reducer will be applied to elements
 having the same index in the array. The size of the result will thus be the same as
 that of each contribution.
 
@@ -332,7 +332,7 @@ Now we will show a full *Hello World* example, that prints a message from all pr
 .. code-block:: python
 
     # hello_world.py
-    from charmpy import Chare, Group, charm
+    from charm4py import Chare, Group, charm
 
     class Hello(Chare):
 
@@ -370,7 +370,7 @@ explicitly by the user like this:
 .. code-block:: python
 
     # hello_world2.py
-    from charmpy import Chare, Group, charm
+    from charm4py import Chare, Group, charm
 
     class Hello(Chare):
 

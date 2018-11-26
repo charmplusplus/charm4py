@@ -1,14 +1,14 @@
-import charmpy
-from charmpy import charm, Chare, Array, Reducer
-from charmpy import readonlies as ro
+import charm4py
+from charm4py import charm, Chare, Array, Reducer
+from charm4py import readonlies as ro
 import time
 import array
 import numpy
 from numpy.testing import assert_allclose
 from collections import defaultdict
 
-charmpy.Options.PROFILING = True
-charmpy.Options.LOCAL_MSG_OPTIM = False
+charm4py.Options.PROFILING = True
+charm4py.Options.LOCAL_MSG_OPTIM = False
 
 MAX_ITER = 50
 DATA_LEN = 15000        # number of doubles

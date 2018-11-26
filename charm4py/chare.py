@@ -7,7 +7,7 @@ else:
 
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
-# (3) to form Arrays. To achieve this, charmpy can register with the Charm++ library up to 3
+# (3) to form Arrays. To achieve this, charm4py can register with the Charm++ library up to 3
 # different types for the given class (a Mainchare, a Group and an Array), and each type will
 # register its own entry methods, even though the definition (body) of the entry methods in Python is the same.
 MAINCHARE, GROUP, ARRAY = range(3)
@@ -50,7 +50,7 @@ class Chare(object):
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:
-            raise CharmPyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
+            raise Charm4PyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
         h = self._local_free_head
         self._local_free_head = self._local[self._local_free_head]
         self._local[h] = msg
@@ -117,7 +117,7 @@ class Chare(object):
         charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
 
     def migrate(self, toPe):
-        # print("[charmpy] Calling migrate, aid: ", self.thisProxy.aid, "ndims",
+        # print("[charm4py] Calling migrate, aid: ", self.thisProxy.aid, "ndims",
         #       self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
@@ -186,7 +186,7 @@ class Mainchare(object):
         M = dict()  # proxy methods
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
-                raise CharmPyError("Unregistered entry method")
+                raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
                 M[m.name] = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
             else:
@@ -264,9 +264,9 @@ class Group(object):
 
     def __new__(cls, C, args=[]):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
-            raise CharmPyError("Only subclasses of Chare can be member of Group")
+            raise Charm4PyError("Only subclasses of Chare can be member of Group")
         if C not in charm.proxyClasses[GROUP]:
-            raise CharmPyError(str(C) + ' not registered for use in Groups')
+            raise Charm4PyError(str(C) + ' not registered for use in Groups')
         return charm.proxyClasses[GROUP][C].ckNew(args)
 
     @classmethod
@@ -286,7 +286,7 @@ class Group(object):
         entryMethods = charm.classEntryMethods[GROUP][cls]
         for m in entryMethods:
             if m.epIdx == -1:
-                raise CharmPyError("Unregistered entry method")
+                raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
                 M[m.name] = profile_send_function(group_proxy_method_gen(m.epIdx))
             else:
@@ -322,7 +322,7 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
     proxy_clone = proxy.__class__(proxy.aid, proxy.ndims)
     if type(idx) == int: idx = (idx,)
     if len(idx) != proxy_clone.ndims:
-        raise CharmPyError("Dimensions of index " + str(idx) + " don't match array dimensions")
+        raise Charm4PyError("Dimensions of index " + str(idx) + " don't match array dimensions")
     proxy_clone.elemIdx = tuple(idx)
     return proxy_clone
 
@@ -353,9 +353,9 @@ def array_ckNew_gen(C, epIdx):
         if type(dims) == int: dims = (dims,)
 
         if dims is None and ndims == -1:
-            raise CharmPyError("Bounds and number of dimensions for array cannot be empty in ckNew")
+            raise Charm4PyError("Bounds and number of dimensions for array cannot be empty in ckNew")
         elif dims is not None and ndims != -1 and ndims != len(dims):
-            raise CharmPyError("Number of bounds should match number of dimensions")
+            raise Charm4PyError("Number of bounds should match number of dimensions")
         elif dims is None and ndims != -1:  # create an empty array
             dims = (0,) * ndims
 
@@ -397,9 +397,9 @@ class Array(object):
 
     def __new__(cls, C, dims=None, ndims=-1, args=[], map=None):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
-            raise CharmPyError("Only subclasses of Chare can be member of Array")
+            raise Charm4PyError("Only subclasses of Chare can be member of Array")
         if C not in charm.proxyClasses[ARRAY]:
-            raise CharmPyError(str(C) + ' not registered for use in Arrays')
+            raise Charm4PyError(str(C) + ' not registered for use in Arrays')
         return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map)
 
     @classmethod
@@ -422,7 +422,7 @@ class Array(object):
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
             if m.epIdx == -1:
-                raise CharmPyError("Unregistered entry method")
+                raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
                 M[m.name] = profile_send_function(array_proxy_method_gen(m.epIdx))
             else:
@@ -451,9 +451,9 @@ for i in CHARM_TYPES:
 
 
 def charmStarting():
-    from .charm import charm, Options, CharmPyError, profile_send_function
+    from .charm import charm, Options, Charm4PyError, profile_send_function
     globals()['charm'] = charm
     globals()['Reducer'] = charm.reducers
     globals()['Options'] = Options
-    globals()['CharmPyError'] = CharmPyError
+    globals()['Charm4PyError'] = Charm4PyError
     globals()['profile_send_function'] = profile_send_function

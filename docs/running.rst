@@ -4,26 +4,26 @@ Running
 
 .. .. contents::
 
-CharmPy includes a launcher called ``charmrun`` to run parallel applications on
+charm4py includes a launcher called ``charmrun`` to run parallel applications on
 desktops and small clusters. Supercomputers and some clusters provide their
-own application launchers (these can also be used to launch CharmPy applications).
+own application launchers (these can also be used to launch Charm4py applications).
 
 charmrun
 --------
 
-After installing CharmPy as explained in the previous section, you can launch
+After installing charm4py as explained in the previous section, you can launch
 applications like this::
 
     $ python -m charmrun.start +p4 myprogram.py
 
 The option ``+pN`` specifies how many processes to run the application with.
 
-Alternatively, if ``charmrun`` is in your PATH (this depends on where charmpy was
+Alternatively, if ``charmrun`` is in your PATH (this depends on where charm4py was
 installed and your system configuration)::
 
     $ charmrun +p4 myprogram.py
 
-CharmPy programs accept the `same command-line parameters`_ as Charm++.
+Charm4py programs accept the `same command-line parameters`_ as Charm++.
 
 .. _same command-line parameters: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
 
@@ -59,7 +59,7 @@ files.
 Using charmrun from a Python program
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can launch a CharmPy application from inside a Python application,
+You can launch a Charm4py application from inside a Python application,
 and wait for it to complete, in this manner:
 
 .. code-block:: python
@@ -88,7 +88,7 @@ Solution
 Using system job launchers
 --------------------------
 
-CharmPy applications can also be launched using system job launchers
+Charm4py applications can also be launched using system job launchers
 (e.g. aprun, ibrun, SLURM).
 The exact details of how to do so depend on the system, and typically Charm++ has
 to be built with a specialized network layer like MPI, GNI or OFI
@@ -110,7 +110,7 @@ for SLURM on a Cray-based system:
     module load craype-hugepages8M
     module load python/3.6-anaconda-4.4
 
-    export PYTHONPATH=/path/to/charmpy
+    export PYTHONPATH=/path/to/charm4py
     PYTHON_EXEC=`which python3`
 
     srun -n 512 -c 1 $PYTHON_EXEC myprogram.py app_param1 app_param2 ...

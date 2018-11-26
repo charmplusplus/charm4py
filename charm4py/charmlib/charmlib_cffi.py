@@ -433,7 +433,7 @@ class CharmLib(object):
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
       else:
-        # do nothing, use message as is (was created by charmpy)
+        # do nothing, use message as is (was created by charm4py)
         returnBuffers[0]     = data
         returnBufferSizes[0] = dataSize
 
@@ -489,7 +489,7 @@ class CharmLib(object):
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
       else:
-        # do nothing, use message as is (was created by charmpy)
+        # do nothing, use message as is (was created by charm4py)
         returnBuffers[0]     = data
         returnBufferSizes[0] = dataSize
 

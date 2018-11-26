@@ -1,5 +1,5 @@
-from charmpy import charm, Chare, Group, Array, Reducer
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Group, Array, Reducer
+from charm4py import readonlies as ro
 import numpy
 import math
 

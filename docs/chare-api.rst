@@ -5,7 +5,7 @@ Chare
 -----
 
 An application specifies new chare types by defining classes that
-inherit from ``charmpy.Chare``. These classes can have custom attributes
+inherit from ``charm4py.Chare``. These classes can have custom attributes
 and methods. In addition, every chare instance has the following properties:
 
 Attributes
@@ -70,7 +70,7 @@ via a proxy. This allows pausing the execution of the method to wait for certain
 (see ``wait`` construct above, :ref:`futures-api-label` or ``charm.awaitCreation()``).
 
 The decorator is placed before the definition of the method, using the syntax:
-``@charmpy.threaded``
+``@charm4py.threaded``
 
 .. note::
     While a thread is paused, the runtime continues scheduling other work in the same
@@ -86,7 +86,7 @@ The semantics of when a remote method can be invoked *at the receiver* can be
 controlled using the ``when`` decorator. The decorator is placed before the definition
 of the method, using the syntax:
 
-``@charmpy.when('condition')``
+``@charm4py.when('condition')``
 
 where ``condition`` is a string containing a standard Python conditional statement. The statement
 can reference any of the chare's attributes (prefixed by ``self``), as well as any of the

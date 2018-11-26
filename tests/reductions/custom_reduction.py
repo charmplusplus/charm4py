@@ -1,6 +1,5 @@
-from charmpy import charm, Chare, Array, Group, CkMyPe, CkNumPes, CkExit, CkAbort
-from charmpy import readonlies as ro
-from charmpy import Reducer
+from charm4py import charm, Chare, Array, Group, Reducer
+from charm4py import readonlies as ro
 
 def myReducer(contribs):
   result = []
@@ -23,7 +22,7 @@ class Main(Chare):
 
     self.nElements = 1
     for x in ro.ARRAY_SIZE: self.nElements *= x
-    print("Running reduction example on " + str(CkNumPes()) + " processors for " + str(self.nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
+    print("Running reduction example on " + str(charm.numPes()) + " processors for " + str(self.nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
     ro.mainProxy = self.thisProxy
     ro.arrProxy = Array(Test, ro.ARRAY_SIZE)
     ro.arrProxy.doReduction()
@@ -34,7 +33,7 @@ class Main(Chare):
     print("[Main] All Charm builtin reductions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
   def done_python_builtin(self, result):
     sum_indices = (self.nElements*(self.nElements-1))/2
@@ -43,14 +42,14 @@ class Main(Chare):
     print("[Main] All Python builtin reductions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
   def done_python_custom(self, result):
     assert result == [10, ro.lastIdx[0], 0], "Custom Python myReduce failed"
     print("[Main] All Python custom reductions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
 class MyObject(object):
   def __init__(self, n):
@@ -70,7 +69,7 @@ class MyObject(object):
 
 class Test(Chare):
   def __init__(self):
-    print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
+    print("Test " + str(self.thisIndex) + " created on PE " + str(charm.myPe()))
 
   def doReduction(self):
     # test contributing using built-in Charm reducer
