@@ -312,7 +312,7 @@ class Charm(object):
         return (msg, direct_copy_buffers)
 
     # register class C in Charm
-    def registerInCharm(self, C, charm_type, libRegisterFunc):
+    def registerInCharmAs(self, C, charm_type, libRegisterFunc):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
         # if self.myPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
@@ -327,6 +327,19 @@ class Charm(object):
         self.proxyClasses[charm_type_id][C] = proxyClass
         setattr(self, proxyClass.__name__, proxyClass)   # save new class in my namespace
         setattr(chare, proxyClass.__name__, proxyClass)  # save in module namespace (needed to pickle the proxy)
+
+    def registerInCharm(self, C):
+        C.idx = [None] * len(CHARM_TYPES)
+        charm_types = self.registered[C]
+        if Mainchare in charm_types:
+            self.registerInCharmAs(C, Mainchare, self.lib.CkRegisterMainchare)
+        if Group in charm_types:
+            if ArrayMap in C.mro():
+                self.registerInCharmAs(C, Group, self.lib.CkRegisterArrayMap)
+            else:
+                self.registerInCharmAs(C, Group, self.lib.CkRegisterGroup)
+        if Array in charm_types:
+            self.registerInCharmAs(C, Array, self.lib.CkRegisterArray)
 
     # first callback from Charm++ shared library
     # this method registers classes with the shared library
@@ -356,17 +369,7 @@ class Charm(object):
             print(out_msg)
 
         for C in self.register_order:
-            C.idx = [None] * len(CHARM_TYPES)
-            charm_types = self.registered[C]
-            if Mainchare in charm_types:
-                self.registerInCharm(C, Mainchare, self.lib.CkRegisterMainchare)
-            if Group in charm_types:
-                if ArrayMap in C.mro():
-                    self.registerInCharm(C, Group, self.lib.CkRegisterArrayMap)
-                else:
-                    self.registerInCharm(C, Group, self.lib.CkRegisterGroup)
-            if Array in charm_types:
-                self.registerInCharm(C, Array, self.lib.CkRegisterArray)
+            self.registerInCharm(C)
 
     def registerAs(self, C, charm_type_id):
         if charm_type_id == MAINCHARE:
