@@ -18,9 +18,6 @@ class Controller(Chare):
         for i in range(len(home_pes)): arrayElemHomeMap[i] = home_pes[i]
         self.contribute(None, None, ro.array.start)
 
-    def done(self):
-        exit()
-
 
 class Test(Chare):
 
@@ -40,7 +37,7 @@ class Test(Chare):
         for i in range(work): A += 1.33
         self.iteration += 1
         if self.iteration == MAX_ITER:
-            self.contribute(None, None, ro.controllers[0].done)
+            self.contribute(None, None, charm.thisProxy[0].exit)
         elif self.iteration % 20 == 0:
             self.AtSync()
         else:

@@ -118,6 +118,7 @@ class Charm(object):
         assert cid not in self.chares, "Chare " + str(cid) + " already instantiated"
         em = self.entryMethods[ep]
         assert em.isCtor, "Specified mainchare entry method is not constructor"
+        self._createInternalChares()
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
         super(em.C, obj).__init__()  # call Chare class __init__ first
@@ -403,6 +404,12 @@ class Charm(object):
             self.registerAs(C, charm_type_id)
         self.register_order.append(C)
 
+    def _registerInternalChares(self):
+        self.register(CharmRemote, (GROUP,))
+
+    def _createInternalChares(self):
+        Group(CharmRemote)
+
     def start(self, entry, classes=[], modules=[]):
         """
         Start Charmpy program.
@@ -428,6 +435,8 @@ class Charm(object):
             self.contribute = profile_send_function(self.contribute)
         if "++quiet" in sys.argv:
             Options.QUIET = True
+
+        self._registerInternalChares()
 
         if hasattr(entry, 'mro') and Chare in entry.mro():
             if entry.__init__.__code__.co_argcount != 2:
@@ -610,6 +619,18 @@ class Charm(object):
 
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
+
+
+class CharmRemote(Chare):
+
+    def __init__(self):
+        charm.thisProxy = self.thisProxy
+
+    def exit(self, exit_code=0):
+        charm.exit(exit_code)
+
+    def myPe(self):
+        return charm.myPe()
 
 
 def load_charm_library(charm):

@@ -16,10 +16,7 @@ class MyChare(Chare):
 
     def __init__(self, last):
         assert charm.myPe() == index_to_pe(self.thisIndex), "ArrayMap failed"
-        if last: self.contribute(None, None, self.thisProxy.done)
-
-    def done(self):
-        exit()
+        if last: self.contribute(None, None, charm.thisProxy[0].exit)
 
 
 def main(args):
