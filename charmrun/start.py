@@ -50,6 +50,17 @@ def start(args=[]):
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
         args.append('++local')
 
+    try:
+        idx = args.index('++interactive')
+        args[idx] = '-c'
+        if os.name == 'nt':
+            # workaround for how windows charmrun executable passes argument
+            args.insert(idx + 1, '\"from charmpy import charm ; charm.start(interactive=True)\"')
+        else:
+            args.insert(idx + 1, 'from charmpy import charm ; charm.start(interactive=True)')
+    except ValueError:
+        pass
+
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
     cmd.append(sys.executable)
     cmd.extend(args)

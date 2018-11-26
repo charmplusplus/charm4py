@@ -99,6 +99,9 @@ class Charm(object):
         # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
         # TODO: remove old/unused condition strings
         self.wait_conditions = {}
+        # store chare types defined after program start and other objects created
+        # in interactive mode
+        self.dynamic_register = {}
 
     def handleGeneralError(self):
         import traceback
@@ -413,7 +416,7 @@ class Charm(object):
     def _createInternalChares(self):
         Group(CharmRemote)
 
-    def start(self, entry, classes=[], modules=[]):
+    def start(self, entry=None, classes=[], modules=[], interactive=False):
         """
         Start Charmpy program.
 
@@ -429,6 +432,13 @@ class Charm(object):
                      always search module '__main__' for Charm classes even if no
                      arguments are passed to this method.
         """
+
+        if interactive:
+            from .interactive import InteractiveConsole as entry
+            self.origStdinFd = os.dup(0)
+            self.origStoutFd = os.dup(1)
+            self.dynamic_register.update({'charm': charm, 'Chare': Chare, 'Group': Group,
+                                          'Array': Array, 'Reducer': self.reducers})
 
         if self.started:
             raise CharmPyError("charm.start() can only be called once")
@@ -634,6 +644,12 @@ class CharmRemote(Chare):
 
     def myPe(self):
         return charm.myPe()
+
+    def registerNewChareType(self, name, source):
+        exec(source, charm.dynamic_register)
+        chare_type = charm.dynamic_register[name]
+        charm.register(chare_type)
+        charm.registerInCharm(chare_type)
 
 
 def load_charm_library(charm):
