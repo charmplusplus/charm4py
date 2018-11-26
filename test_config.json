@@ -1,6 +1,10 @@
 [
     {
         "force_min_processes": 4,
+        "path": "tests/charm_remote.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/array_maps/test1.py"
     },
     {

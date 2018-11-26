@@ -22,10 +22,7 @@ class Migrate(Chare):
         if self.thisIndex == (0,):
             print("Test called on PE ", charm.myPe())
         assert charm.myPe() == self.toPe
-        self.contribute(None, None, self.thisProxy[0].done)
-
-    def done(self):
-        exit()
+        self.contribute(None, None, charm.thisProxy[0].exit)
 
     def start(self):
         """
