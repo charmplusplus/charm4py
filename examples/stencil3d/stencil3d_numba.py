@@ -1,8 +1,8 @@
 # Port of examples/charm++/load_balancing/stencil3d from Charm++ codebase
 # This version uses NumPy and Numba
 
-from charmpy import charm, Chare, Group, Array, when
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Group, Array, when
+from charm4py import readonlies as ro
 import time
 import math
 import numpy as np
@@ -11,7 +11,7 @@ import numba
 import sys
 sys.argv += ['+LBPeriod', '0.001', '+LBOff', '+LBCommOff']
 
-from charmpy import Options
+from charm4py import Options
 Options.PROFILING = False
 
 

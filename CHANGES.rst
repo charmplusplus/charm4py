@@ -3,6 +3,37 @@ This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
 
+What's new in v0.11
+===================
+
+* Changed the name of the project from CharmPy to *charm4py* (more information on why
+  we changed the name is in the forum).
+
+* Not directly related to this release, but there is a new forum for charm4py discussions
+  (see contact details). Feel free to visit the forum for discussions, reports,
+  provide feedback, request features and to follow development.
+
+* Support for interactive charm4py shell using multiple processes on one host has been added
+  as a *beta* feature. Please provide feedback and suggestions in the forum or GitHub.
+
+* Uses the recent major release of Charm++ (6.9)
+
+* C-extension module can be built on Windows. Windows binary wheels on PyPI come with
+  the compiled extension module.
+
+* API change: method ``Chare.gather()`` has been removed to make the name available
+  for user-defined remote methods. Use ``self.contribute(data, Reducer.gather, ...)``
+  instead.
+
+* Some methods of ``charm`` are now remotely callable, like ``charm.exit()``.
+  They can be used as any other remote method including as targets of reductions.
+  For example: ``self.contribute(None, None, charm.thisProxy[0].exit)``
+
+* Can now use Python exit function instead of ``charm.exit()``
+
+* Other small fixes and improvements.
+
+
 What's new in v0.10.1
 =====================
 
@@ -12,16 +43,16 @@ This is a bugfix and documentation release:
 
 * Fixed reduction to Future failing when contributing numeric arrays
 
-* CharmPy now requires Charm++ version >= ``6.8.2-890`` which, among other things,
+* Charm4py now requires Charm++ version >= ``6.8.2-890`` which, among other things,
   includes fixes for the following Windows issues:
 
       - Running an application without ``charmrun`` on Windows would crash
 
-      - Abort messages were sometimes not displayed on exit. On CharmPy,
+      - Abort messages were sometimes not displayed on exit. On Charm4py,
         this had the effect that Python runtime errors were sometimes not shown.
 
       - If running with charmrun, any output prior to charm.start()
-        would not be shown. On CharmPy, this had the effect that Python
+        would not be shown. On Charm4py, this had the effect that Python
         syntax errors were not shown.
 
 
@@ -30,17 +61,17 @@ What's new in v0.10
 
 **Installation and Setup**
 
-* CharmPy can be installed with pip (``pip install charmpy``) on regular
+* Charm4py can be installed with pip (``pip install charm4py``) on regular
   Linux, macOS and Windows systems
 
-* Support setuptools to build, install, and package CharmPy
+* Support setuptools to build, install, and package Charm4py
 
 * Installation from source is much simpler (see documentation)
 
-* charmpy builds include the charm++ library and are relocatable. ``LD_LIBRARY_PATH`` or
+* charm4py builds include the charm++ library and are relocatable. ``LD_LIBRARY_PATH`` or
   similar schemes are no longer needed.
 
-* charmpy does not need a configuration file anymore (it will automatically
+* charm4py does not need a configuration file anymore (it will automatically
   select the best available interface layer at runtime).
 
 
@@ -53,7 +84,7 @@ What's new in v0.10
 **Performance**
 
 * Added Cython-based C-extension module to considerably speed up the interface with
-  the Charm++ library and critical parts of charmpy (currently only with Python 3+).
+  the Charm++ library and critical parts of charm4py (currently only with Python 3+).
 
 * Several minor performance improvements
 
@@ -92,12 +123,12 @@ What's new in v0.10
 
 * ArrayMap: to customize initial mapping of chares to cores
 
-* Warn if user forgot to call ``charm.start()`` when launching charmpy programs
+* Warn if user forgot to call ``charm.start()`` when launching charm4py programs
 
 * Exposed ``migrateMe(toPe)`` method of chares to manually migrate a chare to indicated
   PE
 
-* Exposed `LBTurnInstrumentOn/Off`__ from Charm++ to charmpy applications
+* Exposed `LBTurnInstrumentOn/Off`__ from Charm++ to charm4py applications
 
 * Interface to construct topology-aware trees of nodes/PEs
 
@@ -137,8 +168,8 @@ What's new in v0.10
 
 * Heavy code refactoring. Code simplification in several places
 
-* Several improvements towards PEP 8 compliance of core charmpy code.
-  Indentation of code in ``charmpy`` package is PEP 8 compliant.
+* Several improvements towards PEP 8 compliance of core charm4py code.
+  Indentation of code in ``charm4py`` package is PEP 8 compliant.
 
 * Improvements to test infrastructure and added Travis CI script
 
@@ -152,9 +183,9 @@ What's new in v0.9
 
 **General**
 
-* CharmPy is compatible with Python 3 (Python 3 is the recommended option)
+* Charm4py is compatible with Python 3 (Python 3 is the recommended option)
 
-* Added documentation (http://charmpy.readthedocs.io)
+* Added documentation (http://charm4py.readthedocs.io)
 
 
 **API Changes**
@@ -206,8 +237,8 @@ What's new in v0.9
 
 * Improved profiling output. Profiling is disabled by default.
 
-* Improved general error handling and output. Errors in charmpy runtime raise
-  ``CharmPyError`` exception.
+* Improved general error handling and output. Errors in charm4py runtime raise
+  ``Charm4PyError`` exception.
 
 * Code Examples:
 
@@ -217,4 +248,4 @@ What's new in v0.9
 
     - Add total iterations as program parameter for wave2d
 
-* Added ``auto_test.py`` script to test charmpy
+* Added ``auto_test.py`` script to test charm4py

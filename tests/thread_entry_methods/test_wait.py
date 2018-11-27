@@ -1,7 +1,7 @@
-from charmpy import charm, Chare, Array
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array
+from charm4py import readonlies as ro
 
-from charmpy import Options
+from charm4py import Options
 Options.PROFILING = True
 
 NUM_ITER = 1000

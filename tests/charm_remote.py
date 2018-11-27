@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, threaded
+from charm4py import charm, Chare, Group, threaded
 import random
 
 

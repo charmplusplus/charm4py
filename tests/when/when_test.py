@@ -1,5 +1,5 @@
-from charmpy import charm, Chare, Group, when
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Group, when
+from charm4py import readonlies as ro
 
 GRP_TO_SEND = 20
 

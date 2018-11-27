@@ -10,7 +10,7 @@ else:
     extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
 
-ffibuilder.set_source("charmpy.charmlib._charmlib_cffi",
+ffibuilder.set_source("charm4py.charmlib._charmlib_cffi",
    r""" // passed to the real C compiler
         #include "charm.h"
         #include "spanningTree.h"
@@ -96,7 +96,7 @@ ffibuilder.set_source("charmpy.charmlib._charmlib_cffi",
     """,
     libraries=['charm'],
     include_dirs=['charm_src/charm/include'],
-    library_dirs=['charmpy/.libs'],
+    library_dirs=['charm4py/.libs'],
     extra_compile_args=['-g0', '-O3'],
     extra_link_args=extra_link_args)
 

@@ -1,21 +1,22 @@
-#ignore build files
+# ignore build files
 docs/_build/
 build/
 charm_src/
-charmpy/charmlib/*.o
-charmpy/charmlib/*.so
-charmpy/charmlib/charmlib_cython.c
-charmpy/charmlib/_charmlib_cffi.c
-charmpy/charmlib/build/
+charm4py/_version.py
+charm4py/charmlib/*.o
+charm4py/charmlib/*.so
+charm4py/charmlib/charmlib_cython.c
+charm4py/charmlib/_charmlib_cffi.c
+charm4py/charmlib/build/
 __pycache__
 
-#ignore some common tmp files
+# ignore some common tmp files
 *.swp
 *.pyc
 
-#ignore binaries
-charmpy/.libs/
+# ignore binaries
+charm4py/.libs/
 charmrun/charmrun
 
-#ignore macOS specific files
+# ignore macOS specific files
 .DS_STORE

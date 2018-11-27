@@ -1,13 +1,16 @@
-=======
-CharmPy
-=======
+========
+charm4py
+========
 
-CharmPy is a general-purpose parallel and distributed programming framework with a
-simple and powerful API, based on migratable Python objects and remote method
-invocation; built on top of an adaptive C++ runtime system providing *speed*,
-*scalability* and *dynamic load balancing*.
+(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
+the `forum`_ for more information.)
 
-CharmPy allows development of parallel applications that scale from laptops to
+charm4py (Charm++ for Python *-formerly CharmPy-*) is a general-purpose parallel and
+distributed programming framework with a simple and powerful API, based on
+migratable Python objects and remote method invocation; built on top of an adaptive
+C++ runtime system providing *speed*, *scalability* and *dynamic load balancing*.
+
+charm4py allows development of parallel applications that scale from laptops to
 supercomputers, using the Python language. It is built on top of `Charm++`_.
 
 Please see the Documentation_.
@@ -19,7 +22,7 @@ The following computes Pi in parallel, using any number of machines and processo
 
 .. code-block:: python
 
-    from charmpy import charm, Chare, Group, Reducer
+    from charm4py import charm, Chare, Group, Reducer
     from math import pi
     import time
 
@@ -49,13 +52,13 @@ The following computes Pi in parallel, using any number of machines and processo
     charm.start(main)
 
 
-This is a simple example and demonstrates only a few features of CharmPy. Some things to note
+This is a simple example and demonstrates only a few features of charm4py. Some things to note
 from this example:
 
 - *Chares* are distributed Python objects.
 - A *Group* is a type of distributed collection where one instance of the specified
   chare type is created on each processor.
-- Remote method invocation in CharmPy is *asynchronous*.
+- Remote method invocation in charm4py is *asynchronous*.
 
 In this example, there is only one chare per processor, but multiple chares (of the same
 or different type) can exist on any given processor, which can bring performance
@@ -65,13 +68,13 @@ benefits. Please refer to the documentation_ for more information.
 Contact
 -------
 
-`Mailing list`_
+We want feedback from the community. If you have feature suggestions, support questions or general comments, please visit our `forum`_.
 
 Main author at <jjgalvez@illinois.edu>
 
 
 .. _Charm++: https://github.com/UIUC-PPL/charm
 
-.. _Documentation: https://charmpy.readthedocs.io
+.. _Documentation: https://charm4py.readthedocs.io
 
-.. _Mailing list: charm@cs.illinois.edu
+.. _forum: https://charm.discourse.group/c/charm4py

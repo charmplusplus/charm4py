@@ -3,7 +3,7 @@
 A program to test migration of chares.
 """
 
-from charmpy import charm, Chare, Array
+from charm4py import charm, Chare, Array
 
 
 CHARES_PER_PE = 1

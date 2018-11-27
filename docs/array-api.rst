@@ -4,7 +4,7 @@
 Array
 -----
 
-``charmpy.Array`` is a type of distributed collection where chares have
+``charm4py.Array`` is a type of distributed collection where chares have
 n-dimensional indexes (represented by an integer n-tuple), and members can exist
 anywhere on the system. As such, there can
 be zero or multiple elements of a chare array on a given PE, and elements can
@@ -12,7 +12,7 @@ migrate between PEs.
 
 Arrays are created using the following syntax:
 
-``charmpy.Array(chare_type, dims=None, ndims=-1, args=[], map=None)`` where
+``charm4py.Array(chare_type, dims=None, ndims=-1, args=[], map=None)`` where
 ``chare_type`` is the type of chares that will constitute the array.
 There are two modes to create an array:
 

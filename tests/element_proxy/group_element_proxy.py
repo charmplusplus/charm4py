@@ -2,7 +2,7 @@
 Tests the index proxy for a particular group element.
 """
 
-from charmpy import charm, Chare, Group
+from charm4py import charm, Chare, Group
 
 
 class Test(Chare):

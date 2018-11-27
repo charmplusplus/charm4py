@@ -17,9 +17,9 @@ script:
   - git clone https://github.com/UIUC-PPL/charm charm_src/charm
   - export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
   - export CHARM_BUILD_PROCESSES=2
-  - export CHARMPY_BUILD_CFFI=1
+  - export CHARM4PY_BUILD_CFFI=1
   - python3 setup.py build_ext --inplace
   - python2 setup.py build_ext --inplace
   - export PYTHONPATH=`pwd`
-  - export CHARMPY_TEST_NUM_PROCESSES=2
+  - export CHARM4PY_TEST_NUM_PROCESSES=2
   - python3 auto_test.py

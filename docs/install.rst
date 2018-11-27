@@ -4,11 +4,11 @@ Install
 
 .. .. contents::
 
-CharmPy runs on Linux, macOS, Windows, and a wide variety of clusters and
+charm4py runs on Linux, macOS, Windows, and a wide variety of clusters and
 supercomputer environments (including many supercomputers in the TOP500).
 
-CharmPy runs on Python 2.7 and 3.3+. Python 3 is *highly* recommended for best
-performance. CharmPy has been tested with the following Python implementations:
+charm4py runs on Python 2.7 and 3.3+. Python 3 is *highly* recommended for best
+performance. charm4py has been tested with the following Python implementations:
 CPython (most common implementation) and PyPy_.
 
 
@@ -20,13 +20,13 @@ pip
 
 To install on regular Linux, macOS and Windows machines, do::
 
-    $ pip install charmpy
+    $ pip install charm4py
 
 .. note::
-    pip >= 8.0 is recommended to simplify the install and avoid building CharmPy or
+    pip >= 8.0 is recommended to simplify the install and avoid building charm4py or
     any dependencies from sources.
 
-    Note that a 64-bit version of Python is required to install and run charmpy.
+    Note that a 64-bit version of Python is required to install and run charm4py.
 
 
 Install from Source
@@ -41,15 +41,15 @@ Prerequisites:
 
 To build the latest *stable* release, do::
 
-  $ pip install charmpy --no-binary charmpy
+  $ pip install charm4py --no-binary charm4py
 
 Or download the source distribution from PyPI, uncompress and run ``python setup.py install``.
 
-To build the latest *development* version, download CharmPy and Charm++ source code
+To build the latest *development* version, download Charm4py and Charm++ source code
 and run setup::
 
-    $ git clone https://github.com/UIUC-PPL/charmpy
-    $ cd charmpy
+    $ git clone https://github.com/UIUC-PPL/charm4py
+    $ cd charm4py
     $ git clone https://github.com/UIUC-PPL/charm charm_src/charm
     $ python setup.py install
 
@@ -68,7 +68,7 @@ Before running ``python setup.py`` in the steps above, enter the Charm++ source 
 directory (``charm_src/charm``), and manually build the Charm++ library. The build
 command syntax is::
 
-    $ ./build charmpy <version> -j<N> --with-production
+    $ ./build charm4py <version> -j<N> --with-production
 
 where ``<version>`` varies based on the system and communication layer, and ``<N>``
 is the number of processes to use for compiling.
@@ -76,7 +76,7 @@ For help in choosing the correct ``<version>``, please refer to the Charm++ manu
 and the README in Charm++'s root directory.
 
 After the library has been built, continue with ``python setup.py install`` in the
-charmpy source root directory.
+charm4py source root directory.
 
 
 .. _manual: http://charm.cs.illinois.edu/manuals/html/charm++/A.html

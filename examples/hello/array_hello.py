@@ -1,13 +1,13 @@
-from charmpy import charm, Chare, Array, CkMyPe, CkNumPes
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array
+from charm4py import readonlies as ro
 
 
 class Hello(Chare):
   def __init__(self):
-    print("Hello " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
+    print("Hello " + str(self.thisIndex) + " created on PE " + str(charm.myPe()))
 
   def SayHi(self, hiNo):
-    print("Hi[" + str(hiNo) + "] from element " + str(self.thisIndex) + " on PE " + str(CkMyPe()))
+    print("Hi[" + str(hiNo) + "] from element " + str(self.thisIndex) + " on PE " + str(charm.myPe()))
     if self.thisIndex == ro.lastIdx:
       print("All done")
       exit()
@@ -33,7 +33,7 @@ def main(args):
 
   nElements = 1
   for x in ro.ARRAY_SIZE: nElements *= x
-  print("Running Hello on " + str(CkNumPes()) + " processors for " + str(nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
+  print("Running Hello on " + str(charm.numPes()) + " processors for " + str(nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
   arrProxy = Array(Hello, ro.ARRAY_SIZE)
   arrProxy[ro.firstIdx].SayHi(17)
 

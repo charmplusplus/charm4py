@@ -1,5 +1,5 @@
-from charmpy import charm, Chare
-from charmpy import readonlies as ro
+from charm4py import charm, Chare
+from charm4py import readonlies as ro
 import time
 
 class Hello(Chare):

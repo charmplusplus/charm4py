@@ -1,9 +1,9 @@
-from charmpy import charm, Chare, Array, when
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array, when
+from charm4py import readonlies as ro
 import random
 import time
 
-from charmpy import Options
+from charm4py import Options
 Options.PROFILING = True
 
 X, Y, Z = 3, 7, 11

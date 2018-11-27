@@ -2,7 +2,7 @@
 readonlies
 ----------
 
-``charmpy.readonlies`` is an object that serves as a container for data that
+``charm4py.readonlies`` is an object that serves as a container for data that
 the application wants to broadcast to every process after the "entry point" has executed.
 Attributes added to ``readonlies`` during execution of the entry point will become
 available in the ``readonlies`` instance of every process.
@@ -11,8 +11,8 @@ For example:
 
 .. code-block:: python
 
-    from charmpy import charm, Chare, Group
-    from charmpy import readonlies as ro
+    from charm4py import charm, Chare, Group
+    from charm4py import readonlies as ro
 
     class Test(Chare):
         def __init__(self):

@@ -4,8 +4,8 @@
 # Original author: Isaac Dooley (2008)
 # Converted to Python from examples/charm++/wave2d in Charm++ codebase
 
-from charmpy import charm, Chare, Array, CkMyPe, CkNumPes
-from charmpy import readonlies as ro
+from charm4py import charm, Chare, Array
+from charm4py import readonlies as ro
 import time
 import math
 import numpy as np
@@ -31,7 +31,7 @@ class Main(Chare):
     self.programStartTime = self.periodStartTime = time.time()
     ro.mainProxy = self.thisProxy # store the main proxy
 
-    print("Running wave2d on " + str(CkNumPes()) + " processors")
+    print("Running wave2d on " + str(charm.numPes()) + " processors")
 
     # Create new array of worker chares
     ro.arrayProxy = Array(Wave, (chareArrayWidth, chareArrayHeight))
@@ -154,7 +154,6 @@ class Wave(Chare):
 
     X,Y = chareArrayWidth, chareArrayHeight
     i = self.thisIndex
-    # NOTE: sending the arrays as strings is faster than letting charmpy pickle the numpy arrays
     self.thisProxy[(i[0]-1)%X, i[1]].recvGhosts(RIGHT, left_edge) # Send my left edge
     self.thisProxy[(i[0]+1)%X, i[1]].recvGhosts(LEFT, right_edge) # Send my right edge
     self.thisProxy[i[0], (i[1]-1)%Y].recvGhosts(DOWN, top_edge) # Send my top edge

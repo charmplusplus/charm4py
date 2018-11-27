@@ -5,7 +5,7 @@ Features
 .. .. contents::
 
 - **Speed**: Runtime overhead is very low, particularly compared to Python
-  libraries with similar features. CharmPy runs on top of `Charm++`_, a C/C++
+  libraries with similar features. Charm4py runs on top of `Charm++`_, a C/C++
   runtime system designed to run High-performance computing (HPC) applications
   and to scale to hundreds of thousands of cores
 - Simple and powerful API

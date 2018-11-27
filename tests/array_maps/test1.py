@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, Array, ArrayMap
+from charm4py import charm, Chare, Group, Array, ArrayMap
 import itertools
 
 

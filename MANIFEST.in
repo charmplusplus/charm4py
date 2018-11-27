@@ -1,11 +1,11 @@
 include MANIFEST.in
-include README.rst setup.py auto_test.py AUTHORS.md LICENSE CHANGES.rst
+include README.rst setup.py auto_test.py test_config.json AUTHORS.md LICENSE CHANGES.rst
 
 include charm_src/charm.tar.gz
 
-exclude charmpy/charmlib/charmlib_cython.c
+exclude charm4py/charmlib/charmlib_cython.c
 
-recursive-include charmpy libcharm_version *.pxd *.pyx
+recursive-include charm4py libcharm_version *.pxd *.pyx
 recursive-include docs *.py Makefile *.bat *.rst *.svg
 recursive-include examples *.py
 recursive-include tests *.py

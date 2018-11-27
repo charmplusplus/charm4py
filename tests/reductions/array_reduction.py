@@ -1,6 +1,5 @@
-from charmpy import charm, Chare, Array, Group, CkMyPe, CkNumPes, CkExit
-from charmpy import readonlies as ro
-from charmpy import Reducer
+from charm4py import charm, Chare, Array, Group, Reducer
+from charm4py import readonlies as ro
 import array
 import numpy
 
@@ -25,7 +24,7 @@ class Main(Chare):
 
     nElements = 1
     for x in ro.ARRAY_SIZE: nElements *= x
-    print("Running reduction example on " + str(CkNumPes()) + " processors for " + str(nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
+    print("Running reduction example on " + str(charm.numPes()) + " processors for " + str(nElements) + " elements, array dims=" + str(ro.ARRAY_SIZE))
     ro.mainProxy = self.thisProxy
     ro.arrProxy = Array(Test, ro.ARRAY_SIZE)
     ro.groupProxy = Group(TestGroup)
@@ -36,51 +35,51 @@ class Main(Chare):
     print("[Main] All sum_int contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-        CkExit()
+        exit()
 
   def done_nop(self):
     print("[Main] All nop contributions received. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-        CkExit()
+        exit()
 
   def done_float(self, reduction_result):
     assert_allclose(reduction_result, [101.0, 134.0, 45.0], 1e-03)
     print("[Main] All sum_float contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-        CkExit()
+        exit()
 
   def done_array_to_array(self):
     print("[Main] All array-to-array contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
   def done_array_to_array_bcast(self):
     print("[Main] All array-to-array bcast contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
   def done_array_to_group(self):
     print("[Main] All array-to-group contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
   def done_array_to_group_bcast(self):
     print("[Main] All array-to-group bcast contributions done. Test passed")
     self.recvdReductions += 1
     if (self.recvdReductions >= self.expectedReductions):
-      CkExit()
+      exit()
 
 class Test(Chare):
   def __init__(self):
-    print("Test " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
+    print("Test " + str(self.thisIndex) + " created on PE " + str(charm.myPe()))
 
   def doReduction(self):
-    print("Test element " + str(self.thisIndex) + " on PE " + str(CkMyPe()) + " is starting its contributions.")
+    print("Test element " + str(self.thisIndex) + " on PE " + str(charm.myPe()) + " is starting its contributions.")
     # test contributing single int back to Main
     self.contribute(42, Reducer.sum, ro.mainProxy.done_int)
     # test contributing list of floats back to main
@@ -108,7 +107,7 @@ class Test(Chare):
 
 class TestGroup(Chare):
   def __init__(self):
-    print("TestGroup " + str(self.thisIndex) + " created on PE " + str(CkMyPe()))
+    print("TestGroup " + str(self.thisIndex) + " created on PE " + str(charm.myPe()))
 
   def reduceFromArray(self, reduction_result):
     assert self.thisIndex == 0

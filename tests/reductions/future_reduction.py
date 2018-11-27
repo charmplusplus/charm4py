@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, Array, Reducer
+from charm4py import charm, Chare, Group, Array, Reducer
 import numpy as np
 
 

@@ -40,9 +40,9 @@ class Options:
     QUIET = False
 
 
-class CharmPyError(Exception):
+class Charm4PyError(Exception):
     def __init__(self, msg):
-        super(CharmPyError, self).__init__(msg)
+        super(Charm4PyError, self).__init__(msg)
         self.message = msg
 
 
@@ -143,7 +143,7 @@ class Charm(object):
                     roData[attr] = getattr(readonlies, attr)
             msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
             # print("Registering readonly data of size " + str(len(msg)))
-            self.lib.CkRegisterReadonly(b"charmpy_ro", b"charmpy_ro", msg)
+            self.lib.CkRegisterReadonly(b"charm4py_ro", b"charm4py_ro", msg)
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
         em = self.entryMethods[ep]
@@ -318,9 +318,9 @@ class Charm(object):
     def registerInCharmAs(self, C, charm_type, libRegisterFunc):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        # if self.myPe() == 0: print("CharmPy:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
+        # if self.myPe() == 0: print("charm4py:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
         C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
-        # if self.myPe() == 0: print("CharmPy:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
+        # if self.myPe() == 0: print("charm4py:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
         for i, em in enumerate(entryMethods):
             if i == 0:
                 em.isCtor = True
@@ -362,8 +362,8 @@ class Charm(object):
 
         if (self.myPe() == 0) and (not Options.QUIET):
             import platform
-            from . import charmpy_version
-            out_msg = ("CharmPy> Running CharmPy version " + charmpy_version +
+            from . import charm4py_version
+            out_msg = ("charm4py> Running Charm4py version " + charm4py_version +
                        " on Python " + str(platform.python_version()) + " (" +
                        str(platform.python_implementation()) + "). Using '" +
                        self.lib.name + "' interface to access Charm++")
@@ -379,7 +379,7 @@ class Charm(object):
             assert not self.mainchareRegistered, "More than one entry point has been specified"
             self.mainchareRegistered = True
         charm_type = chare.charm_type_id_to_class[charm_type_id]
-        # print("CharmPy: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
+        # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         l = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
                                      for m in charm_type.__baseEntryMethods__()]
         self.classEntryMethods[charm_type_id][C] = l
@@ -387,7 +387,7 @@ class Charm(object):
             if not callable(getattr(C, m)):
                 continue
             if m in chare.method_restrictions['reserved'] and getattr(C, m) != getattr(Chare, m):
-                raise CharmPyError(str(C) + " redefines reserved method '"  + m + "'")
+                raise Charm4PyError(str(C) + " redefines reserved method '"  + m + "'")
             if m.startswith("__") and m.endswith("__"):
                 continue  # filter out non-user methods
             if m in chare.method_restrictions['non_entry_method']:
@@ -397,13 +397,13 @@ class Charm(object):
             self.classEntryMethods[charm_type_id][C].append(em)
         self.registered[C].add(charm_type)
 
-    # called by user (from Python) to register their Charm++ classes with the CharmPy runtime
+    # called by user (from Python) to register their Charm++ classes with the charm4py runtime
     # by default a class is registered to work with both Groups and Arrays
     def register(self, C, collections=(GROUP, ARRAY)):
         if C in self.registered:
             return
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
-            raise CharmPyError("Only subclasses of Chare can be registered")
+            raise Charm4PyError("Only subclasses of Chare can be registered")
 
         self.registered[C] = set()
         for charm_type_id in collections:
@@ -418,7 +418,7 @@ class Charm(object):
 
     def start(self, entry=None, classes=[], modules=[], interactive=False):
         """
-        Start Charmpy program.
+        Start charm4py program.
 
         IMPORTANT: classes must be registered in the same order on all processes. In
         other words, the arguments to this method must have the same ordering on all
@@ -441,7 +441,7 @@ class Charm(object):
                                           'Array': Array, 'Reducer': self.reducers})
 
         if self.started:
-            raise CharmPyError("charm.start() can only be called once")
+            raise Charm4PyError("charm.start() can only be called once")
         self.started = True
 
         if Options.PROFILING:
@@ -453,12 +453,12 @@ class Charm(object):
 
         if hasattr(entry, 'mro') and Chare in entry.mro():
             if entry.__init__.__code__.co_argcount != 2:
-                raise CharmPyError("Mainchare constructor must have only one parameter")
+                raise Charm4PyError("Mainchare constructor must have only one parameter")
             self.register(entry, (MAINCHARE,))
         else:
             assert callable(entry), "Given entry point is not a function or Chare"
             if entry.__code__.co_argcount != 1:
-                raise CharmPyError("Main function must have only one parameter")
+                raise Charm4PyError("Main function must have only one parameter")
             self.entry_func = entry
             self.register(chare.DefaultMainchare, (MAINCHARE,))
 
@@ -468,7 +468,7 @@ class Charm(object):
             elif Chare in C.mro():
                 self.register(C)
             else:
-                raise CharmPyError("Class", C, "is not a Chare (can't register)")
+                raise Charm4PyError("Class", C, "is not a Chare (can't register)")
 
         import importlib
         import inspect
@@ -485,7 +485,7 @@ class Charm(object):
                     elif Chare in C.mro():
                         self.register(C)
                     elif Group in C.mro() or Array in C.mro() or Mainchare in C.mro():
-                        raise CharmPyError("Chares must not inherit from Group, Array or"
+                        raise Charm4PyError("Chares must not inherit from Group, Array or"
                                            " Mainchare. Refer to new API")
 
         for module in (chare, entry_method, threads, wait):
@@ -520,8 +520,8 @@ class Charm(object):
         for proxy in proxies:
             if not hasattr(proxy, 'creation_future'):
                 if not proxy.__class__.__name__.endswith("Proxy"):
-                    raise CharmPyError('Did not pass a proxy to awaitCreation? ' + str(type(proxy)))
-                raise CharmPyError('awaitCreation can only be used if creation triggered from threaded entry method')
+                    raise Charm4PyError('Did not pass a proxy to awaitCreation? ' + str(type(proxy)))
+                raise Charm4PyError('awaitCreation can only be used if creation triggered from threaded entry method')
             proxy.creation_future.get()
             del proxy.creation_future
 
@@ -542,7 +542,7 @@ class Charm(object):
 
     def printStats(self):
         if not self.started:
-            raise CharmPyError('charm was not started')
+            raise Charm4PyError('charm was not started')
         if not Options.PROFILING:
             print('NOTE: called charm.printStats() but profiling is disabled')
             return
@@ -604,7 +604,7 @@ class Charm(object):
         if version < req_version:
             req_str = '.'.join([str(n) for n in req_version])
             cur_str = '.'.join([str(n) for n in version])
-            raise CharmPyError("Charm++ version >= " + req_str + " required. " +
+            raise Charm4PyError("Charm++ version >= " + req_str + " required. " +
                                "Existing version is " + cur_str)
 
     def getTopoTreeEdges(self, pe, root_pe, pes=None, bfactor=4):
@@ -668,7 +668,7 @@ def load_charm_library(charm):
         elif interface == 'cython':
             from .charmlib.charmlib_cython import CharmLib
         else:
-            raise CharmPyError('Unrecognized interface ' + interface)
+            raise Charm4PyError('Unrecognized interface ' + interface)
     else:
         # pick best available interface
         import platform

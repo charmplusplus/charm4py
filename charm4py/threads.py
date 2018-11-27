@@ -74,7 +74,7 @@ class EntryMethodThreadManager(object):
 
     def __init__(self):
         self.PROFILING = Options.PROFILING
-        self.main_thread_id = get_ident()    # ID of the charmpy process main thread
+        self.main_thread_id = get_ident()    # ID of the charm4py process main thread
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
         self.threads = {}                    # thread ID -> ThreadState object
@@ -112,7 +112,7 @@ class EntryMethodThreadManager(object):
     def objMigrating(self, obj):
         if obj in self.obj_threads:
             if len(self.obj_threads.pop(obj)) > 0:
-                raise CharmPyError("Migration of chares with active threads is not yet supported")
+                raise Charm4PyError("Migration of chares with active threads is not yet supported")
 
     def entryMethodRun_thread(self, obj, entry_method, args, header):
         """ Entry method thread main function """
@@ -143,7 +143,7 @@ class EntryMethodThreadManager(object):
             self.entryMethodRunning.notify()  # notify main thread that done
 
     def throwNotThreadedError(self):
-        raise CharmPyError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
+        raise Charm4PyError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
                            charm.mainThreadEntryMethod.name +
                            "' must be marked as 'threaded' to block")
 
@@ -215,7 +215,7 @@ class EntryMethodThreadManager(object):
 
 
 def charmStarting():
-    from .charm import charm, Options, CharmPyError
+    from .charm import charm, Options, Charm4PyError
     globals()['charm'] = charm
     globals()['Options'] = Options
-    globals()['CharmPyError'] = CharmPyError
+    globals()['Charm4PyError'] = Charm4PyError

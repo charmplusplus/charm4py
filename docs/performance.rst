@@ -5,13 +5,13 @@ Performance
 .. contents::
 
 Python 3 with the Cython interface layer is currently the recommended way to run
-CharmPy programs to get the best performance (on CPython). This is the option that
+Charm4py programs to get the best performance (on CPython). This is the option that
 is installed when using pip.
 
 Performance analysis
 --------------------
 
-Set ``charmpy.Options.PROFILING`` to ``True`` to activate profiling. Do this this
+Set ``charm4py.Options.PROFILING`` to ``True`` to activate profiling. Do this this
 before the program starts.
 
 ``charm.printStats()``: prints timing results and message statistics
@@ -60,21 +60,21 @@ Timings are shown in four colums:
 
 :em: Time in user code (outside of runtime) executing an entry method.
 :send: Time in proxy and contribute calls (in runtime).
-:recv: Time between CharmPy layer receiving a message for delivery and the target
+:recv: Time between Charm4py layer receiving a message for delivery and the target
   entry method being invoked (in runtime).
 :total: Sum of the previous three columns.
 
 The last rows show miscellanous overheads pertaining to reductions and migration.
 
 .. note::
-    While all of the CharmPy code is instrumented, there are parts of the C/C++
+    While all of the Charm4py code is instrumented, there are parts of the C/C++
     runtime that are not currently reflected in the above timings.
 
 The last part of the output shows message statistics for remote method invocations (number
 of messages sent and received and their sizes).
 
 Charm++ has powerful tracing functionality and a performance analysis and visualization
-tool called *Projections*. This functionality has not yet been integrated into CharmPy.
+tool called *Projections*. This functionality has not yet been integrated into Charm4py.
 
 .. _perf-serialization-label:
 
@@ -84,7 +84,7 @@ Serialization
 In many cases a remote method invocation results in serialization of the arguments
 into a message that is sent to a remote process.
 Serialization is also referred to as *pickling*. Pickling can account for much of
-the overhead of the CharmPy runtime. Fastest
+the overhead of the Charm4py runtime. Fastest
 serialization is obtained with the C implementation of the ``pickle`` module
 (only available in CPython).
 

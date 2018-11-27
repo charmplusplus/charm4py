@@ -4,7 +4,7 @@
 Reducer
 -------
 
-``charmpy.Reducer`` contains the reducer functions that have been registered with
+``charm4py.Reducer`` contains the reducer functions that have been registered with
 the runtime. Reducer functions are used in Reductions, to aggregate data across the members
 of a chare collection (see :ref:`chare-api-label`).
 

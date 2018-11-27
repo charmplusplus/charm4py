@@ -79,8 +79,8 @@ class ReducerContainer(object):
 
     def addReducer(self, func, pre=None, post=None):
         if hasattr(self, func.__name__):
-            from .charm import CharmPyError
-            raise CharmPyError("Reducer with name " + func.__name__ + " already registered")
+            from .charm import Charm4PyError
+            raise Charm4PyError("Reducer with name " + func.__name__ + " already registered")
         func.hasPreprocess  = False
         func.hasPostprocess = False
         if pre is not None:
@@ -226,8 +226,8 @@ class ReductionManager(object):
             return (charm_reducer_type, data, c_type)
         else:
             if not hasattr(pyReducer, 'hasPreprocess'):
-                from .charm import CharmPyError
-                raise CharmPyError("Please register reducer '" + reducer.__name__ + "' with addReducer")
+                from .charm import Charm4PyError
+                raise Charm4PyError("Please register reducer '" + reducer.__name__ + "' with addReducer")
             if pyReducer.hasPreprocess:
                 data = pyReducer.preprocess(data, contributor)
             rednMsg = ({b"custom_reducer": pyReducer.__name__}, [data])

@@ -5,7 +5,7 @@ Futures
 -------
 
 Futures are objects that act as placeholders for values which are unknown at the time
-they are created. A future is an instance of ``charmpy.threads.Future``.
+they are created. A future is an instance of ``charm4py.threads.Future``.
 
 Creation
 ~~~~~~~~

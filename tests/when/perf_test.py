@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group, when
+from charm4py import charm, Chare, Group, when
 import random
 import time
 

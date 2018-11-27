@@ -1,4 +1,4 @@
-from charmpy import charm, Chare, Group
+from charm4py import charm, Chare, Group
 
 # this class is mainly for bookkeeping to store and manage job state
 class Job:
