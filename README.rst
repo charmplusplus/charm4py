@@ -2,8 +2,8 @@
 charm4py
 ========
 
-*(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
-the `forum`_ for more information.)*
+(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
+the `forum`_ for more information.)
 
 charm4py (Charm++ for Python *-formerly CharmPy-*) is a general-purpose parallel and
 distributed programming framework with a simple and powerful API, based on
