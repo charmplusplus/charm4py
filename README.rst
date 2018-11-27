@@ -3,7 +3,7 @@ charm4py
 ========
 
 *(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
-the forum for more information.)*
+the `forum`_ for more information.)*
 
 charm4py (Charm++ for Python *-formerly CharmPy-*) is a general-purpose parallel and
 distributed programming framework with a simple and powerful API, based on
@@ -68,7 +68,8 @@ benefits. Please refer to the documentation_ for more information.
 Contact
 -------
 
-`Forum`_
+`Forum`_:
+We want feedback from the community. If you have feature suggestions, support questions or general comments, please visit our forum.
 
 Main author at <jjgalvez@illinois.edu>
 
