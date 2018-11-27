@@ -5,6 +5,16 @@ Tutorial
 .. contents::
 
 This tutorial assumes that you have installed Charm4py as described in :doc:`install`.
+You can run any of these examples in an interactive Python shell (using multiple processes)
+by launching Charm4py in the following manner::
+
+    $ python3 -m charmrun.start +p4 ++interactive
+
+and inserting the example code in the shell. Note that in interactive mode the runtime is already
+started when the interactive shell appears, so ``charm.start()`` does *not* need to be called.
+For the examples below, you can directly call the main function or, alternatively, just run the body of the main
+function in the top-level shell.
+
 
 Program start and exit
 ----------------------
@@ -22,7 +32,7 @@ We will begin with a simple example:
         print("Running on", charm.numPes(), "processors")
         exit()
 
-    charm.start(main)
+    charm.start(main)  # call main([]) in interactive mode
 
 
 We need to define an entry point to the Charm4py program, which we refer to as the
@@ -96,7 +106,7 @@ For easy management of distributed objects, you can organize chares into distrib
         charm.awaitCreation(my_group, my_array, my_2d_array)
         exit()
 
-    charm.start(main)
+    charm.start(main)  # call main([]) in interactive mode
 
 The above program will create P + 3 + 2\*2 chares and print a message for each created
 chare, where P is the number of processors used to launch the program.
@@ -269,7 +279,7 @@ any chare or future of your choice.
         my_group = Group(MyChare)
         my_group.work(3)
 
-    charm.start(main)
+    charm.start(main)  # call main([]) in interactive mode
 
 
 In the above code, every element in the group contributes the data received from
@@ -346,7 +356,7 @@ Now we will show a full *Hello World* example, that prints a message from all pr
         hellos.SayHi(ret=True).get()
         exit()
 
-    charm.start(main)
+    charm.start(main)  # call main([]) in interactive mode
 
 
 
@@ -387,7 +397,7 @@ explicitly by the user like this:
         f.get()
         exit()
 
-    charm.start(main)
+    charm.start(main)  # call main([]) in interactive mode
 
 As we can see, here the user explicitly creates a future and sends it to the group,
 who then initiate a reduction using the future as reduction target.

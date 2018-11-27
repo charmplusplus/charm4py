@@ -74,4 +74,4 @@ Main author at <jjgalvez@illinois.edu>
 
 .. _Documentation: https://charm4py.readthedocs.io
 
-.. _Forum: https://charm.discourse.group
+.. _Forum: https://charm.discourse.group/c/charm4py

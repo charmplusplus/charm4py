@@ -6,7 +6,7 @@ log in the source code repository.
 What's new in v0.11
 ===================
 
-* Changed the name of the project from CharmPy to charm4py (more information on why
+* Changed the name of the project from CharmPy to *charm4py* (more information on why
   we changed the name is in the forum). Apologies for any inconvenience.
 
 * Not directly related to this release, but there is a new forum for charm4py discussions
@@ -16,7 +16,7 @@ What's new in v0.11
 * Support for interactive charm4py shell using multiple processes on one host has been added
   as a *beta* feature. Please provide feedback and suggestions in the forum or GitHub.
 
-* charm4py now uses the recent major release of Charm++ (6.9)
+* Uses the recent major release of Charm++ (6.9)
 
 * C-extension module can be built on Windows. Windows binary wheels in PyPI come with
   the compiled extension module.

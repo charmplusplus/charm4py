@@ -4,7 +4,7 @@
 charm
 -----
 
-* **charm.start(entry, classes=[], modules=[])**:
+* **charm.start(entry=None, classes=[], modules=[], interactive=False)**:
 
     Start the runtime system.  This is required in *all* processes, and registers
     chare types with the runtime.
@@ -16,6 +16,9 @@ charm
     (typically PE 0), and transfer control to the chare's constructor.
     The entry point function (or chare constructor) must have only one parameter, which
     is used to receive the application's arguments.
+
+    If ``interactive`` is ``True``, an entry point is not needed and instead Charm4py
+    will transfer control to a Read-Eval-Print Loop (REPL) loop on PE0.
 
     On calling ``charm.start()``, Charm4py automatically registers any chare types that
     are defined in the ``__main__`` module. If desired, a list of chare types can also be passed

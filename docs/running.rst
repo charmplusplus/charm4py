@@ -4,14 +4,14 @@ Running
 
 .. .. contents::
 
-charm4py includes a launcher called ``charmrun`` to run parallel applications on
+Charm4py includes a launcher called ``charmrun`` to run parallel applications on
 desktops and small clusters. Supercomputers and some clusters provide their
 own application launchers (these can also be used to launch Charm4py applications).
 
 charmrun
 --------
 
-After installing charm4py as explained in the previous section, you can launch
+After installing Charm4py as explained in the previous section, you can launch
 applications like this::
 
     $ python -m charmrun.start +p4 myprogram.py
@@ -23,9 +23,15 @@ installed and your system configuration)::
 
     $ charmrun +p4 myprogram.py
 
+You can launch an *interactive shell* using the ``++interactive`` option, for
+example::
+
+    $ python -m charmrun.start +p4 ++interactive
+
 Charm4py programs accept the `same command-line parameters`_ as Charm++.
 
 .. _same command-line parameters: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
+
 
 
 Running on Multiple Hosts
