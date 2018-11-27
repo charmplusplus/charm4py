@@ -35,6 +35,7 @@ try:
 except:
     try:
         os.environ['PYTHONPATH'] = os.getcwd()
+        os.environ['CHARM_NOLOAD'] = '1'
         from charm4py import _version
         charm4py_version = _version.version
     except:
