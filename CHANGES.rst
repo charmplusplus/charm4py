@@ -7,7 +7,7 @@ What's new in v0.11
 ===================
 
 * Changed the name of the project from CharmPy to *charm4py* (more information on why
-  we changed the name is in the forum). Apologies for any inconvenience.
+  we changed the name is in the forum).
 
 * Not directly related to this release, but there is a new forum for charm4py discussions
   (see contact details). Feel free to visit the forum for discussions, reports,
@@ -18,7 +18,7 @@ What's new in v0.11
 
 * Uses the recent major release of Charm++ (6.9)
 
-* C-extension module can be built on Windows. Windows binary wheels in PyPI come with
+* C-extension module can be built on Windows. Windows binary wheels on PyPI come with
   the compiled extension module.
 
 * API change: method ``Chare.gather()`` has been removed to make the name available
