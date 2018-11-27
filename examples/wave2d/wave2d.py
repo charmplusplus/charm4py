@@ -4,7 +4,7 @@
 # Original author: Isaac Dooley (2008)
 # Converted to Python from examples/charm++/wave2d in Charm++ codebase
 
-from charm4py import charm, Chare, Array, CkMyPe, CkNumPes
+from charm4py import charm, Chare, Array
 from charm4py import readonlies as ro
 import time
 import math
@@ -31,7 +31,7 @@ class Main(Chare):
     self.programStartTime = self.periodStartTime = time.time()
     ro.mainProxy = self.thisProxy # store the main proxy
 
-    print("Running wave2d on " + str(CkNumPes()) + " processors")
+    print("Running wave2d on " + str(charm.numPes()) + " processors")
 
     # Create new array of worker chares
     ro.arrayProxy = Array(Wave, (chareArrayWidth, chareArrayHeight))

@@ -2,7 +2,7 @@
 charm4py
 ========
 
-*(With release 0.11 we have changed the name of the project to charm4py. See
+*(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
 the forum for more information.)*
 
 charm4py (Charm++ for Python *-formerly CharmPy-*) is a general-purpose parallel and

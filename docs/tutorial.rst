@@ -10,7 +10,7 @@ by launching Charm4py in the following manner::
 
     $ python3 -m charmrun.start +p4 ++interactive
 
-and inserting the example code in the shell. Note that in interactive mode the runtime is already
+and inserting code at the prompt. Note that in interactive mode the runtime is already
 started when the interactive shell appears, so ``charm.start()`` does *not* need to be called.
 For the examples below, you can directly call the main function or, alternatively, just run the body of the main
 function in the top-level shell.
