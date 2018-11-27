@@ -68,8 +68,7 @@ benefits. Please refer to the documentation_ for more information.
 Contact
 -------
 
-`Forum`_:
-We want feedback from the community. If you have feature suggestions, support questions or general comments, please visit our forum.
+We want feedback from the community. If you have feature suggestions, support questions or general comments, please visit our `forum`_.
 
 Main author at <jjgalvez@illinois.edu>
 
@@ -78,4 +77,4 @@ Main author at <jjgalvez@illinois.edu>
 
 .. _Documentation: https://charm4py.readthedocs.io
 
-.. _Forum: https://charm.discourse.group/c/charm4py
+.. _forum: https://charm.discourse.group/c/charm4py
