@@ -108,8 +108,8 @@ class Stencil(Chare):
 
         for j in range(blockDimY):
             for i in range(blockDimX):
-                frontGhost[j*blockDimX+i] = self.temperature[index(i+1, j+1, 1)];
-                backGhost[j*blockDimX+i] = self.temperature[index(i+1, j+1, blockDimZ)];
+                frontGhost[j*blockDimX+i] = self.temperature[index(i+1, j+1, 1)]
+                backGhost[j*blockDimX+i] = self.temperature[index(i+1, j+1, blockDimZ)]
 
         X,Y,Z = ro.num_chare_x, ro.num_chare_y, ro.num_chare_z
         i = self.thisIndex
@@ -165,7 +165,7 @@ class Stencil(Chare):
                 for i in range(height):
                     self.temperature[index2(i+1, j+1, blockDimZ+1)] = gh[j*height+i]
         else:
-            charm.abort("ERROR\n");
+            charm.abort("ERROR\n")
 
     def check_and_compute(self):
         self.compute_kernel()

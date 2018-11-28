@@ -105,6 +105,8 @@ def threaded(func):
     return func
 
 
+charm = None
+
 def charmStarting():
     from .charm import charm
     globals()['charm'] = charm

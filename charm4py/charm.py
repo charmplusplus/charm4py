@@ -380,9 +380,9 @@ class Charm(object):
             self.mainchareRegistered = True
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-        l = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
+        ems = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
                                      for m in charm_type.__baseEntryMethods__()]
-        self.classEntryMethods[charm_type_id][C] = l
+        self.classEntryMethods[charm_type_id][C] = ems
         for m in dir(C):
             if not callable(getattr(C, m)):
                 continue
