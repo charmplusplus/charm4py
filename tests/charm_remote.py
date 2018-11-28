@@ -10,7 +10,7 @@ class Controller(Chare):
         for i in range(charm.numPes()):
             assert i == charm.thisProxy[i].myPe(ret=True).get()
 
-        g = Group(Test)
+        Group(Test)
 
 
 class Test(Chare):

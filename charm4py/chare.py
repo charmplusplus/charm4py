@@ -450,6 +450,8 @@ for i in CHARM_TYPES:
         charm_type_id_to_class[i] = Array
 
 
+charm, Options, Charm4PyError, profile_send_function = None, None, None, None
+
 def charmStarting():
     from .charm import charm, Options, Charm4PyError, profile_send_function
     globals()['charm'] = charm

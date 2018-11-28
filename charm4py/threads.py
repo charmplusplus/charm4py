@@ -214,6 +214,8 @@ class EntryMethodThreadManager(object):
             del self.futures[fid]
 
 
+charm, Options, Charm4PyError = None, None, None
+
 def charmStarting():
     from .charm import charm, Options, Charm4PyError
     globals()['charm'] = charm

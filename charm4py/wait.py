@@ -256,6 +256,8 @@ def parse_cond_str(cond_str, method_arguments={}):
     return ChareStateMsgCond(cond_str, lambda_func)
 
 
+charm = None
+
 def charmStarting():
     from .charm import charm
     globals()['charm'] = charm

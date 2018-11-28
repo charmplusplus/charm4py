@@ -67,11 +67,15 @@ def main(args):
     exit()
 
 
+index, compute_kernel_fast, constrainBC_fast, fillGhostData, processGhosts_fast = None, None, None, None, None
+
 def make_numba_functions():
 
-    if 'index' in globals(): return # numba functions already generated
+    global index, blockDimX, blockDimY, blockDimZ
 
-    global blockDimX, blockDimY, blockDimZ
+    if index is not None:
+        return # numba functions already generated
+
     # numba functions will be compiled with blockDimX, blockDimY, blockDimZ as constants
     blockDimX = ro.blockDimX
     blockDimY = ro.blockDimY
@@ -125,7 +129,7 @@ def make_numba_functions():
 
         for j in range(blockDimY):
             for i in range(blockDimX):
-                frontGhost[j*blockDimX+i] = T[index(i+1, j+1, 1)];
+                frontGhost[j*blockDimX+i] = T[index(i+1, j+1, 1)]
                 backGhost[j*blockDimX+i] = T[index(i+1, j+1, blockDimZ)]
 
     @numba.jit(nopython=True, cache=False)
