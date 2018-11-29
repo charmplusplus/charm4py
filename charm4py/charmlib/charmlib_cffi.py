@@ -311,6 +311,12 @@ class CharmLib(object):
   def CkDoneInserting(self, aid):
     lib.CkArrayDoneInsertingExt(aid)
 
+  def getGroupRedNo(self, gid):
+    return lib.CkGroupGetReductionNumber(gid)
+
+  def getArrayElementRedNo(self, aid, index):
+    return lib.CkArrayGetReductionNumber(aid, len(index), index)
+
   def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
     parent       = ffi.new('int*')
     child_count  = ffi.new('int*')

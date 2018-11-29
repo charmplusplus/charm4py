@@ -121,9 +121,20 @@ class Chare(object):
         #       self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
-    # deposit value of one of the futures that was created on this chare
+    # deposit value of one of the futures that was created by this chare
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
+
+    # deposit value of one of the collective futures that was created by this chare
+    def _coll_future_deposit_result(self, fid, result=None):
+        charm.threadMgr.depositCollectiveFuture(fid, result, self)
+
+    def __getRedNo__(self):
+        proxy = self.thisProxy
+        if hasattr(proxy, 'aid'):
+            return charm.lib.getArrayElementRedNo(proxy.aid, self.thisIndex)
+        else:
+            return charm.lib.getGroupRedNo(proxy.gid)
 
 
 method_restrictions = {

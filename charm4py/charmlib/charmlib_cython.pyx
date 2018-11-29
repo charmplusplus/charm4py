@@ -508,6 +508,15 @@ class CharmLib(object):
     for i in range(ndims): c_index[i] = index[i]
     CkMigrateExt(aid, ndims, c_index, toPe)
 
+  def getGroupRedNo(self, int gid):
+    return CkGroupGetReductionNumber(gid)
+
+  def getArrayElementRedNo(self, int aid, index):
+    cdef int ndims = len(index)
+    cdef int i = 0
+    for i in range(ndims): c_index[i] = index[i]
+    return CkArrayGetReductionNumber(aid, ndims, c_index)
+
   def getTopoTreeEdges(self, int pe, int root_pe, pes, int bfactor):
     cdef int parent
     cdef int child_count
