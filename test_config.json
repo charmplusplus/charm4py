@@ -36,6 +36,9 @@
         "path": "tests/reductions/bench_reductions.py"
     },
     {
+        "path": "tests/reductions/allreduce.py"
+    },
+    {
         "path": "tests/dcopy/test_dcopy.py"
     },
     {

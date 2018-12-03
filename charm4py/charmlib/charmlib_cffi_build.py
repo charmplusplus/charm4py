@@ -204,6 +204,9 @@ ffibuilder.cdef("""
     void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize);
     void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
 
+    int CkGroupGetReductionNumber(int gid);
+    int CkArrayGetReductionNumber(int aid, int ndims, int *index);
+
     void registerCkRegisterMainModuleCallback(void (*cb)());
     void registerMainchareCtorExtCallback(void (*cb)(int, void*, int, int, char **));
     void registerReadOnlyRecvExtCallback(void (*cb)(int, char*));

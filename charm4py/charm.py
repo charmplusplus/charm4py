@@ -507,14 +507,19 @@ class Charm(object):
         fid = 0
         if isinstance(target, Future):
             fid = target.fid
-            proxy_class = getattr(self, target.proxy_class_name)
-            proxy = proxy_class.__new__(proxy_class)
-            proxy.__setstate__(target.proxy_state)
-            target = proxy._future_deposit_result
+            target = target.getTargetProxyEntryMethod()
         contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
         if Options.PROFILING:
             self.recordSend(contributeInfo.getDataSize())
         target.__self__.ckContribute(contributeInfo)
+
+    def allReduce(self, data, reducer, contributor):
+        collective_future = self.threadMgr.createCollectiveFuture(contributor.__getRedNo__())
+        self.contribute(data, reducer, collective_future, contributor)
+        return collective_future.get()  # blocks until result of reduction comes
+
+    def barrier(self, contributor):
+        self.allReduce(None, None, contributor)
 
     def awaitCreation(self, *proxies):
         for proxy in proxies:
