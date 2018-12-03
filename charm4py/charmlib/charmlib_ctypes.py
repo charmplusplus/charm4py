@@ -300,6 +300,14 @@ class CharmLib(object):
   def CkDoneInserting(self, aid):
     self.lib.CkArrayDoneInsertingExt(aid)
 
+  def getGroupRedNo(self, gid):
+    return self.lib.CkGroupGetReductionNumber(gid)
+
+  def getArrayElementRedNo(self, aid, index):
+    indexDims = len(index)
+    c_index = (c_int*indexDims)(*index)
+    return self.lib.CkArrayGetReductionNumber(aid, indexDims, c_index)
+
   def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
     parent       = c_int(0)
     child_count  = c_int(0)
