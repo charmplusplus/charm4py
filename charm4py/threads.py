@@ -43,9 +43,9 @@ class Future(object):
             proxy_class = getattr(charm, self.proxy_class_name)
             proxy = proxy_class.__new__(proxy_class)
             proxy.__setstate__(self.proxy_state)
+            return proxy._future_deposit_result
         else:
-            proxy = self.proxy
-        return proxy._future_deposit_result
+            return self.proxy._future_deposit_result
 
     def deposit(self, result):
         """ Deposit a value for this future and resume any blocked threads waiting on this
@@ -75,9 +75,9 @@ class CollectiveFuture(Future):
             proxy_class = getattr(charm, self.proxy_class_name)
             proxy = proxy_class.__new__(proxy_class)
             proxy.__setstate__(self.proxy_state)
+            return proxy._coll_future_deposit_result
         else:
-            proxy = self.proxy
-        return proxy._coll_future_deposit_result
+            return self.proxy._coll_future_deposit_result
 
 
 class EntryMethodThreadManager(object):
