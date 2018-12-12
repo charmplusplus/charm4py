@@ -650,6 +650,9 @@ class CharmRemote(Chare):
     def myPe(self):
         return charm.myPe()
 
+    def printStats(self):
+        charm.printStats()
+
     def registerNewChareType(self, name, source):
         exec(source, charm.dynamic_register)
         chare_type = charm.dynamic_register[name]
