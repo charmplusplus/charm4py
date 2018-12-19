@@ -1,4 +1,5 @@
 from . import wait
+import importlib
 import sys
 if sys.version_info[0] < 3:
     from thread import get_ident
@@ -100,11 +101,12 @@ class Chare(object):
                 self._active_grp_conds[cond_str] = c
 
     def wait(self, cond_str):
-        if cond_str not in charm.wait_conditions:
-            cond_template = wait.ChareStateCond(cond_str)
-            charm.wait_conditions[cond_str] = cond_template
+        wait_conditions = self.__class__.__charm_wait_conds__
+        if cond_str not in wait_conditions:
+            cond_template = wait.ChareStateCond(cond_str, importlib.import_module(self.__module__).__dict__)
+            wait_conditions[cond_str] = cond_template
         else:
-            cond_template = charm.wait_conditions[cond_str]
+            cond_template = wait_conditions[cond_str]
         if not cond_template.cond_func(self):
             self.__waitEnqueue__(cond_template, (1, get_ident()))
             charm.threadMgr.pauseThread()

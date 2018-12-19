@@ -1,6 +1,7 @@
 from . import wait
 import time
 import sys
+import importlib
 
 
 class EntryMethod(object):
@@ -95,7 +96,8 @@ def when(cond_str):
         method_args = {}
         for i in range(1, func.__code__.co_argcount):
             method_args[func.__code__.co_varnames[i]] = i-1
-        func.when_cond = wait.parse_cond_str(cond_str, method_args)
+        func.when_cond = wait.parse_cond_str(cond_str, method_args,
+                                importlib.import_module(func.__module__).__dict__)
         return func
     return _when
 
