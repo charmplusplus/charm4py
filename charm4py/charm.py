@@ -95,10 +95,6 @@ class Charm(object):
             # replace these methods with the fast cython versions
             self.packMsg = self.lib.packMsg
             self.unpackMsg = self.lib.unpackMsg
-        # cache of template condition objects for `chare.wait(cond_str)` calls
-        # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
-        # TODO: remove old/unused condition strings
-        self.wait_conditions = {}
         # store chare types defined after program start and other objects created
         # in interactive mode
         self.dynamic_register = {}
@@ -405,6 +401,10 @@ class Charm(object):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise Charm4PyError("Only subclasses of Chare can be registered")
 
+        # cache of template condition objects for `chare.wait(cond_str)` calls
+        # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
+        # TODO: remove old/unused condition strings from dict?
+        C.__charm_wait_conds__ = {}
         self.registered[C] = set()
         for charm_type_id in collections:
             self.registerAs(C, charm_type_id)

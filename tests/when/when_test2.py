@@ -11,6 +11,7 @@ WORKER_ITERS = 10
 TASKS_PER_WORKER = 40
 NUM_ITERS = 30
 MAX_CHARES = 128
+TEST_WHEN_GLOBAL = 33
 
 class Worker(Chare):
 
@@ -18,7 +19,7 @@ class Worker(Chare):
         self.ready      = True
         self.controller = controller
 
-    @when("self.ready")
+    @when("self.ready and (TEST_WHEN_GLOBAL == 33)")
     def startWork(self, x, y, z):
         assert(self.ready)
         self.ready = False

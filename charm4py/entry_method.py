@@ -95,7 +95,7 @@ def when(cond_str):
         method_args = {}
         for i in range(1, func.__code__.co_argcount):
             method_args[func.__code__.co_varnames[i]] = i-1
-        func.when_cond = wait.parse_cond_str(cond_str, method_args)
+        func.when_cond = wait.parse_cond_str(cond_str, func.__module__, method_args)
         return func
     return _when
 
