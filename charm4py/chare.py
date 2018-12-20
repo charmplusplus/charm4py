@@ -1,5 +1,4 @@
 from . import wait
-import importlib
 import sys
 if sys.version_info[0] < 3:
     from thread import get_ident
@@ -103,7 +102,7 @@ class Chare(object):
     def wait(self, cond_str):
         wait_conditions = self.__class__.__charm_wait_conds__
         if cond_str not in wait_conditions:
-            cond_template = wait.ChareStateCond(cond_str, importlib.import_module(self.__module__).__dict__)
+            cond_template = wait.ChareStateCond(cond_str, self.__module__)
             wait_conditions[cond_str] = cond_template
         else:
             cond_template = wait_conditions[cond_str]

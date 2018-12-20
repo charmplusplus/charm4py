@@ -9,7 +9,7 @@ CHARES_PER_PE = 8
 MAX_CHARES = 128
 
 TEST_GLOBAL = 33
-TEST_GLOBAL2 = 47
+
 
 class Worker(Chare):
 
@@ -21,6 +21,7 @@ class Main(Chare):
 
     def __init__(self, args):
         ro.main = self.thisProxy
+        ro.X = 47
         num_chares = min(charm.numPes() * CHARES_PER_PE, MAX_CHARES)
         assert num_chares % 2 == 0
         workers = Array(Worker, num_chares)
@@ -29,7 +30,7 @@ class Main(Chare):
         for i in range(NUM_ITER):
             workers.sendVal()
             self.wait("self.num_responses1 == " + str(num_chares//2) + " and 33 == TEST_GLOBAL")
-            self.wait("self.num_responses2 == " + str(num_chares//2) + " and 47 == TEST_GLOBAL2")
+            self.wait("self.num_responses2 == " + str(num_chares//2) + " and 47 == ro.X")
             assert(self.result == num_chares * 237)
             assert(self.num_responses1 == num_chares//2)
             assert(self.num_responses2 == num_chares//2)

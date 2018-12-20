@@ -21,58 +21,58 @@ def main(args):
 
     when_cond = 'self.iterations == iter'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.MsgTagCond)
     assert cond.attrib_name == 'iterations'
     assert cond.arg_idx == 0
 
     when_cond = 'self.x == x'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.MsgTagCond)
     assert cond.attrib_name == 'x'
     assert cond.arg_idx == 1
 
     when_cond = 'y    ==    self.x  '
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.MsgTagCond)
     assert cond.attrib_name == 'x'
     assert cond.arg_idx == 2
 
     when_cond = 'self.x == x + y'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateMsgCond)
 
     when_cond = 'x < y'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateMsgCond)
 
     when_cond = 'y == y'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateMsgCond)
 
     when_cond = 'iter'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateMsgCond)
 
     when_cond = 'self.x'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateCond)
 
     when_cond = 'self.x + self.y == 3'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateCond)
 
     when_cond = 'self.x > (self.y + 2/3 + self.z + error)'
     method    = '(self, iter, x, y)'
-    cond = wait.parse_cond_str(when_cond, parseMethodArgs(method))
+    cond = wait.parse_cond_str(when_cond, __name__, parseMethodArgs(method))
     assert isinstance(cond, wait.ChareStateCond)
 
     exit()

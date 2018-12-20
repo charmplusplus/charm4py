@@ -1,6 +1,6 @@
 from collections import defaultdict
 import ast
-import importlib
+from importlib import import_module
 
 
 # This condition object is used to match one argument of a @when entry method to
@@ -111,10 +111,11 @@ class ChareStateCond(object):
 
     group = True
 
-    def __init__(self, cond_str, globals_dict):
+    def __init__(self, cond_str, module_name):
         self.cond_str  = cond_str
-        self.globals_module_name = globals_dict['__name__']
-        self.cond_func = eval('lambda self: ' + cond_str, globals_dict)
+        self.globals_module_name = module_name
+        self.cond_func = eval('lambda self: ' + cond_str,
+                              import_module(module_name).__dict__)
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateCond)
@@ -154,7 +155,7 @@ class ChareStateCond(object):
     def __setstate__(self, state):
         self.cond_str, self.wait_queue, self._cond_next, self.globals_module_name = state
         self.cond_func = eval('lambda self: ' + self.cond_str,
-                              importlib.import_module(self.globals_module_name).__dict__)
+                              import_module(self.globals_module_name).__dict__)
 
 
 def is_tag_cond(root_ast):
@@ -232,7 +233,7 @@ class MsgArgsTransformer(ast.NodeTransformer):
 
 #import astunparse
 
-def parse_cond_str(cond_str, method_arguments={}, module_dict={}):
+def parse_cond_str(cond_str, module_name, method_arguments={}):
 
     #print("Original condition string is", cond_str)
     t = ast.parse(cond_str, filename='<string>', mode='eval')
@@ -243,9 +244,9 @@ def parse_cond_str(cond_str, method_arguments={}, module_dict={}):
         transformer.visit(t)
         #print("Transformed to", astunparse.unparse(t), "num args detected=", transformer.num_msg_args)
         if transformer.num_msg_args == 0:
-            return ChareStateCond(cond_str, module_dict)
+            return ChareStateCond(cond_str, module_name)
     else:
-        return ChareStateCond(cond_str, module_dict)
+        return ChareStateCond(cond_str, module_name)
 
     tag_cond = is_tag_cond(t)
     if tag_cond is not None:
@@ -255,7 +256,8 @@ def parse_cond_str(cond_str, method_arguments={}, module_dict={}):
     new_tree = ast.parse("lambda self, args: x", filename='<string>', mode='eval')
     new_tree.body.body = t.body
     new_tree = ast.fix_missing_locations(new_tree)
-    lambda_func = eval(compile(new_tree, '<string>', 'eval'), module_dict)
+    lambda_func = eval(compile(new_tree, '<string>', 'eval'),
+                       import_module(module_name).__dict__)
     return ChareStateMsgCond(cond_str, lambda_func)
 
 
