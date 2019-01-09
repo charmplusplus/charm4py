@@ -370,7 +370,11 @@ class Charm(object):
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, "More than one entry point has been specified"
             self.mainchareRegistered = True
-            entry_method.threaded(C.__init__)  # make mainchare constructor always threaded
+            # make mainchare constructor always threaded
+            if sys.version_info < (3, 0, 0):
+                entry_method.threaded(C.__init__.im_func)
+            else:
+                entry_method.threaded(C.__init__)
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         ems = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
