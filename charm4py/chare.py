@@ -259,6 +259,7 @@ def group_ckNew_gen(C, epIdx):
         if get_ident() != charm.threadMgr.main_thread_id and ArrayMap not in C.mro():
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
+            header[b'bcast'] = True
         msg = charm.packMsg(None, args, header)
         gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
         proxy = charm.groups[gid].thisProxy
@@ -380,6 +381,7 @@ def array_ckNew_gen(C, epIdx):
         if get_ident() != charm.threadMgr.main_thread_id:
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
+            header[b'bcast'] = True
 
         msg = charm.packMsg(None, args, header)
         aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid)

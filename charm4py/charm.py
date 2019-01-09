@@ -128,7 +128,7 @@ class Charm(object):
         if Options.PROFILING:
             self.activeChares.add((em.C, Mainchare))
             em.startMeasuringTime()
-        self.threadMgr.startThread(obj, em, [args], {})  # call user's __init__ in a new thread
+        em.run(obj, {}, [args])  # now call the user's __init__
         self.chares[cid] = obj
         if Options.PROFILING:
             em.stopMeasuringTime()
@@ -182,10 +182,8 @@ class Charm(object):
                     self.runningEntryMethod.stopMeasuringTime()
                 em.addRecvTime(time.time() - t0)
                 em.startMeasuringTime()
-            obj.__init__(*args)          # now call the user's __init__
+            em.run(obj, header, args)  # now call the user's __init__
             self.groups[gid] = obj
-            if b'block' in header:
-                obj.contribute(None, None, header[b'block'])
             if Options.PROFILING:
                 em.stopMeasuringTime()
                 if len(self.mainchareEmStack) > 0:
@@ -219,9 +217,7 @@ class Charm(object):
                         self.mainchareEmStack.append(self.runningEntryMethod)
                         self.runningEntryMethod.stopMeasuringTime()
                     em.startMeasuringTime()
-                obj.__init__(*args)          # now call the user's array element __init__
-                if b'block' in header:
-                    obj.contribute(None, None, header[b'block'])
+                em.run(obj, header, args)  # now call the user's array element __init__
                 if Options.PROFILING:
                     em.stopMeasuringTime()
                     if len(self.mainchareEmStack) > 0:
@@ -374,6 +370,7 @@ class Charm(object):
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, "More than one entry point has been specified"
             self.mainchareRegistered = True
+            entry_method.threaded(C.__init__)  # make mainchare constructor always threaded
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         ems = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
