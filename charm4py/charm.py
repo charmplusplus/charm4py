@@ -120,6 +120,7 @@ class Charm(object):
         self._createInternalChares()
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
+        self.mainThreadEntryMethod = em
         super(em.C, obj).__init__()  # call Chare class __init__ first
         if self.entry_func is not None:
             assert isinstance(obj, chare.DefaultMainchare)
@@ -174,6 +175,7 @@ class Charm(object):
             header, args = self.unpackMsg(msg, dcopy_start, None)
             obj = object.__new__(em.C)  # create object but don't call __init__
             Group.initMember(obj, gid)
+            self.mainThreadEntryMethod = em
             super(em.C, obj).__init__()  # call Chare class __init__ first
             if Options.PROFILING:
                 self.activeChares.add((em.C, Group))
@@ -211,6 +213,7 @@ class Charm(object):
             else:
                 obj = object.__new__(em.C)   # create object but don't call __init__
                 Array.initMember(obj, aid, index)
+                self.mainThreadEntryMethod = em
                 super(em.C, obj).__init__()  # call Chare class __init__ first
                 if Options.PROFILING:
                     if self.runningEntryMethod is not None:
