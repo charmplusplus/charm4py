@@ -27,6 +27,7 @@ class Chare(object):
         if chare_type is not None:
             arr = Array(chare_type, ndims=1)
             arr.ckInsert(0, args, onPE)
+            arr.ckDoneInserting()
             return arr[0]
         return object.__new__(cls)
 
