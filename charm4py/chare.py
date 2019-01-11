@@ -139,13 +139,18 @@ class Chare(object):
         else:
             return charm.lib.getGroupRedNo(proxy.gid)
 
+    def __addThreadEventSubscriber__(self, target, args):
+        self._thread_notify_target = target
+        self._thread_notify_data = args
+
 
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
                  '__waitEnqueue__', 'wait', 'contribute', 'AtSync',
                  'migrate', '_future_deposit_result',
-                 '_coll_future_deposit_result', '__getRedNo__'},
+                 '_coll_future_deposit_result', '__getRedNo__',
+                 '__addThreadEventSubscriber__'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods

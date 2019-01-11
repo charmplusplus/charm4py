@@ -155,12 +155,14 @@ class EntryMethodThreadManager(object):
                 while True:
                     thread_state.idle = False
                     obj.num_threads += 1
+                    thread_state.notify = entry_method.thread_notify
                     ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                     if b'block' in header:
                         if b'bcast' in header:
                             obj.contribute(None, None, header[b'block'])
                         else:
                             header[b'block'].send(ret)
+                    thread_state.notify = False
                     thread_state.idle = True
                     thread_state.obj = None
                     obj.num_threads -= 1
@@ -196,6 +198,9 @@ class EntryMethodThreadManager(object):
             self.throwNotThreadedError()  # verify that not running on main thread
         # thread has entryMethodRunning lock already because it's running an entry method
         thread_state = self.threads[tid]
+        if thread_state.notify:
+            obj = thread_state.obj
+            obj._thread_notify_target.threadPaused(obj._thread_notify_data)
         with thread_state.wait_cv:
             self.entryMethodRunning.notify()    # notify main thread that I'm pausing
             self.entryMethodRunning.release()
@@ -214,6 +219,9 @@ class EntryMethodThreadManager(object):
         """
         #assert get_ident() == self.main_thread_id
         thread_state.wait_result = arg
+        if thread_state.notify:
+            obj = thread_state.obj
+            obj._thread_notify_target.threadResumed(obj._thread_notify_data)
         with thread_state.wait_cv:
             thread_state.wait_cv.notify()
             self.entryMethodRunning.acquire()
