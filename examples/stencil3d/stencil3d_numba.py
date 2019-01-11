@@ -54,7 +54,7 @@ def main(args):
     charm.awaitCreation(nb_precomps) # wait until Numba functions are compiled
 
     sim_done = charm.createFuture()
-    array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done])
+    array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done], useAtSync=True)
     charm.awaitCreation(array)
 
     print("Starting simulation")
