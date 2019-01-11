@@ -48,6 +48,7 @@ class Chare(object):
         self._cond_next = None
         self._cond_last = self
         self._chare_initialized = True
+        self.num_threads = 0
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:
