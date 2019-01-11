@@ -363,7 +363,7 @@ def array_proxy_method_gen(ep):  # decorator, generates proxy entry methods
 
 def array_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
-    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None):
+    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False):
         # if charm.myPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
         if type(dims) == int: dims = (dims,)
 
@@ -385,7 +385,7 @@ def array_ckNew_gen(C, epIdx):
             header[b'bcast'] = True
 
         msg = charm.packMsg(None, args, header)
-        aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid)
+        aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid, useAtSync)
         proxy = cls(aid, len(dims))
         if creation_future is not None:
             proxy.creation_future = creation_future
@@ -393,11 +393,11 @@ def array_ckNew_gen(C, epIdx):
     return array_ckNew
 
 def array_ckInsert_gen(epIdx):
-    def array_ckInsert(proxy, index, args=[], onPE=-1):
+    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False):
         if type(index) == int: index = (index,)
         assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
         msg = charm.packMsg(None, args, {})
-        charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg)
+        charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg, useAtSync)
     return array_ckInsert
 
 def array_proxy_contribute(proxy, contributeInfo):
@@ -411,12 +411,12 @@ class Array(object):
 
     type_id = ARRAY
 
-    def __new__(cls, C, dims=None, ndims=-1, args=[], map=None):
+    def __new__(cls, C, dims=None, ndims=-1, args=[], map=None, useAtSync=False):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise Charm4PyError("Only subclasses of Chare can be member of Array")
         if C not in charm.proxyClasses[ARRAY]:
             raise Charm4PyError(str(C) + ' not registered for use in Arrays')
-        return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map)
+        return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map, useAtSync)
 
     @classmethod
     def initMember(cls, obj, aid, index):

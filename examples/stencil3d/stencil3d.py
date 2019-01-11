@@ -51,7 +51,7 @@ def main(args):
 
     # Create new array of worker chares
     sim_done = charm.createFuture()
-    array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done])
+    array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done], useAtSync=True)
     charm.awaitCreation(array)
 
     print("Starting simulation\n\nNOTE: stencil3d_numba.py version performs much better than this one\n")

@@ -120,7 +120,8 @@ def main(args):
 
     # create 2D Cell chare array and start simulation
     simDone = charm.createFuture()
-    cells = Array(Cell, ro.arrayDims, args=[simDone]) # array creation happens asynchronously
+    # array creation happens asynchronously
+    cells = Array(Cell, ro.arrayDims, args=[simDone], useAtSync=True)
     t0 = time.time()
     cells.run()
     # wait for simulation to complete

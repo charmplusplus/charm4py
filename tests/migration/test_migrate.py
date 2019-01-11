@@ -9,13 +9,11 @@ arrayElemHomeMap = {} # array elem index -> original pe
 
 class Controller(Chare):
 
-    def __init__(self):
-        pass
-
     def arrayElemsCreated(self, home_pes):
         global all_created, arrayElemHomeMap
         all_created = True
-        for i in range(len(home_pes)): arrayElemHomeMap[i] = home_pes[i]
+        for i in range(len(home_pes)):
+            arrayElemHomeMap[i] = home_pes[i]
         self.contribute(None, None, ro.array.start)
 
 
@@ -30,11 +28,13 @@ class Test(Chare):
         self.contribute(charm.myPe(), Reducer.gather, ro.controllers.arrayElemsCreated)
 
     def start(self):
-        if self.thisIndex == (0,) and self.iteration % 20 == 0: print("Iteration " + str(self.iteration))
+        if self.thisIndex == (0,) and self.iteration % 20 == 0:
+            print("Iteration " + str(self.iteration))
         self.check()
         A = numpy.arange(1000, dtype='float64')
         work = 1000 * int(round(math.log(charm.myPe() + 1) + 1))  # elements in higher PEs do more work
-        for i in range(work): A += 1.33
+        for i in range(work):
+            A += 1.33
         self.iteration += 1
         if self.iteration == MAX_ITER:
             self.contribute(None, None, charm.thisProxy[0].exit)
@@ -54,7 +54,7 @@ class Test(Chare):
 
 def main(args):
     ro.controllers = Group(Controller)
-    ro.array       = Array(Test, charm.numPes() * 4)
+    ro.array = Array(Test, charm.numPes() * 4, useAtSync=True)
 
 
 charm.start(main)

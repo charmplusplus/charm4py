@@ -472,7 +472,7 @@ class CharmLib(object):
     cur_buf = 1
     return group_id
 
-  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None, int map_gid):
+  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None, int map_gid, char useAtSync):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(dims)
@@ -484,11 +484,11 @@ class CharmLib(object):
     if all_zero: ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid)
+    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync)
     cur_buf = 1
     return array_id
 
-  def CkInsert(self, int aid, index, int epIdx, int onPE, msg not None):
+  def CkInsert(self, int aid, index, int epIdx, int onPE, msg not None, char useAtSync):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(index)
@@ -496,7 +496,7 @@ class CharmLib(object):
     for i in range(ndims): c_index[i] = index[i]
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    CkInsertArrayExt(aid, ndims, c_index, epIdx, onPE, cur_buf, send_bufs, send_buf_sizes)
+    CkInsertArrayExt(aid, ndims, c_index, epIdx, onPE, cur_buf, send_bufs, send_buf_sizes, useAtSync)
     cur_buf = 1
 
   def CkDoneInserting(self, int aid):
