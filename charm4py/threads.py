@@ -4,15 +4,20 @@ if sys.version_info < (3, 0, 0):
     from thread import get_ident
 else:
     from threading import get_ident
-from collections import defaultdict
 import time
+
+
+class NotThreadedError(Exception):
+    def __init__(self, msg):
+        super(NotThreadedError, self).__init__(msg)
+        self.message = msg
 
 
 class Future(object):
 
-    def __init__(self, fid, tid, proxy, nsenders):
+    def __init__(self, fid, thread_state, proxy, nsenders):
         self.fid = fid                    # unique future ID within process
-        self.tid = tid                    # thread ID where the future is created
+        self.thread_state = thread_state  # thread context where the future is created
         self.proxy = proxy
         # TODO? only obtain proxy_state if actually serializing the future?
         self.proxy_class_name = proxy.__class__.__name__
@@ -56,7 +61,7 @@ class Future(object):
             self.value_received = True
             if self.thread_paused:
                 self.thread_paused = False
-                charm.threadMgr.resumeThread(self.tid, self.value)
+                charm.threadMgr.resumeThread(self.thread_state, self.value)
 
     def __getstate__(self):
         return (self.fid, self.proxy_class_name, self.proxy_state)
@@ -80,17 +85,20 @@ class CollectiveFuture(Future):
             return self.proxy._coll_future_deposit_result
 
 
+class ThreadState(object):
+    def __init__(self, tid, obj, entry_method):
+        self.tid = tid                  # thread ID
+        self.obj = obj                  # chare that is using the thread
+        self.em = entry_method          # EntryMethod object for which this thread is running
+        self.wait_cv = threading.Condition()  # condition variable to pause/resume entry method threads
+        self.wait_result = None         # to place data that thread was waiting on
+        self.error = None               # to pass exceptions from entry method thread to main thread
+        self.idle = False               # True if thread is idle
+        self.finished = False           # True if thread has run to completion
+
+
 class EntryMethodThreadManager(object):
     """ Creates and manages entry method threads """
-
-    class ThreadState(object):
-        def __init__(self, obj, entry_method):
-            self.obj = obj                  # chare that spawned the thread
-            self.em = entry_method          # EntryMethod object for which this thread is running
-            self.wait_cv = threading.Condition()  # condition variable to pause/resume entry method threads
-            self.wait_result = None         # to place data that thread was waiting on
-            self.error = None               # to pass exceptions from entry method thread to main thread
-            self.finished = False           # True if entry method has run to completion
 
     def __init__(self):
         self.PROFILING = Options.PROFILING
@@ -98,59 +106,70 @@ class EntryMethodThreadManager(object):
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
         self.threads = {}                    # thread ID -> ThreadState object
-        self.obj_threads = defaultdict(set)  # stores active thread IDs of chares
         self.futures_count = 0               # counter used as IDs for futures created by this ThreadManager
         self.futures = {}                    # future ID -> Future object
         self.coll_futures = {}               # (future ID, obj) -> Future object
+        self.threadPool = []
 
     def startThread(self, obj, entry_method, args, header):
         """ Called by main thread to spawn an entry method thread """
 
-        assert get_ident() == self.main_thread_id       # TODO comment out eventually
+        #assert get_ident() == self.main_thread_id
+        if len(self.threadPool) > 0:
+            thread_state = self.threadPool.pop()
+            self.resumeThread(thread_state, (obj, entry_method, args, header))
+        else:
+            with self.entryMethodRunning:
+                t = threading.Thread(target=self.entryMethodRun_thread,
+                                     args=(obj, entry_method, args, header))
+                t.start()
+                self.entryMethodRunning.wait()  # wait until entry method finishes OR pauses
+                self.threadStopped(self.threads[t.ident])
 
-        with self.entryMethodRunning:
-            t = threading.Thread(target=self.entryMethodRun_thread,
-                                 args=(obj, entry_method, args, header))
-            t.start()
-            self.entryMethodRunning.wait()  # wait until entry method finishes OR pauses
-            self.threadStopped(t.ident)
-
-    def threadStopped(self, tid):
+    def threadStopped(self, thread_state):
         """ Called by main thread when entry method thread has finished/paused """
 
-        thread_state = self.threads[tid]
-        if thread_state.finished:
-            self.obj_threads[thread_state.obj].remove(tid)
-            del self.threads[tid]
+        if thread_state.idle:
+            self.threadPool.append(thread_state)  # return to thread pool
+        elif thread_state.finished:
+            del self.threads[thread_state.tid]
         else:
-            # thread paused or returned error
+            # thread paused inside entry method, or returned error
             error = thread_state.error
             if error is not None:
-                self.obj_threads[thread_state.obj].discard(tid)
-                del self.threads[tid]
+                thread_state.obj.num_threads -= 1
+                del self.threads[thread_state.tid]
                 raise error
 
     def objMigrating(self, obj):
-        if obj in self.obj_threads:
-            if len(self.obj_threads.pop(obj)) > 0:
-                raise Charm4PyError("Migration of chares with active threads is not yet supported")
+        if obj.num_threads > 0:
+            raise Charm4PyError("Migration of chares with active threads is not yet supported")
 
     def entryMethodRun_thread(self, obj, entry_method, args, header):
         """ Entry method thread main function """
-
+        tid = get_ident()
+        thread_state = ThreadState(tid, obj, entry_method)
+        self.threads[tid] = thread_state
         with self.entryMethodRunning:
-            tid = get_ident()
-            thread_state = EntryMethodThreadManager.ThreadState(obj, entry_method)
-            self.threads[tid] = thread_state
             try:
-                self.obj_threads[obj].add(tid)
-                ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
-                if b'block' in header:
-                    if b'bcast' in header:
-                        obj.contribute(None, None, header[b'block'])
-                    else:
-                        header[b'block'].send(ret)
-                thread_state.finished = True
+                while True:
+                    thread_state.idle = False
+                    obj.num_threads += 1
+                    ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
+                    if b'block' in header:
+                        if b'bcast' in header:
+                            obj.contribute(None, None, header[b'block'])
+                        else:
+                            header[b'block'].send(ret)
+                    thread_state.idle = True
+                    thread_state.obj = None
+                    obj.num_threads -= 1
+                    obj, entry_method, args, header = charm.threadMgr.pauseThread()
+                    if obj is None:
+                        thread_state.finished = True
+                        break
+                    thread_state.obj = obj
+                    thread_state.em = entry_method
             except SystemExit:
                 exit_code = sys.exc_info()[1].code
                 if exit_code is None:
@@ -164,16 +183,17 @@ class EntryMethodThreadManager(object):
             self.entryMethodRunning.notify()  # notify main thread that done
 
     def throwNotThreadedError(self):
-        raise Charm4PyError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
-                           charm.mainThreadEntryMethod.name +
-                           "' must be marked as 'threaded' to block")
+        raise NotThreadedError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
+                               charm.mainThreadEntryMethod.name +
+                               "' must be marked as 'threaded' to block")
 
     def pauseThread(self):
         """ Called by an entry method thread to wait for something.
             Returns data that thread was waiting for, or None if was waiting for an event
         """
         tid = get_ident()
-        if tid == self.main_thread_id: self.throwNotThreadedError()  # verify that not running on main thread
+        if tid == self.main_thread_id:
+            self.throwNotThreadedError()  # verify that not running on main thread
         # thread has entryMethodRunning lock already because it's running an entry method
         thread_state = self.threads[tid]
         with thread_state.wait_cv:
@@ -185,12 +205,14 @@ class EntryMethodThreadManager(object):
         #self.entryMethodRunning.acquire()
         return thread_state.wait_result
 
-    def resumeThread(self, tid, arg):
+    def resumeThreadTid(self, tid, arg):
+        self.resumeThread(self.threads[tid], arg)
+
+    def resumeThread(self, thread_state, arg):
         """ Deposit a result or signal that a local entry method thread is waiting on,
             and resume it. This executes on main thread.
         """
-        assert get_ident() == self.main_thread_id
-        thread_state = self.threads[tid]
+        #assert get_ident() == self.main_thread_id
         thread_state.wait_result = arg
         with thread_state.wait_cv:
             thread_state.wait_cv.notify()
@@ -203,7 +225,7 @@ class EntryMethodThreadManager(object):
         if self.PROFILING:
             thread_state.em.stopMeasuringTime()
             charm.mainThreadEntryMethod.startMeasuringTime()
-        self.threadStopped(tid)
+        self.threadStopped(thread_state)
 
     def createFuture(self, senders=1):
         """ Creates a new Future object by obtaining/creating a unique future ID. The
@@ -216,13 +238,14 @@ class EntryMethodThreadManager(object):
             self.throwNotThreadedError()
         self.futures_count += 1
         fid = self.futures_count
-        obj = self.threads[tid].obj
+        thread_state = self.threads[tid]
+        obj = thread_state.obj
         if hasattr(obj, 'thisIndex'):
             proxy = obj.thisProxy[obj.thisIndex]
         else:
             proxy = obj.thisProxy
 
-        f = Future(fid, tid, proxy, senders)
+        f = Future(fid, thread_state, proxy, senders)
         self.futures[fid] = f
         return f
 
@@ -231,9 +254,10 @@ class EntryMethodThreadManager(object):
         tid = get_ident()
         if tid == self.main_thread_id:
             self.throwNotThreadedError()
-        obj = self.threads[tid].obj
+        thread_state = self.threads[tid]
+        obj = thread_state.obj
         proxy = obj.thisProxy
-        f = CollectiveFuture(fid, tid, proxy, 1)
+        f = CollectiveFuture(fid, thread_state, proxy, 1)
         self.coll_futures[(fid, obj)] = f
         return f
 
