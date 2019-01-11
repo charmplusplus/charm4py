@@ -19,6 +19,7 @@ class EntryMethod(object):
         if hasattr(method, '_ck_threaded'):
             self.isThreaded = True  # true if entry method runs in its own thread
             self.run = self.run_threaded
+            self.thread_notify = hasattr(method, '_ck_threaded_notify') and method._ck_threaded_notify
         else:
             self.isThreaded = False
             self.run = self.run_non_threaded
@@ -103,6 +104,14 @@ def when(cond_str):
 def threaded(func):
     func._ck_threaded = True
     return func
+
+
+def threaded_ext(event_notify=False):
+    def _threaded(func):
+        func._ck_threaded = True
+        func._ck_threaded_notify = event_notify
+        return func
+    return _threaded
 
 
 charm = None

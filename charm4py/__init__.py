@@ -25,7 +25,7 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
     CkExit = charm.exit
     CkAbort = charm.abort
 
-    from .entry_method import when, threaded
+    from .entry_method import when, threaded, threaded_ext
 
     from .chare import Chare, Group, Array, ArrayMap
 
