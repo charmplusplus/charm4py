@@ -41,7 +41,8 @@ The main function of ``charm.pool`` is currently parallel map. The syntax is:
   until the result arrives.
 
   The parameter ``ncores`` limits the job to use a specified number of cores.
-  If this value is negative, the pool will use all available cores.
+  If this value is negative, the pool will use all available cores (note that
+  the total number of available cores is determined at application launch).
 
   Use ``allow_nested=True`` if you want tasks to be able to spawn other parallel
   work (for example, tasks that themselves call ``charm.pool``).
