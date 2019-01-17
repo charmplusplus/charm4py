@@ -1,6 +1,10 @@
 [
     {
         "force_min_processes": 4,
+        "path": "tests/pool/pool.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/charm_remote.py"
     },
     {
@@ -131,6 +135,12 @@
         "condition": "numbaInstalled",
         "path": "examples/wave2d/wave2d.py",
         "args": "1500"
+    },
+    {
+        "path": "examples/pool/pool1.py"
+    },
+    {
+        "path": "examples/pool/fib.py"
     },
     {
         "path": "examples/tutorial/start.py"

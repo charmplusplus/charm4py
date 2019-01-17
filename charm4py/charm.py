@@ -109,7 +109,11 @@ class Charm(object):
     def recvReadOnly(self, msg):
         roData = cPickle.loads(msg)
         for name, obj in roData.items():
-            setattr(readonlies, name, obj)
+            if name == 'charm_pool_proxy__h':
+                from .pool import Pool
+                self.pool = Pool(obj)
+            else:
+                setattr(readonlies, name, obj)
 
     def buildMainchare(self, onPe, objPtr, ep, args):
         cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int)
@@ -417,8 +421,18 @@ class Charm(object):
     def _registerInternalChares(self):
         self.register(CharmRemote, (GROUP,))
 
+        from .pool import PoolScheduler, Worker
+        self.register(PoolScheduler, (ARRAY,))
+        self.register(Worker, (GROUP,))
+
     def _createInternalChares(self):
         Group(CharmRemote)
+
+        from .pool import Pool, PoolScheduler
+        pool_proxy = Chare(PoolScheduler, onPE=0)
+        self.pool = Pool(pool_proxy)
+        readonlies.charm_pool_proxy__h = pool_proxy
+
 
     def start(self, entry=None, classes=[], modules=[], interactive=False):
         """
