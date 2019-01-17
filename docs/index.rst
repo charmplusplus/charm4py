@@ -59,6 +59,7 @@ Example applications are in the ``examples`` subdirectory of the source code rep
    :caption: API Reference
 
    core-api
+   pool
 
 .. toctree::
    :maxdepth: 2

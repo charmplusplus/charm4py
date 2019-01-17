@@ -1,5 +1,6 @@
 from charm4py import charm
 
+# Recursive Parallel Fibonacci
 # NOTE: this example is meant to illustrate the use of charm.pool and nested
 # parallelism (creating tasks from tasks). However, it is not efficient,
 # because the computation performed by each task is very small.
