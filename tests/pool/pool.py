@@ -14,7 +14,7 @@ def add_val(x):
 
 
 def main(args):
-    NUM_TASKS = (charm.numPes() - 1) * 200
+    NUM_TASKS = (charm.numPes() - 1) * 100
 
     # test charm.pool.map()
     tasks = list(range(NUM_TASKS))
