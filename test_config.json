@@ -5,6 +5,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/pool/pool_ncores.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/charm_remote.py"
     },
     {
