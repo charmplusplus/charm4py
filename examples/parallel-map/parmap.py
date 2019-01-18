@@ -1,5 +1,10 @@
 from charm4py import charm, Chare, Group
 
+
+# NOTE: there is a better implementation of this in charm4py/pool.py
+# (for usage examples, see examples/pool/*)
+
+
 # this class is mainly for bookkeeping to store and manage job state
 class Job:
     def __init__(self, job_id, tasks, procs, future):
@@ -43,7 +48,7 @@ class Master(Chare):
     def map_async(self, func, numProcs, tasks, future):
         """ start a new map job (to apply func to tasks), using numProcs processors
             result is sent to given future """
-        free = [self.free_procs.pop() for i in range(numProcs)] # select free processors
+        free = [self.free_procs.pop() for i in range(numProcs)]  # select free processors
         job = self.addJob(tasks, free, future)
         # tell workers in selected processors to start the job
         for p in free:
@@ -86,14 +91,14 @@ def main(args):
     if charm.numPes() < 5:
         print("\nRun this example with at least 5 PEs\n")
         exit()
-    pool = Chare(Master, onPE=0) # create one Master called 'pool' on PE 0
+    pool = Chare(Master, onPE=0)  # create one Master called 'pool' on PE 0
     f1 = charm.createFuture()
     f2 = charm.createFuture()
     tasks1 = [1, 2, 3, 4, 5]
     tasks2 = [1, 3, 5, 7, 9]
     pool.map_async(f, 2, tasks1, f1)
     pool.map_async(f, 2, tasks2, f2)
-    print("Final results are", f1.get(), f2.get()) # wait on futures
+    print("Final results are", f1.get(), f2.get())  # wait on futures
     exit()
 
 charm.start(main)
