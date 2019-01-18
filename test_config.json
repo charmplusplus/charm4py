@@ -128,7 +128,7 @@
     {
         "condition": "not numbaInstalled",
         "path": "examples/stencil3d/stencil3d.py",
-        "args": "16 8 +balancer GreedyRefineLB +LBDebug 1"
+        "args": "8 4 +balancer GreedyRefineLB +LBDebug 1"
     },
     {
         "condition": "numbaInstalled",
