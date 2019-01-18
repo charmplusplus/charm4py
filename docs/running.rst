@@ -91,6 +91,18 @@ Solution
     program on a single host.
 
 
+mpirun (or equivalent)
+----------------------
+
+If you have built charm4py to use MPI, you can launch charm4py applications
+using mpirun, mpiexec or other valid method on your system that supports
+launching MPI applications. For example::
+
+    $ mpirun -np 4 /usr/bin/python3 myprogram.py
+
+See :doc:`install` for instructions on building charm4py for MPI.
+
+
 Using system job launchers
 --------------------------
 

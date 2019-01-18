@@ -78,6 +78,11 @@ class Charm(object):
         self.activeChares = set()  # for profiling (active chares on this PE)
         self.opts = Options
         self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
+        if 'OMPI_COMM_WORLD_SIZE' in os.environ:
+            # this is needed for OpenMPI, see:
+            # https://svn.open-mpi.org/trac/ompi/wiki/Linkers
+            import ctypes
+            ctypes.CDLL('libmpi.so', mode=ctypes.RTLD_GLOBAL)
         self.lib = load_charm_library(self)
         self.ReducerType = self.lib.ReducerType
         self.CkContributeToChare = self.lib.CkContributeToChare

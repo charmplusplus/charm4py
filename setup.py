@@ -6,10 +6,13 @@ import subprocess
 import setuptools
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
+from setuptools.command.install import install
 from distutils.errors import DistutilsSetupError
 from distutils import log
 import distutils
 
+
+build_mpi = False
 
 system = platform.system()
 libcharm_filename2 = None
@@ -116,9 +119,15 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2))
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
         if system == 'Darwin':
-            cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            if build_mpi:
+                cmd = './build charm4py mpi-darwin-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            else:
+                cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         else:
-            cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            if build_mpi:
+                cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            else:
+                cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -158,21 +167,69 @@ def build_libcharm(charm_src_dir, build_dir):
         shutil.copy(charmrun_src_path, output_dir)
 
 
-class specialized_build_py(build_py, object):
+class custom_install(install, object):
+
+    user_options = install.user_options + [
+        ('mpi', None, 'Build libcharm with MPI')
+    ]
+
+    def initialize_options(self):
+        install.initialize_options(self)
+        self.mpi = False
+
+    def finalize_options(self):
+        global build_mpi
+        if not build_mpi:
+            build_mpi = bool(self.mpi)
+        install.finalize_options(self)
+
+    def run(self):
+        install.run(self)
+
+
+class custom_build_py(build_py, object):
+
+    user_options = build_py.user_options + [
+        ('mpi', None, 'Build libcharm with MPI')
+    ]
+
+    def initialize_options(self):
+        build_py.initialize_options(self)
+        self.mpi = False
+
+    def finalize_options(self):
+        global build_mpi
+        if not build_mpi:
+            build_mpi = bool(self.mpi)
+        build_py.finalize_options(self)
 
     def run(self):
         if not self.dry_run:
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
             shutil.copy(os.path.join(os.getcwd(), 'LICENSE'), os.path.join(self.build_lib, 'charm4py'))
-        super(specialized_build_py, self).run()
+        super(custom_build_py, self).run()
 
 
-class specialized_build_ext(build_ext, object):
+class custom_build_ext(build_ext, object):
+
+    user_options = build_ext.user_options + [
+        ('mpi', None, 'Build libcharm with MPI')
+    ]
+
+    def initialize_options(self):
+        build_ext.initialize_options(self)
+        self.mpi = False
+
+    def finalize_options(self):
+        global build_mpi
+        if not build_mpi:
+            build_mpi = bool(self.mpi)
+        build_ext.finalize_options(self)
 
     def run(self):
         if not self.dry_run:
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
-        super(specialized_build_ext, self).run()
+        super(custom_build_ext, self).run()
 
 
 extensions = []
@@ -264,7 +321,8 @@ setuptools.setup(
         'Topic :: System :: Clustering',
     ],
     ext_modules=extensions,
-    cmdclass = {'build_py': specialized_build_py,
-                'build_ext': specialized_build_ext},
+    cmdclass = {'build_py': custom_build_py,
+                'build_ext': custom_build_ext,
+                'install': custom_install},
     **additional_setup_keywords
 )
