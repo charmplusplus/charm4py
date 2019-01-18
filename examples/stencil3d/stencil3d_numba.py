@@ -51,11 +51,16 @@ def main(args):
     print("Block Dimensions: " + str((ro.blockDimX, ro.blockDimY, ro.blockDimZ)))
 
     nb_precomps = Group(NumbaPrecompiler)
-    charm.awaitCreation(nb_precomps) # wait until Numba functions are compiled
+    # commented out next line because of current issue with lb framework where periodic mode
+    # and AtSync mode are not separated. If I wait here for NumbaPrecompiler before creating the Stencil array,
+    # the lb framework will start load balancing on PE0 because of internal charm4py chares that are array
+    # elements, and lb will become out of sync when Stencil chares start being created and calling AtSync.
+    # So, I create NumbaPrecompiler and Stencil array at the same time and wait for both (below)
+    #charm.awaitCreation(nb_precomps) # wait until Numba functions are compiled
 
     sim_done = charm.createFuture()
     array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done], useAtSync=True)
-    charm.awaitCreation(array)
+    charm.awaitCreation(nb_precomps, array)
 
     print("Starting simulation")
     initTime = time.time()
