@@ -2,6 +2,29 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+What's new in v0.12
+===================
+
+* Added experimental charm.pool library which is similar to Python's
+  multiprocessing Pool, but also works in a distributed setting (multiple hosts),
+  tasks can create other tasks all of which use the same shared pool,
+  and can benefit from Charm++'s support for efficient communication layers
+  such as MPI. See documentation for more information.
+
+* Improved support for building and running with Charm++'s MPI communication
+  layer. See Install and Running sections of the documentation for more information.
+
+* Substantially improved the performance of threaded entry methods by allowing
+  thread reuse.
+
+* Blocking allreduce and barrier is now supported inside threaded entry methods:
+  ``result = charm.allReduce(data, reducer, self)`` and ``charm.barrier(self)``.
+
+* Can now indicate if array elements use AtSync at array creation time
+  by passing ``useAtSync=True`` in Array creation method.
+
+* Minor bugfixes and improvements.
+
 
 What's new in v0.11
 ===================
