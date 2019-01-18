@@ -23,6 +23,11 @@ To install on regular Linux, macOS and Windows machines, do::
     $ pip install charm4py
 
 .. note::
+
+    This option selects Charm++'s TCP layer as the communication layer.
+    If you want a faster communication layer (e.g. MPI), see "Install from
+    Source" below.
+
     pip >= 8.0 is recommended to simplify the install and avoid building charm4py or
     any dependencies from sources.
 
@@ -33,7 +38,7 @@ Install from Source
 -------------------
 
 .. note::
-    This is not required if installing from a binary wheel with pip (see above).
+    This is not required if installing from a binary wheel with pip.
 
 Prerequisites:
     - CPython: install numpy and cython (``pip install 'numpy>=1.10.0' cython``)
@@ -41,9 +46,14 @@ Prerequisites:
 
 To build the latest *stable* release, do::
 
-  $ pip install charm4py --no-binary charm4py
+  $ pip install [--mpi] charm4py --no-binary charm4py
 
-Or download the source distribution from PyPI, uncompress and run ``python setup.py install``.
+Or download the source distribution from PyPI, uncompress and run
+``python setup.py install [--mpi]``.
+
+The optional flag ``--mpi``, when enabled, will build the
+Charm++ library with the MPI communication layer (MPI headers and libraries
+need to be installed on the system).
 
 To build the latest *development* version, download Charm4py and Charm++ source code
 and run setup::
@@ -51,18 +61,22 @@ and run setup::
     $ git clone https://github.com/UIUC-PPL/charm4py
     $ cd charm4py
     $ git clone https://github.com/UIUC-PPL/charm charm_src/charm
-    $ python setup.py install
+    $ python setup.py install [--mpi]
 
+.. note::
 
-NOTE: the defaults used by the setup script to build Charm++ are suitable
-for desktops, servers, or small clusters. Specialized environments like
-supercomputers most likely require manual building with different options (see below).
+    The TCP layer (selected by default) will work on desktop, servers and
+    small clusters. The MPI layer is faster and should work on most systems
+    including large clusters and supercomputers. Charm++ however also has support
+    for specialized network layers like uGNI, Intel OFI and IBM PAMI. To use these,
+    you have to manually build the Charm++ library (see below).
 
 
 Manually building the Charm++ shared library
 --------------------------------------------
 
-This is needed when building Charm++ for specialized environments (e.g. Cray XC/XE).
+This is needed when building Charm++ for specialized machine/network layers
+other than TCP and MPI (e.g. Cray XC/XE).
 
 Before running ``python setup.py`` in the steps above, enter the Charm++ source code
 directory (``charm_src/charm``), and manually build the Charm++ library. The build
