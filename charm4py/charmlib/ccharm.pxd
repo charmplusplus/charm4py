@@ -1,7 +1,10 @@
 
 # libcharm wrapper for Cython
 
-cdef extern from "charm.h":
+cdef extern from "charmlib_cython_defs.h":
+    pass
+
+cdef extern:
 
     void StartCharmExt(int argc, char **argv);
     int CkMyPeHook();
@@ -71,7 +74,7 @@ cdef extern from "charm.h":
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
 
-cdef extern from "spanningTree.h":
+cdef extern:
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
 

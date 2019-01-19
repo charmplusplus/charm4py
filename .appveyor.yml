@@ -1,0 +1,48 @@
+environment:
+#  CYGWIN_NOWINPATH: yes
+  matrix:
+
+    # not using cython c-extension module with Python 2.7
+    #- PYTHON: "C:\\Python27-x64"
+    #- PYTHON: "C:\\Python33-x64"
+    #  DISTUTILS_USE_SDK: "1"
+    - PYTHON: "C:\\Python34-x64"
+      DISTUTILS_USE_SDK: "1"
+    - PYTHON: "C:\\Python35-x64"
+    - PYTHON: "C:\\Python36-x64"
+    - PYTHON: "C:\\Python37-x64"
+
+install:
+  - "%PYTHON%\\python.exe -m pip install wheel"
+  - "%PYTHON%\\python.exe -m pip install numpy==1.15.0"
+  - "%PYTHON%\\python.exe -m pip install cython"
+  - "%PYTHON%\\python.exe -m pip install greenlet"
+
+before_build:
+#  - git clone https://github.com/UIUC-PPL/charm charm_src\charm
+#  - mkdir charm_src\charm\include
+#  - cp charm_src/charm/src/ck-core/*.h charm_src/charm/include
+#  - cp charm_src/charm/src/conv-core/*.h charm_src/charm/include
+#  - c:\cygwin64\bin\bash.exe build_charm_windows.sh
+#  - c:\cygwin64\bin\bash.exe -lc "cd $APPVEYOR_BUILD_FOLDER/charm_src/charm ; ./build charm++ netlrts-win-x86_64 tcp -j4 --with-production --enable-charmpy"
+  - mkdir charm_src\charm\bin
+  - mkdir charm_src\charm\lib
+  - mkdir temp
+  - "%PYTHON%\\python.exe -m pip download charm4py --no-deps --abi none --platform win_amd64 -d temp"
+  - 7z x -otemp temp\charm4py-*none-win_amd64.whl
+  - copy temp\charm4py\.libs\charm.dll charm_src\charm\lib
+  - copy temp\charm4py\.libs\charm.lib charm_src\charm\lib
+  - copy temp\charmrun\charmrun.exe charm_src\charm\bin
+
+build_script:
+  # build.cmd is only needed if building C extensions for 64-bit Python 3.3/3.4
+  - "build.cmd %PYTHON%\\python.exe setup.py bdist_wheel"
+
+artifacts:
+  # bdist_wheel puts your built wheel in the dist directory
+  - path: dist\*
+
+#on_success:
+#  You can use this step to upload your artifacts to a public website.
+#  See Appveyor's documentation for more details. Or you can simply
+#  access your wheels from the Appveyor "artifacts" tab for your build.
