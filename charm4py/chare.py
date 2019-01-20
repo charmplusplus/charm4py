@@ -26,7 +26,7 @@ class Chare(object):
         # when creating a singleton chare with `Chare(ChareType, args=[...], onPE=p)`
         if chare_type is not None:
             arr = Array(chare_type, ndims=1)
-            arr.ckInsert(0, args, onPE)
+            arr.ckInsert(0, args, onPE, single=True)
             arr.ckDoneInserting()
             return arr[0]
         return object.__new__(cls)
@@ -399,10 +399,13 @@ def array_ckNew_gen(C, epIdx):
     return array_ckNew
 
 def array_ckInsert_gen(epIdx):
-    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False):
+    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False):
         if type(index) == int: index = (index,)
         assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
-        msg = charm.packMsg(None, args, {})
+        header = {}
+        if single:
+            header = {b'single' : True}
+        msg = charm.packMsg(None, args, header)
         charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg, useAtSync)
     return array_ckInsert
 
@@ -425,9 +428,13 @@ class Array(object):
         return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map, useAtSync)
 
     @classmethod
-    def initMember(cls, obj, aid, index):
+    def initMember(cls, obj, aid, index, single=False):
         obj.thisIndex = index
-        obj.thisProxy = charm.proxyClasses[ARRAY][obj.__class__](aid, len(obj.thisIndex))
+        if single:
+            proxy = charm.proxyClasses[ARRAY][obj.__class__](aid, len(obj.thisIndex))
+            obj.thisProxy = proxy[index]
+        else:
+            obj.thisProxy = charm.proxyClasses[ARRAY][obj.__class__](aid, len(obj.thisIndex))
         # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
         obj.usesAtSync = False
         obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)

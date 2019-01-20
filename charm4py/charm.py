@@ -221,7 +221,10 @@ class Charm(object):
                 obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
             else:
                 obj = object.__new__(em.C)   # create object but don't call __init__
-                Array.initMember(obj, aid, index)
+                if b'single' in header:
+                    Array.initMember(obj, aid, index, single=True)
+                else:
+                    Array.initMember(obj, aid, index)
                 self.mainThreadEntryMethod = em
                 super(em.C, obj).__init__()  # call Chare class __init__ first
                 if Options.PROFILING:
