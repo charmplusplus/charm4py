@@ -404,7 +404,7 @@ def array_ckInsert_gen(epIdx):
         assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
         header = {}
         if single:
-            header = {b'single' : True}
+            header[b'single'] = True
         msg = charm.packMsg(None, args, header)
         charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg, useAtSync)
     return array_ckInsert
