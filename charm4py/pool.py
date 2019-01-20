@@ -212,6 +212,7 @@ class Worker(Chare):
 
     def __init__(self, scheduler):
         self.scheduler = scheduler
+        assert len(self.scheduler.elemIdx) > 0  # make sure points to the element, not collection
         self.__addThreadEventSubscriber__(scheduler, self.thisIndex)
         # TODO: when to purge entries from this dict?
         self.funcs = {}  # job ID -> function used by this job ID
