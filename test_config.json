@@ -63,7 +63,15 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/trees/topo_treeAPI.py"
+        "path": "tests/topo/topo_treeAPI.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/topo/topo_treeAPI2.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/topo/phynode_API.py"
     },
     {
         "path": "tests/migration/test_migrate.py",

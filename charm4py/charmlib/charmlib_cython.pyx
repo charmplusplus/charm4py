@@ -568,12 +568,10 @@ class CharmLib(object):
                   next_child = children[i+1]
               else:
                   next_child = -1
-              # print('child', children[i], 'next_child=', next_child)
               while idx < num_pes:
                   pe = pes_c[idx]
                   if pe == next_child:
                       break
-                  # print('pe=', pe)
                   subtree.append(pe)
                   idx += 1
               subtrees.append(subtree)
