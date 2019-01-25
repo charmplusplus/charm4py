@@ -110,6 +110,15 @@ ffibuilder.cdef("""
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
     void free(void *ptr);
+
+    int CmiPeOnSamePhysicalNode(int pe1, int pe2);
+    int CmiNumPhysicalNodes();
+    int CmiPhysicalNodeID(int pe);
+    int CmiNumPesOnPhysicalNode(int node);
+    void CmiGetPesOnPhysicalNode(int node, int **pelist, int *num);
+    int CmiGetFirstPeOnPhysicalNode(int node);
+    int CmiPhysicalRank(int pe);
+
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
 

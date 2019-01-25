@@ -330,10 +330,40 @@ class CharmLib(object):
     else:
       lib.getPETopoTreeEdges(pe, root_pe, ffi.NULL, 0, bfactor, parent, child_count, children_ptr)
     children = [children_ptr[0][i] for i in range(child_count[0])]
-    if len(children) > 0: lib.free(children_ptr[0])
+    if len(children) > 0:
+      lib.free(children_ptr[0])
     parent = parent[0]
     if parent == -1: parent = None
     return parent, children
+
+  def getTopoSubtrees(self, root_pe, pes, bfactor):
+    parent       = ffi.new('int*')
+    child_count  = ffi.new('int*')
+    children_ptr = ffi.new("int**")
+    pes_c = ffi.new('int[]', pes)
+    lib.getPETopoTreeEdges(root_pe, root_pe, pes_c, len(pes), bfactor, parent, child_count, children_ptr)
+    children = [children_ptr[0][i] for i in range(child_count[0])]
+    child_count = len(children)
+    if child_count > 0:
+      lib.free(children_ptr[0])
+
+    subtrees = []
+    if child_count > 0:
+      idx = 1
+      for i in range(child_count):
+        subtree = []
+        if i < child_count - 1:
+          next_child = children[i+1]
+        else:
+          next_child = None
+        while idx < len(pes):
+          pe = int(pes_c[idx])
+          if pe == next_child:
+            break
+          subtree.append(pe)
+          idx += 1
+        subtrees.append(subtree)
+    return subtrees
 
   def start(self):
     argv_bufs = [ffi.new("char[]", arg.encode()) for arg in sys.argv]
@@ -626,3 +656,12 @@ class CharmLib(object):
 
   def LBTurnInstrumentOff(self):
     lib.LBTurnInstrumentOff()
+
+  def CkGetFirstPeOnPhysicalNode(self, node):
+    return lib.CmiGetFirstPeOnPhysicalNode(node)
+
+  def CkPhysicalNodeID(self, pe):
+    return lib.CmiPhysicalNodeID(pe)
+
+  def CkNumPhysicalNodes(self):
+    return lib.CmiNumPhysicalNodes()
