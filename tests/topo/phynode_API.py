@@ -2,7 +2,8 @@ from charm4py import charm
 
 
 def main(args):
-    charm.firstPeOnPhysicalNode(0)
+    pe = charm.firstPeOnPhysicalNode(0)
+    assert pe in list(range(charm.numPes()))
 
     phyNodes = set([])
     for pe in range(charm.numPes()):
