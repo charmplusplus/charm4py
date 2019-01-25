@@ -356,7 +356,6 @@ class CharmLib(object):
           next_child = children[i+1]
         else:
           next_child = None
-        # print('child', children[i], 'next_child=', next_child)
         while idx < len(pes):
           pe = int(pes_c[idx])
           if pe == next_child:
