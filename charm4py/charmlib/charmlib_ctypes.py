@@ -315,17 +315,50 @@ class CharmLib(object):
     child_count  = c_int(0)
     children_ptr = ctypes.POINTER(ctypes.c_int)()
     if pes is not None:
-      pes_c = (c_int*len(pes))(*pes)
+      pes_c = (c_int * len(pes))(*pes)
       self.lib.getPETopoTreeEdges(pe, root_pe, pes_c, len(pes), bfactor, ctypes.byref(parent),
                                   ctypes.byref(child_count), ctypes.byref(children_ptr))
     else:
       self.lib.getPETopoTreeEdges(pe, root_pe, 0, 0, bfactor, ctypes.byref(parent),
                                   ctypes.byref(child_count), ctypes.byref(children_ptr))
     children = [children_ptr[i] for i in range(int(child_count.value))]
-    if len(children) > 0: self.lib.free(children_ptr)
+    if len(children) > 0:
+      self.lib.free(children_ptr)
     parent = int(parent.value)
     if parent == -1: parent = None
     return parent, children
+
+  def getTopoSubtrees(self, root_pe, pes, bfactor):
+    parent       = c_int(0)
+    child_count  = c_int(0)
+    children_ptr = ctypes.POINTER(ctypes.c_int)()
+    pes_c = (c_int * len(pes))(*pes)
+    self.lib.getPETopoTreeEdges(root_pe, root_pe, pes_c, len(pes), bfactor, ctypes.byref(parent),
+                                ctypes.byref(child_count), ctypes.byref(children_ptr))
+    children = [children_ptr[i] for i in range(int(child_count.value))]
+    child_count = len(children)
+    if child_count > 0:
+      self.lib.free(children_ptr)
+
+    subtrees = []
+    if child_count > 0:
+      idx = 1
+      for i in range(child_count):
+        subtree = []
+        assert pes_c[idx] == children[i]
+        if i < child_count - 1:
+          next_child = children[i+1]
+        else:
+          next_child = None
+        # print('child', children[i], 'next_child=', next_child)
+        while idx < len(pes):
+          pe = int(pes_c[idx])
+          if pe == next_child:
+            break
+          subtree.append(pe)
+          idx += 1
+        subtrees.append(subtree)
+    return subtrees
 
   def start(self):
     self.argv_bufs = [ctypes.create_string_buffer(arg.encode()) for arg in sys.argv]
@@ -578,3 +611,12 @@ class CharmLib(object):
 
   def LBTurnInstrumentOff(self):
     self.lib.LBTurnInstrumentOff()
+
+  def CkGetFirstPeOnPhysicalNode(self, node):
+    return self.lib.CmiGetFirstPeOnPhysicalNode(node)
+
+  def CkPhysicalNodeID(self, pe):
+    return self.lib.CmiPhysicalNodeID(pe)
+
+  def CkNumPhysicalNodes(self):
+    return self.lib.CmiNumPhysicalNodes()

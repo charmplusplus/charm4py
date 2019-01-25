@@ -13,6 +13,14 @@ cdef extern from "charm.h":
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
 
+    int CmiPeOnSamePhysicalNode(int pe1, int pe2);
+    int CmiNumPhysicalNodes();
+    int CmiPhysicalNodeID(int pe);
+    int CmiNumPesOnPhysicalNode(int node);
+    void CmiGetPesOnPhysicalNode(int node, int **pelist, int *num);
+    int CmiGetFirstPeOnPhysicalNode(int node);
+    int CmiPhysicalRank(int pe);
+
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
     void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
     void CkRegisterGroupExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);

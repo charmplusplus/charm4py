@@ -645,6 +645,15 @@ class Charm(object):
             and 'pe' must be a member of 'pes' """
         return self.lib.getTopoTreeEdges(pe, root_pe, pes, bfactor)
 
+    def getTopoSubtrees(self, root_pe, pes, bfactor=4):
+        """ Returns a list of subtrees of root_pe in a spanning tree containing
+            all given pes. Subtrees are given by the list of pes in the subtree:
+            the first PE in the list is the root of the subtree, but
+            otherwise the list doesn't contain the structure of the subtree
+            (the subtree structure can be obtained by recursively calling this
+            method). """
+        return self.lib.getTopoSubtrees(root_pe, pes, bfactor)
+
     # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
     def myPe(self):
         return self._myPe
@@ -664,6 +673,14 @@ class Charm(object):
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
 
+    def firstPeOnPhysicalNode(self, node):
+        return self.lib.CkGetFirstPeOnPhysicalNode(node)
+
+    def physicalNodeID(self, pe):
+        return self.lib.CkPhysicalNodeID(pe)
+
+    def numPhysicalNodes(self):
+        return self.lib.CkNumPhysicalNodes()
 
 class CharmRemote(Chare):
 

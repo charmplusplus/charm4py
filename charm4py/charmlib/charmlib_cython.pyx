@@ -539,6 +539,49 @@ class CharmLib(object):
     if parent != -1: p = parent
     return p, children
 
+  def getTopoSubtrees(self, int root_pe, list pes, int bfactor):
+      cdef int parent
+      cdef int child_count
+      cdef int* children_ptr
+      cdef int* pes_c
+      cdef int num_pes
+      cdef int i
+      cdef int idx
+      cdef int next_child = -1
+
+      num_pes = len(pes)
+      subtrees = []
+      try:
+          pes_c = <int*> malloc(num_pes * sizeof(int))
+          for i in range(num_pes):
+              pes_c[i] = pes[i]
+          getPETopoTreeEdges(root_pe, root_pe, pes_c, num_pes, bfactor,
+                             &parent, &child_count, &children_ptr)
+          children = [children_ptr[i] for i in range(child_count)]
+          if child_count > 0:
+              free(children_ptr)
+
+          idx = 1
+          for i in range(child_count):
+              subtree = []
+              if i < child_count - 1:
+                  next_child = children[i+1]
+              else:
+                  next_child = -1
+              # print('child', children[i], 'next_child=', next_child)
+              while idx < num_pes:
+                  pe = pes_c[idx]
+                  if pe == next_child:
+                      break
+                  # print('pe=', pe)
+                  subtree.append(pe)
+                  idx += 1
+              subtrees.append(subtree)
+      finally:
+          free(pes_c)
+
+      return subtrees
+
   def start(self):
 
     global PROFILING, PICKLE_PROTOCOL, emptyMsg
@@ -607,6 +650,9 @@ class CharmLib(object):
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
   def LBTurnInstrumentOn(self):  LBTurnInstrumentOn()
   def LBTurnInstrumentOff(self): LBTurnInstrumentOff()
+  def CkGetFirstPeOnPhysicalNode(self, node): return CmiGetFirstPeOnPhysicalNode(node)
+  def CkPhysicalNodeID(self, pe): return CmiPhysicalNodeID(pe)
+  def CkNumPhysicalNodes(self): return CmiNumPhysicalNodes()
 
   def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0
