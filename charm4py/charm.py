@@ -647,10 +647,10 @@ class Charm(object):
 
     def getTopoSubtrees(self, root_pe, pes, bfactor=4):
         """ Returns a list of subtrees of root_pe in a spanning tree containing
-            all given pes. Subtrees are given by the list of pes in the subtree:
-            the first PE in the list is the root of the subtree, but
-            otherwise the list doesn't contain the structure of the subtree
-            (the subtree structure can be obtained by recursively calling this
+            all given pes. Subtrees are returned as lists of pes in the
+            subtree: the first PE in the list is the root of the subtree, but
+            otherwise the list doesn't specify the structure of the subtree
+            (the subtree structure can be extracted by recursively calling this
             method). """
         return self.lib.getTopoSubtrees(root_pe, pes, bfactor)
 

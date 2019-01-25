@@ -557,15 +557,11 @@ class CharmLib(object):
               pes_c[i] = pes[i]
           getPETopoTreeEdges(root_pe, root_pe, pes_c, num_pes, bfactor,
                              &parent, &child_count, &children_ptr)
-          children = [children_ptr[i] for i in range(child_count)]
-          if child_count > 0:
-              free(children_ptr)
-
           idx = 1
           for i in range(child_count):
               subtree = []
               if i < child_count - 1:
-                  next_child = children[i+1]
+                  next_child = children_ptr[i+1]
               else:
                   next_child = -1
               while idx < num_pes:
@@ -575,6 +571,8 @@ class CharmLib(object):
                   subtree.append(pe)
                   idx += 1
               subtrees.append(subtree)
+          if child_count > 0:
+              free(children_ptr)
       finally:
           free(pes_c)
 
