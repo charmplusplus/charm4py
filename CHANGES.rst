@@ -2,6 +2,20 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+
+What's new in v0.12.2
+=====================
+
+* Fixed a bug which decreased the performance of charm.pool, and could result
+  in high memory usage in some circumstances.
+
+* Added API to obtain information on nodes, for example: the number of nodes on
+  which the application is running, or the first PE of each node.
+
+* Expanded topology-aware tree API to allow obtaining the subtrees of a given
+  PE in a topology-based spanning tree.
+
+
 What's new in v0.12
 ===================
 
