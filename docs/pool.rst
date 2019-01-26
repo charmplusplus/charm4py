@@ -13,10 +13,12 @@ or creating more processes than processors.
 
 .. warning::
 
-    ``charm.pool`` is experimental. It outperforms other Python frameworks,
-    particularly when using an efficient communication layer like MPI, but
+    ``charm.pool`` is experimental,
     the API and performance (especially at large scales) is still subject to
     change.
+
+..    TODO: better to show benchmarks: It outperforms other Python frameworks,
+..    particularly when using an efficient communication layer like MPI, but
 
 .. note::
 
