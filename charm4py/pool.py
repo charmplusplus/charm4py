@@ -77,7 +77,6 @@ class PoolScheduler(Chare):
         self.workers = None
         self.idle_workers = set(range(1, charm.numPes()))
         self.num_workers = len(self.idle_workers)
-        assert self.num_workers > 0, 'Run with more than 1 PE to use charm.pool'
         self.jobs = [None] * INITIAL_MAX_JOBS
         self.job_id_pool = set(range(INITIAL_MAX_JOBS))
         self.job_next = None
@@ -94,6 +93,7 @@ class PoolScheduler(Chare):
             ncores = self.num_workers
 
         if self.workers is None:
+            assert self.num_workers > 0, 'Run with more than 1 PE to use charm.pool'
             # first time running a job, create Group of workers
             print('Initializing charm.pool. WARNING: charm.pool is '
                   'experimental (API and performance is subject to change)')
