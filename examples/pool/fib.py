@@ -15,6 +15,7 @@ def fib(n):
 def main(args):
     result = fib(13)
     assert result == 233
+    print('fib(13) is', result)
     exit()
 
 
