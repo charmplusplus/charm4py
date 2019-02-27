@@ -187,8 +187,8 @@ class PoolScheduler(Chare):
                 n = len(results)
                 job.results[i:i+n] = results
             else:
-                i, result = result
-                job.results[i] = result
+                i, _result = result
+                job.results[i] = _result
         self.idle_workers.add(worker_id)
         job.taskDone()
         if job.tasks_pending == 0:
