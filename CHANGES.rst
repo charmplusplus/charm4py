@@ -3,6 +3,13 @@ This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
 
+What's new in v0.12.3
+=====================
+
+* Fixed some bugs in charm.pool, one of which could cause charm.pool to hang
+  when tasks return None.
+
+
 What's new in v0.12.2
 =====================
 
