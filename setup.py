@@ -116,7 +116,7 @@ def build_libcharm(charm_src_dir, build_dir):
         # divide by 2 to not hog the system. On systems with hyperthreading, this will likely
         # result in using same # cores as physical cores (therefore not all the logical cores)
         import multiprocessing
-        build_num_cores = int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2))
+        build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
         if system == 'Darwin':
             if build_mpi:
@@ -124,10 +124,27 @@ def build_libcharm(charm_src_dir, build_dir):
             else:
                 cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         else:
-            if build_mpi:
-                cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            try:
+                arch = os.uname()[4]
+            except:
+                arch = None
+            if arch is not None and arch.startswith('arm'):
+                import re
+                regexp = re.compile("armv(\d+).*")
+                m = regexp.match(arch)
+                if m:
+                    version = int(m.group(1))
+                    if version < 8:
+                        cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+                    else:
+                        cmd = './build charm4py netlrts-linux-arm8 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+                else:
+                    cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
             else:
-                cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+                if build_mpi:
+                    cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+                else:
+                    cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -248,7 +265,7 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
             haveNumpy = True
             my_include_dirs.append(numpy.get_include())
         except:
-            log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found)')
+            log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found or import failed)')
 
         extra_link_args = []
         if os.name != 'nt':
