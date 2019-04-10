@@ -265,7 +265,7 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
             haveNumpy = True
             my_include_dirs.append(numpy.get_include())
         except:
-            log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found)')
+            log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found or import failed)')
 
         extra_link_args = []
         if os.name != 'nt':
