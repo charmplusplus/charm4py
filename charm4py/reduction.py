@@ -144,7 +144,7 @@ class ReductionManager(object):
                                    'uint16': C_USHORT, 'uint32': C_UINT, 'uint64': C_ULONG,
                                    #'float16': ?
                                    'float32': C_FLOAT, 'float64': C_DOUBLE}
-            if os.name == 'nt':
+            if np.dtype('int64').itemsize > self.charm.lib.sizeof(C_LONG):
                 self.numpy_type_map['int64']  = C_LONG_LONG
                 self.numpy_type_map['uint64'] = C_ULONG_LONG
 
