@@ -51,6 +51,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/callbacks/callbacks.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/element_proxy/array_element_proxy.py"
     },
     {
