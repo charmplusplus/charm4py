@@ -525,7 +525,14 @@ class Charm(object):
         obj = self.arrays[aid].pop(index)
         self.threadMgr.objMigrating(obj)
         del obj._contributeInfo  # don't want to pickle this
-        return cPickle.dumps(({}, obj), Options.PICKLE_PROTOCOL)
+        pickled_chare = cPickle.dumps(({}, obj), Options.PICKLE_PROTOCOL)
+        # facilitate garbage collection (especially by removing cyclical references)
+        del obj._local
+        del obj._local_free_head
+        del obj._active_grp_conds
+        obj._cond_next = None
+        obj._cond_last = None
+        return pickled_chare
 
     # Charm class level contribute function used by Array, Group for reductions
     def contribute(self, data, reducer, target, contributor):
