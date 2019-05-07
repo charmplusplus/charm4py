@@ -43,6 +43,9 @@ class Future(object):
         """ Set the value of a future either from remote or current thread. """
         self.getTargetProxyEntryMethod()(self.fid, result)
 
+    def __call__(self, result):
+        self.send(result)
+
     def getTargetProxyEntryMethod(self):
         if not hasattr(self, 'proxy'):
             proxy_class = getattr(charm, self.proxy_class_name)
