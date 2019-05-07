@@ -203,19 +203,23 @@ class Mainchare(object):
     @classmethod
     def __getProxyClass__(C, cls):
         # print("Creating mainchare proxy class for class " + cls.__name__)
+        proxyClassName = cls.__name__ + 'Proxy'
         M = dict()  # proxy methods
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
-                M[m.name] = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
+                f = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
             else:
-                M[m.name] = mainchare_proxy_method_gen(m.epIdx)
+                f = mainchare_proxy_method_gen(m.epIdx)
+            f.__qualname__ = proxyClassName + '.' + m.name
+            f.__name__ = m.name
+            M[m.name] = f
         M["__init__"] = mainchare_proxy_ctor
         M["ckContribute"] = mainchare_proxy_contribute  # function called when target proxy is Mainchare
         M["__getstate__"] = mainchare_proxy__getstate__
         M["__setstate__"] = mainchare_proxy__setstate__
-        return type(cls.__name__ + 'Proxy', (), M)  # create and return proxy class
+        return type(proxyClassName, (), M)  # create and return proxy class
 
 
 class DefaultMainchare(Chare):
@@ -303,22 +307,26 @@ class Group(object):
     @classmethod
     def __getProxyClass__(C, cls):
         # print("Creating group proxy class for class " + cls.__name__)
+        proxyClassName = cls.__name__ + 'GroupProxy'
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[GROUP][cls]
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
-                M[m.name] = profile_send_function(group_proxy_method_gen(m.epIdx))
+                f = profile_send_function(group_proxy_method_gen(m.epIdx))
             else:
-                M[m.name] = group_proxy_method_gen(m.epIdx)
+                f = group_proxy_method_gen(m.epIdx)
+            f.__qualname__ = proxyClassName + '.' + m.name
+            f.__name__ = m.name
+            M[m.name] = f
         M["__init__"] = group_proxy_ctor
         M["__getitem__"] = group_proxy_elem
         M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
         M["ckContribute"] = group_proxy_contribute  # function called when target proxy is Group
         M["__getstate__"] = group_proxy__getstate__
         M["__setstate__"] = group_proxy__setstate__
-        return type(cls.__name__ + 'GroupProxy', (), M)  # create and return proxy class
+        return type(proxyClassName, (), M)  # create and return proxy class
 
 
 class ArrayMap(Chare):
@@ -447,15 +455,19 @@ class Array(object):
     @classmethod
     def __getProxyClass__(C, cls):
         # print("Creating array proxy class for class " + cls.__name__)
+        proxyClassName = cls.__name__ + 'ArrayProxy'
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
             if Options.PROFILING:
-                M[m.name] = profile_send_function(array_proxy_method_gen(m.epIdx))
+                f = profile_send_function(array_proxy_method_gen(m.epIdx))
             else:
-                M[m.name] = array_proxy_method_gen(m.epIdx)
+                f = array_proxy_method_gen(m.epIdx)
+            f.__qualname__ = proxyClassName + '.' + m.name
+            f.__name__ = m.name
+            M[m.name] = f
         M["__init__"] = array_proxy_ctor
         M["__getitem__"] = array_proxy_elem
         M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
@@ -464,7 +476,7 @@ class Array(object):
         M["ckDoneInserting"] = array_proxy_doneInserting
         M["__getstate__"] = array_proxy__getstate__
         M["__setstate__"] = array_proxy__setstate__
-        return type(cls.__name__ + 'ArrayProxy', (), M)  # create and return proxy class
+        return type(proxyClassName, (), M)  # create and return proxy class
 
 
 # ---------------------------------------------------
