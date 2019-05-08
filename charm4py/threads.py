@@ -39,11 +39,11 @@ class Future(object):
 
         return self.value
 
-    def send(self, result):
+    def send(self, result=None):
         """ Set the value of a future either from remote or current thread. """
         self.getTargetProxyEntryMethod()(self.fid, result)
 
-    def __call__(self, result):
+    def __call__(self, result=None):
         self.send(result)
 
     def getTargetProxyEntryMethod(self):
