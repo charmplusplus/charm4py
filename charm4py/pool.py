@@ -82,6 +82,7 @@ class PoolScheduler(Chare):
         self.job_next = None
         self.job_last = self
         self.worker_knows = defaultdict(set)
+        self.setMigratable(False)
 
     def start(self, func, tasks, result, ncores, chunksize, allow_nested):
         assert ncores != 0
@@ -206,6 +207,9 @@ class PoolScheduler(Chare):
 
     def threadResumed(self, worker_id):
         self.idle_workers.discard(worker_id)
+
+    def migrated(self):
+        charm.abort('Someone migrated PoolScheduler which is non-migratable')
 
 
 class Worker(Chare):
