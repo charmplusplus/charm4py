@@ -558,6 +558,24 @@ class Charm(object):
     def barrier(self, contributor):
         self.allReduce(None, None, contributor)
 
+    def startQD(self, callback):
+        fid = 0
+        if isinstance(callback, Future):
+            fid = callback.fid
+            callback = callback.getTargetProxyEntryMethod()
+        cb_proxy = callback.__self__
+        if hasattr(cb_proxy, 'gid'):
+            self.lib.CkStartQD_GroupCallback(cb_proxy.gid, cb_proxy.elemIdx, callback.ep, fid)
+        elif hasattr(cb_proxy, 'aid'):
+            self.lib.CkStartQD_ArrayCallback(cb_proxy.aid, cb_proxy.elemIdx, callback.ep, fid)
+        else:
+            self.lib.CkStartQD_ChareCallback(cb_proxy.cid, callback.ep, fid)
+
+    def waitQD(self):
+        f = self.createFuture()
+        self.startQD(f)
+        f.get()
+
     def awaitCreation(self, *proxies):
         for proxy in proxies:
             if not hasattr(proxy, 'creation_future'):

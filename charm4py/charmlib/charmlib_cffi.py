@@ -432,12 +432,32 @@ class CharmLib(object):
   def CkContributeToArray(self, contributeInfo, aid, index):
     lib.CkExtContributeToArray(contributeInfo.data, aid, index, len(index))
 
+  def CkStartQD_ChareCallback(self, cid, ep, fid):
+    objPtr = ffi.cast("void*", cid[1])
+    lib.CkStartQDExt_ChareCallback(cid[0], objPtr, ep, fid)
+
+  def CkStartQD_GroupCallback(self, gid, pe, ep, fid):
+    lib.CkStartQDExt_GroupCallback(gid, pe, ep, fid)
+
+  def CkStartQD_ArrayCallback(self, aid, index, ep, fid):
+    lib.CkStartQDExt_ArrayCallback(aid, index, len(index), ep, fid)
+
   @ffi.def_extern()
   def createCallbackMsg_py2(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if charm.opts.PROFILING: t0 = time.time()
 
-      if reducerType != ReducerType.external_py:
+      if reducerType < 0 and data == ffi.NULL:
+        if fid > 0:
+          msg = ({}, [fid])
+        else:
+          msg = ({}, [])
+        # save msg, else it might be deleted before returning control to libcharm
+        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
+        returnBufferSizes[0] = len(CharmLib.tempData)
+
+      elif reducerType != ReducerType.external_py:
         header = {}
         pyData = []
         if fid > 0: pyData.append(fid)
@@ -491,7 +511,17 @@ class CharmLib(object):
     try:
       if charm.opts.PROFILING: t0 = time.time()
 
-      if reducerType != ReducerType.external_py:
+      if reducerType < 0 and data == ffi.NULL:
+        if fid > 0:
+          msg = ({}, [fid])
+        else:
+          msg = ({}, [])
+        # save msg, else it might be deleted before returning control to libcharm
+        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
+        returnBufferSizes[0] = len(CharmLib.tempData)
+
+      elif reducerType != ReducerType.external_py:
         header = {}
         pyData = []
         if fid > 0: pyData.append(fid)

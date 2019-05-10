@@ -419,11 +419,32 @@ class CharmLib(object):
     c_elemIdx = (ctypes.c_int * ndims)(*index)
     self.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), aid, c_elemIdx, ndims)
 
+  def CkStartQD_ChareCallback(self, cid, ep, fid):
+    self.lib.CkStartQDExt_ChareCallback(cid[0], cid[1], ep, fid)
+
+  def CkStartQD_GroupCallback(self, gid, pe, ep, fid):
+    self.lib.CkStartQDExt_GroupCallback(gid, pe, ep, fid)
+
+  def CkStartQD_ArrayCallback(self, aid, index, ep, fid):
+    ndims = len(index)
+    c_index = (ctypes.c_int * ndims)(*index)
+    self.lib.CkStartQDExt_ArrayCallback(aid, c_index, ndims, ep, fid)
+
   def createCallbackMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if self.opts.PROFILING: t0 = time.time()
 
-      if reducerType != self.ReducerType.external_py:
+      if reducerType < 0 and data == None:
+        if fid > 0:
+          msg = ({}, [fid])
+        else:
+          msg = ({}, [])
+        pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
+        returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
+        returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
+        returnBufferSizes[0] = len(pickledData)
+
+      elif reducerType != self.ReducerType.external_py:
         header = {}
         pyData = []
         if fid > 0: pyData.append(fid)
