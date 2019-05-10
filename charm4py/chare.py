@@ -124,6 +124,10 @@ class Chare(object):
         #       self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
+    # called after the chare has migrated to a new PE
+    def migrated(self):
+        pass
+
     # deposit value of one of the futures that was created by this chare
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
@@ -154,7 +158,7 @@ method_restrictions = {
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
-    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrate'}
+    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrate', 'migrated'}
 }
 
 # ----------------- Mainchare and Proxy -----------------

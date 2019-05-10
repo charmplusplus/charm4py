@@ -219,6 +219,8 @@ class Charm(object):
             if isinstance(args, Chare):  # obj migrating in
                 obj = args
                 obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
+                self.arrays[aid][index] = obj
+                obj.migrated()
             else:
                 obj = object.__new__(em.C)   # create object but don't call __init__
                 if b'single' in header:
@@ -237,7 +239,7 @@ class Charm(object):
                     em.stopMeasuringTime()
                     if len(self.mainchareEmStack) > 0:
                         self.mainchareEmStack.pop().startMeasuringTime()
-            self.arrays[aid][index] = obj
+                self.arrays[aid][index] = obj
 
     def unpackMsg(self, msg, dcopy_start, dest_obj):
         if msg[:7] == b"_local:":
