@@ -1,6 +1,7 @@
 language: cpp
 os: linux
 dist: xenial
+cache: ccache
 before_install:
   - sudo apt-get install python-dev
   - sudo apt-get install python3-dev
