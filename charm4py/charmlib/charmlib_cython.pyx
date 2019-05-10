@@ -625,6 +625,19 @@ class CharmLib(object):
     CkExtContributeToArray(&contributeInfo.internal, aid, c_index, ndims)
     contributeInfo.releaseBuffer()
 
+  def CkStartQD_ChareCallback(self, tuple cid not None, int ep, int fid):
+    objPtr = <void*>(<uintptr_t>cid[1])
+    CkStartQDExt_ChareCallback(<int>cid[0], objPtr, ep, fid)
+
+  def CkStartQD_GroupCallback(self, int gid, int pe, int ep, int fid):
+    CkStartQDExt_GroupCallback(gid, pe, ep, fid)
+
+  def CkStartQD_ArrayCallback(self, int aid, index not None, int ep, int fid):
+    cdef int ndims = len(index)
+    cdef int i = 0
+    for i in range(ndims): c_index[i] = index[i]
+    CkStartQDExt_ArrayCallback(aid, c_index, ndims, ep, fid)
+
   def lib_version_check(self):
     charm.lib_version_check(CmiCommitID.decode('UTF-8'))
 
@@ -848,7 +861,15 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
   try:
     if PROFILING: t0 = time.time()
 
-    if reducerType != charm_reducers.external_py:
+    if reducerType < 0 and data == NULL:
+      if fid > 0:
+        tempData = dumps(({}, [fid]), PICKLE_PROTOCOL)
+      else:
+        tempData = emptyMsg
+      returnBuffers[0]     = <char*>tempData
+      returnBufferSizes[0] = len(tempData)
+
+    elif reducerType != charm_reducers.external_py:
 
       if reducerType != charm_reducers.nop:
         header = {}

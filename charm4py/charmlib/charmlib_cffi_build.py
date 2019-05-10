@@ -233,6 +233,9 @@ ffibuilder.cdef("""
     void CkExtContributeToChare(struct ContributeInfo* contribute_params, int onPE, void* objPtr);
     void CkExtContributeToGroup(struct ContributeInfo* contribute_params, int gid, int pe);
     void CkExtContributeToArray(struct ContributeInfo* contribute_params, int aid, int* idx, int ndims);
+    void CkStartQDExt_ChareCallback(int onPE, void* objPtr, int epIdx, int fid);
+    void CkStartQDExt_GroupCallback(int gid, int pe, int epIdx, int fid);
+    void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
 
     // callbacks to python
     extern "Python" void registerMainModule(void);

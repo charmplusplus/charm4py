@@ -60,6 +60,9 @@ cdef extern from "charm.h":
     void CkExtContributeToChare(void* contribute_params, int onPE, void* objPtr);
     void CkExtContributeToGroup(void* contribute_params, int gid, int pe);
     void CkExtContributeToArray(void* contribute_params, int aid, int* idx, int ndims);
+    void CkStartQDExt_ChareCallback(int onPE, void* objPtr, int epIdx, int fid);
+    void CkStartQDExt_GroupCallback(int gid, int pe, int epIdx, int fid);
+    void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
 
 
 cdef extern from "spanningTree.h":

@@ -113,6 +113,10 @@
         "path": "tests/futures/multi_futures.py"
     },
     {
+        "force_min_processes": 2,
+        "path": "tests/qd/qd.py"
+    },
+    {
         "force_min_processes": 4,
         "path": "examples/hello/group_hello.py"
     },
