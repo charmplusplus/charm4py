@@ -140,12 +140,12 @@ class EntryMethodThreadManager(object):
             # thread paused inside entry method, or returned error
             error = thread_state.error
             if error is not None:
-                thread_state.obj.num_threads -= 1
+                thread_state.obj._num_threads -= 1
                 del self.threads[thread_state.tid]
                 raise error
 
     def objMigrating(self, obj):
-        if obj.num_threads > 0:
+        if obj._num_threads > 0:
             raise Charm4PyError("Migration of chares with active threads is not yet supported")
 
     def entryMethodRun_thread(self, obj, entry_method, args, header):
@@ -157,7 +157,7 @@ class EntryMethodThreadManager(object):
             try:
                 while True:
                     thread_state.idle = False
-                    obj.num_threads += 1
+                    obj._num_threads += 1
                     thread_state.notify = entry_method.thread_notify
                     ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                     if b'block' in header:
@@ -168,7 +168,7 @@ class EntryMethodThreadManager(object):
                     thread_state.notify = False
                     thread_state.idle = True
                     thread_state.obj = None
-                    obj.num_threads -= 1
+                    obj._num_threads -= 1
                     obj, entry_method, args, header = charm.threadMgr.pauseThread()
                     if obj is None:
                         thread_state.finished = True

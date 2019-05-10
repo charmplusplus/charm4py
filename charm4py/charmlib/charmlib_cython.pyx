@@ -511,7 +511,7 @@ class CharmLib(object):
   def getGroupRedNo(self, int gid):
     return CkGroupGetReductionNumber(gid)
 
-  def getArrayElementRedNo(self, int aid, index):
+  def getArrayElementRedNo(self, int aid, index not None):
     cdef int ndims = len(index)
     cdef int i = 0
     for i in range(ndims): c_index[i] = index[i]
@@ -647,7 +647,7 @@ class CharmLib(object):
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
-  def CkExit(self, exitCode): return realCkExit(exitCode);
+  def CkExit(self, exitCode): return realCkExit(exitCode)
   def CkPrintf(self, bytes msg): CmiPrintf(msg)
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
   def LBTurnInstrumentOn(self):  LBTurnInstrumentOn()

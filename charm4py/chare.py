@@ -32,14 +32,14 @@ class Chare(object):
         return object.__new__(cls)
 
     def __init__(self):
-        if hasattr(self, '_chare_initialized'):
+        if hasattr(self, '_local'):
             return
         # messages to this chare from chares in the same PE are stored here without copying
         # or pickling. _local is a fixed size array that implements a mem pool, where msgs
         # can be in non-consecutive positions, and the indexes of free slots are stored
         # as a linked list inside _local, with _local_free_head being the index of the
         # first free slot, _local[_local_free_head] is the index of next free slot and so on
-        self._local = [i for i in range(1, Options.LOCAL_MSG_BUF_SIZE+1)]
+        self._local = [i for i in range(1, Options.LOCAL_MSG_BUF_SIZE + 1)]
         self._local[-1] = None
         self._local_free_head = 0
         # stores condition objects which group all elements waiting on same condition string
@@ -47,8 +47,7 @@ class Chare(object):
         # linked list of active wait condition objects
         self._cond_next = None
         self._cond_last = self
-        self._chare_initialized = True
-        self.num_threads = 0
+        self._num_threads = 0
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:
@@ -68,7 +67,8 @@ class Chare(object):
         while True:
             # go through linked list of active wait condition objects
             cond, prev = self._cond_next, self
-            if cond is None: break
+            if cond is None:
+                break
             dequeued = False
             while cond is not None:
                 deq, done = cond.check(self)
@@ -83,7 +83,8 @@ class Chare(object):
                 else:
                     prev = cond
                 cond = cond._cond_next
-            if not dequeued: break
+            if not dequeued:
+                break
             # if I dequeued waiting elements, chare state might have changed as a result of
             # activating them, so I need to continue flushing wait queues
 
@@ -451,8 +452,6 @@ class Array(object):
             obj.thisProxy = proxy[index]
         else:
             obj.thisProxy = charm.proxyClasses[ARRAY][obj.__class__](aid, len(obj.thisIndex))
-        # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
-        obj.usesAtSync = False
         obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
         obj.migratable = True
 

@@ -481,12 +481,12 @@ class Charm(object):
 
         if hasattr(entry, 'mro') and Chare in entry.mro():
             if entry.__init__.__code__.co_argcount != 2:
-                raise Charm4PyError("Mainchare constructor must have only one parameter")
+                raise Charm4PyError("Mainchare constructor must take one (and only one) parameter")
             self.register(entry, (MAINCHARE,))
         else:
             assert callable(entry), "Given entry point is not a function or Chare"
             if entry.__code__.co_argcount != 1:
-                raise Charm4PyError("Main function must have only one parameter")
+                raise Charm4PyError("Main function must have one (and only one) parameter")
             self.entry_func = entry
             self.register(chare.DefaultMainchare, (MAINCHARE,))
 
@@ -559,7 +559,7 @@ class Charm(object):
     def awaitCreation(self, *proxies):
         for proxy in proxies:
             if not hasattr(proxy, 'creation_future'):
-                if not proxy.__class__.__name__.endswith("Proxy"):
+                if not proxy.__class__.__name__.endswith('Proxy'):
                     raise Charm4PyError('Did not pass a proxy to awaitCreation? ' + str(type(proxy)))
                 raise Charm4PyError('awaitCreation can only be used if creation triggered from threaded entry method')
             proxy.creation_future.get()
