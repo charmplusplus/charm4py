@@ -215,6 +215,7 @@ ffibuilder.cdef("""
 
     int CkGroupGetReductionNumber(int gid);
     int CkArrayGetReductionNumber(int aid, int ndims, int *index);
+    void CkSetMigratable(int aid, int ndims, int *index, char migratable);
 
     void registerCkRegisterMainModuleCallback(void (*cb)());
     void registerMainchareCtorExtCallback(void (*cb)(int, void*, int, int, char **));
