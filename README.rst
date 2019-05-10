@@ -2,8 +2,7 @@
 charm4py
 ========
 
-(NOTE: With release v0.11 we have changed the name of the project to charm4py. See
-the `forum`_ for more information.)
+(NOTE: With release v0.11 we changed the name of the project to charm4py.)
 
 
 .. image:: https://travis-ci.org/UIUC-PPL/charm4py.svg?branch=master
@@ -24,7 +23,7 @@ C++ runtime system providing *speed*, *scalability* and *dynamic load balancing*
 charm4py allows development of parallel applications that scale from laptops to
 supercomputers, using the Python language. It is built on top of `Charm++`_.
 
-Please see the Documentation_.
+Please see the Documentation_ for more information.
 
 Short Example
 -------------
@@ -72,14 +71,14 @@ from this example:
 - Remote method invocation in charm4py is *asynchronous*.
 
 In this example, there is only one chare per processor, but multiple chares (of the same
-or different type) can exist on any given processor, which can bring performance
+or different type) can exist on any given processor, which can bring flexibility and also performance
 benefits. Please refer to the documentation_ for more information.
 
 
 Contact
 -------
 
-We want feedback from the community. If you have feature suggestions, support questions or general comments, please visit our `forum`_.
+We would like feedback from the community. If you have feature suggestions, support questions or general comments, please visit our `forum`_.
 
 Main author at <jjgalvez@illinois.edu>
 
