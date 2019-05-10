@@ -52,7 +52,7 @@ cdef extern from "charm.h":
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
     void registerArrayElemJoinExtCallback(void (*cb)(int, int, int *, int, char*, int));
     void registerArrayResumeFromSyncExtCallback(void (*cb)(int, int, int *));
-    void registerCreateReductionTargetMsgExtCallback(void (*cb)(void*, int, int, int, char**, int*));
+    void registerCreateCallbackMsgExtCallback(void (*cb)(void*, int, int, int, char**, int*));
     void registerPyReductionExtCallback(int (*cb)(char**, int*, int, char**));
     void registerArrayMapProcNumExtCallback(int (*cb)(int, int, const int *));
 

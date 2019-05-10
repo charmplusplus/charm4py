@@ -637,7 +637,7 @@ class CharmLib(object):
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
     registerPyReductionExtCallback(pyReduction)
-    registerCreateReductionTargetMsgExtCallback(createReductionTargetMsg)
+    registerCreateCallbackMsgExtCallback(createCallbackMsg)
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
@@ -834,7 +834,7 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
   except:
     charm.handleGeneralError()
 
-cdef void createReductionTargetMsg(void *data, int dataSize, int reducerType, int fid, char **returnBuffers, int *returnBufferSizes):
+cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, char **returnBuffers, int *returnBufferSizes):
   cdef int numElems
   cdef array.array a
   cdef int item_size
