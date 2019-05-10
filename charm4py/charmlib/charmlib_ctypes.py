@@ -414,7 +414,7 @@ class CharmLib(object):
     c_elemIdx = (ctypes.c_int * ndims)(*index)
     self.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), aid, c_elemIdx, ndims)
 
-  def createReductionTargetMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if self.opts.PROFILING: t0 = time.time()
 
@@ -579,10 +579,10 @@ class CharmLib(object):
     self.resumeFromSyncCb = self.RESUME_FROM_SYNC_CB_TYPE(self.resumeFromSync)
     self.lib.registerArrayResumeFromSyncExtCallback(self.resumeFromSyncCb)
 
-    # Args to createReductionTargetMsg: data, return_buffer, data_size, reducer_type
+    # Args to createCallbackMsg: data, return_buffer, data_size, reducer_type
     self.CREATE_RED_TARG_MSG_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, c_int, POINTER(c_char_p), POINTER(c_int))
-    self.createReductionTargetMsgCb = self.CREATE_RED_TARG_MSG_CB_TYPE(self.createReductionTargetMsg)
-    self.lib.registerCreateReductionTargetMsgExtCallback(self.createReductionTargetMsgCb)
+    self.createCallbackMsgCb = self.CREATE_RED_TARG_MSG_CB_TYPE(self.createCallbackMsg)
+    self.lib.registerCreateCallbackMsgExtCallback(self.createCallbackMsgCb)
 
     # Args to pyReduction: msgs, msgSizes, nMsgs, returnBuffer
     self.PY_REDUCTION_CB_TYPE = CFUNCTYPE(c_int, POINTER(c_void_p), POINTER(c_int), c_int, POINTER(c_char_p))

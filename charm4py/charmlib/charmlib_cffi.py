@@ -430,7 +430,7 @@ class CharmLib(object):
     lib.CkExtContributeToArray(contributeInfo.data, aid, index, len(index))
 
   @ffi.def_extern()
-  def createReductionTargetMsg_py2(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg_py2(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if charm.opts.PROFILING: t0 = time.time()
 
@@ -484,7 +484,7 @@ class CharmLib(object):
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def createReductionTargetMsg_py3(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg_py3(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
       if charm.opts.PROFILING: t0 = time.time()
 
@@ -629,7 +629,7 @@ class CharmLib(object):
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py2)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py2)
       lib.registerPyReductionExtCallback(lib.pyReduction_py2)
-      lib.registerCreateReductionTargetMsgExtCallback(lib.createReductionTargetMsg_py2)
+      lib.registerCreateCallbackMsgExtCallback(lib.createCallbackMsg_py2)
     else:
       lib.registerReadOnlyRecvExtCallback(lib.recvReadOnly_py3)
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py3)
@@ -637,7 +637,7 @@ class CharmLib(object):
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py3)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py3)
       lib.registerPyReductionExtCallback(lib.pyReduction_py3)
-      lib.registerCreateReductionTargetMsgExtCallback(lib.createReductionTargetMsg_py3)
+      lib.registerCreateCallbackMsgExtCallback(lib.createCallbackMsg_py3)
 
     self.CkArrayExtSend = lib.CkArrayExtSend
     self.CkGroupExtSend = lib.CkGroupExtSend
