@@ -310,6 +310,11 @@ class CharmLib(object):
     c_index = (c_int*indexDims)(*index)
     return self.lib.CkArrayGetReductionNumber(aid, indexDims, c_index)
 
+  def setMigratable(self, aid, index, migratable):
+    ndims = len(index)
+    c_index = (c_int*ndims)(*index)
+    self.lib.CkSetMigratable(aid, ndims, c_index, migratable)
+
   def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
     parent       = c_int(0)
     child_count  = c_int(0)

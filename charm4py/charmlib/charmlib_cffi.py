@@ -320,6 +320,9 @@ class CharmLib(object):
   def getArrayElementRedNo(self, aid, index):
     return lib.CkArrayGetReductionNumber(aid, len(index), index)
 
+  def setMigratable(self, aid, index, migratable):
+    lib.CkSetMigratable(aid, len(index), index, ffi.cast('char', migratable))
+
   def getTopoTreeEdges(self, pe, root_pe, pes, bfactor):
     parent       = ffi.new('int*')
     child_count  = ffi.new('int*')

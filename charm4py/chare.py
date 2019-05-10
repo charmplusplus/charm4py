@@ -128,6 +128,10 @@ class Chare(object):
     def migrated(self):
         pass
 
+    def setMigratable(self, migratable):
+        charm.lib.setMigratable(self.thisProxy.aid, self.thisIndex, migratable)
+        self.migratable = migratable
+
     # deposit value of one of the futures that was created by this chare
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
@@ -152,7 +156,7 @@ method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
                  '__waitEnqueue__', 'wait', 'contribute', 'AtSync',
-                 'migrate', '_future_deposit_result',
+                 'migrate', 'setMigratable', '_future_deposit_result',
                  '_coll_future_deposit_result', '__getRedNo__',
                  '__addThreadEventSubscriber__'},
 
@@ -450,6 +454,7 @@ class Array(object):
         # NOTE currently only used at Python level. proxy object in charm runtime currently has this set to true
         obj.usesAtSync = False
         obj._contributeInfo = charm.lib.initContributeInfo(aid, obj.thisIndex, CONTRIBUTOR_TYPE_ARRAY)
+        obj.migratable = True
 
     @classmethod
     def __baseEntryMethods__(cls):

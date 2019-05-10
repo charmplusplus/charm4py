@@ -517,6 +517,12 @@ class CharmLib(object):
     for i in range(ndims): c_index[i] = index[i]
     return CkArrayGetReductionNumber(aid, ndims, c_index)
 
+  def setMigratable(self, int aid, index not None, char migratable):
+    cdef int ndims = len(index)
+    cdef int i = 0
+    for i in range(ndims): c_index[i] = index[i]
+    CkSetMigratable(aid, ndims, c_index, migratable)
+
   def getTopoTreeEdges(self, int pe, int root_pe, pes, int bfactor):
     cdef int parent
     cdef int child_count

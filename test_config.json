@@ -82,6 +82,9 @@
         "args": "+balancer GreedyRefineLB +LBDebug 1"
     },
     {
+        "path": "tests/migration/test_nonmigratables.py"
+    },
+    {
         "force_min_processes": 4,
         "path": "tests/migration/chare_migration.py"
     },
