@@ -379,6 +379,8 @@ class Charm(object):
             if self.lib.name != "cython":
                 out_msg += ", **WARNING**: cython recommended for best performance"
             print(out_msg)
+            if sys.version_info < (3,0,0):
+                print('\ncharm4py> DEPRECATION: Python 2 support is ending. Some features may not work.\n')
 
         for C in self.register_order:
             self.registerInCharm(C)
