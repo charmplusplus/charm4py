@@ -1,6 +1,6 @@
 language: cpp
 os: linux
-dist: trusty
+dist: xenial
 before_install:
   - sudo apt-get install python-dev
   - sudo apt-get install python3-dev
