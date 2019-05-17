@@ -121,8 +121,6 @@ class Chare(object):
         charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
 
     def migrate(self, toPe):
-        # print("[charm4py] Calling migrate, aid: ", self.thisProxy.aid, "ndims",
-        #       self.thisProxy.ndims, "index: ", self.thisIndex, "toPe", toPe)
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
     # called after the chare has migrated to a new PE
@@ -163,7 +161,7 @@ method_restrictions = {
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
-    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrate', 'migrated'}
+    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrated'}
 }
 
 # ----------------- Mainchare and Proxy -----------------
