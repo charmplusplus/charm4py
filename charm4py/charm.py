@@ -10,6 +10,7 @@ if sys.version_info < (3, 0, 0):
     import cPickle
 else:
     import pickle as cPickle
+import inspect
 import time
 from collections import defaultdict
 from . import chare
@@ -400,9 +401,10 @@ class Charm(object):
                                      for m in charm_type.__baseEntryMethods__()]
         self.classEntryMethods[charm_type_id][C] = ems
         for m in dir(C):
-            if not callable(getattr(C, m)):
+            m_obj = getattr(C, m)
+            if not callable(m_obj) or inspect.isclass(m_obj):
                 continue
-            if m in chare.method_restrictions['reserved'] and getattr(C, m) != getattr(Chare, m):
+            if m in chare.method_restrictions['reserved'] and m_obj != getattr(Chare, m):
                 raise Charm4PyError(str(C) + " redefines reserved method '"  + m + "'")
             if m.startswith("__") and m.endswith("__"):
                 continue  # filter out non-user methods
@@ -501,7 +503,6 @@ class Charm(object):
                 raise Charm4PyError("Class", C, "is not a Chare (can't register)")
 
         import importlib
-        import inspect
         M = list(modules)
         if '__main__' not in M:
             M.append('__main__')
