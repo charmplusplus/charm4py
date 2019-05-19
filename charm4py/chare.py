@@ -164,6 +164,17 @@ method_restrictions = {
     'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrated'}
 }
 
+
+def getEntryMethodInfo(cls, method_name):
+    func = getattr(cls, method_name)
+    argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
+    argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
+    assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
+    defaults = func.__defaults__
+    if defaults is None:
+        defaults = ()
+    return argcount, argnames, defaults
+
 # ----------------- Mainchare and Proxy -----------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -175,8 +186,22 @@ def mainchare_proxy__getstate__(proxy):
 def mainchare_proxy__setstate__(proxy, state):
     proxy.cid = state
 
-def mainchare_proxy_method_gen(ep):  # decorator, generates proxy entry methods
+def mainchare_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
+        num_args = len(args)
+        if num_args < argcount and len(kwargs) > 0:
+            args = list(args)
+            for i in range(num_args, argcount):
+                argname = argnames[i]
+                # first look for argument in kwargs
+                if argname in kwargs:
+                    args.append(kwargs[argname])
+                else:
+                    # if not there, see if there is a default value
+                    def_idx = i - argcount + len(defaults)
+                    assert def_idx >= 0, 'Value not found for parameter \'' + argname + '\' of entry method'
+                    args.append(defaults[def_idx])
+
         header = {}
         blockFuture = None
         cid = proxy.cid  # chare ID
@@ -215,10 +240,11 @@ class Mainchare(object):
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
-                f = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
+                f = profile_send_function(mainchare_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
-                f = mainchare_proxy_method_gen(m.epIdx)
+                f = mainchare_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
@@ -251,8 +277,22 @@ def group_proxy_elem(proxy, pe):  # group proxy [] overload method
     proxy_clone.elemIdx = pe
     return proxy_clone
 
-def group_proxy_method_gen(ep):  # decorator, generates proxy entry methods
+def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
+        num_args = len(args)
+        if num_args < argcount and len(kwargs) > 0:
+            args = list(args)
+            for i in range(num_args, argcount):
+                argname = argnames[i]
+                # first look for argument in kwargs
+                if argname in kwargs:
+                    args.append(kwargs[argname])
+                else:
+                    # if not there, see if there is a default value
+                    def_idx = i - argcount + len(defaults)
+                    assert def_idx >= 0, 'Value not found for parameter \'' + argname + '\' of entry method'
+                    args.append(defaults[def_idx])
+
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
@@ -320,10 +360,11 @@ class Group(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
-                f = profile_send_function(group_proxy_method_gen(m.epIdx))
+                f = profile_send_function(group_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
-                f = group_proxy_method_gen(m.epIdx)
+                f = group_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
@@ -362,8 +403,22 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
     proxy_clone.elemIdx = tuple(idx)
     return proxy_clone
 
-def array_proxy_method_gen(ep):  # decorator, generates proxy entry methods
+def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
+        num_args = len(args)
+        if num_args < argcount and len(kwargs) > 0:
+            args = list(args)
+            for i in range(num_args, argcount):
+                argname = argnames[i]
+                # first look for argument in kwargs
+                if argname in kwargs:
+                    args.append(kwargs[argname])
+                else:
+                    # if not there, see if there is a default value
+                    def_idx = i - argcount + len(defaults)
+                    assert def_idx >= 0, 'Value not found for parameter \'' + argname + '\' of entry method'
+                    args.append(defaults[def_idx])
+
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
@@ -467,10 +522,11 @@ class Array(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
-                f = profile_send_function(array_proxy_method_gen(m.epIdx))
+                f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
-                f = array_proxy_method_gen(m.epIdx)
+                f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
