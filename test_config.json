@@ -1,5 +1,9 @@
 [
     {
+        "force_min_processes": 2,
+        "path": "tests/entry_methods/entrymethod_args_kwargs.py"
+    },
+    {
         "force_min_processes": 4,
         "path": "tests/pool/pool.py"
     },
