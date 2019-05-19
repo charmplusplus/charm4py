@@ -1,4 +1,3 @@
-import charm4py
 from charm4py import charm, Chare, Array, Reducer
 from charm4py import readonlies as ro
 import time
