@@ -164,6 +164,17 @@ method_restrictions = {
     'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrated'}
 }
 
+
+def getEntryMethodInfo(cls, method_name):
+    func = getattr(cls, method_name)
+    argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
+    argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
+    assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
+    defaults = func.__defaults__
+    if defaults is None:
+        defaults = ()
+    return argcount, argnames, defaults
+
 # ----------------- Mainchare and Proxy -----------------
 
 def mainchare_proxy_ctor(proxy, cid):
@@ -229,13 +240,7 @@ class Mainchare(object):
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            func = getattr(m.C, m.name)
-            argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
-            argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
-            assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
-            defaults = func.__defaults__
-            if defaults is None:
-                defaults = ()
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
                 f = profile_send_function(mainchare_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
@@ -355,13 +360,7 @@ class Group(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            func = getattr(m.C, m.name)
-            argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
-            argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
-            assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
-            defaults = func.__defaults__
-            if defaults is None:
-                defaults = ()
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
                 f = profile_send_function(group_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
@@ -523,13 +522,7 @@ class Array(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            func = getattr(m.C, m.name)
-            argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
-            argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
-            assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
-            defaults = func.__defaults__
-            if defaults is None:
-                defaults = ()
+            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
                 f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
