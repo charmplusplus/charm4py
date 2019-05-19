@@ -587,8 +587,8 @@ class CharmLib(object):
   def start(self):
 
     global PROFILING, PICKLE_PROTOCOL, emptyMsg
-    PROFILING = <int>charm.opts.PROFILING   # save bool in global static int variable for fast access
-    PICKLE_PROTOCOL = charm.opts.PICKLE_PROTOCOL
+    PROFILING = <int>charm.options.profiling   # save bool in global static int variable for fast access
+    PICKLE_PROTOCOL = charm.options.pickle_protocol
     emptyMsg = dumps(({},[]), PICKLE_PROTOCOL)
 
     global charm_reducer_to_ctype, rev_np_array_type_map, rev_array_type_map

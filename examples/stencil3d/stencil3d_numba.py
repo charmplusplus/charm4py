@@ -11,8 +11,7 @@ import numba
 import sys
 sys.argv += ['+LBPeriod', '0.001', '+LBOff', '+LBCommOff']
 
-from charm4py import Options
-Options.PROFILING = False
+charm.options.profiling = False
 
 
 MAX_ITER = 100

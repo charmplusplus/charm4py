@@ -188,7 +188,7 @@ class CharmLib(object):
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING:
+      if self.opts.profiling:
         t0 = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
@@ -199,7 +199,7 @@ class CharmLib(object):
   def recvGroupMsg(self, gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING:
+      if self.opts.profiling:
         t0 = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
@@ -210,7 +210,7 @@ class CharmLib(object):
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if self.opts.PROFILING:
+      if self.opts.profiling:
         t0 = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
@@ -375,7 +375,7 @@ class CharmLib(object):
 
   def arrayElemLeave(self, aid, ndims, arrayIndex, pdata, sizing):
     try:
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.profiling: t0 = time.time()
       if sizing:
         arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
         self.tempData = ctypes.create_string_buffer(self.charm.arrayElemLeave(aid, arrIndex))
@@ -383,7 +383,7 @@ class CharmLib(object):
         #pdata[0] = ctypes.cast(data, c_void_p).value
         pdata = ctypes.cast(pdata, POINTER(POINTER(c_char)))
         pdata[0] = self.tempData
-      if self.opts.PROFILING: self.times[2] += (time.time() - t0)
+      if self.opts.profiling: self.times[2] += (time.time() - t0)
       return len(self.tempData)
     except:
       self.charm.handleGeneralError()
@@ -391,7 +391,7 @@ class CharmLib(object):
   def arrayElemJoin(self, aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if self.opts.PROFILING:
+      if self.opts.profiling:
         t0 = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
@@ -432,14 +432,14 @@ class CharmLib(object):
 
   def createCallbackMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.profiling: t0 = time.time()
 
       if reducerType < 0 and data == None:
         if fid > 0:
           msg = ({}, [fid])
         else:
           msg = ({}, [])
-        pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
+        pickledData = cPickle.dumps(msg, self.opts.pickle_protocol)
         returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
         returnBufferSizes[0] = len(pickledData)
@@ -475,7 +475,7 @@ class CharmLib(object):
             pyData.append(None)
 
         msg = (header, pyData)
-        pickledData = cPickle.dumps(msg, self.opts.PICKLE_PROTOCOL)
+        pickledData = cPickle.dumps(msg, self.opts.pickle_protocol)
         returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
         returnBufferSizes[0] = len(pickledData)
@@ -490,7 +490,7 @@ class CharmLib(object):
         data = ctypes.cast(data, POINTER(c_char * dataSize)).contents.raw
         header, args = cPickle.loads(data)
         args.insert(0, fid)
-        pickledData = cPickle.dumps((header,args), self.opts.PICKLE_PROTOCOL)
+        pickledData = cPickle.dumps((header,args), self.opts.pickle_protocol)
         returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
         returnBufferSizes[0] = len(pickledData)
@@ -499,20 +499,20 @@ class CharmLib(object):
         returnBuffers[0]     = ctypes.cast(data, c_char_p)
         returnBufferSizes[0] = dataSize
 
-      if self.opts.PROFILING: self.times[0] += (time.time() - t0)
+      if self.opts.profiling: self.times[0] += (time.time() - t0)
     except:
       self.charm.handleGeneralError()
 
   # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
   def pyReduction(self, msgs, msgSizes, nMsgs, returnBuffer):
     try:
-      if self.opts.PROFILING: t0 = time.time()
+      if self.opts.profiling: t0 = time.time()
       contribs = []
       currentReducer = None
       for i in range(nMsgs):
         msg = msgs[i]
         if msgSizes[i] > 0:
-          if self.opts.PROFILING: self.charm.recordReceive(int(msgSizes[i]))
+          if self.opts.profiling: self.charm.recordReceive(int(msgSizes[i]))
           msg = ctypes.cast(msg, POINTER(c_char * msgSizes[i])).contents.raw
           header, args = cPickle.loads(msg)
 
@@ -526,14 +526,14 @@ class CharmLib(object):
 
       reductionResult = getattr(self.charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
-      rednMsgPickle = cPickle.dumps(rednMsg, self.opts.PICKLE_PROTOCOL)
+      rednMsgPickle = cPickle.dumps(rednMsg, self.opts.pickle_protocol)
       rednMsgPickle = ctypes.create_string_buffer(rednMsgPickle)
 
       # cast returnBuffer to char** and make it point to pickled reduction msg
       returnBuffer = ctypes.cast(returnBuffer, POINTER(POINTER(c_char)))
       returnBuffer[0] = rednMsgPickle
 
-      if self.opts.PROFILING: self.times[1] += (time.time() - t0)
+      if self.opts.profiling: self.times[1] += (time.time() - t0)
       return len(rednMsgPickle)
     except:
       self.charm.handleGeneralError()

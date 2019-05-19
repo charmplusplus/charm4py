@@ -32,13 +32,22 @@ except ImportError:
     numpy = NumpyDummy()
 
 
-class Options:
-    PROFILING = False
-    PICKLE_PROTOCOL = -1    # -1 is highest protocol number
-    LOCAL_MSG_OPTIM = True
-    LOCAL_MSG_BUF_SIZE = 50
-    AUTO_FLUSH_WAIT_QUEUES = True
-    QUIET = False
+class Options(object):
+
+    def __str__(self):
+        output = ''
+        for varname in dir(self):
+            var = getattr(self, varname)
+            if isinstance(var, Options) or varname.startswith('__'):
+                continue
+            output += varname + ': ' + str(var) + '\n'
+        return output
+
+    def check_deprecated(self):
+        old_options = {'PROFILING', 'PICKLE_PROTOCOL', 'LOCAL_MSG_OPTIM',
+                       'LOCAL_MSG_BUF_SIZE', 'AUTO_FLUSH_WAIT_QUEUES', 'QUIET'}
+        if len(old_options.intersection(set(dir(self.__class__)))) != 0:
+            raise Charm4PyError('Options API has changed. Use charm.options instead')
 
 
 class Charm4PyError(Exception):
@@ -77,8 +86,16 @@ class Charm(object):
         # inlining of constructor calls (only used with profiling)
         self.mainchareEmStack = []
         self.activeChares = set()  # for profiling (active chares on this PE)
-        self.opts = Options
         self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
+
+        self.options = Options()
+        self.options.profiling = False
+        self.options.pickle_protocol = -1  # -1 selects the highest protocol number
+        self.options.local_msg_optim = True
+        self.options.local_msg_buf_size = 50
+        self.options.auto_flush_wait_queues = True
+        self.options.quiet = False
+
         if 'OMPI_COMM_WORLD_SIZE' in os.environ:
             # this is needed for OpenMPI, see:
             # https://svn.open-mpi.org/trac/ompi/wiki/Linkers
@@ -136,25 +153,25 @@ class Charm(object):
             assert isinstance(obj, chare.DefaultMainchare)
             obj.main = self.entry_func
             del self.entry_func
-        if Options.PROFILING:
+        if self.options.profiling:
             self.activeChares.add((em.C, Mainchare))
             em.startMeasuringTime()
         em.run(obj, {}, [args])  # now call the user's __init__
         self.chares[cid] = obj
-        if Options.PROFILING:
+        if self.options.profiling:
             em.stopMeasuringTime()
         if self.myPe() == 0:  # broadcast readonlies
             roData = {}
             for attr in dir(readonlies):  # attr is string
                 if not attr.startswith("_") and not attr.endswith("_"):
                     roData[attr] = getattr(readonlies, attr)
-            msg = cPickle.dumps(roData, Options.PICKLE_PROTOCOL)
+            msg = cPickle.dumps(roData, self.options.pickle_protocol)
             # print("Registering readonly data of size " + str(len(msg)))
             self.lib.CkRegisterReadonly(b"charm4py_ro", b"charm4py_ro", msg)
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
         em = self.entryMethods[ep]
-        if Options.PROFILING:
+        if self.options.profiling:
             em.addRecvTime(time.time() - t0)
             em.startMeasuringTime()
 
@@ -163,10 +180,10 @@ class Charm(object):
         else:
             self.mainThreadEntryMethod = em
             em.run(obj, header, args)
-            if Options.AUTO_FLUSH_WAIT_QUEUES and obj._cond_next is not None:
+            if self.options.auto_flush_wait_queues and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 
-        if Options.PROFILING:
+        if self.options.profiling:
             em.stopMeasuringTime()
 
     def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
@@ -187,7 +204,7 @@ class Charm(object):
             Group.initMember(obj, gid)
             self.mainThreadEntryMethod = em
             super(em.C, obj).__init__()  # call Chare class __init__ first
-            if Options.PROFILING:
+            if self.options.profiling:
                 self.activeChares.add((em.C, Group))
                 if self.runningEntryMethod is not None:
                     self.mainchareEmStack.append(self.runningEntryMethod)
@@ -196,7 +213,7 @@ class Charm(object):
                 em.startMeasuringTime()
             em.run(obj, header, args)  # now call the user's __init__
             self.groups[gid] = obj
-            if Options.PROFILING:
+            if self.options.profiling:
                 em.stopMeasuringTime()
                 if len(self.mainchareEmStack) > 0:
                     self.mainchareEmStack.pop().startMeasuringTime()
@@ -214,7 +231,7 @@ class Charm(object):
             em = self.entryMethods[ep]
             assert em.isCtor, "Specified array entry method not constructor"
             header, args = self.unpackMsg(msg, dcopy_start, None)
-            if Options.PROFILING:
+            if self.options.profiling:
                 self.activeChares.add((em.C, Array))
                 em.addRecvTime(time.time() - t0)
             if isinstance(args, Chare):  # obj migrating in
@@ -230,13 +247,13 @@ class Charm(object):
                     Array.initMember(obj, aid, index)
                 self.mainThreadEntryMethod = em
                 super(em.C, obj).__init__()  # call Chare class __init__ first
-                if Options.PROFILING:
+                if self.options.profiling:
                     if self.runningEntryMethod is not None:
                         self.mainchareEmStack.append(self.runningEntryMethod)
                         self.runningEntryMethod.stopMeasuringTime()
                     em.startMeasuringTime()
                 em.run(obj, header, args)  # now call the user's array element __init__
-                if Options.PROFILING:
+                if self.options.profiling:
                     em.stopMeasuringTime()
                     if len(self.mainchareEmStack) > 0:
                         self.mainchareEmStack.pop().startMeasuringTime()
@@ -320,8 +337,8 @@ class Charm(object):
                     dcopy_size += nbytes
                 if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
             msg = (header, args)
-            msg = cPickle.dumps(msg, Options.PICKLE_PROTOCOL)
-        if Options.PROFILING: self.recordSend(len(msg) + dcopy_size)
+            msg = cPickle.dumps(msg, self.options.pickle_protocol)
+        if self.options.profiling: self.recordSend(len(msg) + dcopy_size)
         return (msg, direct_copy_buffers)
 
     # register class C in Charm
@@ -370,7 +387,7 @@ class Charm(object):
         if self.myPe() != 0:
             self.lib.CkRegisterReadonly(b"python_null", b"python_null", None)
 
-        if (self.myPe() == 0) and (not Options.QUIET):
+        if (self.myPe() == 0) and (not self.options.quiet):
             import platform
             from . import charm4py_version
             out_msg = ("charm4py> Running Charm4py version " + charm4py_version +
@@ -397,7 +414,7 @@ class Charm(object):
                 entry_method.threaded(C.__init__)
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-        ems = [entry_method.EntryMethod(C, m, profile=Options.PROFILING)
+        ems = [entry_method.EntryMethod(C, m, profile=self.options.profiling)
                                      for m in charm_type.__baseEntryMethods__()]
         self.classEntryMethods[charm_type_id][C] = ems
         for m in dir(C):
@@ -411,7 +428,7 @@ class Charm(object):
             if m in chare.method_restrictions['non_entry_method']:
                 continue
             # print(m)
-            em = entry_method.EntryMethod(C, m, profile=Options.PROFILING)
+            em = entry_method.EntryMethod(C, m, profile=self.options.profiling)
             self.classEntryMethods[charm_type_id][C].append(em)
         self.registered[C].add(charm_type)
 
@@ -465,6 +482,9 @@ class Charm(object):
                      arguments are passed to this method.
         """
 
+        # TODO: remove in a future release
+        self.options.check_deprecated()
+
         if interactive:
             from .interactive import InteractiveConsole as entry
             self.origStdinFd = os.dup(0)
@@ -476,10 +496,12 @@ class Charm(object):
             raise Charm4PyError("charm.start() can only be called once")
         self.started = True
 
-        if Options.PROFILING:
+        if self.options.profiling:
             self.contribute = profile_send_function(self.contribute)
-        if "++quiet" in sys.argv:
-            Options.QUIET = True
+        if self.options.quiet and '++quiet' not in sys.argv:
+            sys.argv += ['++quiet']
+        elif '++quiet' in sys.argv:
+            self.options.quiet = True
 
         self._registerInternalChares()
 
@@ -530,7 +552,7 @@ class Charm(object):
         obj = self.arrays[aid].pop(index)
         self.threadMgr.objMigrating(obj)
         del obj._contributeInfo  # don't want to pickle this
-        pickled_chare = cPickle.dumps(({}, obj), Options.PICKLE_PROTOCOL)
+        pickled_chare = cPickle.dumps(({}, obj), self.options.pickle_protocol)
         # facilitate garbage collection (especially by removing cyclical references)
         del obj._local
         del obj._local_free_head
@@ -547,7 +569,7 @@ class Charm(object):
             fid = target.fid
             target = target.getTargetProxyEntryMethod()
         contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
-        if Options.PROFILING:
+        if self.options.profiling:
             self.recordSend(contributeInfo.getDataSize())
         target.__self__.ckContribute(contributeInfo)
 
@@ -604,7 +626,7 @@ class Charm(object):
     def printStats(self):
         if not self.started:
             raise Charm4PyError('charm was not started')
-        if not Options.PROFILING:
+        if not self.options.profiling:
             print('NOTE: called charm.printStats() but profiling is disabled')
             return
 
@@ -765,7 +787,7 @@ def load_charm_library(charm):
         else:
             # for PyPy we require the cffi interface (cffi comes builtin in PyPy)
             from .charmlib.charmlib_cffi import CharmLib
-    return CharmLib(charm, Options, libcharm_path)
+    return CharmLib(charm, charm.options, libcharm_path)
 
 
 def profile_send_function(func):

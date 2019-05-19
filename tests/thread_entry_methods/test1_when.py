@@ -2,8 +2,7 @@ from charm4py import charm, Chare, Array, Group, threaded, when, Reducer
 from charm4py import readonlies as ro
 import time
 
-from charm4py import Options
-Options.PROFILING = True
+charm.options.profiling = True
 
 ITERATIONS = 30
 

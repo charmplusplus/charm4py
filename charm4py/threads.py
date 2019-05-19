@@ -104,7 +104,7 @@ class EntryMethodThreadManager(object):
     """ Creates and manages entry method threads """
 
     def __init__(self):
-        self.PROFILING = Options.PROFILING
+        self.PROFILING = Options.profiling
         self.main_thread_id = get_ident()    # ID of the charm4py process main thread
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
@@ -292,7 +292,7 @@ class EntryMethodThreadManager(object):
 charm, Options, Charm4PyError = None, None, None
 
 def charmStarting():
-    from .charm import charm, Options, Charm4PyError
+    from .charm import charm, Charm4PyError
     globals()['charm'] = charm
-    globals()['Options'] = Options
+    globals()['Options'] = charm.options
     globals()['Charm4PyError'] = Charm4PyError
