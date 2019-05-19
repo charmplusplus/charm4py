@@ -1,8 +1,7 @@
 from charm4py import charm, Chare, Array
 from charm4py import readonlies as ro
 
-from charm4py import Options
-Options.PROFILING = True
+charm.options.profiling = True
 
 NUM_ITER = 1000
 CHARES_PER_PE = 8

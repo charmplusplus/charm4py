@@ -3,8 +3,7 @@ from charm4py import readonlies as ro
 import random
 import time
 
-from charm4py import Options
-Options.PROFILING = True
+charm.options.profiling = True
 
 X, Y, Z = 3, 7, 11
 WORKER_ITERS = 10

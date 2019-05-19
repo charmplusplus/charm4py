@@ -39,7 +39,7 @@ class Chare(object):
         # can be in non-consecutive positions, and the indexes of free slots are stored
         # as a linked list inside _local, with _local_free_head being the index of the
         # first free slot, _local[_local_free_head] is the index of next free slot and so on
-        self._local = [i for i in range(1, Options.LOCAL_MSG_BUF_SIZE + 1)]
+        self._local = [i for i in range(1, Options.local_msg_buf_size + 1)]
         self._local[-1] = None
         self._local_free_head = 0
         # stores condition objects which group all elements waiting on same condition string
@@ -183,7 +183,7 @@ def mainchare_proxy_method_gen(ep):  # decorator, generates proxy entry methods
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.createFuture()
         destObj = None
-        if Options.LOCAL_MSG_OPTIM and (cid in charm.chares) and (len(args) > 0):
+        if Options.local_msg_optim and (cid in charm.chares) and (len(args) > 0):
             destObj = charm.chares[cid]
         msg = charm.packMsg(destObj, args, header)
         charm.CkChareSend(cid, ep, msg)
@@ -215,7 +215,7 @@ class Mainchare(object):
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            if Options.PROFILING:
+            if Options.profiling:
                 f = profile_send_function(mainchare_proxy_method_gen(m.epIdx))
             else:
                 f = mainchare_proxy_method_gen(m.epIdx)
@@ -261,7 +261,7 @@ def group_proxy_method_gen(ep):  # decorator, generates proxy entry methods
             if elemIdx == -1:
                 header[b'bcast'] = True
         destObj = None
-        if Options.LOCAL_MSG_OPTIM and (elemIdx == charm._myPe) and (len(args) > 0):
+        if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
             destObj = charm.groups[proxy.gid]
         msg = charm.packMsg(destObj, args, header)
         charm.CkGroupSend(proxy.gid, elemIdx, ep, msg)
@@ -320,7 +320,7 @@ class Group(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            if Options.PROFILING:
+            if Options.profiling:
                 f = profile_send_function(group_proxy_method_gen(m.epIdx))
             else:
                 f = group_proxy_method_gen(m.epIdx)
@@ -372,7 +372,7 @@ def array_proxy_method_gen(ep):  # decorator, generates proxy entry methods
             if elemIdx == ():
                 header[b'bcast'] = True
         destObj = None
-        if Options.LOCAL_MSG_OPTIM and (len(args) > 0):
+        if Options.local_msg_optim and (len(args) > 0):
             array = charm.arrays[proxy.aid]
             if elemIdx in array:
                 destObj = array[elemIdx]
@@ -467,7 +467,7 @@ class Array(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            if Options.PROFILING:
+            if Options.profiling:
                 f = profile_send_function(array_proxy_method_gen(m.epIdx))
             else:
                 f = array_proxy_method_gen(m.epIdx)
@@ -500,9 +500,9 @@ for i in CHARM_TYPES:
 charm, Options, Charm4PyError, profile_send_function = None, None, None, None
 
 def charmStarting():
-    from .charm import charm, Options, Charm4PyError, profile_send_function
+    from .charm import charm, Charm4PyError, profile_send_function
     globals()['charm'] = charm
     globals()['Reducer'] = charm.reducers
-    globals()['Options'] = Options
+    globals()['Options'] = charm.options
     globals()['Charm4PyError'] = Charm4PyError
     globals()['profile_send_function'] = profile_send_function

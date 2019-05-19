@@ -232,5 +232,5 @@ class ReductionManager(object):
                 data = pyReducer.preprocess(data, contributor)
             rednMsg = ({b"custom_reducer": pyReducer.__name__}, [data])
             # data for custom reducers is a custom reduction msg
-            data = cPickle.dumps(rednMsg, self.charm.opts.PICKLE_PROTOCOL)
+            data = cPickle.dumps(rednMsg, self.charm.options.pickle_protocol)
             return (self.charm.ReducerType.external_py, data, C_CHAR)

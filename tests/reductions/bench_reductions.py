@@ -4,7 +4,7 @@ from charm4py import readonlies as ro
 import time
 import numpy
 
-charm4py.Options.PROFILING = True
+charm.options.profiling = True
 
 CHARES_PER_PE = 8
 NUM_ITER = 5000

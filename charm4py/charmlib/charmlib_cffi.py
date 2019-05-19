@@ -137,7 +137,7 @@ class CharmLib(object):
   def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
@@ -149,7 +149,7 @@ class CharmLib(object):
   def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
@@ -161,7 +161,7 @@ class CharmLib(object):
   def recvGroupMsg_py2(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
@@ -172,7 +172,7 @@ class CharmLib(object):
   def recvGroupMsg_py3(gid, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
@@ -183,7 +183,7 @@ class CharmLib(object):
   def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
@@ -195,7 +195,7 @@ class CharmLib(object):
   def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
@@ -375,14 +375,14 @@ class CharmLib(object):
   @ffi.def_extern()
   def arrayElemLeave(aid, ndims, arrayIndex, pdata, sizing):
     try:
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.options.profiling: t0 = time.time()
       if sizing:
         arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
         CharmLib.tempData = charm.arrayElemLeave(aid, arrIndex)
         pdata[0] = ffi.NULL
       else:
         pdata[0] = ffi.from_buffer(CharmLib.tempData)
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         global times
         times[2] += (time.time() - t0)
       return len(CharmLib.tempData)
@@ -393,7 +393,7 @@ class CharmLib(object):
   def arrayElemJoin_py2(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
@@ -405,7 +405,7 @@ class CharmLib(object):
   def arrayElemJoin_py3(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       t0 = None
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         t0 = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
@@ -445,7 +445,7 @@ class CharmLib(object):
   @ffi.def_extern()
   def createCallbackMsg_py2(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.options.profiling: t0 = time.time()
 
       if reducerType < 0 and data == ffi.NULL:
         if fid > 0:
@@ -453,7 +453,7 @@ class CharmLib(object):
         else:
           msg = ({}, [])
         # save msg, else it might be deleted before returning control to libcharm
-        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
@@ -478,7 +478,7 @@ class CharmLib(object):
 
         msg = (header, pyData)
         # save msg, else it might be deleted before returning control to libcharm
-        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
@@ -491,7 +491,7 @@ class CharmLib(object):
         # a more efficient solution
         header, args = cPickle.loads(ffi.buffer(data, dataSize)[:])
         args.insert(0, fid)
-        CharmLib.tempData = cPickle.dumps((header,args), charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps((header,args), charm.options.pickle_protocol)
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
       else:
@@ -499,7 +499,7 @@ class CharmLib(object):
         returnBuffers[0]     = data
         returnBufferSizes[0] = dataSize
 
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         global times
         times[0] += (time.time() - t0)
 
@@ -509,7 +509,7 @@ class CharmLib(object):
   @ffi.def_extern()
   def createCallbackMsg_py3(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
     try:
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.options.profiling: t0 = time.time()
 
       if reducerType < 0 and data == ffi.NULL:
         if fid > 0:
@@ -517,7 +517,7 @@ class CharmLib(object):
         else:
           msg = ({}, [])
         # save msg, else it might be deleted before returning control to libcharm
-        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
@@ -544,7 +544,7 @@ class CharmLib(object):
 
         msg = (header, pyData)
         # save msg, else it might be deleted before returning control to libcharm
-        CharmLib.tempData = cPickle.dumps(msg, charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
@@ -557,7 +557,7 @@ class CharmLib(object):
         # a more efficient solution
         header, args = cPickle.loads(ffi.buffer(data, dataSize))
         args.insert(0, fid)
-        CharmLib.tempData = cPickle.dumps((header,args), charm.opts.PICKLE_PROTOCOL)
+        CharmLib.tempData = cPickle.dumps((header,args), charm.options.pickle_protocol)
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
       else:
@@ -565,7 +565,7 @@ class CharmLib(object):
         returnBuffers[0]     = data
         returnBufferSizes[0] = dataSize
 
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         global times
         times[0] += (time.time() - t0)
 
@@ -576,12 +576,12 @@ class CharmLib(object):
   @ffi.def_extern()
   def pyReduction_py2(msgs, msgSizes, nMsgs, returnBuffer):
     try:
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.options.profiling: t0 = time.time()
       contribs = []
       currentReducer = None
       for i in range(nMsgs):
         msgSize = msgSizes[i]
-        if charm.opts.PROFILING: charm.recordReceive(msgSize)
+        if charm.options.profiling: charm.recordReceive(msgSize)
         if msgSize > 0:
           header, args = cPickle.loads(ffi.buffer(msgs[i], msgSize)[:])
           customReducer = header[b"custom_reducer"]
@@ -592,10 +592,10 @@ class CharmLib(object):
 
       reductionResult = getattr(charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
-      CharmLib.tempData = cPickle.dumps(rednMsg, charm.opts.PICKLE_PROTOCOL)
+      CharmLib.tempData = cPickle.dumps(rednMsg, charm.options.pickle_protocol)
       returnBuffer[0] = ffi.from_buffer(CharmLib.tempData)
 
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         global times
         times[1] += (time.time() - t0)
 
@@ -607,12 +607,12 @@ class CharmLib(object):
   @ffi.def_extern()
   def pyReduction_py3(msgs, msgSizes, nMsgs, returnBuffer):
     try:
-      if charm.opts.PROFILING: t0 = time.time()
+      if charm.options.profiling: t0 = time.time()
       contribs = []
       currentReducer = None
       for i in range(nMsgs):
         msgSize = msgSizes[i]
-        if charm.opts.PROFILING: charm.recordReceive(msgSize)
+        if charm.options.profiling: charm.recordReceive(msgSize)
         if msgSize > 0:
           header, args = cPickle.loads(ffi.buffer(msgs[i], msgSize))
           customReducer = header[b"custom_reducer"]
@@ -623,10 +623,10 @@ class CharmLib(object):
 
       reductionResult = getattr(charm.reducers, currentReducer)(contribs)
       rednMsg = ({b"custom_reducer": currentReducer}, [reductionResult])
-      CharmLib.tempData = cPickle.dumps(rednMsg, charm.opts.PICKLE_PROTOCOL)
+      CharmLib.tempData = cPickle.dumps(rednMsg, charm.options.pickle_protocol)
       returnBuffer[0] = ffi.from_buffer(CharmLib.tempData)
 
-      if charm.opts.PROFILING:
+      if charm.options.profiling:
         global times
         times[1] += (time.time() - t0)
 

@@ -7,12 +7,13 @@ import numpy
 from numpy.testing import assert_allclose
 from collections import defaultdict
 
-charm4py.Options.PROFILING = True
-charm4py.Options.LOCAL_MSG_OPTIM = False
+charm.options.profiling = True
+charm.options.local_msg_optim = False
 
 MAX_ITER = 50
 DATA_LEN = 15000        # number of doubles
 CHARES_PER_PE = 10
+
 
 class Main(Chare):
 
