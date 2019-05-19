@@ -44,7 +44,7 @@ class Options(object):
         return output
 
     def check_deprecated(self):
-        old_options = {'profiling', 'pickle_protocol', 'LOCAL_MSG_OPTIM',
+        old_options = {'PROFILING', 'PICKLE_PROTOCOL', 'LOCAL_MSG_OPTIM',
                        'LOCAL_MSG_BUF_SIZE', 'AUTO_FLUSH_WAIT_QUEUES', 'QUIET'}
         if len(old_options.intersection(set(dir(self.__class__)))) != 0:
             raise Charm4PyError('Options API has changed. Use charm.options instead')
@@ -95,9 +95,6 @@ class Charm(object):
         self.options.local_msg_buf_size = 50
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
-        self.options.interactive = Options()
-        self.options.interactive.verbose = 1
-        self.options.interactive.broadcast_imports = True
 
         if 'OMPI_COMM_WORLD_SIZE' in os.environ:
             # this is needed for OpenMPI, see:
