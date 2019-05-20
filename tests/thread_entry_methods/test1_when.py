@@ -1,5 +1,4 @@
 from charm4py import charm, Chare, Array, Group, threaded, when, Reducer
-from charm4py import readonlies as ro
 import time
 
 charm.options.profiling = True
@@ -18,19 +17,19 @@ class Test(Chare):
     @threaded
     def start(self, pes):
         for j in range(ITERATIONS):
-            for i in range(ro.numChares):
+            for i in range(numChares):
                 x = self.thisProxy[i].getVal(j, ret=True).get()
                 assert x == 53 * i * (73 + pes[i]) * j
 
         self.contribute(None, None, self.thisProxy[0].done)
 
     @threaded
-    @when("self.iteration == iteration")
+    @when('self.iteration == iteration')
     def getVal(self, iteration):
-        result = 53 * ro.testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0] * self.iteration
+        result = 53 * testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0] * self.iteration
         #assert result == 53 * (73 + charm.myPe()) * self.thisIndex[0] * self.iteration
         self.msgsRcvd += 1
-        if self.msgsRcvd == ro.numChares:
+        if self.msgsRcvd == numChares:
             self.msgsRcvd = 0
             self.iteration += 1
         return result
@@ -42,13 +41,16 @@ class Test(Chare):
 
 class Test2(Chare):
 
-    def getVal(self): return (73 + charm.myPe())
+    def getVal(self):
+        return (73 + charm.myPe())
 
 
 def main(args):
-    ro.numChares = min(charm.numPes() * 8, 32)
-    ro.testGroup = Group(Test2)
-    Array(Test, ro.numChares)
+    numChares = min(charm.numPes() * 8, 32)
+    testGroup = Group(Test2)
+    charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},
+                                  '__main__', ret=True).get()
+    Array(Test, numChares)
 
 
 charm.start(main)

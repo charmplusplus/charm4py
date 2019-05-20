@@ -12,18 +12,20 @@ TEST_GLOBAL = 33
 
 class Worker(Chare):
 
+    def __init__(self, main):
+        self.main = main
+
     def sendVal(self):
-        ro.main.collectResult(237, self.thisIndex[0] % 2)
+        self.main.collectResult(237, self.thisIndex[0] % 2)
 
 
 class Main(Chare):
 
     def __init__(self, args):
-        ro.main = self.thisProxy
         ro.X = 47
         num_chares = min(charm.numPes() * CHARES_PER_PE, MAX_CHARES)
         assert num_chares % 2 == 0
-        workers = Array(Worker, num_chares)
+        workers = Array(Worker, num_chares, args=[self.thisProxy])
         self.num_responses1 = self.num_responses2 = 0
         self.result = 0
         for i in range(NUM_ITER):

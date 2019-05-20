@@ -1,5 +1,4 @@
 from charm4py import charm, Chare, Array, Reducer
-from charm4py import readonlies as ro
 import time
 import array
 import numpy
@@ -17,28 +16,29 @@ CHARES_PER_PE = 10
 class Main(Chare):
 
     def __init__(self, args):
-        ro.mainProxy = self.thisProxy
-        ro.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
+        charm.thisProxy.updateGlobals({'mainProxy' : self.thisProxy}, '__main__', ret=True).get()
+        self.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
 
     def start(self):
         self.iterations = 0
         self.startTime = time.time()
-        ro.testProxy.doIteration()
+        self.testProxy.doIteration()
 
     def iterationComplete(self):
-        if self.iterations % 10 == 0: print("Iteration", self.iterations, "complete")
+        if self.iterations % 10 == 0:
+            print('Iteration', self.iterations, 'complete')
         self.iterations += 1
         if self.iterations == MAX_ITER:
-            print("Program done. Total time =", time.time() - self.startTime)
+            print('Program done. Total time =', time.time() - self.startTime)
             charm.printStats()
             exit()
         else:
-            ro.testProxy.doIteration()
+            self.testProxy.doIteration()
 
 
 class Test(Chare):
-    def __init__(self):
 
+    def __init__(self):
         self.x = numpy.arange(DATA_LEN, dtype='float64')
         y = self.x * (self.thisIndex[0] + 1)
 
@@ -59,14 +59,13 @@ class Test(Chare):
         nb1 = self.thisProxy[loc[(myPe - 1) % charm.numPes()][myPos]]
         nb2 = self.thisProxy[loc[(myPe + 1) % charm.numPes()][myPos]]
         self.nbs = [nb1, nb2, self.thisProxy[self.thisIndex]]
-        self.contribute(None, None, ro.mainProxy.start)
+        self.contribute(None, None, mainProxy.start)
 
     def doIteration(self):
         for nb in self.nbs:
             nb.recvData(self.thisIndex, self.S1, self.S2, self.S3)
 
     def recvData(self, src, d1, d2, d3):
-
         self.msgsRcvd += 1
 
         desired = self.x * (src[0] + 1)
@@ -81,7 +80,7 @@ class Test(Chare):
 
         if self.msgsRcvd == 3:
             self.msgsRcvd = 0
-            self.contribute(None, None, ro.mainProxy.iterationComplete)
+            self.contribute(None, None, mainProxy.iterationComplete)
 
 
 charm.start(Main)
