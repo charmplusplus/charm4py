@@ -39,7 +39,6 @@ class HelloGroup(Chare):
 
 
 def main(args):
-
     if len(args) <= 1:
         args = [None, 3, 2]  # default: 3 dimensions of size 2 each
     elif len(args) != 3:

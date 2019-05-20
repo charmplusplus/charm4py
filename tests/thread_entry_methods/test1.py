@@ -40,7 +40,8 @@ def main(args):
     # every chare sends to every other so don't want a ton of chares
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)
-    charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup}, '__main__', ret=True).get()
+    charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},
+                                  '__main__', ret=True).get()
     Array(Test, numChares)
 
 

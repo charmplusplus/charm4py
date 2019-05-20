@@ -4,7 +4,7 @@ import math
 
 MAX_ITER = 100
 all_created = False
-arrayElemHomeMap = {} # array elem index -> original pe
+arrayElemHomeMap = {}  # array elem index -> original pe
 
 
 class Test(Chare):

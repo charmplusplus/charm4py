@@ -5,7 +5,6 @@ import itertools
 class Main(Chare):
 
     def __init__(self, args):
-
         if len(args) <= 1:
             args = [None,2,3]  # default: 2 dimensions of size 3
         elif len(args) != 3:

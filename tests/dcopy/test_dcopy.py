@@ -9,7 +9,7 @@ charm.options.profiling = True
 charm.options.local_msg_optim = False
 
 MAX_ITER = 50
-DATA_LEN = 15000        # number of doubles
+DATA_LEN = 15000  # number of doubles
 CHARES_PER_PE = 10
 
 
@@ -52,7 +52,8 @@ class Test(Chare):
 
     def recvLocations(self, locations):
         loc = defaultdict(list)
-        for chare_idx, pe in enumerate(locations): loc[pe].append(chare_idx)
+        for chare_idx, pe in enumerate(locations):
+            loc[pe].append(chare_idx)
         myPe = charm.myPe()
         myPos = loc[myPe].index(self.thisIndex[0])
         # i-th chare in a PE sends to i-th chare in PE-1 and PE+1 and to itself
