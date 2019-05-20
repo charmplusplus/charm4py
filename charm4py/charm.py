@@ -121,6 +121,7 @@ class Charm(object):
         # store chare types defined after program start and other objects created
         # in interactive mode
         self.dynamic_register = {}
+        self.lb_requested = False
 
     def handleGeneralError(self):
         import traceback
@@ -546,6 +547,7 @@ class Charm(object):
         self.threadMgr = threads.EntryMethodThreadManager()
         self.createFuture = self.threadMgr.createFuture
 
+        self.lb_requested = '+balancer' in sys.argv
         self.lib.start()
 
     def arrayElemLeave(self, aid, index):
@@ -744,6 +746,20 @@ class CharmRemote(Chare):
 
     def myPe(self):
         return charm.myPe()
+
+    # user signature is: `def updateGlobals(self, global_dict, module_name='__main__')`
+    def updateGlobals(self, *args):
+        global_dict = {}
+        module_name = args[-1]
+        for i in range(0, len(args) - 1, 2):
+            global_dict[args[i]] = args[i + 1]
+
+        # TODO remove this warning and related code when the new lb framework is merged
+        if charm.myPe() == 0 and charm.lb_requested:
+            print('WARNING> updateGlobals with load balancing enabled can lead to unexpected behavior '
+                  'due to a bug in Charm++ load balancing. This will be fixed in an upcoming release.')
+            charm.lb_requested = False
+        sys.modules[module_name].__dict__.update(global_dict)
 
     def printStats(self):
         charm.printStats()

@@ -1,5 +1,4 @@
 from charm4py import charm, Chare, Array, when
-from charm4py import readonlies as ro
 import random
 import time
 
@@ -12,10 +11,11 @@ NUM_ITERS = 30
 MAX_CHARES = 128
 TEST_WHEN_GLOBAL = 33
 
+
 class Worker(Chare):
 
     def __init__(self, controller):
-        self.ready      = True
+        self.ready = True
         self.controller = controller
 
     @when("self.ready and (TEST_WHEN_GLOBAL == 33)")
@@ -42,16 +42,20 @@ class Controller(Chare):
     def __init__(self):
         self.tasks_completed = 0
         self.iteration = 0
+
+    def start(self, workers, num_workers):
+        self.workers = workers
+        self.num_workers = num_workers
         self.thisProxy.sendWork()
 
     def sendWork(self):
-        for i in range(ro.num_workers):
+        for i in range(self.num_workers):
             for _ in range(TASKS_PER_WORKER):
-                ro.workers[i].startWork(X, Y, Z)
+                self.workers[i].startWork(X, Y, Z)
 
     def taskDone(self):
         self.tasks_completed += 1
-        if self.tasks_completed == ro.num_workers * TASKS_PER_WORKER:
+        if self.tasks_completed == self.num_workers * TASKS_PER_WORKER:
             self.tasks_completed = 0
             self.iteration += 1
             if self.iteration == NUM_ITERS:
@@ -62,9 +66,10 @@ class Controller(Chare):
 
 
 def main(args):
-    ro.num_workers = min(charm.numPes() * 8, MAX_CHARES)
+    num_workers = min(charm.numPes() * 8, MAX_CHARES)
     controller = Chare(Controller, onPE=0)
-    ro.workers = Array(Worker, ro.num_workers, args=[controller])
+    workers = Array(Worker, num_workers, args=[controller])
+    controller.start(workers, num_workers)
 
 
 charm.start(main)

@@ -1,12 +1,12 @@
 from charm4py import charm, Chare, Group, when
-from charm4py import readonlies as ro
 
 GRP_TO_SEND = 20
 
 
 class Test(Chare):
 
-    def __init__(self):
+    def __init__(self, numParticipants):
+        self.numParticipants = numParticipants
         self.msgsRcvd = 0   # for PE 0
         self.current  = 1   # for PE 0
         self.msgsSent = 0   # for PEs != 0
@@ -20,11 +20,11 @@ class Test(Chare):
         if self.msgsRcvd >= GRP_TO_SEND:
             self.msgsRcvd = 0
             self.current += 1
-            if self.current > ro.numParticipants:
+            if self.current > self.numParticipants:
                 exit()
 
     def run(self):
-        if charm.myPe() == 0 or charm.myPe() > ro.numParticipants: return
+        if charm.myPe() == 0 or charm.myPe() > self.numParticipants: return
         #print("Group " + str(self.thisIndex) + " sending msg " + str(self.msgsSent))
         self.thisProxy[0].testWhen(charm.myPe(), "hi")
         self.msgsSent += 1
@@ -35,8 +35,8 @@ class Test(Chare):
 def main(args):
     if charm.numPes() < 3:
         charm.abort("Run program with at least 3 PEs")
-    ro.numParticipants = min(charm.numPes()-1, 31)
-    Group(Test).run()
+    numParticipants = min(charm.numPes()-1, 31)
+    Group(Test, args=[numParticipants]).run()
 
 
 charm.start(main)

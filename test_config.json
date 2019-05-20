@@ -4,6 +4,9 @@
         "path": "tests/entry_methods/entrymethod_args_kwargs.py"
     },
     {
+        "path": "tests/entry_methods/bcast_globals.py"
+    },
+    {
         "force_min_processes": 4,
         "path": "tests/pool/pool.py"
     },

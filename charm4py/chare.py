@@ -309,6 +309,35 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
     proxy_entry_method.ep = ep
     return proxy_entry_method
 
+def update_globals_proxy_method_gen(ep):
+    def proxy_entry_method(proxy, *args, **kwargs):
+        new_args = []
+        for varname, var in args[0].items():
+            new_args.append(varname)
+            new_args.append(var)
+        if len(args) >= 2:
+            new_args.append(args[1])
+        elif 'module_name' in kwargs:
+            new_args.append(kwargs['module_name'])
+        else:
+            new_args.append('__main__')  # default value for 'module_name' parameter
+        args = new_args
+        header = {}
+        blockFuture = None
+        elemIdx = proxy.elemIdx
+        if 'ret' in kwargs and kwargs['ret']:
+            header[b'block'] = blockFuture = charm.createFuture()
+            if elemIdx == -1:
+                header[b'bcast'] = True
+        destObj = None
+        if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
+            destObj = charm.groups[proxy.gid]
+        msg = charm.packMsg(destObj, args, header)
+        charm.CkGroupSend(proxy.gid, elemIdx, ep, msg)
+        return blockFuture
+    proxy_entry_method.ep = ep
+    return proxy_entry_method
+
 def group_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def group_ckNew(cls, args):
@@ -360,11 +389,17 @@ class Group(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
-            argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
-            if Options.profiling:
-                f = profile_send_function(group_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
+            if m.name == 'updateGlobals' and cls == CharmRemote:
+                if Options.profiling:
+                    f = profile_send_function(update_globals_proxy_method_gen(m.epIdx))
+                else:
+                    f = update_globals_proxy_method_gen(m.epIdx)
             else:
-                f = group_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
+                argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
+                if Options.profiling:
+                    f = profile_send_function(group_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
+                else:
+                    f = group_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
@@ -556,9 +591,10 @@ for i in CHARM_TYPES:
 charm, Options, Charm4PyError, profile_send_function = None, None, None, None
 
 def charmStarting():
-    from .charm import charm, Charm4PyError, profile_send_function
+    from .charm import charm, Charm4PyError, CharmRemote, profile_send_function
     globals()['charm'] = charm
     globals()['Reducer'] = charm.reducers
     globals()['Options'] = charm.options
     globals()['Charm4PyError'] = Charm4PyError
+    globals()['CharmRemote'] = CharmRemote
     globals()['profile_send_function'] = profile_send_function
