@@ -50,7 +50,7 @@ def main(args):
     firstIdx = [0] * nDims
     lastIdx = tuple([x-1 for x in ARRAY_SIZE])
     myglobals = {'nDims': nDims, 'ARRAY_SIZE': ARRAY_SIZE, 'firstIdx': firstIdx, 'lastIdx': lastIdx}
-    charm.thisProxy.updateGlobals(myglobals, module_name='__main__', ret=True).get()
+    charm.thisProxy.updateGlobals(myglobals, module_name=__name__, ret=True).get()
 
     nElements = 1
     for x in ARRAY_SIZE:
@@ -59,7 +59,7 @@ def main(args):
     arrProxy = Array(Hello, ARRAY_SIZE, args=[1, 'test', [4.2, -9]])
     grpProxy = Group(HelloGroup, args=[1, 'test', [4.2, -9], numpy.full((3,5), 4.2)])
 
-    charm.thisProxy.updateGlobals({'grpProxy': grpProxy}, ret=True).get()
+    charm.thisProxy.updateGlobals({'grpProxy': grpProxy}, module_name=__name__, ret=True).get()
     arrProxy[firstIdx].SayHi(17)
 
 
