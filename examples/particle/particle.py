@@ -110,10 +110,14 @@ class Cell(Chare):
 
 
 def main(args):
-    if len(args) == 3:
+    if len(args) >= 3:
         arrayDims = (int(args[1]), int(args[2]))
     else:
         arrayDims = (6, 3)  # default: 2D chare array of 6x3 cells
+    if len(args) == 4:
+        MAX_START_PARTICLES_PER_CELL = int(args[3])
+        charm.thisProxy.updateGlobals({'MAX_START_PARTICLES_PER_CELL': MAX_START_PARTICLES_PER_CELL},
+                                      __name__, ret=True).get()
     cellSize = (SIM_BOX_SIZE / arrayDims[0], SIM_BOX_SIZE / arrayDims[1])
 
     # create 2D Cell chare array and start simulation

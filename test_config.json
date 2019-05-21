@@ -151,7 +151,7 @@
     },
     {
         "path": "examples/particle/particle.py",
-        "args": "+balancer GreedyRefineLB"
+        "args": "6 3 2500 +balancer GreedyRefineLB"
     },
     {
         "condition": "not numbaInstalled",
