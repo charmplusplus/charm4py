@@ -76,6 +76,8 @@ for test in tests:
         for version, python in sorted(python_implementations):
             if version not in supported_py_versions[interface]:
                 continue
+            if version < test.get('requires_py_version', -1):
+                continue
             additionalArgs = []
             if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
                 additionalArgs.append('++quiet')
