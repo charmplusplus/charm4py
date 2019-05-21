@@ -470,7 +470,7 @@ class CharmLib(object):
           else:
             if haveNumpy:
               dt = charm.redMgr.rev_np_array_type_map[ctype]
-              a = numpy.fromstring(ffi.buffer(data, dataSize)[:], dtype=numpy.dtype(dt))
+              a = numpy.frombuffer(ffi.buffer(data, dataSize)[:], dtype=numpy.dtype(dt))
             else:
               array_typecode = charm.redMgr.rev_array_type_map[ctype]
               a = array.array(array_typecode, ffi.buffer(data, dataSize)[:])

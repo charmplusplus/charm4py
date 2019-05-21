@@ -71,7 +71,7 @@ class Test(Chare):
 
         desired = self.x * (src[0] + 1)
 
-        v1 = numpy.fromstring(d1, dtype='float64')
+        v1 = numpy.frombuffer(d1, dtype='float64')
         assert_allclose(v1, desired, atol=1e-07)
 
         v2 = numpy.array(d2, dtype='float64')

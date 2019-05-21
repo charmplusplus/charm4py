@@ -458,7 +458,7 @@ class CharmLib(object):
             data = ctypes.cast(data, POINTER(dataType * numElems)).contents
             if haveNumpy:
               dt = self.charm.redMgr.rev_np_array_type_map[ctype]
-              a = numpy.fromstring(data, dtype=numpy.dtype(dt))
+              a = numpy.frombuffer(data, dtype=numpy.dtype(dt))
             else:
               array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
               a = array.array(array_typecode, data)
