@@ -1,5 +1,13 @@
 [
     {
+        "force_min_processes": 4,
+        "path": "tests/entry_methods/array_element_proxy.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/entry_methods/group_element_proxy.py"
+    },
+    {
         "force_min_processes": 2,
         "path": "tests/entry_methods/entrymethod_args_kwargs.py"
     },
@@ -59,14 +67,6 @@
     {
         "force_min_processes": 4,
         "path": "tests/callbacks/callbacks.py"
-    },
-    {
-        "force_min_processes": 4,
-        "path": "tests/element_proxy/array_element_proxy.py"
-    },
-    {
-        "force_min_processes": 4,
-        "path": "tests/element_proxy/group_element_proxy.py"
     },
     {
         "force_min_processes": 4,
