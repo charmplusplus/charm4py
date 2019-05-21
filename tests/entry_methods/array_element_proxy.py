@@ -27,10 +27,6 @@ class Test(Chare):
             exit()
 
     def start(self):
-        """
-        Method which contains the started code.
-        """
-
         proxy = self.thisProxy[3]
         proxy.say("bye")
         proxy.say("bye")
