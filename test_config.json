@@ -24,7 +24,8 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/charm_remote.py"
+        "path": "tests/charm_remote.py",
+        "requires_py_version": 3
     },
     {
         "force_min_processes": 4,
