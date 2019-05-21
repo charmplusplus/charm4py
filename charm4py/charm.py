@@ -761,7 +761,7 @@ class CharmRemote(Chare):
             charm.lb_requested = False
         sys.modules[module_name].__dict__.update(global_dict)
 
-    def exec(self, code, module_name='__main__'):
+    def rexec(self, code, module_name='__main__'):
         exec(code, sys.modules[module_name].__dict__)
 
     def eval(self, expression, module_name='__main__'):
