@@ -17,7 +17,6 @@ def nodelist_islocal(filename, regexp):
 
 
 def checkNodeListLocal(args):
-
     import re
     regexp = re.compile("^\s*host\s+(\S+)\s*$")
 
@@ -50,19 +49,11 @@ def start(args=[]):
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
         args.append('++local')
 
-    try:
-        idx = args.index('++interactive')
-        args[idx] = '-c'
-        if os.name == 'nt':
-            # workaround for how windows charmrun executable passes argument
-            args.insert(idx + 1, '\"from charm4py import charm ; charm.start(interactive=True)\"')
-        else:
-            args.insert(idx + 1, 'from charm4py import charm ; charm.start(interactive=True)')
-    except ValueError:
-        pass
+    if '++interactive' in args and 'charm4py.interactive' not in args:
+        args += ['-m', 'charm4py.interactive']
 
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
-    cmd.append(sys.executable)
+    cmd.append(sys.executable)  # for example: /usr/bin/python3
     cmd.extend(args)
     try:
         return subprocess.call(cmd)

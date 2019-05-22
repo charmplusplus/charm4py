@@ -99,3 +99,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
 
     def raw_input(self, prompt=''):
         return input(prompt)
+
+
+if __name__ == '__main__':
+    charm.start(interactive=True)
