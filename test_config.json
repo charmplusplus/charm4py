@@ -116,6 +116,12 @@
         "path": "tests/thread_entry_methods/test_wait.py"
     },
     {
+        "path": "tests/thread_entry_methods/threaded_ctors1.py"
+    },
+    {
+        "path": "tests/thread_entry_methods/threaded_ctors2.py"
+    },
+    {
         "path": "tests/futures/test_futures.py"
     },
     {

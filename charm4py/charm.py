@@ -87,6 +87,7 @@ class Charm(object):
         self.mainchareEmStack = []
         self.activeChares = set()  # for profiling (active chares on this PE)
         self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
+        self.buildingMainChare = False
 
         self.options = Options()
         self.options.profiling = False
@@ -145,6 +146,7 @@ class Charm(object):
         assert cid not in self.chares, "Chare " + str(cid) + " already instantiated"
         em = self.entryMethods[ep]
         assert em.isCtor, "Specified mainchare entry method is not constructor"
+        self.buildingMainChare = True
         self._createInternalChares()
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
@@ -159,6 +161,7 @@ class Charm(object):
             em.startMeasuringTime()
         em.run(obj, {}, [args])  # now call the user's __init__
         self.chares[cid] = obj
+        self.buildingMainChare = False
         if self.options.profiling:
             em.stopMeasuringTime()
         if self.myPe() == 0:  # broadcast readonlies
@@ -212,7 +215,13 @@ class Charm(object):
                     self.runningEntryMethod.stopMeasuringTime()
                 em.addRecvTime(time.time() - t0)
                 em.startMeasuringTime()
-            em.run(obj, header, args)  # now call the user's __init__
+            # TODO: if mainchare constructor is *always* going to be threaded, we can remove the second condition
+            if self.buildingMainChare and threads.get_ident() != self.threadMgr.main_thread_id:
+                # we are already inside a threaded entry method (mainchare constructor),
+                # so in case this constructor is threaded, run it in the current thread
+                em.run_non_threaded(obj, header, args)  # now call the user's __init__
+            else:
+                em.run(obj, header, args)
             self.groups[gid] = obj
             if self.options.profiling:
                 em.stopMeasuringTime()
@@ -253,7 +262,13 @@ class Charm(object):
                         self.mainchareEmStack.append(self.runningEntryMethod)
                         self.runningEntryMethod.stopMeasuringTime()
                     em.startMeasuringTime()
-                em.run(obj, header, args)  # now call the user's array element __init__
+                # TODO: if mainchare constructor is *always* going to be threaded, we can remove the second condition
+                if self.buildingMainChare and threads.get_ident() != self.threadMgr.main_thread_id:
+                    # we are already inside a threaded entry method (mainchare constructor),
+                    # so in case this constructor is threaded, run it in the current thread
+                    em.run_non_threaded(obj, header, args)  # now call the user's array element __init__
+                else:
+                    em.run(obj, header, args)  # now call the user's array element __init__
                 if self.options.profiling:
                     em.stopMeasuringTime()
                     if len(self.mainchareEmStack) > 0:
