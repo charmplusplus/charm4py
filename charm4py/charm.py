@@ -215,6 +215,7 @@ class Charm(object):
                     self.runningEntryMethod.stopMeasuringTime()
                 em.addRecvTime(time.time() - t0)
                 em.startMeasuringTime()
+            # TODO: if mainchare constructor is *always* going to be threaded, we can remove the second condition
             if self.buildingMainChare and threads.get_ident() != self.threadMgr.main_thread_id:
                 # we are already inside a threaded entry method (mainchare constructor),
                 # so in case this constructor is threaded, run it in the current thread
@@ -261,6 +262,7 @@ class Charm(object):
                         self.mainchareEmStack.append(self.runningEntryMethod)
                         self.runningEntryMethod.stopMeasuringTime()
                     em.startMeasuringTime()
+                # TODO: if mainchare constructor is *always* going to be threaded, we can remove the second condition
                 if self.buildingMainChare and threads.get_ident() != self.threadMgr.main_thread_id:
                     # we are already inside a threaded entry method (mainchare constructor),
                     # so in case this constructor is threaded, run it in the current thread
