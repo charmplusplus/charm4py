@@ -35,9 +35,10 @@ class Particle(object):
 
 class Cell(Chare):
 
-    def __init__(self, arrayDims, _cellSize, simDoneFuture):
-        global cellSize
+    def __init__(self, arrayDims, _cellSize, _MAX_START_PARTICLES_PER_CELL, simDoneFuture):
+        global cellSize, MAX_START_PARTICLES_PER_CELL
         cellSize = _cellSize
+        MAX_START_PARTICLES_PER_CELL = _MAX_START_PARTICLES_PER_CELL
         # store future to notify main function when simulation is done
         self.simDoneFuture = simDoneFuture
         self.iteration = -1
@@ -116,14 +117,14 @@ def main(args):
         arrayDims = (6, 3)  # default: 2D chare array of 6x3 cells
     if len(args) == 4:
         MAX_START_PARTICLES_PER_CELL = int(args[3])
-        charm.thisProxy.updateGlobals({'MAX_START_PARTICLES_PER_CELL': MAX_START_PARTICLES_PER_CELL},
-                                      __name__, ret=True).get()
     cellSize = (SIM_BOX_SIZE / arrayDims[0], SIM_BOX_SIZE / arrayDims[1])
 
     # create 2D Cell chare array and start simulation
     simDone = charm.createFuture()
     # array creation happens asynchronously
-    cells = Array(Cell, arrayDims, args=[arrayDims, cellSize, simDone], useAtSync=True)
+    cells = Array(Cell, arrayDims,
+                  args=[arrayDims, cellSize, MAX_START_PARTICLES_PER_CELL, simDone],
+                  useAtSync=True)
     t0 = time.time()
     cells.run()
     # wait for simulation to complete
