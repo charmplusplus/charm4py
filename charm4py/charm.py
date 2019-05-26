@@ -38,7 +38,7 @@ class Options(object):
         output = ''
         for varname in dir(self):
             var = getattr(self, varname)
-            if isinstance(var, Options) or varname.startswith('__'):
+            if isinstance(var, Options) or varname.startswith('__') or callable(var):
                 continue
             output += varname + ': ' + str(var) + '\n'
         return output
