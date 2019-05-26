@@ -86,7 +86,7 @@ class Charm(object):
         # inlining of constructor calls (only used with profiling)
         self.mainchareEmStack = []
         self.activeChares = set()  # for profiling (active chares on this PE)
-        self.rebuildFuncs = [rebuildByteArray, rebuildArray, rebuildNumpyArray]
+        self.rebuildFuncs = (rebuildByteArray, rebuildArray, rebuildNumpyArray)
         self.buildingMainChare = False
 
         self.options = Options()
@@ -167,11 +167,11 @@ class Charm(object):
         if self.myPe() == 0:  # broadcast readonlies
             roData = {}
             for attr in dir(readonlies):  # attr is string
-                if not attr.startswith("_") and not attr.endswith("_"):
+                if not attr.startswith('_') and not attr.endswith('_'):
                     roData[attr] = getattr(readonlies, attr)
             msg = cPickle.dumps(roData, self.options.pickle_protocol)
             # print("Registering readonly data of size " + str(len(msg)))
-            self.lib.CkRegisterReadonly(b"charm4py_ro", b"charm4py_ro", msg)
+            self.lib.CkRegisterReadonly(b'charm4py_ro', b'charm4py_ro', msg)
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
         em = self.entryMethods[ep]
@@ -414,7 +414,7 @@ class Charm(object):
                 out_msg += ", **WARNING**: cython recommended for best performance"
             print(out_msg)
             if sys.version_info < (3,0,0):
-                print('\ncharm4py> DEPRECATION: Python 2 support is ending. Some features may not work.\n')
+                print('\ncharm4py> DEPRECATION: Python 2 support is ending. Some new features may not work.\n')
 
         for C in self.register_order:
             self.registerInCharm(C)
