@@ -76,6 +76,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/collections/async_array_creation.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/topo/topo_treeAPI.py"
     },
     {

@@ -488,6 +488,10 @@ def array_ckNew_gen(C, epIdx):
         elif dims is None and ndims != -1:  # create an empty array
             dims = (0,) * ndims
 
+        # this is a restriction in Charm++. Charm++ won't tell you unless
+        # error checking is enabled, resulting in obscure errors otherwise
+        assert charm._myPe == 0, 'Cannot create arrays from PE != 0. Use charm.thisProxy[0].createArray() instead'
+
         map_gid = -1
         if map is not None:
             map_gid = map.gid

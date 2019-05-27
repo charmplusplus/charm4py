@@ -769,6 +769,12 @@ class CharmRemote(Chare):
             charm.lb_requested = False
         sys.modules[module_name].__dict__.update(global_dict)
 
+    def createArray(self, cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False, cb=None):
+        proxy = Array(cls, dims, ndims, args, map, useAtSync)
+        if cb is not None:
+            cb(proxy)
+        return proxy
+
     def rexec(self, code, module_name='__main__'):
         exec(code, sys.modules[module_name].__dict__)
 
