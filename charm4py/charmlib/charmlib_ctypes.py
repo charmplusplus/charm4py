@@ -623,6 +623,8 @@ class CharmLib(object):
     self.CkChareExtSend = self.lib.CkChareExtSend
     self.lib.CkExtContributeToChare.argtypes = (c_void_p, c_int, c_void_p)
 
+    self.CcdCallFnAfterCallback_cb = CFUNCTYPE(None, c_void_p, c_double)(self.CcdCallFnAfterCallback)
+
     self.CkMyPe = self.lib.CkMyPeHook
     self.CkNumPes = self.lib.CkNumPesHook
     self.CkExit = self.lib.realCkExit
@@ -645,3 +647,12 @@ class CharmLib(object):
 
   def CkNumPhysicalNodes(self):
     return self.lib.CmiNumPhysicalNodes()
+
+  def scheduleTagAfter(self, tag, msecs):
+    self.lib.CcdCallFnAfter(self.CcdCallFnAfterCallback_cb, tag, c_double(msecs))
+
+  def CcdCallFnAfterCallback(self, userParam, curWallTime):
+    try:
+      self.charm.triggerCallable(userParam)
+    except:
+      self.charm.handleGeneralError()

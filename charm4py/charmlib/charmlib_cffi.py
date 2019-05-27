@@ -698,3 +698,14 @@ class CharmLib(object):
 
   def CkNumPhysicalNodes(self):
     return lib.CmiNumPhysicalNodes()
+
+  def scheduleTagAfter(self, tag, msecs):
+    lib.CcdCallFnAfter(lib.CcdCallFnAfterCallback, ffi.cast("void*", tag), msecs)
+
+  @ffi.def_extern()
+  def CcdCallFnAfterCallback(userParam, curWallTime):
+    try:
+      tag = int(ffi.cast("uintptr_t", userParam))
+      charm.triggerCallable(tag)
+    except:
+      charm.handleGeneralError()

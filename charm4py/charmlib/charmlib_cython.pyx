@@ -754,6 +754,9 @@ class CharmLib(object):
     if PROFILING: charm.recordSend(len(msg) + dcopy_size)
     return msg, None
 
+  def scheduleTagAfter(self, int tag, double msecs):
+    CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
+
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
@@ -957,5 +960,11 @@ cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer)
       times[1] += (time.time() - t0)
 
     return len(tempData)
+  except:
+    charm.handleGeneralError()
+
+cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
+  try:
+    charm.triggerCallable(<int>userParam)
   except:
     charm.handleGeneralError()

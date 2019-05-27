@@ -72,6 +72,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/callbacks/schedule_cb.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/collections/test.py"
     },
     {

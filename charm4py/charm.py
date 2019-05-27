@@ -87,6 +87,8 @@ class Charm(object):
         self.mainchareEmStack = []
         self.activeChares = set()  # for profiling (active chares on this PE)
         self.rebuildFuncs = (rebuildByteArray, rebuildArray, rebuildNumpyArray)
+        self.sched_tagpool = set(range(1,100))  # pool of tags for scheduling callables
+        self.sched_callables = {}
 
         self.options = Options()
         self.options.profiling = False
@@ -617,6 +619,16 @@ class Charm(object):
                 raise Charm4PyError('awaitCreation can only be used if creation triggered from threaded entry method')
             proxy.creation_future.get()
             del proxy.creation_future
+
+    def scheduleCallableAfter(self, callable_obj, secs, args=[]):
+        tag = self.sched_tagpool.pop()
+        self.sched_callables[tag] = (callable_obj, args)
+        self.lib.scheduleTagAfter(tag, secs * 1000)
+
+    def triggerCallable(self, tag):
+        cb, args = self.sched_callables.pop(tag)
+        self.sched_tagpool.add(tag)
+        cb(*args)
 
     def recordSend(self, size):
         # TODO? might be better (certainly more memory efficient) to update msg stats

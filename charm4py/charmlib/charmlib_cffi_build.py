@@ -236,6 +236,7 @@ ffibuilder.cdef("""
     void CkStartQDExt_ChareCallback(int onPE, void* objPtr, int epIdx, int fid);
     void CkStartQDExt_GroupCallback(int gid, int pe, int epIdx, int fid);
     void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
+    void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
     // callbacks to python
     extern "Python" void registerMainModule(void);
@@ -257,6 +258,7 @@ ffibuilder.cdef("""
     extern "Python" int pyReduction_py2(char**, int*, int, char**);
     extern "Python" int pyReduction_py3(char**, int*, int, char**);
     extern "Python" int arrayMapProcNum(int, int, const int*);
+    extern "Python" void CcdCallFnAfterCallback(void*, double);
 
 """)
 
