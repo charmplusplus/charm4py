@@ -741,6 +741,9 @@ class Charm(object):
     def abort(self, msg):
         self.lib.CkAbort(msg)
 
+    def addReducer(self, func):
+        self.reducers.addReducer(func)
+
     def LBTurnInstrumentOn(self):
         self.lib.LBTurnInstrumentOn()
 
@@ -766,6 +769,9 @@ class CharmRemote(Chare):
 
     def myPe(self):
         return charm.myPe()
+
+    def addReducer(self, func):
+        charm.addReducer(func)
 
     # user signature is: `def updateGlobals(self, global_dict, module_name='__main__')`
     def updateGlobals(self, *args):
