@@ -162,7 +162,10 @@ class EntryMethodThreadManager(object):
                     ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                     if b'block' in header:
                         if b'bcast' in header:
-                            obj.contribute(None, None, header[b'block'])
+                            if b'bcastret' in header:
+                                obj.contribute(ret, charm.reducers.gather, header[b'block'])
+                            else:
+                                obj.contribute(None, None, header[b'block'])
                         else:
                             header[b'block'].send(ret)
                     thread_state.notify = False
