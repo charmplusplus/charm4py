@@ -296,10 +296,16 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs and kwargs['ret']:
+        if 'ret' in kwargs:
+            retmode = kwargs['ret']
+        else:
+            retmode = 0
+        if retmode > 0:
             header[b'block'] = blockFuture = charm.createFuture()
             if elemIdx == -1:
                 header[b'bcast'] = True
+                if retmode > 1:
+                    header[b'bcastret'] = True
         destObj = None
         if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
             destObj = charm.groups[proxy.gid]
@@ -325,10 +331,16 @@ def update_globals_proxy_method_gen(ep):
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs and kwargs['ret']:
+        if 'ret' in kwargs:
+            retmode = kwargs['ret']
+        else:
+            retmode = 0
+        if retmode > 0:
             header[b'block'] = blockFuture = charm.createFuture()
             if elemIdx == -1:
                 header[b'bcast'] = True
+                if retmode > 1:
+                    header[b'bcastret'] = True
         destObj = None
         if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
             destObj = charm.groups[proxy.gid]
@@ -460,10 +472,16 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs and kwargs['ret']:
+        if 'ret' in kwargs:
+            retmode = kwargs['ret']
+        else:
+            retmode = 0
+        if retmode > 0:
             header[b'block'] = blockFuture = charm.createFuture()
             if elemIdx == ():
                 header[b'bcast'] = True
+                if retmode > 1:
+                    header[b'bcastret'] = True
         destObj = None
         if Options.local_msg_optim and (len(args) > 0):
             array = charm.arrays[proxy.aid]

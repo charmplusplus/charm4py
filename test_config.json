@@ -16,6 +16,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/entry_methods/retmodes.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/pool/pool.py"
     },
     {
