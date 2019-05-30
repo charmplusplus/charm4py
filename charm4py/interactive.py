@@ -12,7 +12,9 @@ HANG_CHECK_FREQ = 0.5  # in secs
 
 
 def future_():
-    charm.dynamic_register['_f'] = charm.createFuture()
+    f = charm.createFuture()
+    charm.dynamic_register['_f'] = f
+    return f
 
 
 class InteractiveConsole(Chare, InteractiveInterpreter):
