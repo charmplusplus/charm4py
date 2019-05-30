@@ -1,6 +1,12 @@
 [
     {
         "force_min_processes": 4,
+        "path": "tests/interactive/test1.in",
+        "interactive": true,
+        "requires_py_version": 3
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/entry_methods/array_element_proxy.py"
     },
     {

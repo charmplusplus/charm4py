@@ -97,6 +97,9 @@ class Charm(object):
         self.options.local_msg_buf_size = 50
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
+        self.options.interactive = Options()
+        self.options.interactive.verbose = 1
+        self.options.interactive.broadcast_imports = True
 
         if 'OMPI_COMM_WORLD_SIZE' in os.environ:
             # this is needed for OpenMPI, see:
@@ -122,7 +125,7 @@ class Charm(object):
             self.unpackMsg = self.lib.unpackMsg
         # store chare types defined after program start and other objects created
         # in interactive mode
-        self.dynamic_register = {}
+        self.dynamic_register = sys.modules['__main__'].__dict__
         self.lb_requested = False
 
     def handleGeneralError(self):
@@ -501,7 +504,8 @@ class Charm(object):
             self.origStdinFd = os.dup(0)
             self.origStoutFd = os.dup(1)
             self.dynamic_register.update({'charm': charm, 'Chare': Chare, 'Group': Group,
-                                          'Array': Array, 'Reducer': self.reducers})
+                                          'Array': Array, 'Reducer': self.reducers,
+                                          'threaded': entry_method.threaded})
 
         if self.started:
             raise Charm4PyError("charm.start() can only be called once")
@@ -608,6 +612,7 @@ class Charm(object):
 
     def waitQD(self):
         f = self.createFuture()
+        f.waitqd = True
         self.startQD(f)
         f.get()
 
@@ -807,6 +812,11 @@ class CharmRemote(Chare):
         chare_type = charm.dynamic_register[name]
         charm.register(chare_type)
         charm.registerInCharm(chare_type)
+
+    def registerNewChareTypes(self, classes):
+        for chare_type in classes:
+            charm.register(chare_type)
+            charm.registerInCharm(chare_type)
 
 
 def load_charm_library(charm):

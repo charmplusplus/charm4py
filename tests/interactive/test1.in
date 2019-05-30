@@ -1,0 +1,52 @@
+import sys
+import traceback
+
+def my_except_hook(errorType, error, tb):
+    traceback.print_tb(tb, limit=None)
+    charm.abort(errorType.__name__ + ': ' + str(error))
+
+sys.excepthook = my_except_hook
+
+import os
+charm.thisProxy.rexec("sys.path.append(os.path.join(os.getcwd(), 'tests', 'interactive'))", ret=True).get()
+
+assert charm.myPe() == 0
+
+
+class Worker(Chare):
+    def work(self, cb):
+        self.contribute(2, Reducer.sum, cb)
+    def retVal(self):
+        return random.random()
+    def work2(self, cb):
+        self.contribute(self.thisIndex, Reducer.myreducer, cb)
+
+
+g = Group(Worker)
+g.work(future())
+assert _f.get() == (charm.numPes() * 2)
+
+import random
+val = g[1].retVal(ret=True).get()
+assert isinstance(val, float)
+
+myreducer_src='''
+def myreducer(contribs):
+    return [6282 for _ in range(len(contribs))]
+'''
+
+charm.thisProxy.exec(myreducer_src, ret=1).get()
+charm.thisProxy.addReducer(myreducer, ret=1).get()
+g.work2(future())
+assert _f.get() == [6282 for _ in range(charm.numPes())]
+
+
+import mylib
+num_chares = charm.numPes() * 4
+a = Array(mylib.Worker, num_chares)
+a.work(x=33, cb=future())
+assert _f.get() == (num_chares * 33)
+
+
+print('interactive session says bye')
+exit()
