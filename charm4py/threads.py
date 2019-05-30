@@ -66,6 +66,12 @@ class Future(object):
                 self.thread_paused = False
                 charm.threadMgr.resumeThread(self.thread_state, self.value)
 
+    def forceResume(self):
+        if self.thread_paused:
+            self.thread_paused = False
+            self.value_received = True
+            charm.threadMgr.resumeThread(self.thread_state, [None])
+
     def __getstate__(self):
         return (self.fid, self.proxy_class_name, self.proxy_state)
 
@@ -281,9 +287,13 @@ class EntryMethodThreadManager(object):
             that is blocking on this future's value is resumed.
         """
         future = self.futures[fid]
-        future.deposit(result)
-        if future.value_received:
+        if len(future.value) + 1 == future.num_senders:
             del self.futures[fid]
+        future.deposit(result)
+
+    def cancelFuture(self, future):
+        del self.futures[future.fid]
+        future.forceResume()
 
     def depositCollectiveFuture(self, fid, result, obj):
         future = self.coll_futures[(fid, obj)]

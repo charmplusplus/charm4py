@@ -82,7 +82,10 @@ for test in tests:
             if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
                 additionalArgs.append('++quiet')
             cmd = ['charmrun/charmrun']
-            cmd += [python] + [test['path']]
+            if not test.get('interactive', False):
+                cmd += [python] + [test['path']]
+            else:
+                cmd += [python] + ['-m', 'charm4py.interactive']
             if 'args' in test:
                 cmd += test['args'].split(' ')
             cmd += commonArgs
@@ -90,7 +93,10 @@ for test in tests:
             cmd += additionalArgs
             print('Test command is ' + ' '.join(cmd))
             startTime = time.time()
-            p = subprocess.Popen(cmd)
+            stdin = None
+            if test.get('interactive', False):
+                stdin = open(test['path'])
+            p = subprocess.Popen(cmd, stdin=stdin)
             try:
                 rc = p.wait(TIMEOUT)
             except subprocess.TimeoutExpired:
