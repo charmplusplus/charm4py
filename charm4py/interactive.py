@@ -167,15 +167,10 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         return input(prompt)
 
     def hang_check_phase1(self):
-        new_monitor_futures = []
-        for f in self.monitorFutures:
-            if f.thread_paused:
-                new_monitor_futures.append(f)
-        self.monitorFutures = new_monitor_futures
+        self.monitorFutures = [f for f in self.monitorFutures if f.thread_paused]
         if self.interactive_running:
-            blockedFutures = [f for f in charm.threadMgr.futures.values() if (f.thread_paused and not hasattr(f, 'waitqd'))]
-            for f in blockedFutures:
-                if not hasattr(f, 'timestamp'):
+            for f in charm.threadMgr.futures.values():
+                if f.thread_paused and not hasattr(f, 'waitqd') and not hasattr(f, 'timestamp'):
                     f.timestamp = time.time()
                     self.monitorFutures.append(f)
             for f in self.monitorFutures:
