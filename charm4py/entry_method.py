@@ -47,6 +47,26 @@ class EntryMethod(object):
                 print(exit_code)
                 exit_code = 1
             charm.exit(exit_code)
+        except Exception as e:
+            if b'block' in header:
+                # remote is expecting a response via a future, send exception to the future
+                blockFuture = header[b'block']
+                if b'creation' in header:
+                    # don't send anything in this case (future is not guaranteed to be used)
+                    obj.contribute(None, None, blockFuture)
+                    raise e
+                charm.prepareExceptionForSend(e)
+                if b'bcast' in header:
+                    if b'bcastret' in header:
+                        obj.contribute(e, charm.reducers.gather, blockFuture)
+                    else:
+                        # NOTE: it will work if some elements contribute with an exception (here)
+                        # and some do nop (None) reduction below. Charm++ will ignore the nops
+                        obj.contribute(e, charm.reducers._broadcast_exception_reducer, blockFuture)
+                else:
+                    blockFuture.send(e)
+                return
+            raise e
         if b'block' in header:
             blockFuture = header[b'block']
             if b'bcast' in header:

@@ -36,7 +36,14 @@ class Future(object):
             self.values = charm.threadMgr.pauseThread()
 
         if self.nsenders == 1:
-            return self.values[0]
+            val = self.values[0]
+            if isinstance(val, Exception):
+                raise val
+            return val
+
+        for val in self.values:
+            if isinstance(val, Exception):
+                raise val
         return self.values
 
     def send(self, result=None):
@@ -162,7 +169,26 @@ class EntryMethodThreadManager(object):
                     thread_state.idle = False
                     obj._num_threads += 1
                     thread_state.notify = entry_method.thread_notify
-                    ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
+                    try:
+                        ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
+                    except Exception as e:
+                        if b'block' in header:
+                            blockFuture = header.pop(b'block')
+                            if b'creation' in header:
+                                obj.contribute(None, None, blockFuture)
+                                raise e
+                            charm.prepareExceptionForSend(e)
+                            if b'bcast' in header:
+                                if b'bcastret' in header:
+                                    obj.contribute(e, charm.reducers.gather, blockFuture)
+                                else:
+                                    # NOTE: it will work if some elements contribute with an exception (here)
+                                    # and some do nop (None) redution below. Charm++ will ignore the nops
+                                    obj.contribute(e, charm.reducers._broadcast_exception_reducer, blockFuture)
+                            else:
+                                blockFuture.send(e)
+                        else:
+                            raise e
                     if b'block' in header:
                         if b'bcast' in header:
                             if b'bcastret' in header:

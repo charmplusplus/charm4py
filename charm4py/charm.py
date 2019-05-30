@@ -8,11 +8,14 @@ import sys
 import os
 if sys.version_info < (3, 0, 0):
     import cPickle
+    from cStringIO import StringIO
 else:
     import pickle as cPickle
+    from io import StringIO
 import inspect
 import time
 from collections import defaultdict
+import traceback
 from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
 from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
@@ -123,17 +126,33 @@ class Charm(object):
             # replace these methods with the fast cython versions
             self.packMsg = self.lib.packMsg
             self.unpackMsg = self.lib.unpackMsg
+        self.interactive = False
+        self.last_exception_timestamp = time.time()
         # store chare types defined after program start and other objects created
         # in interactive mode
         self.dynamic_register = sys.modules['__main__'].__dict__
         self.lb_requested = False
 
     def handleGeneralError(self):
-        import traceback
         errorType, error, stacktrace = sys.exc_info()
-        print("----------------- Python Stack Traceback PE " + str(self.myPe()) + " -----------------")
-        traceback.print_tb(stacktrace, limit=None)
-        self.abort(errorType.__name__ + ": " + str(error))
+        if not self.interactive:
+            if hasattr(error, 'remote_stacktrace'):
+                origin, stacktrace = error.remote_stacktrace
+                print('----------------- Python Stack Traceback PE ' + str(origin) + ' -----------------')
+                print(stacktrace)
+            else:
+                print('----------------- Python Stack Traceback PE ' + str(self.myPe()) + ' -----------------')
+                traceback.print_tb(stacktrace, limit=None)
+            self.abort(errorType.__name__ + ': ' + str(error))
+        else:
+            self.thisProxy[self.myPe()].propagateException(self.prepareExceptionForSend(error), ret=0)
+
+    def prepareExceptionForSend(self, e):
+        if not hasattr(e, 'remote_stacktrace'):
+            f = StringIO()
+            traceback.print_tb(sys.exc_info()[2], limit=None, file=f)
+            e.remote_stacktrace = (self.myPe(), f.getvalue())
+        return e
 
     def recvReadOnly(self, msg):
         roData = cPickle.loads(msg)
@@ -503,6 +522,7 @@ class Charm(object):
             from .interactive import InteractiveConsole as entry
             self.origStdinFd = os.dup(0)
             self.origStoutFd = os.dup(1)
+            self.interactive = True
             self.dynamic_register.update({'charm': charm, 'Chare': Chare, 'Group': Group,
                                           'Array': Array, 'Reducer': self.reducers,
                                           'threaded': entry_method.threaded})
@@ -803,6 +823,16 @@ class CharmRemote(Chare):
 
     def eval(self, expression, module_name='__main__'):
         return eval(expression, sys.modules[module_name].__dict__)
+
+    def propagateException(self, error):
+        if time.time() - charm.last_exception_timestamp >= 1.0:
+            charm.last_exception_timestamp = time.time()
+            if charm.myPe() == 0:
+                origin, remote_stacktrace = error.remote_stacktrace
+                print('----------------- Python Stack Traceback from PE', origin, '-----------------\n', remote_stacktrace)
+                print(type(error).__name__ + ':', error, '(PE ' + str(origin) + ')')
+            else:
+                self.thisProxy[(charm.myPe()-1) // 2].propagateException(error)
 
     def printStats(self):
         charm.printStats()
