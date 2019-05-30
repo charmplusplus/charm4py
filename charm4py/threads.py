@@ -18,29 +18,30 @@ class Future(object):
     def __init__(self, fid, thread_state, proxy, nsenders):
         self.fid = fid                    # unique future ID within process
         self.thread_state = thread_state  # thread context where the future is created
-        self.proxy = proxy
+        self.proxy = proxy                # proxy to the chare that created the future
         # TODO? only obtain proxy_state if actually serializing the future?
         self.proxy_class_name = proxy.__class__.__name__
         self.proxy_state = proxy.__getstate__()
-        self.num_senders = nsenders       # number of senders
-        self.value = []                   # value of the future, it can be a bag of values in case of multiple senders
-        self.thread_paused = False        # flag to check if creator thread is blocked on future
-        self.value_received = False       # flag to check if value has been received
+        self.nsenders = nsenders          # number of senders
+        self.values = []                  # values of the future (can be multiple in case of multiple senders)
+        self.blocked = False              # flag to check if creator thread is blocked on future
+        self.gotvalues = False            # flag to check if values have been received
 
     def get(self):
-        """ Blocking call on current entry method's thread to obtain the value of the
-            future. If the value is already available then it is returned immediately.
+        """ Blocking call on current entry method's thread to obtain the values of the
+            future. If the values are already available then they are returned immediately.
         """
-        if not self.value_received:
-            self.thread_paused = True
-            self.value = charm.threadMgr.pauseThread()
+        if not self.gotvalues:
+            self.blocked = True
+            self.values = charm.threadMgr.pauseThread()
 
-        if len(self.value) == 1: return self.value[0]
-
-        return self.value
+        if self.nsenders == 1:
+            return self.values[0]
+        else:
+            return self.values
 
     def send(self, result=None):
-        """ Set the value of a future either from remote or current thread. """
+        """ Send a value to this future. """
         self.getTargetProxyEntryMethod()(self.fid, result)
 
     def __call__(self, result=None):
@@ -48,29 +49,25 @@ class Future(object):
 
     def getTargetProxyEntryMethod(self):
         if not hasattr(self, 'proxy'):
-            proxy_class = getattr(charm, self.proxy_class_name)
-            proxy = proxy_class.__new__(proxy_class)
+            proxy_cls = getattr(charm, self.proxy_class_name)
+            proxy = proxy_cls.__new__(proxy_cls)
             proxy.__setstate__(self.proxy_state)
             return proxy._future_deposit_result
         else:
             return self.proxy._future_deposit_result
 
     def deposit(self, result):
-        """ Deposit a value for this future and resume any blocked threads waiting on this
-            future.
-        """
-        self.value.append(result)
-        if len(self.value) == self.num_senders:
-            self.value_received = True
-            if self.thread_paused:
-                self.thread_paused = False
-                charm.threadMgr.resumeThread(self.thread_state, self.value)
+        """ Deposit a value for this future. """
+        self.values.append(result)
+        if len(self.values) == self.nsenders:
+            self.gotvalues = True
+            return True
+        return False
 
-    def forceResume(self):
-        if self.thread_paused:
-            self.thread_paused = False
-            self.value_received = True
-            charm.threadMgr.resumeThread(self.thread_state, [None])
+    def resume(self, threadMgr):
+        if self.blocked:
+            self.blocked = False
+            threadMgr.resumeThread(self.thread_state, self.values)
 
     def __getstate__(self):
         return (self.fid, self.proxy_class_name, self.proxy_state)
@@ -81,8 +78,8 @@ class Future(object):
 
 class CollectiveFuture(Future):
 
-    def __init__(self, fid, tid, proxy, nsenders):
-        super(CollectiveFuture, self).__init__(fid, tid, proxy, nsenders)
+    def __init__(self, fid, tstate, proxy, nsenders):
+        super(CollectiveFuture, self).__init__(fid, tstate, proxy, nsenders)
 
     def getTargetProxyEntryMethod(self):
         if not hasattr(self, 'proxy'):
@@ -203,7 +200,7 @@ class EntryMethodThreadManager(object):
 
     def pauseThread(self):
         """ Called by an entry method thread to wait for something.
-            Returns data that thread was waiting for, or None if was waiting for an event
+            Returns data that the thread was waiting for, or None if it was waiting for an event
         """
         tid = get_ident()
         if tid == self.main_thread_id:
@@ -251,7 +248,7 @@ class EntryMethodThreadManager(object):
         """ Creates a new Future object by obtaining/creating a unique future ID. The
             future also has some attributes related to the creator object's proxy to allow
             remote chares to send values to the future's creator. The new future object is
-            saved in the self.futures map, and will be deleted whenever its value is received.
+            saved in the self.futures dict, and will be deleted whenever its values are received.
         """
         tid = get_ident()
         if tid == self.main_thread_id:
@@ -282,24 +279,27 @@ class EntryMethodThreadManager(object):
         return f
 
     def depositFuture(self, fid, result):
-        """ Set a value of a future that is being managed by this ThreadManager. The flag to
-            track receipt of all values, tied to this future, is also updated and any thread
-            that is blocking on this future's value is resumed.
-        """
-        future = self.futures[fid]
-        if len(future.value) + 1 == future.num_senders:
+        """ Set a value of a future that is being managed by this ThreadManager. """
+        f = self.futures[fid]
+        if f.deposit(result):
             del self.futures[fid]
-        future.deposit(result)
-
-    def cancelFuture(self, future):
-        del self.futures[future.fid]
-        future.forceResume()
+            # resume if blocked
+            f.resume(self)
 
     def depositCollectiveFuture(self, fid, result, obj):
-        future = self.coll_futures[(fid, obj)]
-        future.deposit(result)
-        if future.value_received:
+        f = self.coll_futures[(fid, obj)]
+        if f.deposit(result):
             del self.coll_futures[(fid, obj)]
+            f.resume(self)
+
+    def cancelFuture(self, f):
+        del self.futures[f.fid]
+        f.gotvalues = True
+        f.values = [None] * f.nsenders
+        f.resume(self)
+
+    # TODO: method to cancel collective future. the main issue with this is
+    # that the future would need to be canceled on every chare waiting on it
 
 
 charm, Options, Charm4PyError = None, None, None

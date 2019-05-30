@@ -167,10 +167,10 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         return input(prompt)
 
     def hang_check_phase1(self):
-        self.monitorFutures = [f for f in self.monitorFutures if f.thread_paused]
+        self.monitorFutures = [f for f in self.monitorFutures if f.blocked]
         if self.interactive_running:
             for f in charm.threadMgr.futures.values():
-                if f.thread_paused and not hasattr(f, 'waitqd') and not hasattr(f, 'timestamp'):
+                if f.blocked and not hasattr(f, 'waitqd') and not hasattr(f, 'timestamp'):
                     f.timestamp = time.time()
                     self.monitorFutures.append(f)
             for f in self.monitorFutures:
@@ -184,7 +184,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         self.monitorFutures = []
         charm.scheduleCallableAfter(self.thisProxy.hang_check_phase1, HANG_CHECK_FREQ)
         for f in monitor_futures:
-            if f.thread_paused:
+            if f.blocked:
                 self.write('\nError: system is idle, canceling block on future\n', sched=False)
                 charm.threadMgr.cancelFuture(f)
 
