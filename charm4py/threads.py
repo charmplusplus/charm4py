@@ -37,8 +37,7 @@ class Future(object):
 
         if self.nsenders == 1:
             return self.values[0]
-        else:
-            return self.values
+        return self.values
 
     def send(self, result=None):
         """ Send a value to this future. """
