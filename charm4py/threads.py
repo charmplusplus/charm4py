@@ -60,6 +60,7 @@ class Future(object):
         self.values.append(result)
         if len(self.values) == self.nsenders:
             self.gotvalues = True
+            del self.proxy
             return True
         return False
 
