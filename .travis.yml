@@ -1,6 +1,8 @@
 language: cpp
 os: linux
 dist: xenial
+git:
+  depth: false
 cache: ccache
 before_install:
   - sudo apt-get install python-dev
