@@ -69,11 +69,11 @@ def main(args):
                 try:
                     getattr(proxy, methods['allbad'])(ret=1).get()
                     assert False
-                except:
+                except NameError:
                     try:
                         getattr(proxy, methods['bad'])(ret=1).get()
                         assert False
-                    except:
+                    except NameError:
                         retval = getattr(proxy, methods['good'])(ret=1).get()
                         assert retval is None
 
@@ -82,7 +82,7 @@ def main(args):
                 retvals = getattr(proxy, methods['bad'])(ret=2).get()
                 num_errors = 0
                 for retval in retvals:
-                    if isinstance(retval, Exception):
+                    if isinstance(retval, NameError):
                         num_errors += 1
                     else:
                         assert retval == 'good'
