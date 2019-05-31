@@ -154,6 +154,26 @@ class Charm(object):
             e.remote_stacktrace = (self.myPe(), f.getvalue())
         return e
 
+    def process_em_exc(self, e, obj, header):
+        if b'block' not in header:
+            raise e
+        # remote is expecting a response via a future, send exception to the future
+        blockFuture = header.pop(b'block')
+        if b'creation' in header:
+            # don't send anything in this case (future is not guaranteed to be used)
+            obj.contribute(None, None, blockFuture)
+            raise e
+        self.prepareExceptionForSend(e)
+        if b'bcast' in header:
+            if b'bcastret' in header:
+                obj.contribute(e, self.reducers.gather, blockFuture)
+            else:
+                # NOTE: it will work if some elements contribute with an exception (here)
+                # and some do nop (None) reduction below. Charm++ will ignore the nops
+                obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture)
+        else:
+            blockFuture.send(e)
+
     def recvReadOnly(self, msg):
         roData = cPickle.loads(msg)
         for name, obj in roData.items():

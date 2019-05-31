@@ -172,23 +172,7 @@ class EntryMethodThreadManager(object):
                     try:
                         ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                     except Exception as e:
-                        if b'block' in header:
-                            blockFuture = header.pop(b'block')
-                            if b'creation' in header:
-                                obj.contribute(None, None, blockFuture)
-                                raise e
-                            charm.prepareExceptionForSend(e)
-                            if b'bcast' in header:
-                                if b'bcastret' in header:
-                                    obj.contribute(e, charm.reducers.gather, blockFuture)
-                                else:
-                                    # NOTE: it will work if some elements contribute with an exception (here)
-                                    # and some do nop (None) redution below. Charm++ will ignore the nops
-                                    obj.contribute(e, charm.reducers._bcast_exc_reducer, blockFuture)
-                            else:
-                                blockFuture.send(e)
-                        else:
-                            raise e
+                        charm.process_em_exc(e, obj, header)
                     if b'block' in header:
                         if b'bcast' in header:
                             if b'bcastret' in header:
