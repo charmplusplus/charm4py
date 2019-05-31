@@ -50,7 +50,7 @@ def _max(contribs):
 def _min(contribs):
     return min(contribs)
 
-def _broadcast_exception_reducer(contribs):
+def _bcast_exc_reducer(contribs):
     return contribs[0]
 
 def gather(contribs):
@@ -72,7 +72,7 @@ class ReducerContainer(object):
         self.addReducer(_product)
         self.addReducer(_max)
         self.addReducer(_min)
-        self.addReducer(_broadcast_exception_reducer)
+        self.addReducer(_bcast_exc_reducer)
         self.addReducer(gather, pre=gather_preprocess, post=gather_postprocess)
 
         self.nop     = charm.ReducerType.nop

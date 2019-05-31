@@ -62,7 +62,7 @@ class EntryMethod(object):
                     else:
                         # NOTE: it will work if some elements contribute with an exception (here)
                         # and some do nop (None) reduction below. Charm++ will ignore the nops
-                        obj.contribute(e, charm.reducers._broadcast_exception_reducer, blockFuture)
+                        obj.contribute(e, charm.reducers._bcast_exc_reducer, blockFuture)
                 else:
                     blockFuture.send(e)
                 return
