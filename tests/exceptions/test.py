@@ -39,7 +39,7 @@ class Test(Chare):
 def main(args):
     assert charm.numPes() % 2 == 0
 
-    NUM_ITER = 20
+    NUM_ITER = 5
     npes = charm.numPes()
     g = Group(Test)
     a = Array(Test, npes * 8)
