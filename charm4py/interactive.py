@@ -188,6 +188,16 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 self.write('\nError: system is idle, canceling block on future\n', sched=False)
                 charm.threadMgr.cancelFuture(f)
 
+    def showtraceback(self):
+        error_type, error, tb = sys.exc_info()
+        if hasattr(error, 'remote_stacktrace'):
+            origin, stacktrace = error.remote_stacktrace
+            self.write('----------------- Python Stack Traceback from PE ' + str(origin) + ' -----------------\n')
+            self.write(stacktrace + '\n')
+            self.write(error_type.__name__ + ': ' + str(error) + ' (PE ' + str(origin) + ')\n')
+        else:
+            super(InteractiveConsole, self).showtraceback()
+
 
 if __name__ == '__main__':
     charm.start(interactive=True)

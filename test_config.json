@@ -94,6 +94,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/exceptions/test.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/topo/topo_treeAPI.py"
     },
     {

@@ -50,6 +50,9 @@ def _max(contribs):
 def _min(contribs):
     return min(contribs)
 
+def _bcast_exc_reducer(contribs):
+    return contribs[0]
+
 def gather(contribs):
     # contribs will be a list of list of tuples
     # first element of tuple is always array index of chare
@@ -69,6 +72,7 @@ class ReducerContainer(object):
         self.addReducer(_product)
         self.addReducer(_max)
         self.addReducer(_min)
+        self.addReducer(_bcast_exc_reducer)
         self.addReducer(gather, pre=gather_preprocess, post=gather_postprocess)
 
         self.nop     = charm.ReducerType.nop
