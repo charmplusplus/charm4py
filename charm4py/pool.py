@@ -2,6 +2,7 @@ from . import charm, Chare, Group, threaded_ext, threads
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
+import sys
 
 
 INITIAL_MAX_JOBS = 2048
@@ -30,11 +31,13 @@ class Job(object):
 
     def __init__(self, id, func, tasks, result, ncores, chunksize, threaded):
         self.id = id
+        self.max_cores = ncores
         self.n_avail = ncores
         self.func = func  # if func is not None, function is the same for all tasks in the job
         self.workers = []  # ID of workers who have executed tasks from this job
         self.chunked = chunksize > 1
         self.threaded = threaded
+        self.failed = False
         assert chunksize > 0
         if self.chunked:
             if isinstance(result, threads.Future):
@@ -106,6 +109,21 @@ class PoolScheduler(Chare):
             self.job_id_pool.update(range(oldSize, newSize))
             self.jobs.extend([None] * (newSize - oldSize))
 
+        if charm.interactive:
+            try:
+                if func is not None:
+                    self.workers.check(func.__module__, func.__name__, ret=1).get()
+                else:
+                    for func_, args in tasks:
+                        self.workers.check(func_.__module__, func_.__name__, ret=1).get()
+            except Exception as e:
+                if isinstance(result, threads.Future):
+                    result.send(e)
+                else:
+                    for f in result:
+                        f.send(e)
+                return
+
         job_id = self.job_id_pool.pop()
         job = Job(job_id, func, tasks, result, ncores, chunksize, allow_nested)
         self.jobs[job_id] = job
@@ -145,24 +163,25 @@ class PoolScheduler(Chare):
             if len(self.idle_workers) == 0:
                 return
             while True:
-                task = job.getTask()
-                if task is None:
-                    break
-                worker_id = self.idle_workers.pop()
-                # print('Sending task to worker', worker_id)
+                if not job.failed:
+                    task = job.getTask()
+                    if task is None:
+                        break
+                    worker_id = self.idle_workers.pop()
+                    # print('Sending task to worker', worker_id)
 
-                if job.func is not None:
-                    func = None
-                    if job.id not in self.worker_knows[worker_id]:
-                        func = job.func
-                        job.workers.append(worker_id)
-                        self.worker_knows[worker_id].add(job.id)
-                else:
-                    func = task.func
-                # NOTE: this is a non-standard way of using proxies, but is
-                # faster and allows the scheduler to reuse the same proxy
-                self.workers.elemIdx = worker_id
-                job.remote(func, task.data, task.result_dest, job.id)
+                    if job.func is not None:
+                        func = None
+                        if job.id not in self.worker_knows[worker_id]:
+                            func = job.func
+                            job.workers.append(worker_id)
+                            self.worker_knows[worker_id].add(job.id)
+                    else:
+                        func = task.func
+                    # NOTE: this is a non-standard way of using proxies, but is
+                    # faster and allows the scheduler to reuse the same proxy
+                    self.workers.elemIdx = worker_id
+                    job.remote(func, task.data, task.result_dest, job.id)
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -173,6 +192,7 @@ class PoolScheduler(Chare):
                     break
                 if len(self.idle_workers) == 0:
                     return
+            # go to next job
             if job is not None:
                 prev = job
                 job = job.job_next
@@ -182,6 +202,8 @@ class PoolScheduler(Chare):
     def taskFinished(self, worker_id, job_id, result=None):
         # print('Job finished')
         job = self.jobs[job_id]
+        if job.failed:
+            return self.taskError(worker_id, job_id, job.exception)
         if result is not None:
             if job.chunked:
                 i, results = result
@@ -210,6 +232,32 @@ class PoolScheduler(Chare):
 
     def migrated(self):
         charm.abort('Someone migrated PoolScheduler which is non-migratable')
+
+    def taskError(self, worker_id, job_id, exception):
+        job = self.jobs[job_id]
+        job.exception = exception
+        self.idle_workers.add(worker_id)
+        # marking as failed will allow the scheduler to delete it from the linked list
+        # NOTE that we will only delete from the 'jobs' list once all the pending tasks are done
+        job.failed = True
+        if not hasattr(job, 'future'):
+            if job.chunked:
+                for chunk in job.tasks:
+                    for f in chunk.result_dest:
+                        f.send(job.exception)
+            else:
+                for t in job.tasks:
+                    t.result_dest.send(job.exception)
+        job.tasks = []
+        job.taskDone()
+        if job.n_avail == job.max_cores:  # all the running tasks are done
+            self.jobs[job_id] = None
+            self.job_id_pool.add(job_id)
+            for worker_id in job.workers:
+                self.worker_knows[worker_id].remove(job.id)
+            if hasattr(job, 'future'):
+                job.future.send(job.exception)
+        self.schedule()
 
 
 class Worker(Chare):
@@ -245,9 +293,14 @@ class Worker(Chare):
                 # assume result_destination is a future
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
-        except NotThreadedError:
-            raise Charm4PyError("Use allow_nested=True to allow launching tasks"
-                                " from tasks with charm.pool")
+        except Exception as e:
+            if isinstance(e, NotThreadedError):
+                e = Charm4PyError('Use allow_nested=True to allow launching tasks'
+                                  ' from tasks with charm.pool')
+            charm.prepareExceptionForSend(e)
+            self.scheduler.taskError(self.thisIndex, job_id, e)
+            if not isinstance(result_destination, int):
+                result_destination.send(e)
 
     @threaded_ext(event_notify=True)
     def runChunkSingleFunc_th(self, func, chunk, result_destination, job_id):
@@ -261,22 +314,23 @@ class Worker(Chare):
                 func = self.funcs[job_id]
             results = [func(args) for args in chunk]
             self.send_chunk_results(results, result_destination, job_id)
-        except NotThreadedError:
-            raise Charm4PyError("Use allow_nested=True to allow launching tasks"
-                                " from tasks with charm.pool")
+        except Exception as e:
+            self.send_chunk_exc(e, result_destination, job_id)
 
     @threaded_ext(event_notify=True)
     def runChunk_th(self, _, chunk, result_destination, job_id):
-        results = [func(args) for func, args in chunk]
-        self.send_chunk_results(results, result_destination, job_id)
+        try:
+            results = [func(args) for func, args in chunk]
+            self.send_chunk_results(results, result_destination, job_id)
+        except Exception as e:
+            self.send_chunk_exc(e, result_destination, job_id)
 
     def runChunk(self, _, chunk, result_destination, job_id):
         try:
             results = [func(args) for func, args in chunk]
             self.send_chunk_results(results, result_destination, job_id)
-        except NotThreadedError:
-            raise Charm4PyError("Use allow_nested=True to allow launching tasks"
-                                " from tasks with charm.pool")
+        except Exception as e:
+            self.send_chunk_exc(e, result_destination, job_id)
 
     def send_chunk_results(self, results, result_destination, job_id):
         if isinstance(result_destination, int):
@@ -288,6 +342,19 @@ class Worker(Chare):
             for i, result in enumerate(results):
                 result_destination[i].send(result)
             self.scheduler.taskFinished(self.thisIndex, job_id)
+
+    def send_chunk_exc(self, e, result_destination, job_id):
+        if isinstance(e, NotThreadedError):
+            e = Charm4PyError('Use allow_nested=True to allow launching tasks'
+                              ' from tasks with charm.pool')
+        charm.prepareExceptionForSend(e)
+        self.scheduler.taskError(self.thisIndex, job_id, e)
+        if not isinstance(result_destination, int):
+            for f in result_destination:
+                f.send(e)
+
+    def check(self, func_module, func_name):
+        eval(func_name, sys.modules[func_module].__dict__)
 
 
 # This acts as an interface to charm.pool. It is not a chare
