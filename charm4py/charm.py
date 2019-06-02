@@ -506,6 +506,11 @@ class Charm(object):
         self.register(CharmRemote, (GROUP,))
 
         from .pool import PoolScheduler, Worker
+        if self.interactive:
+            if sys.version_info < (3, 0, 0):
+                entry_method.threaded(PoolScheduler.start.im_func)
+            else:
+                entry_method.threaded(PoolScheduler.start)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
