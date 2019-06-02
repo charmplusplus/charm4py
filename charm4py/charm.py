@@ -465,13 +465,6 @@ class Charm(object):
                 entry_method.threaded(C.__init__.im_func)
             else:
                 entry_method.threaded(C.__init__)
-        if self.interactive:
-            from .pool import PoolScheduler
-            if C == PoolScheduler:
-                if sys.version_info < (3, 0, 0):
-                    entry_method.threaded(C.start.im_func)
-                else:
-                    entry_method.threaded(C.start)
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         ems = [entry_method.EntryMethod(C, m, profile=self.options.profiling)
@@ -513,6 +506,11 @@ class Charm(object):
         self.register(CharmRemote, (GROUP,))
 
         from .pool import PoolScheduler, Worker
+        if self.interactive:
+            if sys.version_info < (3, 0, 0):
+                entry_method.threaded(PoolScheduler.start.im_func)
+            else:
+                entry_method.threaded(PoolScheduler.start)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
