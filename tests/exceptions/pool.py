@@ -22,7 +22,7 @@ def myfunc(x):
 
 
 def main(args):
-    num_tasks = charm.numPes() * 20
+    num_tasks = (charm.numPes() - 1) * 20
 
     for _ in range(5):
         for trial in range(2):
