@@ -657,8 +657,14 @@ class Charm(object):
 
     def waitQD(self):
         f = self.createFuture()
-        f.waitqd = True
+        f.ignorehang = True
         self.startQD(f)
+        f.get()
+
+    def sleep(self, time):
+        f = charm.createFuture()
+        f.ignorehang = True
+        self.scheduleCallableAfter(f, time)
         f.get()
 
     def awaitCreation(self, *proxies):
