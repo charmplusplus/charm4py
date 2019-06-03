@@ -38,7 +38,7 @@ def myreducer(contribs):
 charm.thisProxy.exec(myreducer_src, ret=1).get()
 charm.thisProxy.addReducer(myreducer, ret=1).get()
 g.work2(future())
-assert _f.get() == [6282 for _ in range(charm.numPes())]
+assert all([x == 6282 for x in _f.get()])
 
 
 import mylib
