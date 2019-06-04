@@ -170,7 +170,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         self.monitorFutures = [f for f in self.monitorFutures if f.blocked]
         if self.interactive_running:
             for f in charm.threadMgr.futures.values():
-                if f.blocked and not hasattr(f, 'waitqd') and not hasattr(f, 'timestamp'):
+                if f.blocked and not hasattr(f, 'ignorehang') and not hasattr(f, 'timestamp'):
                     f.timestamp = time.time()
                     self.monitorFutures.append(f)
             for f in self.monitorFutures:
