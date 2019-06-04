@@ -750,7 +750,12 @@ class CharmLib(object):
         if PROFILING: dcopy_size += nbytes
         cur_buf += 1
       if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
-      msg = dumps((header, args), PICKLE_PROTOCOL)
+      try:
+        msg = dumps((header, args), PICKLE_PROTOCOL)
+      except:
+        global cur_buf
+        cur_buf = 1
+        raise
     if PROFILING: charm.recordSend(len(msg) + dcopy_size)
     return msg, None
 
