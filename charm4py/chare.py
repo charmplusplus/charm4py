@@ -355,7 +355,7 @@ def group_ckNew_gen(C, epIdx):
     def group_ckNew(cls, args):
         # print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
         header, creation_future = {}, None
-        if get_ident() != charm.threadMgr.main_thread_id and ArrayMap not in C.mro():
+        if not charm.threadMgr.isMainThread() and ArrayMap not in C.mro():
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
             header[b'bcast'] = True
@@ -516,7 +516,7 @@ def array_ckNew_gen(C, epIdx):
             map_gid = map.gid
 
         header, creation_future = {}, None
-        if get_ident() != charm.threadMgr.main_thread_id:
+        if not charm.threadMgr.isMainThread():
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
             header[b'bcast'] = True

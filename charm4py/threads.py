@@ -124,6 +124,9 @@ class EntryMethodThreadManager(object):
         self.coll_futures = {}               # (future ID, obj) -> Future object
         self.threadPool = []
 
+    def isMainThread(self):
+        return get_ident() == self.main_thread_id
+
     def startThread(self, obj, entry_method, args, header):
         """ Called by main thread to spawn an entry method thread """
 

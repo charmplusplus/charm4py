@@ -256,7 +256,7 @@ class Charm(object):
                     self.runningEntryMethod.stopMeasuringTime()
                 em.addRecvTime(time.time() - t0)
                 em.startMeasuringTime()
-            if threads.get_ident() != self.threadMgr.main_thread_id:
+            if not self.threadMgr.isMainThread():
                 # we are already inside a threaded entry method, so don't create a new thread
                 em.run_non_threaded(obj, header, args)  # now call the user's __init__
             else:
@@ -301,7 +301,7 @@ class Charm(object):
                         self.mainchareEmStack.append(self.runningEntryMethod)
                         self.runningEntryMethod.stopMeasuringTime()
                     em.startMeasuringTime()
-                if threads.get_ident() != self.threadMgr.main_thread_id:
+                if not self.threadMgr.isMainThread():
                     # we are already inside a threaded entry method, so don't create a new thread
                     em.run_non_threaded(obj, header, args)  # now call the user's array element __init__
                 else:
