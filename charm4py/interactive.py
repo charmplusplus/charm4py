@@ -139,7 +139,12 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 new_modules = set(sys.modules.keys()) - prev_modules
                 chare_types = []
                 for module_name in new_modules:
-                    for C_name, C in inspect.getmembers(sys.modules[module_name], inspect.isclass):
+                    try:
+                        members = inspect.getmembers(sys.modules[module_name], inspect.isclass)
+                    except:
+                        # some modules can throw exceptions with inspect.getmembers, ignoring them for now
+                        continue
+                    for C_name, C in members:
                         if C.__module__ != chare.__name__ and hasattr(C, 'mro'):
                             if chare.ArrayMap in C.mro():
                                 chare_types.append(C)
