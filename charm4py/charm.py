@@ -14,6 +14,7 @@ else:
     from io import StringIO
 import inspect
 import time
+import gc
 from collections import defaultdict
 import traceback
 from . import chare
@@ -182,6 +183,7 @@ class Charm(object):
                 self.pool = Pool(obj)
             else:
                 setattr(readonlies, name, obj)
+        gc.collect()
 
     def buildMainchare(self, onPe, objPtr, ep, args):
         cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int)
@@ -201,6 +203,7 @@ class Charm(object):
         if self.options.profiling:
             self.activeChares.add((em.C, Mainchare))
             em.startMeasuringTime()
+        gc.collect()
         em.run(obj, {}, [args])  # now call the user's __init__
         self.chares[cid] = obj
         if self.options.profiling:
@@ -213,6 +216,7 @@ class Charm(object):
             msg = cPickle.dumps(roData, self.options.pickle_protocol)
             # print("Registering readonly data of size " + str(len(msg)))
             self.lib.CkRegisterReadonly(b'charm4py_ro', b'charm4py_ro', msg)
+        gc.collect()
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
         em = self.entryMethods[ep]
