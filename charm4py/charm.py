@@ -661,11 +661,14 @@ class Charm(object):
         self.startQD(f)
         f.get()
 
-    def sleep(self, time):
-        f = charm.createFuture()
-        f.ignorehang = True
-        self.scheduleCallableAfter(f, time)
-        f.get()
+    def sleep(self, secs):
+        if self.threadMgr.isMainThread():
+            time.sleep(secs)
+        else:
+            f = self.createFuture()
+            f.ignorehang = True
+            self.scheduleCallableAfter(f, secs)
+            f.get()
 
     def awaitCreation(self, *proxies):
         for proxy in proxies:

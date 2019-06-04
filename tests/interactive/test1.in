@@ -41,6 +41,9 @@ g.work2(future())
 assert all([x == 6282 for x in _f.get()])
 
 
+charm.sleep(3.0)
+
+
 import mylib
 num_chares = charm.numPes() * 4
 a = Array(mylib.Worker, num_chares)
