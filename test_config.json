@@ -94,6 +94,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/collections/proxies_same_name.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/exceptions/test.py"
     },
     {
