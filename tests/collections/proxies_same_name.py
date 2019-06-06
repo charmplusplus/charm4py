@@ -25,6 +25,7 @@ def main(args):
     g2 = Group(proxies_same_name_aux.Hello)
     tester1 = Chare(Test, onPE=2)
     tester2 = Chare(proxies_same_name_aux.Test, onPE=1)
+    charm.awaitCreation(g2, g1, tester2, tester1)
     tester1.test(g2, 'check2', ret=1).get()
     tester2.test(g1, 'check1', ret=1).get()
     exit()
