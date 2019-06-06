@@ -411,9 +411,10 @@ class Charm(object):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
         proxyClass = charm_type.__getProxyClass__(C)
+        # save proxy class in the same module as its Chare class
+        proxyClass.__module__ = C.__module__
+        setattr(sys.modules[C.__module__], proxyClass.__name__, proxyClass)
         self.proxyClasses[charm_type_id][C] = proxyClass
-        setattr(self, proxyClass.__name__, proxyClass)   # save new class in my namespace
-        setattr(chare, proxyClass.__name__, proxyClass)  # save in module namespace (needed to pickle the proxy)
 
     def registerInCharm(self, C):
         C.idx = [None] * len(CHARM_TYPES)

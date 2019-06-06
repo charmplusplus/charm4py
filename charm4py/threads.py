@@ -20,8 +20,7 @@ class Future(object):
         self.thread_state = thread_state  # thread context where the future is created
         self.proxy = proxy                # proxy to the chare that created the future
         # TODO? only obtain proxy_state if actually serializing the future?
-        self.proxy_class_name = proxy.__class__.__name__
-        self.proxy_state = proxy.__getstate__()
+        self.proxy_info = (proxy.__class__.__name__, proxy.__module__, proxy.__getstate__())
         self.nsenders = nsenders          # number of senders
         self.values = []                  # values of the future (can be multiple in case of multiple senders)
         self.blocked = False              # flag to check if creator thread is blocked on future
@@ -55,9 +54,9 @@ class Future(object):
 
     def getTargetProxyEntryMethod(self):
         if not hasattr(self, 'proxy'):
-            proxy_cls = getattr(charm, self.proxy_class_name)
+            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
             proxy = proxy_cls.__new__(proxy_cls)
-            proxy.__setstate__(self.proxy_state)
+            proxy.__setstate__(self.proxy_info[2])
             return proxy._future_deposit_result
         else:
             return self.proxy._future_deposit_result
@@ -77,10 +76,10 @@ class Future(object):
             threadMgr.resumeThread(self.thread_state, self.values)
 
     def __getstate__(self):
-        return (self.fid, self.proxy_class_name, self.proxy_state)
+        return (self.fid, self.proxy_info)
 
     def __setstate__(self, state):
-        self.fid, self.proxy_class_name, self.proxy_state = state
+        self.fid, self.proxy_info = state
 
 
 class CollectiveFuture(Future):
@@ -90,9 +89,9 @@ class CollectiveFuture(Future):
 
     def getTargetProxyEntryMethod(self):
         if not hasattr(self, 'proxy'):
-            proxy_class = getattr(charm, self.proxy_class_name)
-            proxy = proxy_class.__new__(proxy_class)
-            proxy.__setstate__(self.proxy_state)
+            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
+            proxy = proxy_cls.__new__(proxy_cls)
+            proxy.__setstate__(self.proxy_info[2])
             return proxy._coll_future_deposit_result
         else:
             return self.proxy._coll_future_deposit_result
