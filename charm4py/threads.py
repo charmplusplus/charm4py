@@ -20,6 +20,7 @@ class Future(object):
         self.thread_state = thread_state  # thread context where the future is created
         self.proxy = proxy                # proxy to the chare that created the future
         # TODO? only obtain proxy_state if actually serializing the future?
+        self.proxy_info = (proxy.__class__.__name__, proxy.__module__, proxy.__getstate__())
         self.nsenders = nsenders          # number of senders
         self.values = []                  # values of the future (can be multiple in case of multiple senders)
         self.blocked = False              # flag to check if creator thread is blocked on future
@@ -52,7 +53,13 @@ class Future(object):
         self.send(result)
 
     def getTargetProxyEntryMethod(self):
-        return self.proxy._future_deposit_result
+        if not hasattr(self, 'proxy'):
+            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
+            proxy = proxy_cls.__new__(proxy_cls)
+            proxy.__setstate__(self.proxy_info[2])
+            return proxy._future_deposit_result
+        else:
+            return self.proxy._future_deposit_result
 
     def deposit(self, result):
         """ Deposit a value for this future. """
@@ -69,10 +76,10 @@ class Future(object):
             threadMgr.resumeThread(self.thread_state, self.values)
 
     def __getstate__(self):
-        return (self.fid, self.proxy)
+        return (self.fid, self.proxy_info)
 
     def __setstate__(self, state):
-        self.fid, self.proxy = state
+        self.fid, self.proxy_info = state
 
 
 class CollectiveFuture(Future):
@@ -81,7 +88,13 @@ class CollectiveFuture(Future):
         super(CollectiveFuture, self).__init__(fid, tstate, proxy, nsenders)
 
     def getTargetProxyEntryMethod(self):
-        return self.proxy._coll_future_deposit_result
+        if not hasattr(self, 'proxy'):
+            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
+            proxy = proxy_cls.__new__(proxy_cls)
+            proxy.__setstate__(self.proxy_info[2])
+            return proxy._coll_future_deposit_result
+        else:
+            return self.proxy._coll_future_deposit_result
 
 
 class ThreadState(object):
