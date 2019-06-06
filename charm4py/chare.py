@@ -28,7 +28,10 @@ class Chare(object):
             arr = Array(chare_type, ndims=1)
             arr.ckInsert(0, args, onPE, single=True)
             arr.ckDoneInserting()
-            return arr[0]
+            proxy = arr[0]
+            if hasattr(arr, 'creation_future'):
+                proxy.creation_future = arr.creation_future
+            return proxy
         return object.__new__(cls)
 
     def __init__(self):
@@ -516,7 +519,7 @@ def array_ckNew_gen(C, epIdx):
             map_gid = map.gid
 
         header, creation_future = {}, None
-        if not charm.threadMgr.isMainThread():
+        if sum(dims) > 0 and not charm.threadMgr.isMainThread():
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
             header[b'bcast'] = True
@@ -537,6 +540,11 @@ def array_ckInsert_gen(epIdx):
         header = {}
         if single:
             header[b'single'] = True
+            if not charm.threadMgr.isMainThread():
+                proxy.creation_future = charm.createFuture()
+                header[b'block'] = proxy.creation_future
+                header[b'bcast'] = True
+                header[b'creation'] = True
         msg = charm.packMsg(None, args, header)
         charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg, useAtSync)
     return array_ckInsert
