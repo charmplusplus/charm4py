@@ -38,6 +38,9 @@ cdef enum:
   NUM_DCOPY_BUFS = 60   # max number of dcopy buffers
 
 cdef enum:
+  SECTION_MAX_BFACTOR = 100
+
+cdef enum:
   MAX_INDEX_LEN = 10    # max dimensions supported for array index
 
 # ----- reduction data structures ------
@@ -288,6 +291,7 @@ cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
 cdef c_type_table_typecodes = [None] * 12
 cdef int c_type_table_sizes[12]
+cdef int[SECTION_MAX_BFACTOR] section_children
 
 cdef object charm
 cdef object charm_reducer_to_ctype
@@ -414,11 +418,27 @@ class CharmLib(object):
     global cur_buf
     msg0, dcopy = msg
     if cur_buf <= 1:
-      CkGroupExtSend(group_id, index, ep, msg0, len(msg0))
+      CkGroupExtSend(group_id, 1, &index, ep, msg0, len(msg0))
     else:
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
-      CkGroupExtSend_multi(group_id, index, ep, cur_buf, send_bufs, send_buf_sizes)
+      CkGroupExtSend_multi(group_id, 1, &index, ep, cur_buf, send_bufs, send_buf_sizes)
+      cur_buf = 1
+
+  def CkGroupSendMulti(self, int group_id, list pes, int ep, msg not None):
+    cdef int num_pes
+    cdef int i = 0
+    global cur_buf
+    msg0, dcopy = msg
+    num_pes = len(pes)
+    assert num_pes < SECTION_MAX_BFACTOR
+    for i in range(num_pes): section_children[i] = pes[i]
+    if cur_buf <= 1:
+      CkGroupExtSend(group_id, num_pes, section_children, ep, msg0, len(msg0))
+    else:
+      send_bufs[0]      = <char*>msg0
+      send_buf_sizes[0] = <int>len(msg0)
+      CkGroupExtSend_multi(group_id, num_pes, section_children, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
 
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):

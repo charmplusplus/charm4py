@@ -208,8 +208,8 @@ ffibuilder.cdef("""
 
     void CkChareExtSend(int onPE, void *objPtr, int epIdx, char *msg, int msgSize);
     void CkChareExtSend_multi(int onPE, void *objPtr, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
-    void CkGroupExtSend(int gid, int pe, int epIdx, char *msg, int msgSize);
-    void CkGroupExtSend_multi(int gid, int pe, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
+    void CkGroupExtSend(int gid, int npes, int *pes, int epIdx, char *msg, int msgSize);
+    void CkGroupExtSend_multi(int gid, int npes, int *pes, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
     void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize);
     void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
 

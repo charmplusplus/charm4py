@@ -233,7 +233,13 @@ class CharmLib(object):
 
   def CkGroupSend(self, group_id, index, ep, msg):
     msg0, dcopy = msg
-    self.lib.CkGroupExtSend(group_id, index, ep, msg0, len(msg0))
+    c_pe = c_int(index)
+    self.lib.CkGroupExtSend(group_id, 1, ctypes.byref(c_pe), ep, msg0, len(msg0))
+
+  def CkGroupSendMulti(self, group_id, pes, ep, msg):
+    msg0, dcopy = msg
+    c_pes = (c_int * len(pes))(*pes)
+    self.lib.CkGroupExtSend(group_id, len(pes), c_pes, ep, msg0, len(msg0))
 
   def CkArraySend(self, array_id, index, ep, msg):
     msg0, dcopy = msg
