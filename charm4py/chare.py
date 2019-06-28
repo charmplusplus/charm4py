@@ -301,19 +301,18 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         elemIdx = proxy.elemIdx
         if 'ret' in kwargs:
             retmode = kwargs['ret']
-        else:
-            retmode = 0
-        if retmode > 0:
-            header[b'block'] = blockFuture = charm.createFuture()
-            if elemIdx == -1:
-                header[b'bcast'] = True
-                if retmode > 1:
-                    header[b'bcastret'] = True
+            if retmode > 0:
+                header[b'block'] = blockFuture = charm.createFuture()
+                if elemIdx == -1:
+                    header[b'bcast'] = True
+                    if retmode > 1:
+                        header[b'bcastret'] = True
         destObj = None
+        gid = proxy.gid
         if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
-            destObj = charm.groups[proxy.gid]
+            destObj = charm.groups[gid]
         msg = charm.packMsg(destObj, args, header)
-        charm.CkGroupSend(proxy.gid, elemIdx, ep, msg)
+        charm.CkGroupSend(gid, elemIdx, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -336,19 +335,18 @@ def update_globals_proxy_method_gen(ep):
         elemIdx = proxy.elemIdx
         if 'ret' in kwargs:
             retmode = kwargs['ret']
-        else:
-            retmode = 0
-        if retmode > 0:
-            header[b'block'] = blockFuture = charm.createFuture()
-            if elemIdx == -1:
-                header[b'bcast'] = True
-                if retmode > 1:
-                    header[b'bcastret'] = True
+            if retmode > 0:
+                header[b'block'] = blockFuture = charm.createFuture()
+                if elemIdx == -1:
+                    header[b'bcast'] = True
+                    if retmode > 1:
+                        header[b'bcastret'] = True
         destObj = None
+        gid = proxy.gid
         if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
-            destObj = charm.groups[proxy.gid]
+            destObj = charm.groups[gid]
         msg = charm.packMsg(destObj, args, header)
-        charm.CkGroupSend(proxy.gid, elemIdx, ep, msg)
+        charm.CkGroupSend(gid, elemIdx, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -357,7 +355,8 @@ def group_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def group_ckNew(cls, args):
         # print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
-        header, creation_future = {}, None
+        header = {}
+        creation_future = None
         if not charm.threadMgr.isMainThread() and ArrayMap not in C.mro():
             creation_future = charm.createFuture()
             header[b'block'] = creation_future
@@ -478,21 +477,20 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         elemIdx = proxy.elemIdx
         if 'ret' in kwargs:
             retmode = kwargs['ret']
-        else:
-            retmode = 0
-        if retmode > 0:
-            header[b'block'] = blockFuture = charm.createFuture()
-            if elemIdx == ():
-                header[b'bcast'] = True
-                if retmode > 1:
-                    header[b'bcastret'] = True
+            if retmode > 0:
+                header[b'block'] = blockFuture = charm.createFuture()
+                if elemIdx == ():
+                    header[b'bcast'] = True
+                    if retmode > 1:
+                        header[b'bcastret'] = True
         destObj = None
+        aid = proxy.aid
         if Options.local_msg_optim and (len(args) > 0):
-            array = charm.arrays[proxy.aid]
+            array = charm.arrays[aid]
             if elemIdx in array:
                 destObj = array[elemIdx]
         msg = charm.packMsg(destObj, args, header)
-        charm.CkArraySend(proxy.aid, elemIdx, ep, msg)
+        charm.CkArraySend(aid, elemIdx, ep, msg)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
