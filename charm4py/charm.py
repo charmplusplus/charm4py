@@ -220,7 +220,9 @@ class Charm(object):
 
     def invokeEntryMethod(self, obj, ep, header, args, t0):
         em = self.entryMethods[ep]
-        if self.options.profiling:
+        opts = self.options
+        profiling = opts.profiling
+        if profiling:
             em.addRecvTime(time.time() - t0)
             em.startMeasuringTime()
 
@@ -229,10 +231,10 @@ class Charm(object):
         else:
             self.mainThreadEntryMethod = em
             em.run(obj, header, args)
-            if self.options.auto_flush_wait_queues and obj._cond_next is not None:
+            if opts.auto_flush_wait_queues and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 
-        if self.options.profiling:
+        if profiling:
             em.stopMeasuringTime()
 
     def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
