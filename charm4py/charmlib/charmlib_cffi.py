@@ -227,14 +227,26 @@ class CharmLib(object):
   def CkGroupSend(self, group_id, index, ep, msg):
     msg0, dcopy = msg
     if len(dcopy) == 0:
-      lib.CkGroupExtSend(group_id, index, ep, msg0, len(msg0))
+      lib.CkGroupExtSend(group_id, 1, (index,), ep, msg0, len(msg0))
     else:
       self.send_bufs[0] = ffi.from_buffer(msg0)
       self.send_buf_sizes[0] = len(msg0)
       for i,buf in enumerate(dcopy):
         self.send_bufs[i+1] = ffi.from_buffer(buf)
         self.send_buf_sizes[i+1] = buf.nbytes
-      lib.CkGroupExtSend_multi(group_id, index, ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
+      lib.CkGroupExtSend_multi(group_id, 1, (index,), ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
+
+  def CkGroupSendMulti(self, group_id, pes, ep, msg):
+    msg0, dcopy = msg
+    if len(dcopy) == 0:
+      lib.CkGroupExtSend(group_id, len(pes), pes, ep, msg0, len(msg0))
+    else:
+      self.send_bufs[0] = ffi.from_buffer(msg0)
+      self.send_buf_sizes[0] = len(msg0)
+      for i,buf in enumerate(dcopy):
+        self.send_bufs[i+1] = ffi.from_buffer(buf)
+        self.send_buf_sizes[i+1] = buf.nbytes
+      lib.CkGroupExtSend_multi(group_id, len(pes), pes, ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
   def CkArraySend(self, array_id, index, ep, msg):
     msg0, dcopy = msg
