@@ -92,15 +92,16 @@ class PoolScheduler(Chare):
         if ncores < 0:
             ncores = self.num_workers
         elif ncores > self.num_workers:
-            print('charm.pool WARNING: requested more cores than are '
+            print('charm.pool Warning: requested more cores than are '
                   'available. Using max available cores')
             ncores = self.num_workers
 
         if self.workers is None:
             assert self.num_workers > 0, 'Run with more than 1 PE to use charm.pool'
             # first time running a job, create Group of workers
-            print('Initializing charm.pool. WARNING: charm.pool is '
-                  'experimental (API and performance is subject to change)')
+            print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
+                  'Warning: charm.pool is experimental (API and performance '
+                  'is subject to change)')
             self.workers = Group(Worker, args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
