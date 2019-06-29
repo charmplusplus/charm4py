@@ -5,6 +5,7 @@ if sys.version_info < (3, 0, 0):
 else:
     from threading import get_ident
 import time
+import array
 
 
 class NotThreadedError(Exception):
@@ -118,7 +119,7 @@ class EntryMethodThreadManager(object):
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
         self.threads = {}                    # thread ID -> ThreadState object
-        self.futures_count = 0               # counter used as IDs for futures created by this ThreadManager
+        self.fidpool = array.array('H', range(30000,0,-1))
         self.futures = {}                    # future ID -> Future object
         self.coll_futures = {}               # (future ID, obj) -> Future object
         self.threadPool = []
@@ -265,8 +266,7 @@ class EntryMethodThreadManager(object):
         tid = get_ident()
         if tid == self.main_thread_id:
             self.throwNotThreadedError()
-        self.futures_count += 1
-        fid = self.futures_count
+        fid = self.fidpool.pop()
         thread_state = self.threads[tid]
         obj = thread_state.obj
         if hasattr(obj, 'thisIndex'):
@@ -295,6 +295,7 @@ class EntryMethodThreadManager(object):
         f = self.futures[fid]
         if f.deposit(result):
             del self.futures[fid]
+            self.fidpool.append(fid)
             # resume if blocked
             f.resume(self)
 
@@ -305,7 +306,9 @@ class EntryMethodThreadManager(object):
             f.resume(self)
 
     def cancelFuture(self, f):
-        del self.futures[f.fid]
+        fid = f.fid
+        del self.futures[fid]
+        self.fidpool.append(fid)
         f.gotvalues = True
         f.values = [None] * f.nsenders
         f.resume(self)
