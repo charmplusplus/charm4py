@@ -119,6 +119,8 @@ class EntryMethodThreadManager(object):
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
         self.threads = {}                    # thread ID -> ThreadState object
+        # pool of Future IDs for futures created by this ThreadManager. Can have as many
+        # active futures as the size of this pool
         self.fidpool = array.array('H', range(30000,0,-1))
         self.futures = {}                    # future ID -> Future object
         self.coll_futures = {}               # (future ID, obj) -> Future object
