@@ -2,21 +2,27 @@ from charm4py import charm
 
 
 def main(args):
-
-    # phynode IDs should go from 0 to N-1, but assume that is not the case
-    phyNodes = set()
-    for pe in range(charm.numPes()):
-        phynode = charm.physicalNodeID(pe)
-        assert phynode >= 0
-        phyNodes.add(phynode)
-
-    assert len(phyNodes) == charm.numPhysicalNodes()
-
-    for phynode in phyNodes:
-        pe = charm.firstPeOnPhysicalNode(phynode)
-        assert pe >= 0 and pe < charm.numPes()
-        assert charm.physicalNodeID(pe) == phynode
-
+    myhost = charm.myHost()
+    assert myhost >= 0 and myhost < charm.numHosts()
+    allpes = set()
+    rank0pes = set()
+    totalpes = 0
+    for host in range(charm.numHosts()):
+        pes = charm.getHostPes(host)
+        assert charm.getHostNumPes(host) == len(pes)
+        assert len(allpes.intersection(pes)) == 0
+        allpes.update(pes)
+        for i, pe in enumerate(pes):
+            assert charm.getPeHost(pe) == host
+            assert charm.getPeHostRank(pe) == i
+        rank0 = charm.getHostFirstPe(host)
+        assert rank0 == pes[0]
+        assert rank0 >= 0 and rank0 < charm.numPes()
+        assert rank0 not in rank0pes
+        rank0pes.add(rank0)
+        totalpes += charm.getHostNumPes(host)
+    assert sorted(allpes) == list(range(charm.numPes()))
+    assert totalpes == charm.numPes()
     exit()
 
 

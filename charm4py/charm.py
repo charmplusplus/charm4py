@@ -801,6 +801,27 @@ class Charm(object):
     def numPes(self):
         return self._numPes
 
+    def myHost(self):
+        return self.lib.CkPhysicalNodeID(self._myPe)
+
+    def numHosts(self):
+        return self.lib.CkNumPhysicalNodes()
+
+    def getHostPes(self, host):
+        return self.lib.CkGetPesOnPhysicalNode(host)
+
+    def getHostFirstPe(self, host):
+        return self.lib.CkGetFirstPeOnPhysicalNode(host)
+
+    def getHostNumPes(self, host):
+        return self.lib.CkNumPesOnPhysicalNode(host)
+
+    def getPeHost(self, pe):
+        return self.lib.CkPhysicalNodeID(pe)
+
+    def getPeHostRank(self, pe):
+        return self.lib.CkPhysicalRank(pe)
+
     def exit(self, exitCode=0):
         self.lib.CkExit(exitCode)
 
@@ -816,14 +837,8 @@ class Charm(object):
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
 
-    def firstPeOnPhysicalNode(self, node):
-        return self.lib.CkGetFirstPeOnPhysicalNode(node)
 
-    def physicalNodeID(self, pe):
-        return self.lib.CkPhysicalNodeID(pe)
 
-    def numPhysicalNodes(self):
-        return self.lib.CkNumPhysicalNodes()
 
 class CharmRemote(Chare):
 
