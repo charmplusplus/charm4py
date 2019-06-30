@@ -680,14 +680,23 @@ class CharmLib(object):
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
-  def CkExit(self, exitCode): return realCkExit(exitCode)
+  def CkExit(self, int exitCode): return realCkExit(exitCode)
   def CkPrintf(self, bytes msg): CmiPrintf(msg)
   def CkAbort(self, str msg): return CmiAbort(msg.encode())
   def LBTurnInstrumentOn(self):  LBTurnInstrumentOn()
   def LBTurnInstrumentOff(self): LBTurnInstrumentOff()
-  def CkGetFirstPeOnPhysicalNode(self, node): return CmiGetFirstPeOnPhysicalNode(node)
-  def CkPhysicalNodeID(self, pe): return CmiPhysicalNodeID(pe)
+  def CkGetFirstPeOnPhysicalNode(self, int node): return CmiGetFirstPeOnPhysicalNode(node)
+  def CkPhysicalNodeID(self, int pe): return CmiPhysicalNodeID(pe)
   def CkNumPhysicalNodes(self): return CmiNumPhysicalNodes()
+  def CkNumPesOnPhysicalNode(self, int node): return CmiNumPesOnPhysicalNode(node)
+  def CkPhysicalRank(self, int pe): return CmiPhysicalRank(pe)
+
+  def CkGetPesOnPhysicalNode(self, int node):
+    cdef int numpes
+    cdef int *pelist
+    cdef int i = 0
+    CmiGetPesOnPhysicalNode(node, &pelist, &numpes)
+    return [pelist[i] for i in range(numpes)]
 
   def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0

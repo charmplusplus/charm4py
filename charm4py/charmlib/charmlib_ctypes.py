@@ -654,6 +654,18 @@ class CharmLib(object):
   def CkNumPhysicalNodes(self):
     return self.lib.CmiNumPhysicalNodes()
 
+  def CkNumPesOnPhysicalNode(self, node):
+    return self.lib.CmiNumPesOnPhysicalNode(node)
+
+  def CkPhysicalRank(self, pe):
+    return self.lib.CmiPhysicalRank(pe)
+
+  def CkGetPesOnPhysicalNode(self, node):
+    numpes = c_int(0)
+    pelist = POINTER(c_int)()
+    self.lib.CmiGetPesOnPhysicalNode(node, ctypes.byref(pelist), ctypes.byref(numpes))
+    return [pelist[i] for i in range(numpes.value)]
+
   def scheduleTagAfter(self, tag, msecs):
     self.lib.CcdCallFnAfter(self.CcdCallFnAfterCallback_cb, tag, c_double(msecs))
 
