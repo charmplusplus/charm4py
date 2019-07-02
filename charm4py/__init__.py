@@ -20,11 +20,6 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
     from .charm import charm, readonlies, Options
     Reducer = charm.reducers
 
-    CkMyPe = charm.myPe
-    CkNumPes = charm.numPes
-    CkExit = charm.exit
-    CkAbort = charm.abort
-
     from .entry_method import when, threaded, threaded_ext
 
     from .chare import Chare, Group, Array, ArrayMap
