@@ -178,13 +178,10 @@ class EntryMethodThreadManager(object):
                         ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                         if b'block' in header:
                             if b'bcast' in header:
-                                sid = None
-                                if b'sid' in header:
-                                    sid = header[b'sid']
                                 if b'bcastret' in header:
-                                    obj.contribute(ret, charm.reducers.gather, header[b'block'], sid)
+                                    obj.contribute(ret, charm.reducers.gather, header[b'block'])
                                 else:
-                                    obj.contribute(None, None, header[b'block'], sid)
+                                    obj.contribute(None, None, header[b'block'])
                             else:
                                 header[b'block'].send(ret)
                     except Exception as e:
