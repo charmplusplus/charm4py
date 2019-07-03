@@ -176,16 +176,19 @@ class EntryMethodThreadManager(object):
                     thread_state.notify = entry_method.thread_notify
                     try:
                         ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
+                        if b'block' in header:
+                            if b'bcast' in header:
+                                sid = None
+                                if b'sid' in header:
+                                    sid = header[b'sid']
+                                if b'bcastret' in header:
+                                    obj.contribute(ret, charm.reducers.gather, header[b'block'], sid)
+                                else:
+                                    obj.contribute(None, None, header[b'block'], sid)
+                            else:
+                                header[b'block'].send(ret)
                     except Exception as e:
                         charm.process_em_exc(e, obj, header)
-                    if b'block' in header:
-                        if b'bcast' in header:
-                            if b'bcastret' in header:
-                                obj.contribute(ret, charm.reducers.gather, header[b'block'])
-                            else:
-                                obj.contribute(None, None, header[b'block'])
-                        else:
-                            header[b'block'].send(ret)
                     thread_state.notify = False
                     thread_state.idle = True
                     thread_state.obj = None
