@@ -890,7 +890,8 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
   except:
     charm.handleGeneralError()
 
-cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, char **returnBuffers, int *returnBufferSizes):
+cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
+                            char **returnBuffers, int *returnBufferSizes):
   cdef int numElems
   cdef array.array a
   cdef int item_size

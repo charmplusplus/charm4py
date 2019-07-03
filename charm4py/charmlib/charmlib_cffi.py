@@ -455,7 +455,7 @@ class CharmLib(object):
     lib.CkStartQDExt_ArrayCallback(aid, index, len(index), ep, fid)
 
   @ffi.def_extern()
-  def createCallbackMsg_py2(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg_py2(data, dataSize, reducerType, fid, sectionInfo, returnBuffers, returnBufferSizes):
     try:
       if charm.options.profiling: t0 = time.time()
 
@@ -519,7 +519,7 @@ class CharmLib(object):
       charm.handleGeneralError()
 
   @ffi.def_extern()
-  def createCallbackMsg_py3(data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg_py3(data, dataSize, reducerType, fid, sectionInfo, returnBuffers, returnBufferSizes):
     try:
       if charm.options.profiling: t0 = time.time()
 
