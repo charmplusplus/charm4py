@@ -158,9 +158,8 @@ class Charm(object):
     def process_em_exc(self, e, obj, header):
         if b'block' not in header:
             raise e
-        else:
-            # remote is expecting a response via a future, send exception to the future
-            blockFuture = header[b'block']
+        # remote is expecting a response via a future, send exception to the future
+        blockFuture = header[b'block']
         if b'creation' in header:
             # don't send anything in this case (future is not guaranteed to be used)
             obj.contribute(None, None, blockFuture)
