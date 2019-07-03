@@ -11,7 +11,7 @@ class Test(Chare):
             index = self.thisIndex
         i = 137
         for _ in range(1000):
-            result = charm.allReduce(index + i, Reducer.sum, self)
+            result = self.allreduce(index + i, Reducer.sum).get()
             expected = float(numChares) * (numChares - 1) / 2 + (i * numChares)
             assert result == expected
             i += 1

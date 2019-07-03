@@ -641,14 +641,6 @@ class Charm(object):
             self.recordSend(contributeInfo.getDataSize())
         target.__self__.ckContribute(contributeInfo)
 
-    def allReduce(self, data, reducer, contributor):
-        collective_future = self.threadMgr.createCollectiveFuture(contributor.__getRedNo__())
-        self.contribute(data, reducer, collective_future, contributor)
-        return collective_future.get()  # blocks until result of reduction comes
-
-    def barrier(self, contributor):
-        self.allReduce(None, None, contributor)
-
     def startQD(self, callback):
         fid = 0
         if isinstance(callback, Future):

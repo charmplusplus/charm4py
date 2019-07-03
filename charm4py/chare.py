@@ -122,6 +122,15 @@ class Chare(object):
     def reduce(self, callback, data=None, reducer=None):
         charm.contribute(data, reducer, callback, self)
 
+    def allreduce(self, data=None, reducer=None):
+        # The CMK_REFNUM_TYPE type inside Charm++ callbacks that is used to
+        # carry future IDs is usually unsigned short, so don't go over that max value.
+        # Also, we can't have fid==0 because that means no fid
+        fid = self.__getRedNo__() % 65535 + 1
+        future = charm.threadMgr.createCollectiveFuture(fid)
+        charm.contribute(data, reducer, future, self)
+        return future
+
     def AtSync(self):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
         charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
@@ -160,14 +169,15 @@ class Chare(object):
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
-                 '__waitEnqueue__', 'wait', 'contribute', 'reduce',
+                 '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
                  'AtSync', 'migrate', 'setMigratable', '_future_deposit_result',
                  '_coll_future_deposit_result', '__getRedNo__',
                  '__addThreadEventSubscriber__'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
-    'non_entry_method': {'wait', 'contribute', 'reduce', 'AtSync', 'migrated'}
+    'non_entry_method': {'wait', 'contribute', 'reduce', 'allreduce',
+                         'AtSync', 'migrated'}
 }
 
 
