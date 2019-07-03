@@ -5,7 +5,7 @@ class Hello(Chare):
 
     def SayHi(self, future):
         print("Hello World from element", self.thisIndex)
-        self.contribute(None, None, future)
+        self.reduce(future)
 
 def main(args):
     # create Group of Hello objects (one object exists and runs on each core)

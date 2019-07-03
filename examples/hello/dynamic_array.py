@@ -61,7 +61,7 @@ class Hello(Chare):
             return self.thisProxy[nextIndex].SayHi(hiNo+1)
 
     def TestReduction(self):
-        self.contribute(1, Reducer.sum, mainProxy.doneReduction)
+        self.reduce(mainProxy.doneReduction, 1, Reducer.sum)
 
 
 charm.start(Main)

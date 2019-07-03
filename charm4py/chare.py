@@ -116,8 +116,11 @@ class Chare(object):
             self.__waitEnqueue__(cond_template, (1, get_ident()))
             charm.threadMgr.pauseThread()
 
-    def contribute(self, data, reducer_type, target):
-        charm.contribute(data, reducer_type, target, self)
+    def contribute(self, data, reducer, callback):
+        charm.contribute(data, reducer, callback, self)
+
+    def reduce(self, callback, data=None, reducer=None):
+        charm.contribute(data, reducer, callback, self)
 
     def AtSync(self):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
@@ -157,14 +160,14 @@ class Chare(object):
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
-                 '__waitEnqueue__', 'wait', 'contribute', 'AtSync',
-                 'migrate', 'setMigratable', '_future_deposit_result',
+                 '__waitEnqueue__', 'wait', 'contribute', 'reduce',
+                 'AtSync', 'migrate', 'setMigratable', '_future_deposit_result',
                  '_coll_future_deposit_result', '__getRedNo__',
                  '__addThreadEventSubscriber__'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
-    'non_entry_method': {'wait', 'contribute', 'AtSync', 'migrated'}
+    'non_entry_method': {'wait', 'contribute', 'reduce', 'AtSync', 'migrated'}
 }
 
 

@@ -6,4 +6,4 @@ class Goodbye(Chare):
 
     def SayGoodbye(self):
         print('Goodbye from PE', charm.myPe())
-        self.contribute(None, None, mainProxy.done)
+        self.reduce(mainProxy.done)
