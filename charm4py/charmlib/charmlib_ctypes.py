@@ -436,7 +436,7 @@ class CharmLib(object):
     c_index = (ctypes.c_int * ndims)(*index)
     self.lib.CkStartQDExt_ArrayCallback(aid, c_index, ndims, ep, fid)
 
-  def createCallbackMsg(self, data, dataSize, reducerType, fid, returnBuffers, returnBufferSizes):
+  def createCallbackMsg(self, data, dataSize, reducerType, fid, sectionInfo, returnBuffers, returnBufferSizes):
     try:
       if self.opts.profiling: t0 = time.time()
 
@@ -612,7 +612,7 @@ class CharmLib(object):
     self.lib.registerArrayResumeFromSyncExtCallback(self.resumeFromSyncCb)
 
     # Args to createCallbackMsg: data, return_buffer, data_size, reducer_type
-    self.CREATE_RED_TARG_MSG_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, c_int, POINTER(c_char_p), POINTER(c_int))
+    self.CREATE_RED_TARG_MSG_CB_TYPE = CFUNCTYPE(None, c_void_p, c_int, c_int, c_int, POINTER(c_int), POINTER(c_char_p), POINTER(c_int))
     self.createCallbackMsgCb = self.CREATE_RED_TARG_MSG_CB_TYPE(self.createCallbackMsg)
     self.lib.registerCreateCallbackMsgExtCallback(self.createCallbackMsgCb)
 
