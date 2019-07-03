@@ -49,6 +49,7 @@ class EntryMethod(object):
             charm.exit(exit_code)
         except Exception as e:
             charm.process_em_exc(e, obj, header)
+            return
         if b'block' in header:
             blockFuture = header[b'block']
             if b'bcast' in header:

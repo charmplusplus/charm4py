@@ -159,7 +159,7 @@ class Charm(object):
         if b'block' not in header:
             raise e
         # remote is expecting a response via a future, send exception to the future
-        blockFuture = header.pop(b'block')
+        blockFuture = header[b'block']
         if b'creation' in header:
             # don't send anything in this case (future is not guaranteed to be used)
             obj.contribute(None, None, blockFuture)
