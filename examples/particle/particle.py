@@ -84,9 +84,9 @@ class Cell(Chare):
         self.msgsRcvd += 1
         if self.msgsRcvd == len(self.neighbors):
             self.msgsRcvd = 0
-            self.contribute(len(self.particles), Reducer.max, self.thisProxy[(0,0)].collectMax)
+            self.reduce(self.thisProxy[(0,0)].collectMax, len(self.particles), Reducer.max)
             if self.iteration >= NUM_ITER:
-                self.contribute(None, None, self.simDoneFuture)  # simulation done
+                self.reduce(self.simDoneFuture)  # simulation done
             elif self.iteration == 1 or self.iteration % 15 == 0:
                 self.AtSync()  # do load balancing
             else:
@@ -111,6 +111,7 @@ class Cell(Chare):
 
 
 def main(args):
+    global MAX_START_PARTICLES_PER_CELL
     if len(args) >= 3:
         arrayDims = (int(args[1]), int(args[2]))
     else:

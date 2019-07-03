@@ -182,13 +182,13 @@ class Stencil(Chare):
             print("[" + str(self.iterations) + "] Time per iteration: " + str(endTime-self.startTime))
 
         if self.iterations == MAX_ITER:
-            self.contribute(None, None, self.sim_done_future)
+            self.reduce(self.sim_done_future)
         else:
             if self.thisIndex == (0,0,0): self.startTime = time.time()
             if self.iterations == 1 or self.iterations % LBPERIOD_ITER == 0:
                 self.AtSync()
             else:
-                self.contribute(None, None, self.thisProxy.begin_iteration)
+                self.reduce(self.thisProxy.begin_iteration)
 
     # Check to see if we have received all neighbor values yet
     # If all neighbor values have been received, we update our values and proceed
