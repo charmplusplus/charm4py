@@ -8,9 +8,10 @@ charm.options.local_msg_buf_size = 10000
 
 NUM_ARRAYS = 10
 NUM_GROUPS = 10
-NUM_GEN = 500
+NUM_GEN = 300
 DATA_VERIFY = 0
-NUM_ITER = 10
+NUM_ITER = 1
+VERBOSE = False
 
 
 def mygather(contribs):
@@ -115,7 +116,7 @@ def inSections(obj):
 
 def main(args):
     collections = []
-    cid = 0
+    cid = 0  # collection ID
 
     for _ in range(NUM_ARRAYS):
         proxy = Array(Test, random.randint(1, charm.numPes() * 10), args=[cid])
@@ -163,16 +164,17 @@ def main(args):
     print(len(collections), 'collections created, sections_split=', sections_split,
           'sections_combined=', sections_combined)
 
-    section_sizes = []
-    for c in collections:
-        if c.proxy.issec is not None:
-            section_sizes.append(len(c.elems))
-    section_sizes = numpy.array(section_sizes)
-    print(len(section_sizes), 'sections, sizes:')
-    print('min size=', numpy.min(section_sizes))
-    print('median size=', numpy.median(section_sizes))
-    print('mean size=', numpy.mean(section_sizes))
-    print('max size=', numpy.max(section_sizes))
+    if VERBOSE:
+        section_sizes = []
+        for c in collections:
+            if c.proxy.issec is not None:
+                section_sizes.append(len(c.elems))
+        section_sizes = numpy.array(section_sizes)
+        print(len(section_sizes), 'sections, sizes:')
+        print('min size=', numpy.min(section_sizes))
+        print('median size=', numpy.median(section_sizes))
+        print('mean size=', numpy.mean(section_sizes))
+        print('max size=', numpy.max(section_sizes))
 
     for c in collections:
         if c.proxy.issec:
