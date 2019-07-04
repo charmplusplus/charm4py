@@ -51,7 +51,10 @@ def _min(contribs):
     return min(contribs)
 
 def _bcast_exc_reducer(contribs):
-    return contribs[0]
+    # return first non empty contribution
+    for c in contribs:
+        if c is not None:
+            return c
 
 def gather(contribs):
     # contribs will be a list of list of tuples

@@ -244,8 +244,12 @@ class CharmLib(object):
   def CkArraySend(self, array_id, index, ep, msg):
     msg0, dcopy = msg
     ndims = len(index)
-    c_elemIdx = (ctypes.c_int * ndims)(*index)  # TODO have buffer preallocated for this?
+    c_elemIdx = (c_int * ndims)(*index)  # TODO have buffer preallocated for this?
     self.lib.CkArrayExtSend(array_id, c_elemIdx, ndims, ep, msg0, len(msg0))
+
+  def sendToSection(self, gid, children):
+    c_children = (c_int * len(children))(*children)
+    self.lib.CkForwardMulticastMsg(gid, len(children), c_children)
 
   def CkRegisterReadonly(self, n1, n2, msg):
     if msg is None: self.lib.CkRegisterReadonlyExt(n1, n2, 0, msg)
@@ -261,6 +265,12 @@ class CharmLib(object):
     self.chareNames.append(ctypes.create_string_buffer(name.encode()))
     chareIdx, startEpIdx = c_int(0), c_int(0)
     self.lib.CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
+    return int(chareIdx.value), int(startEpIdx.value)
+
+  def CkRegisterSectionManager(self, name, numEntryMethods):
+    self.chareNames.append(ctypes.create_string_buffer(name.encode()))
+    chareIdx, startEpIdx = c_int(0), c_int(0)
+    self.lib.CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, ctypes.byref(chareIdx), ctypes.byref(startEpIdx))
     return int(chareIdx.value), int(startEpIdx.value)
 
   def CkRegisterArrayMap(self, name, numEntryMethods):
@@ -425,6 +435,9 @@ class CharmLib(object):
     c_elemIdx = (ctypes.c_int * ndims)(*index)
     self.lib.CkExtContributeToArray(ctypes.byref(contributeInfo), aid, c_elemIdx, ndims)
 
+  def CkContributeToSection(self, contributeInfo, sid, rootPE):
+    self.lib.CkExtContributeToSection(ctypes.byref(contributeInfo), sid[0], sid[1], rootPE)
+
   def CkStartQD_ChareCallback(self, cid, ep, fid):
     self.lib.CkStartQDExt_ChareCallback(cid[0], cid[1], ep, fid)
 
@@ -436,15 +449,28 @@ class CharmLib(object):
     c_index = (ctypes.c_int * ndims)(*index)
     self.lib.CkStartQDExt_ArrayCallback(aid, c_index, ndims, ep, fid)
 
+  def CkStartQD_SectionCallback(self, sid, rootPE, ep):
+    self.lib.CkStartQDExt_SectionCallback(sid[0], sid[1], rootPE, ep)
+
   def createCallbackMsg(self, data, dataSize, reducerType, fid, sectionInfo, returnBuffers, returnBufferSizes):
     try:
       if self.opts.profiling: t0 = time.time()
 
-      if reducerType < 0 and data == None:
+      pyData = []
+      if sectionInfo[0] >= 0:
+        # this is a section callback
+        sid = (sectionInfo[0], sectionInfo[1])
+        pyData = [sid, sectionInfo[2], {b'sid': sid}]
+        secMgrProxy = self.charm.sectionMgr.thisProxy
+        # tell Charm++ the gid and ep of SectionManager for section broadcasts
+        sectionInfo[0] = secMgrProxy.gid
+        sectionInfo[1] = secMgrProxy.sendToSection.ep
+
+      if (reducerType < 0) or (reducerType == self.ReducerType.nop):
         if fid > 0:
           msg = ({}, [fid])
         else:
-          msg = ({}, [])
+          msg = ({}, pyData)
         pickledData = cPickle.dumps(msg, self.opts.pickle_protocol)
         returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
@@ -452,33 +478,32 @@ class CharmLib(object):
 
       elif reducerType != self.ReducerType.external_py:
         header = {}
-        pyData = []
-        if fid > 0: pyData.append(fid)
-        if reducerType != self.ReducerType.nop:
-          ctype = self.charm.redMgr.charm_reducer_to_ctype[reducerType]
-          dataType = self.c_type_table[ctype]
-          numElems = dataSize // sizeof(dataType)
-          if numElems == 1:
-            pyData.append(ctypes.cast(data, POINTER(dataType))[0])
-          elif sys.version_info[0] < 3:
-            data = ctypes.cast(data, POINTER(dataType * numElems)).contents
-            if haveNumpy:
-              dt = self.charm.redMgr.rev_np_array_type_map[ctype]
-              a = numpy.frombuffer(data, dtype=numpy.dtype(dt))
-            else:
-              array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
-              a = array.array(array_typecode, data)
-            pyData.append(a)
+        ctype = self.charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataType = self.c_type_table[ctype]
+        numElems = dataSize // sizeof(dataType)
+        if fid > 0:
+          pyData.append(fid)
+        if numElems == 1:
+          pyData.append(ctypes.cast(data, POINTER(dataType))[0])
+        elif sys.version_info[0] < 3:
+          data = ctypes.cast(data, POINTER(dataType * numElems)).contents
+          if haveNumpy:
+            dt = self.charm.redMgr.rev_np_array_type_map[ctype]
+            a = numpy.frombuffer(data, dtype=numpy.dtype(dt))
           else:
-            if haveNumpy:
-              dtype = self.charm.redMgr.rev_np_array_type_map[ctype]
-              header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
-            else:
-              array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
-              header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
-            returnBuffers[1] = ctypes.cast(data, c_char_p)
-            returnBufferSizes[1] = dataSize
-            pyData.append(None)
+            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+            a = array.array(array_typecode, data)
+          pyData.append(a)
+        else:
+          if haveNumpy:
+            dtype = self.charm.redMgr.rev_np_array_type_map[ctype]
+            header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
+          else:
+            array_typecode = self.charm.redMgr.rev_array_type_map[ctype]
+            header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
+          returnBuffers[1] = ctypes.cast(data, c_char_p)
+          returnBufferSizes[1] = dataSize
+          pyData.append(None)
 
         msg = (header, pyData)
         pickledData = cPickle.dumps(msg, self.opts.pickle_protocol)
@@ -486,16 +511,21 @@ class CharmLib(object):
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
         returnBufferSizes[0] = len(pickledData)
 
-      elif fid > 0:
-        # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
-        # as first argument, and then repickles it
+      elif fid > 0 or len(pyData) > 0:
+        # TODO: this is INEFFICIENT. it unpickles the message, then either:
+        # a) inserts the future ID as first argument
+        # b) puts the data into a section msg
+        # then repickles the message.
         # this code path is only used when the result of a reduction using a
-        # Python-defined (custom) reducer is sent to a Future, which right now appears to
-        # be a rare use case. But if it turns out to be critical we should consider
-        # a more efficient solution
+        # Python-defined (custom) reducer is sent to a Future or Section.
+        # If this turns out to be critical we should consider a more efficient solution
         data = ctypes.cast(data, POINTER(c_char * dataSize)).contents.raw
         header, args = cPickle.loads(data)
-        args.insert(0, fid)
+        if fid > 0:
+          args.insert(0, fid)
+        else:
+          pyData.extend(args)
+          args = pyData
         pickledData = cPickle.dumps((header,args), self.opts.pickle_protocol)
         returnBuffers = ctypes.cast(returnBuffers, POINTER(POINTER(c_char)))
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))

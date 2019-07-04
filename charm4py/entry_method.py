@@ -53,10 +53,13 @@ class EntryMethod(object):
         if b'block' in header:
             blockFuture = header[b'block']
             if b'bcast' in header:
+                sid = None
+                if b'sid' in header:
+                    sid = header[b'sid']
                 if b'bcastret' in header:
-                    obj.contribute(ret, charm.reducers.gather, blockFuture)
+                    obj.contribute(ret, charm.reducers.gather, blockFuture, sid)
                 else:
-                    obj.contribute(None, None, blockFuture)
+                    obj.contribute(None, None, blockFuture, sid)
             else:
                 blockFuture.send(ret)  # send result back to remote
 
