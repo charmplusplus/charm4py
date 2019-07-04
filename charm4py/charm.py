@@ -669,6 +669,39 @@ class Charm(object):
         obj._cond_last = None
         return pickled_chare
 
+    # Charm class contribute function used by Array, Group and Sections for reductions
+    # 'section' can either be an sid (2-tuple) or a section proxy
+    def contribute(self, data, reducer, target, chare, section=None):
+        if section is None and not chare.thisProxy.issec:
+            contribution = self.redMgr.prepare(data, reducer, chare)
+            fid = 0
+            if isinstance(target, Future):
+                fid = target.fid
+                target = target.getTargetProxyEntryMethod()
+            contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, chare)
+            if self.options.profiling:
+                self.recordSend(contributeInfo.getDataSize())
+            target.__self__.ckContribute(contributeInfo)
+        else:
+            if section is None:
+                # for constrained groups, thisProxy is a section proxy
+                sid = chare.thisProxy.section[1]  # get the sid from the proxy
+            elif isinstance(section, tuple):
+                sid = section  # already a sid
+            else:
+                # is a section proxy
+                sid = section.section[1]
+            if isinstance(reducer, tuple):
+                reducer = reducer[1]
+            if reducer is not None and reducer.hasPreprocess:
+                data = reducer.preprocess(data, chare)
+            try:
+                redno = chare._scookies[sid]
+            except:
+                raise Charm4PyError('Chare doing section reduction but is not part of a section')
+            self.sectionMgr.contrib(sid, redno, data, reducer, target)
+            chare._scookies[sid] += 1
+
     def combine(self, *proxies):
         sid = (self._myPe, self.section_counter)
         self.section_counter += 1
@@ -729,39 +762,6 @@ class Charm(object):
                 self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
             secProxies.append(proxy.__getsecproxy__((root, sid)))
         return secProxies
-
-    # Charm class contribute function used by Array, Group and Sections for reductions
-    # 'section' can either be an sid (2-tuple) or a section proxy
-    def contribute(self, data, reducer, target, chare, section=None):
-        if section is None and not chare.thisProxy.issec:
-            contribution = self.redMgr.prepare(data, reducer, chare)
-            fid = 0
-            if isinstance(target, Future):
-                fid = target.fid
-                target = target.getTargetProxyEntryMethod()
-            contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, chare)
-            if self.options.profiling:
-                self.recordSend(contributeInfo.getDataSize())
-            target.__self__.ckContribute(contributeInfo)
-        else:
-            if section is None:
-                # for constrained groups, thisProxy is a section proxy
-                sid = chare.thisProxy.section[1]  # get the sid from the proxy
-            elif isinstance(section, tuple):
-                sid = section  # already a sid
-            else:
-                # is a section proxy
-                sid = section.section[1]
-            if isinstance(reducer, tuple):
-                reducer = reducer[1]
-            if reducer is not None and reducer.hasPreprocess:
-                data = reducer.preprocess(data, chare)
-            try:
-                redno = chare._scookies[sid]
-            except:
-                raise Charm4PyError('Chare doing section reduction but is not part of a section')
-            self.sectionMgr.contrib(sid, redno, data, reducer, target)
-            chare._scookies[sid] += 1
 
     def startQD(self, callback):
         fid = 0
