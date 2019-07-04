@@ -1,7 +1,7 @@
 from charm4py import charm, Chare, Group, Array, threaded, Reducer
 
 
-NUM_ITER = 5000
+NUM_ITER = 100
 
 
 class Test(Chare):
