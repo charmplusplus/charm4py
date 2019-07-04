@@ -176,7 +176,7 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/sections/split-combine-combinations.py"
+        "path": "tests/sections/multirand-split-combine.py"
     },
     {
         "force_min_processes": 4,
