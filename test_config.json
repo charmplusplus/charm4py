@@ -171,7 +171,8 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/sections/callbacks.py"
+        "path": "tests/sections/callbacks.py",
+        "requires_py_version": 3
     },
     {
         "force_min_processes": 4,
