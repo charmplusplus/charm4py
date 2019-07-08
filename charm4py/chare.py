@@ -124,25 +124,27 @@ class Chare(object):
 
     def allreduce(self, data=None, reducer=None, section=None):
         if section is None:
-            # The CMK_REFNUM_TYPE type inside Charm++ callbacks that is used to
-            # carry future IDs is usually unsigned short, so don't go over that max value.
-            # Also, we can't have fid==0 because that means no fid
+            # The CMK_REFNUM_TYPE type inside Charm++ CkCallbacks that we use
+            # to carry future IDs (aka fid) is usually unsigned short, so we
+            # don't go over the max value for that type. Also, we can't have
+            # fid==0 because that means no fid
             fid = self.__getRedNo__() % 65535 + 1
             proxy = self.thisProxy
         else:
-            # Note that this currently works because section reductions are entirely
-            # implemented in sections.py. Some adjustments will be needed when the
-            # implementation moves to Charm++ (fid/redno will have to start
-            # at 1, and the fid carried in Charm++ callbacks can only contain redno
+            # Note that this currently works because section reductions are
+            # entirely implemented in sections.py. Some adjustments will be
+            # needed when the implementation moves to Charm++ (fid/redno will
+            # have to start at 1, and the fid carried in Charm++ CkCallbacks
+            # can only contain the 'redno' part
             sid = section.section[1]
             redno = self._scookies[sid] % 65535
-            # an object can participate in multiple sections. fids need to be unique
-            # across sections, and not conflict with non-section fids
+            # An object can participate in multiple sections. fids need to be
+            # unique across sections, and not conflict with non-section fids
             fid = (redno, sid[0], sid[1])
             proxy = section
-        future = charm.threadMgr.createCollectiveFuture(fid, proxy)
-        charm.contribute(data, reducer, future, self, section)
-        return future
+        f = charm.threadMgr.createCollectiveFuture(fid, proxy)
+        charm.contribute(data, reducer, f, self, section)
+        return f
 
     def AtSync(self):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
