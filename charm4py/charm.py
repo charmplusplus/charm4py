@@ -545,8 +545,9 @@ class Charm(object):
     def _registerInternalChares(self):
         from .sections import SectionManager
         globals()['SectionManager'] = SectionManager
-        self.register(CharmRemote, (GROUP,))
         self.register(SectionManager, (GROUP,))
+
+        self.register(CharmRemote, (GROUP,))
 
         from .pool import PoolScheduler, Worker
         if self.interactive:

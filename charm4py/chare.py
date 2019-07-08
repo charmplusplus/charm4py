@@ -478,12 +478,12 @@ def group_ckNew_gen(C, epIdx):
         if onPEs is None:
             msg = charm.packMsg(None, args, header)
             gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
-            proxy = charm.groups[gid].thisProxy
+            proxy = cls(gid)
         else:
             # send empty msg for Charm++ group creation (on every PE)
             msg = charm.packMsg(None, [], {b'constrained': True})
             gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
-            proxy = charm.proxyClasses[GROUP][C](gid)
+            proxy = cls(gid)
             # real msg goes only to section elements
             proxy = charm.split(proxy, 1, elems=[onPEs], cons=[-1, epIdx, header, args])[0]
         if creation_future is not None:
