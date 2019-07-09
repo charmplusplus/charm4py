@@ -204,10 +204,11 @@ class Chare(object):
             if insection:
                 sections.append(0)  # when slicing there is only one section (0)
         else:
-            for i, elems in enumerate(section_elems):
+            for sec_num, elems in enumerate(section_elems):
                 if self.thisIndex in elems:
-                    sections.append(i)
-        assert len(sections) <= numsections, 'Element ' + str(self.thisIndex) + ' participates in more sections than were specified'
+                    sections.append(sec_num)
+        assert len(sections) <= numsections, 'Element ' + str(self.thisIndex) + \
+                                             ' participates in more sections than were specified'
         if len(sections) > 0 and not hasattr(self, '_scookies'):
             # chares that participate in sections need this dict to store their
             # reduction numbers for each section
