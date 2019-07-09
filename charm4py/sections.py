@@ -103,7 +103,6 @@ class SectionManager(Chare):
     def sendToSectionLocal(self, sid, ep, header, *args):
         entry = self.sections[sid]
         if not entry.final:
-            # root got a msg for the section, but the upward pass hasn't completed yet
             entry.buffered_msgs.append((ep, header, args))
             return
 
@@ -119,14 +118,13 @@ class SectionManager(Chare):
     def sendToSection(self, sid, ep, header, *args):
         entry = self.sections[sid]
         if not entry.final:
-            # root got a msg for the section, but the upward pass hasn't completed yet
             entry.buffered_msgs.append((ep, header, args))
             return
 
         if len(entry.children) > 0:
-            # this assumes that my GroupExt stub in Charm++ has a pointer to
-            # the section msg's CkMessage, and I am telling it to send it to
-            # the children using CkSendMsgBranchMulti
+            # SectionManagerExt in Charm++ has a pointer to the multicast message,
+            # this tells it to forward the msg to the children using CkSendMsgBranchMulti
+            # (thus avoiding any copies)
             charm.lib.sendToSection(self.thisProxy.gid, entry.children)
 
         for obj in entry.local_elems:
