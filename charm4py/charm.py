@@ -167,20 +167,20 @@ class Charm(object):
             raise e
         # remote is expecting a response via a future, send exception to the future
         blockFuture = header[b'block']
+        sid = None
+        if b'sid' in header:
+            sid = header[b'sid']
         if b'creation' in header:
             # don't send anything in this case (future is not guaranteed to be used)
-            obj.contribute(None, None, blockFuture)
+            obj.contribute(None, None, blockFuture, sid)
             raise e
         self.prepareExceptionForSend(e)
         if b'bcast' in header:
-            sid = None
-            if b'sid' in header:
-                sid = header[b'sid']
             if b'bcastret' in header:
                 obj.contribute(e, self.reducers.gather, blockFuture, sid)
             else:
                 # NOTE: it will work if some elements contribute with an exception (here)
-                # and some do nop (None) reduction below. Charm++ will ignore the nops
+                # and some do nop (None) reduction. Charm++ will ignore the nops
                 obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture, sid)
         else:
             blockFuture.send(e)
@@ -754,11 +754,8 @@ class Charm(object):
                 pes = set(pes)
             assert len(pes) > 0
             root = min(pes)
-            if hasattr(proxy, 'gid'):
-                if not proxy.issec:
-                    self.sectionMgr.thisProxy[root].createGroupSectionDown(sid, proxy.gid, pes, None, cons)
-                else:
-                    self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
+            if not proxy.issec and hasattr(proxy, 'gid'):
+                self.sectionMgr.thisProxy[root].createGroupSectionDown(sid, proxy.gid, pes, None, cons)
             else:
                 self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
             secProxies.append(proxy.__getsecproxy__((root, sid)))
