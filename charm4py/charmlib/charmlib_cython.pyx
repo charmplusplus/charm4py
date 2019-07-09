@@ -455,6 +455,15 @@ class CharmLib(object):
       CkArrayExtSend_multi(array_id, c_index, ndims, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
 
+  def sendToSection(self, int gid, list children):
+    cdef int i = 0
+    cdef int num_children
+    num_children = len(children)
+    assert num_children <= SECTION_MAX_BFACTOR
+    for i in range(num_children):
+      section_children[i] = children[i]
+    CkForwardMulticastMsg(gid, num_children, section_children)
+
   def CkRegisterReadonly(self, bytes n1, bytes n2, msg):
     if msg is None: CkRegisterReadonlyExt(n1, n2, 0, NULL)
     else: CkRegisterReadonlyExt(n1, n2, len(msg), msg)
@@ -469,6 +478,12 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    return chareIdx, startEpIdx
+
+  def CkRegisterSectionManager(self, str name, int numEntryMethods):
+    self.chareNames.append(name.encode())
+    cdef int chareIdx, startEpIdx
+    CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
   def CkRegisterArrayMap(self, str name, int numEntryMethods):
@@ -645,6 +660,10 @@ class CharmLib(object):
     CkExtContributeToArray(&contributeInfo.internal, aid, c_index, ndims)
     contributeInfo.releaseBuffer()
 
+  def CkContributeToSection(self, ContributeInfo contributeInfo not None, tuple sid, int rootPE):
+    CkExtContributeToSection(&contributeInfo.internal, sid[0], sid[1], rootPE)
+    contributeInfo.releaseBuffer()
+
   def CkStartQD_ChareCallback(self, tuple cid not None, int ep, int fid):
     objPtr = <void*>(<uintptr_t>cid[1])
     CkStartQDExt_ChareCallback(<int>cid[0], objPtr, ep, fid)
@@ -657,6 +676,9 @@ class CharmLib(object):
     cdef int i = 0
     for i in range(ndims): c_index[i] = index[i]
     CkStartQDExt_ArrayCallback(aid, c_index, ndims, ep, fid)
+
+  def CkStartQD_SectionCallback(self, tuple sid, int rootPE, int ep):
+    CkStartQDExt_SectionCallback(sid[0], sid[1], rootPE, ep)
 
   def lib_version_check(self):
     charm.lib_version_check(CmiCommitID.decode('UTF-8'))
@@ -899,62 +921,74 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
   try:
     if PROFILING: t0 = time.time()
 
-    if reducerType < 0 and data == NULL:
+    pyData = []
+    if sectionInfo[0] >= 0:
+      # this is a section callback
+      sid = (sectionInfo[0], sectionInfo[1])
+      pyData = [sid, sectionInfo[2], {b'sid': sid}]
+      secMgrProxy = charm.sectionMgr.thisProxy
+      # tell Charm++ the gid and ep of SectionManager for section broadcasts
+      sectionInfo[0] = <int>secMgrProxy.gid
+      sectionInfo[1] = <int>secMgrProxy.sendToSection.ep
+
+    if (reducerType < 0) or (reducerType == charm_reducers.nop):
       if fid > 0:
         tempData = dumps(({}, [fid]), PICKLE_PROTOCOL)
-      else:
+      elif len(pyData) == 0:
         tempData = emptyMsg
+      else:
+        # section
+        tempData = dumps(({}, pyData), PICKLE_PROTOCOL)
       returnBuffers[0]     = <char*>tempData
       returnBufferSizes[0] = len(tempData)
 
     elif reducerType != charm_reducers.external_py:
 
-      if reducerType != charm_reducers.nop:
-        header = {}
-        ctype = charm_reducer_to_ctype[reducerType]
-        item_size = c_type_table_sizes[ctype]
-        numElems = dataSize / item_size
-        pyData = []
-        if fid > 0: pyData.append(fid)
-        if numElems == 1:
-          a = array.array(c_type_table_typecodes[ctype], [0])
-          memcpy(a.data.as_voidptr, data, item_size)
-          pyData.append(a[0])
-        else:
-          IF HAVE_NUMPY:
-            dtype = rev_np_array_type_map[ctype]
-            header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
-          ELSE:
-            array_typecode = rev_array_type_map[ctype]
-            header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
-          returnBuffers[1]     = <char*>data
-          returnBufferSizes[1] = dataSize
-          pyData.append(None)
-        # save msg, else it might be deleted before returning control to libcharm
-        tempData = dumps((header, pyData), PICKLE_PROTOCOL)
-      elif fid > 0:
-        tempData = dumps(({}, [fid]), PICKLE_PROTOCOL)
+      header = {}
+      ctype = charm_reducer_to_ctype[reducerType]
+      item_size = c_type_table_sizes[ctype]
+      numElems = dataSize / item_size
+      if fid > 0:
+        pyData.append(fid)
+      if numElems == 1:
+        a = array.array(c_type_table_typecodes[ctype], [0])
+        memcpy(a.data.as_voidptr, data, item_size)
+        pyData.append(a[0])
       else:
-        tempData = emptyMsg
-
+        IF HAVE_NUMPY:
+          dtype = rev_np_array_type_map[ctype]
+          header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
+        ELSE:
+          array_typecode = rev_array_type_map[ctype]
+          header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
+        returnBuffers[1]     = <char*>data
+        returnBufferSizes[1] = dataSize
+        pyData.append(None)
+      # save msg, else it might be deleted before returning control to libcharm
+      tempData = dumps((header, pyData), PICKLE_PROTOCOL)
       returnBuffers[0]     = <char*>tempData
       returnBufferSizes[0] = len(tempData)
 
-    elif fid > 0:
-      # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
-      # as first argument, and then repickles it
+    elif fid > 0 or len(pyData) > 0:
+      # TODO: this is INEFFICIENT. it unpickles the message, then either:
+      # a) inserts the future ID as first argument
+      # b) puts the data into a section msg
+      # then repickles the message.
       # this code path is only used when the result of a reduction using a
-      # Python-defined (custom) reducer is sent to a Future, which right now appears to
-      # be a rare use case. But if it turns out to be critical we should consider
-      # a more efficient solution
+      # Python-defined (custom) reducer is sent to a Future or Section.
+      # If this turns out to be critical we should consider a more efficient solution
       recv_buffer.setMsg(<char*>data, dataSize)
       header, args = loads(recv_buffer)
-      args.insert(0, fid)
-      tempData = dumps((header,args), PICKLE_PROTOCOL)
+      if fid > 0:
+        args.insert(0, fid)
+      else:
+        pyData.extend(args)
+        args = pyData
+      tempData = dumps((header, args), PICKLE_PROTOCOL)
       returnBuffers[0]     = <char*>tempData
       returnBufferSizes[0] = len(tempData)
     else:
-      # do nothing, use message as is (was created by charm4py)
+      # do nothing, use message as is (was created by Charm4py)
       returnBuffers[0]     = <char*>data
       returnBufferSizes[0] = dataSize
 

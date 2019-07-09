@@ -24,6 +24,7 @@ cdef extern from "charm.h":
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
     void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
     void CkRegisterGroupExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterSectionManagerExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
     void CkRegisterArrayExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
     void CkRegisterArrayMapExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
 
@@ -39,6 +40,7 @@ cdef extern from "charm.h":
     void CkGroupExtSend_multi(int gid, int npes, int *pes, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
     void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize);
     void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
+    void CkForwardMulticastMsg(int gid, int num_children, int *children);
 
     int CkGroupGetReductionNumber(int gid);
     int CkArrayGetReductionNumber(int aid, int ndims, int *index);
@@ -60,9 +62,11 @@ cdef extern from "charm.h":
     void CkExtContributeToChare(void* contribute_params, int onPE, void* objPtr);
     void CkExtContributeToGroup(void* contribute_params, int gid, int pe);
     void CkExtContributeToArray(void* contribute_params, int aid, int* idx, int ndims);
+    void CkExtContributeToSection(void* contribute_params, int sid_pe, int sid_cnt, int rootPE);
     void CkStartQDExt_ChareCallback(int onPE, void* objPtr, int epIdx, int fid);
     void CkStartQDExt_GroupCallback(int gid, int pe, int epIdx, int fid);
     void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
+    void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
 

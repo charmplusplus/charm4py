@@ -36,6 +36,10 @@ except ImportError:
     numpy = NumpyDummy()
 
 
+def SECTION_ALL(obj):
+    return 0
+
+
 class Options(object):
 
     def __str__(self):
@@ -83,6 +87,8 @@ class Charm(object):
         self.entryMethods = {}    # ep_idx -> EntryMethod object
         self.classEntryMethods = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
         self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
+        self.groupMsgBuf = defaultdict(list)  # gid -> list of msgs received for constrained groups that haven't been created yet
+        self.section_counter = 0
         self.msg_send_sizes = []  # for profiling
         self.msg_recv_sizes = []  # for profiling
         self.runningEntryMethod = None  # currently running entry method (only used with profiling)
@@ -115,6 +121,7 @@ class Charm(object):
         self.CkContributeToChare = self.lib.CkContributeToChare
         self.CkContributeToGroup = self.lib.CkContributeToGroup
         self.CkContributeToArray = self.lib.CkContributeToArray
+        self.CkContributeToSection = self.lib.CkContributeToSection
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
@@ -160,18 +167,21 @@ class Charm(object):
             raise e
         # remote is expecting a response via a future, send exception to the future
         blockFuture = header[b'block']
+        sid = None
+        if b'sid' in header:
+            sid = header[b'sid']
         if b'creation' in header:
             # don't send anything in this case (future is not guaranteed to be used)
-            obj.contribute(None, None, blockFuture)
+            obj.contribute(None, None, blockFuture, sid)
             raise e
         self.prepareExceptionForSend(e)
         if b'bcast' in header:
             if b'bcastret' in header:
-                obj.contribute(e, self.reducers.gather, blockFuture)
+                obj.contribute(e, self.reducers.gather, blockFuture, sid)
             else:
                 # NOTE: it will work if some elements contribute with an exception (here)
-                # and some do nop (None) reduction below. Charm++ will ignore the nops
-                obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture)
+                # and some do nop (None) reduction. Charm++ will ignore the nops
+                obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture, sid)
         else:
             blockFuture.send(e)
 
@@ -249,8 +259,18 @@ class Charm(object):
             self.invokeEntryMethod(obj, ep, header, args, t0)
         else:
             em = self.entryMethods[ep]
-            assert em.isCtor, "Specified group entry method not constructor"
             header, args = self.unpackMsg(msg, dcopy_start, None)
+            if not em.isCtor:
+                # this is not a constructor msg and the group hasn't been
+                # created yet. this should only happen for constrained groups
+                # (buffering of msgs for regular groups that haven't
+                # been created yet is done inside Charm++)
+                self.groupMsgBuf[gid].append((ep, header, args))
+                return
+            if b'constrained' in header:
+                # constrained group instances are created by SectionManager
+                return
+            assert gid not in self.groupMsgBuf
             obj = object.__new__(em.C)  # create object but don't call __init__
             Group.initMember(obj, gid)
             self.mainThreadEntryMethod = em
@@ -417,6 +437,11 @@ class Charm(object):
         proxyClass.__module__ = C.__module__
         setattr(sys.modules[C.__module__], proxyClass.__name__, proxyClass)
         self.proxyClasses[charm_type_id][C] = proxyClass
+        if charm_type_id in (GROUP, ARRAY):
+            secProxyClass = charm_type.__getProxyClass__(C, sectionProxy=True)
+            secProxyClass.__module__ = C.__module__
+            setattr(sys.modules[C.__module__], secProxyClass.__name__, secProxyClass)
+            proxyClass.__secproxyclass__ = secProxyClass
 
     def registerInCharm(self, C):
         C.idx = [None] * len(CHARM_TYPES)
@@ -426,6 +451,8 @@ class Charm(object):
         if Group in charm_types:
             if ArrayMap in C.mro():
                 self.registerInCharmAs(C, Group, self.lib.CkRegisterArrayMap)
+            elif C == SectionManager:
+                self.registerInCharmAs(C, Group, self.lib.CkRegisterSectionManager)
             else:
                 self.registerInCharmAs(C, Group, self.lib.CkRegisterGroup)
         if Array in charm_types:
@@ -476,8 +503,14 @@ class Charm(object):
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         ems = [entry_method.EntryMethod(C, m, profile=self.options.profiling)
                                      for m in charm_type.__baseEntryMethods__()]
+
+        members = dir(C)
+        if C == SectionManager:
+            ems.append(entry_method.EntryMethod(C, 'sendToSection', profile=self.options.profiling))
+            members.remove('sendToSection')
         self.classEntryMethods[charm_type_id][C] = ems
-        for m in dir(C):
+
+        for m in members:
             m_obj = getattr(C, m)
             if not callable(m_obj) or inspect.isclass(m_obj):
                 continue
@@ -510,6 +543,10 @@ class Charm(object):
         self.register_order.append(C)
 
     def _registerInternalChares(self):
+        from .sections import SectionManager
+        globals()['SectionManager'] = SectionManager
+        self.register(SectionManager, (GROUP,))
+
         self.register(CharmRemote, (GROUP,))
 
         from .pool import PoolScheduler, Worker
@@ -523,6 +560,7 @@ class Charm(object):
 
     def _createInternalChares(self):
         Group(CharmRemote)
+        Group(SectionManager)
 
         from .pool import Pool, PoolScheduler
         pool_proxy = Chare(PoolScheduler, onPE=0)
@@ -618,6 +656,9 @@ class Charm(object):
 
     def arrayElemLeave(self, aid, index):
         obj = self.arrays[aid].pop(index)
+        if hasattr(obj, '_scookies'):
+            charm.abort('Cannot migrate elements that are part of a section '
+                        '(this will be supported in a future version)')
         self.threadMgr.objMigrating(obj)
         del obj._contributeInfo  # don't want to pickle this
         pickled_chare = cPickle.dumps(({}, obj), self.options.pickle_protocol)
@@ -629,17 +670,96 @@ class Charm(object):
         obj._cond_last = None
         return pickled_chare
 
-    # Charm class level contribute function used by Array, Group for reductions
-    def contribute(self, data, reducer, target, contributor):
-        contribution = self.redMgr.prepare(data, reducer, contributor)
-        fid = 0
-        if isinstance(target, Future):
-            fid = target.fid
-            target = target.getTargetProxyEntryMethod()
-        contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, contributor)
-        if self.options.profiling:
-            self.recordSend(contributeInfo.getDataSize())
-        target.__self__.ckContribute(contributeInfo)
+    # Charm class contribute function used by Array, Group and Sections for reductions
+    # 'section' can either be an sid (2-tuple) or a section proxy
+    def contribute(self, data, reducer, target, chare, section=None):
+        if section is None and not chare.thisProxy.issec:
+            contribution = self.redMgr.prepare(data, reducer, chare)
+            fid = 0
+            if isinstance(target, Future):
+                fid = target.fid
+                target = target.getTargetProxyEntryMethod()
+            contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, chare)
+            if self.options.profiling:
+                self.recordSend(contributeInfo.getDataSize())
+            target.__self__.ckContribute(contributeInfo)
+        else:
+            if section is None:
+                # for constrained groups, thisProxy is a section proxy
+                sid = chare.thisProxy.section[1]  # get the sid from the proxy
+            elif isinstance(section, tuple):
+                sid = section  # already a sid
+            else:
+                # is a section proxy
+                sid = section.section[1]
+            if isinstance(reducer, tuple):
+                reducer = reducer[1]
+            if reducer is not None and reducer.hasPreprocess:
+                data = reducer.preprocess(data, chare)
+            try:
+                redno = chare._scookies[sid]
+            except:
+                raise Charm4PyError('Chare doing section reduction but is not part of a section')
+            self.sectionMgr.contrib(sid, redno, data, reducer, target)
+            chare._scookies[sid] += 1
+
+    def combine(self, *proxies):
+        sid = (self._myPe, self.section_counter)
+        self.section_counter += 1
+        pes = set()
+        futures = [charm.createFuture() for _ in range(len(proxies))]
+        for i, proxy in enumerate(proxies):
+            secproxy = None
+            if proxy.issec:
+                secproxy = proxy
+            proxy._getSectionLocations_(sid, 1, SECTION_ALL, None, None, futures[i], secproxy)
+        for f in futures:
+            pes.update(f.get()[0])
+        assert len(pes) > 0
+        root = min(pes)
+        self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
+        return proxies[0].__getsecproxy__((root, sid))
+
+    def split(self, proxy, numsections, section_func=None, elems=None, slicing=None, cons=None):
+        assert (hasattr(proxy, 'gid') and proxy.elemIdx == -1) or (hasattr(proxy, 'aid') and proxy.elemIdx == ())
+        sid0 = (self._myPe, self.section_counter)
+        self.section_counter += numsections
+        secproxy = None
+        if proxy.issec:
+            secproxy = proxy
+        if elems is None:
+            f = charm.createFuture()
+            proxy._getSectionLocations_(sid0, numsections, section_func, slicing, None, f, secproxy)
+            section_pes = f.get()
+        else:
+            if numsections == 1 and not isinstance(elems[0], list) and not isinstance(elems[0], set):
+                elems = [elems]
+            assert len(elems) == numsections
+            if hasattr(proxy, 'gid') and not proxy.issec:
+                # in this case the elements are guaranteed to be PEs, so I don't
+                # have to collect locations
+                section_pes = elems
+            else:
+                f = charm.createFuture()
+                proxy._getSectionLocations_(sid0, numsections, None, None, elems, f, secproxy)
+                section_pes = f.get()
+        secProxies = []
+        # TODO if there are many many sections, should do a stateless multicast to the roots with the section info
+        for i in range(numsections):
+            sid = (self._myPe, sid0[1] + i)
+            pes = section_pes[i]
+            if not isinstance(pes, set):
+                # pes will be a set in most cases, unless the user passed a list of elements.
+                # transforming to set ensures we get rid of duplicates
+                pes = set(pes)
+            assert len(pes) > 0
+            root = min(pes)
+            if not proxy.issec and hasattr(proxy, 'gid'):
+                self.sectionMgr.thisProxy[root].createGroupSectionDown(sid, proxy.gid, pes, None, cons)
+            else:
+                self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
+            secProxies.append(proxy.__getsecproxy__((root, sid)))
+        return secProxies
 
     def startQD(self, callback):
         fid = 0
@@ -647,7 +767,9 @@ class Charm(object):
             fid = callback.fid
             callback = callback.getTargetProxyEntryMethod()
         cb_proxy = callback.__self__
-        if hasattr(cb_proxy, 'gid'):
+        if hasattr(cb_proxy, 'section'):
+            self.lib.CkStartQD_SectionCallback(cb_proxy.section[1], cb_proxy.section[0], callback.ep)
+        elif hasattr(cb_proxy, 'gid'):
             self.lib.CkStartQD_GroupCallback(cb_proxy.gid, cb_proxy.elemIdx, callback.ep, fid)
         elif hasattr(cb_proxy, 'aid'):
             self.lib.CkStartQD_ArrayCallback(cb_proxy.aid, cb_proxy.elemIdx, callback.ep, fid)

@@ -260,6 +260,9 @@ class CharmLib(object):
         self.send_buf_sizes[i+1] = buf.nbytes
       lib.CkArrayExtSend_multi(array_id, index, len(index), ep, len(dcopy)+1, self.send_bufs, self.send_buf_sizes)
 
+  def sendToSection(self, gid, children):
+    lib.CkForwardMulticastMsg(gid, len(children), children)
+
   def CkRegisterReadonly(self, n1, n2, msg):
     if msg is None: lib.CkRegisterReadonlyExt(n1, n2, 0, ffi.NULL)
     else: lib.CkRegisterReadonlyExt(n1, n2, len(msg), msg)
@@ -274,6 +277,12 @@ class CharmLib(object):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
     lib.CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    return chareIdx[0], startEpIdx[0]
+
+  def CkRegisterSectionManager(self, name, numEntryMethods):
+    self.chareNames.append(ffi.new("char[]", name.encode()))
+    chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
+    lib.CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
     return chareIdx[0], startEpIdx[0]
 
   def CkRegisterArrayMap(self, name, numEntryMethods):
@@ -444,6 +453,9 @@ class CharmLib(object):
   def CkContributeToArray(self, contributeInfo, aid, index):
     lib.CkExtContributeToArray(contributeInfo.data, aid, index, len(index))
 
+  def CkContributeToSection(self, contributeInfo, sid, rootPE):
+    lib.CkExtContributeToSection(contributeInfo.data, sid[0], sid[1], rootPE)
+
   def CkStartQD_ChareCallback(self, cid, ep, fid):
     objPtr = ffi.cast("void*", cid[1])
     lib.CkStartQDExt_ChareCallback(cid[0], objPtr, ep, fid)
@@ -454,16 +466,29 @@ class CharmLib(object):
   def CkStartQD_ArrayCallback(self, aid, index, ep, fid):
     lib.CkStartQDExt_ArrayCallback(aid, index, len(index), ep, fid)
 
+  def CkStartQD_SectionCallback(self, sid, rootPE, ep):
+    lib.CkStartQDExt_SectionCallback(sid[0], sid[1], rootPE, ep)
+
   @ffi.def_extern()
   def createCallbackMsg_py2(data, dataSize, reducerType, fid, sectionInfo, returnBuffers, returnBufferSizes):
     try:
       if charm.options.profiling: t0 = time.time()
 
-      if reducerType < 0 and data == ffi.NULL:
+      pyData = []
+      if sectionInfo[0] >= 0:
+        # this is a section callback
+        sid = (sectionInfo[0], sectionInfo[1])
+        pyData = [sid, sectionInfo[2], {b'sid': sid}]
+        secMgrProxy = charm.sectionMgr.thisProxy
+        # tell Charm++ the gid and ep of SectionManager for section broadcasts
+        sectionInfo[0] = secMgrProxy.gid
+        sectionInfo[1] = secMgrProxy.sendToSection.ep
+
+      if (reducerType < 0) or (reducerType == ReducerType.nop):
         if fid > 0:
           msg = ({}, [fid])
         else:
-          msg = ({}, [])
+          msg = ({}, pyData)
         # save msg, else it might be deleted before returning control to libcharm
         CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
@@ -471,22 +496,21 @@ class CharmLib(object):
 
       elif reducerType != ReducerType.external_py:
         header = {}
-        pyData = []
-        if fid > 0: pyData.append(fid)
-        if reducerType != ReducerType.nop:
-          ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
-          dataTypeTuple = c_type_table[ctype]
-          numElems = dataSize // dataTypeTuple[3]
-          if numElems == 1:
-            pyData.append(ffi.cast(dataTypeTuple[2], data)[0])
+        ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataTypeTuple = c_type_table[ctype]
+        numElems = dataSize // dataTypeTuple[3]
+        if fid > 0:
+          pyData.append(fid)
+        if numElems == 1:
+          pyData.append(ffi.cast(dataTypeTuple[2], data)[0])
+        else:
+          if haveNumpy:
+            dt = charm.redMgr.rev_np_array_type_map[ctype]
+            a = numpy.frombuffer(ffi.buffer(data, dataSize)[:], dtype=numpy.dtype(dt))
           else:
-            if haveNumpy:
-              dt = charm.redMgr.rev_np_array_type_map[ctype]
-              a = numpy.frombuffer(ffi.buffer(data, dataSize)[:], dtype=numpy.dtype(dt))
-            else:
-              array_typecode = charm.redMgr.rev_array_type_map[ctype]
-              a = array.array(array_typecode, ffi.buffer(data, dataSize)[:])
-            pyData.append(a)
+            array_typecode = charm.redMgr.rev_array_type_map[ctype]
+            a = array.array(array_typecode, ffi.buffer(data, dataSize)[:])
+          pyData.append(a)
 
         msg = (header, pyData)
         # save msg, else it might be deleted before returning control to libcharm
@@ -494,15 +518,20 @@ class CharmLib(object):
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
-      elif fid > 0:
-        # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
-        # as first argument, and then repickles it
+      elif fid > 0 or len(pyData) > 0:
+        # TODO: this is INEFFICIENT. it unpickles the message, then either:
+        # a) inserts the future ID as first argument
+        # b) puts the data into a section msg
+        # then repickles the message.
         # this code path is only used when the result of a reduction using a
-        # Python-defined (custom) reducer is sent to a Future, which right now appears to
-        # be a rare use case. But if it turns out to be critical we should consider
-        # a more efficient solution
+        # Python-defined (custom) reducer is sent to a Future or Section.
+        # If this turns out to be critical we should consider a more efficient solution
         header, args = cPickle.loads(ffi.buffer(data, dataSize)[:])
-        args.insert(0, fid)
+        if fid > 0:
+          args.insert(0, fid)
+        else:
+          pyData.extend(args)
+          args = pyData
         CharmLib.tempData = cPickle.dumps((header,args), charm.options.pickle_protocol)
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
@@ -523,11 +552,21 @@ class CharmLib(object):
     try:
       if charm.options.profiling: t0 = time.time()
 
-      if reducerType < 0 and data == ffi.NULL:
+      pyData = []
+      if sectionInfo[0] >= 0:
+        # this is a section callback
+        sid = (sectionInfo[0], sectionInfo[1])
+        pyData = [sid, sectionInfo[2], {b'sid': sid}]
+        secMgrProxy = charm.sectionMgr.thisProxy
+        # tell Charm++ the gid and ep of SectionManager for section broadcasts
+        sectionInfo[0] = secMgrProxy.gid
+        sectionInfo[1] = secMgrProxy.sendToSection.ep
+
+      if (reducerType < 0) or (reducerType == ReducerType.nop):
         if fid > 0:
           msg = ({}, [fid])
         else:
-          msg = ({}, [])
+          msg = ({}, pyData)
         # save msg, else it might be deleted before returning control to libcharm
         CharmLib.tempData = cPickle.dumps(msg, charm.options.pickle_protocol)
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
@@ -535,24 +574,23 @@ class CharmLib(object):
 
       elif reducerType != ReducerType.external_py:
         header = {}
-        pyData = []
-        if fid > 0: pyData.append(fid)
-        if reducerType != ReducerType.nop:
-          ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
-          dataTypeTuple = c_type_table[ctype]
-          numElems = dataSize // dataTypeTuple[3]
-          if numElems == 1:
-            pyData.append(ffi.cast(dataTypeTuple[2], data)[0])
+        ctype = charm.redMgr.charm_reducer_to_ctype[reducerType]
+        dataTypeTuple = c_type_table[ctype]
+        numElems = dataSize // dataTypeTuple[3]
+        if fid > 0:
+          pyData.append(fid)
+        if numElems == 1:
+          pyData.append(ffi.cast(dataTypeTuple[2], data)[0])
+        else:
+          if haveNumpy:
+            dtype = charm.redMgr.rev_np_array_type_map[ctype]
+            header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
           else:
-            if haveNumpy:
-              dtype = charm.redMgr.rev_np_array_type_map[ctype]
-              header[b'dcopy'] = [(len(pyData), 2, (numElems, dtype), dataSize)]
-            else:
-              array_typecode = charm.redMgr.rev_array_type_map[ctype]
-              header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
-            returnBuffers[1] = data
-            returnBufferSizes[1] = dataSize
-            pyData.append(None)
+            array_typecode = charm.redMgr.rev_array_type_map[ctype]
+            header[b'dcopy'] = [(len(pyData), 1, (array_typecode), dataSize)]
+          returnBuffers[1] = data
+          returnBufferSizes[1] = dataSize
+          pyData.append(None)
 
         msg = (header, pyData)
         # save msg, else it might be deleted before returning control to libcharm
@@ -560,15 +598,20 @@ class CharmLib(object):
         returnBuffers[0] = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)
 
-      elif fid > 0:
-        # TODO: this is INEFFICIENT. it unpickles the message, inserts the future ID
-        # as first argument, and then repickles it
+      elif fid > 0 or len(pyData) > 0:
+        # TODO: this is INEFFICIENT. it unpickles the message, then either:
+        # a) inserts the future ID as first argument
+        # b) puts the data into a section msg
+        # then repickles the message.
         # this code path is only used when the result of a reduction using a
-        # Python-defined (custom) reducer is sent to a Future, which right now appears to
-        # be a rare use case. But if it turns out to be critical we should consider
-        # a more efficient solution
+        # Python-defined (custom) reducer is sent to a Future or Section.
+        # If this turns out to be critical we should consider a more efficient solution
         header, args = cPickle.loads(ffi.buffer(data, dataSize))
-        args.insert(0, fid)
+        if fid > 0:
+          args.insert(0, fid)
+        else:
+          pyData.extend(args)
+          args = pyData
         CharmLib.tempData = cPickle.dumps((header,args), charm.options.pickle_protocol)
         returnBuffers[0]     = ffi.from_buffer(CharmLib.tempData)
         returnBufferSizes[0] = len(CharmLib.tempData)

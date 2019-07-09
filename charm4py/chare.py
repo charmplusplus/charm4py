@@ -4,7 +4,7 @@ if sys.version_info[0] < 3:
     from thread import get_ident
 else:
     from threading import get_ident
-
+from collections import defaultdict
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
 # (3) to form Arrays. To achieve this, charm4py can register with the Charm++ library up to 3
@@ -116,20 +116,35 @@ class Chare(object):
             self.__waitEnqueue__(cond_template, (1, get_ident()))
             charm.threadMgr.pauseThread()
 
-    def contribute(self, data, reducer, callback):
-        charm.contribute(data, reducer, callback, self)
+    def contribute(self, data, reducer, callback, section=None):
+        charm.contribute(data, reducer, callback, self, section)
 
-    def reduce(self, callback, data=None, reducer=None):
-        charm.contribute(data, reducer, callback, self)
+    def reduce(self, callback, data=None, reducer=None, section=None):
+        charm.contribute(data, reducer, callback, self, section)
 
-    def allreduce(self, data=None, reducer=None):
-        # The CMK_REFNUM_TYPE type inside Charm++ callbacks that is used to
-        # carry future IDs is usually unsigned short, so don't go over that max value.
-        # Also, we can't have fid==0 because that means no fid
-        fid = self.__getRedNo__() % 65535 + 1
-        future = charm.threadMgr.createCollectiveFuture(fid)
-        charm.contribute(data, reducer, future, self)
-        return future
+    def allreduce(self, data=None, reducer=None, section=None):
+        if section is None:
+            # The CMK_REFNUM_TYPE type inside Charm++ CkCallbacks that we use
+            # to carry future IDs (aka fid) is usually unsigned short, so we
+            # don't go over the max value for that type. Also, we can't have
+            # fid==0 because that means no fid
+            fid = self.__getRedNo__() % 65535 + 1
+            proxy = self.thisProxy
+        else:
+            # Note that this currently works because section reductions are
+            # entirely implemented in sections.py. Some adjustments will be
+            # needed when the implementation moves to Charm++ (fid/redno will
+            # have to start at 1, and the fid carried in Charm++ CkCallbacks
+            # can only contain the 'redno' part
+            sid = section.section[1]
+            redno = self._scookies[sid] % 65535
+            # An object can participate in multiple sections. fids need to be
+            # unique across sections, and not conflict with non-section fids
+            fid = (redno, sid[0], sid[1])
+            proxy = section
+        f = charm.threadMgr.createCollectiveFuture(fid, proxy)
+        charm.contribute(data, reducer, f, self, section)
+        return f
 
     def AtSync(self):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
@@ -165,6 +180,54 @@ class Chare(object):
         self._thread_notify_target = target
         self._thread_notify_data = args
 
+    def _getSectionLocations_(self, sid0, numsections, member_func, slicing, section_elems, f, proxy):
+        # list of sections in which this element participates (sections
+        # numbered from 0 to numsections - 1)
+        sections = []
+        if member_func is not None:
+            sections = member_func(self)
+            if isinstance(sections, int):
+                if sections < 0:
+                    sections = []  # I don't belong to any section
+                else:
+                    sections = [sections]
+        elif slicing is not None:
+            insection = True
+            for i, idx_i in enumerate(self.thisIndex):
+                sl = slicing[i]
+                step = 1
+                if sl.step is not None:
+                    step = sl.step
+                if idx_i not in range(sl.start, sl.stop, step):
+                    insection = False
+                    break
+            if insection:
+                sections.append(0)  # when slicing there is only one section (0)
+        else:
+            for sec_num, elems in enumerate(section_elems):
+                if self.thisIndex in elems:
+                    sections.append(sec_num)
+        assert len(sections) <= numsections, 'Element ' + str(self.thisIndex) + \
+                                             ' participates in more sections than were specified'
+        if len(sections) > 0 and not hasattr(self, '_scookies'):
+            # chares that participate in sections need this dict to store their
+            # reduction numbers for each section
+            self._scookies = defaultdict(int)
+        result = [set() for _ in range(numsections)]
+        sid_pe, sid_cnt_start = sid0
+        mype = charm.myPe()
+        for sec_num in sections:
+            sid = (sid_pe, sid_cnt_start + sec_num)
+            result[sec_num].add(mype)
+            # We don't use a set for local_elems because section creation is not frequent,
+            # and the most frequent use of local_elems will be to iterate through its elements
+            # (a list is a bit faster than set for this)
+            local_elems = charm.sectionMgr.sections[sid].local_elems
+            if self not in local_elems:
+                local_elems.append(self)
+        # send result to future via a reduction
+        charm.contribute(result, Reducer._sectionloc, f, self, proxy)
+
 
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
@@ -172,7 +235,7 @@ method_restrictions = {
                  '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
                  'AtSync', 'migrate', 'setMigratable', '_future_deposit_result',
                  '_coll_future_deposit_result', '__getRedNo__',
-                 '__addThreadEventSubscriber__'},
+                 '__addThreadEventSubscriber__', '_getSectionLocations_'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
@@ -288,10 +351,34 @@ def group_proxy__getstate__(proxy):
 def group_proxy__setstate__(proxy, state):
     proxy.gid, proxy.elemIdx = state
 
+def group_getsecproxy(proxy, sinfo):
+    if proxy.issec:
+        secproxy = proxy.__class__(proxy.gid)
+    else:
+        secproxy = proxy.__secproxyclass__(proxy.gid)
+    secproxy.section = sinfo
+    return secproxy
+
+def groupsecproxy__getstate__(proxy):
+    return (proxy.gid, proxy.elemIdx, proxy.section)
+
+def groupsecproxy__setstate__(proxy, state):
+    proxy.gid, proxy.elemIdx, proxy.section = state
+
 def group_proxy_elem(proxy, pe):  # group proxy [] overload method
-    proxy_clone = proxy.__class__(proxy.gid)
-    proxy_clone.elemIdx = pe
-    return proxy_clone
+    if not isinstance(pe, slice):
+        proxy_clone = proxy.__class__(proxy.gid)
+        proxy_clone.elemIdx = pe
+        return proxy_clone
+    else:
+        start, stop, step = pe.start, pe.stop, pe.step
+        if start is None:
+            start = 0
+        if stop is None:
+            stop = charm.numPes()
+        if step is None:
+            step = 1
+        return charm.split(proxy, 1, elems=[list(range(start, stop, step))])[0]
 
 def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
@@ -320,12 +407,20 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                     header[b'bcast'] = True
                     if retmode > 1:
                         header[b'bcastret'] = True
-        destObj = None
-        gid = proxy.gid
-        if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
-            destObj = charm.groups[gid]
-        msg = charm.packMsg(destObj, args, header)
-        charm.CkGroupSend(gid, elemIdx, ep, msg)
+        if not proxy.issec or elemIdx != -1:
+            destObj = None
+            gid = proxy.gid
+            if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
+                destObj = charm.groups[gid]
+            msg = charm.packMsg(destObj, args, header)
+            charm.CkGroupSend(gid, elemIdx, ep, msg)
+        else:
+            root, sid = proxy.section
+            header[b'sid'] = sid
+            if Options.local_msg_optim and root == charm._myPe:
+                charm.sectionMgr.thisProxy[root].sendToSectionLocal(sid, ep, header, *args)
+            else:
+                charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -354,19 +449,27 @@ def update_globals_proxy_method_gen(ep):
                     header[b'bcast'] = True
                     if retmode > 1:
                         header[b'bcastret'] = True
-        destObj = None
-        gid = proxy.gid
-        if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
-            destObj = charm.groups[gid]
-        msg = charm.packMsg(destObj, args, header)
-        charm.CkGroupSend(gid, elemIdx, ep, msg)
+        if not proxy.issec or elemIdx != -1:
+            destObj = None
+            gid = proxy.gid
+            if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
+                destObj = charm.groups[gid]
+            msg = charm.packMsg(destObj, args, header)
+            charm.CkGroupSend(gid, elemIdx, ep, msg)
+        else:
+            root, sid = proxy.section
+            header[b'sid'] = sid
+            if Options.local_msg_optim and root == charm._myPe:
+                charm.sectionMgr.thisProxy[root].sendToSectionLocal(sid, ep, header, *args)
+            else:
+                charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
 
 def group_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
-    def group_ckNew(cls, args):
+    def group_ckNew(cls, args, onPEs):
         # print("GROUP calling ckNew for class " + C.__name__ + " cIdx=", C.idx[GROUP], "epIdx=", epIdx)
         header = {}
         creation_future = None
@@ -375,9 +478,17 @@ def group_ckNew_gen(C, epIdx):
             header[b'block'] = creation_future
             header[b'bcast'] = True
             header[b'creation'] = True
-        msg = charm.packMsg(None, args, header)
-        gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
-        proxy = charm.groups[gid].thisProxy
+        if onPEs is None:
+            msg = charm.packMsg(None, args, header)
+            gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
+            proxy = cls(gid)
+        else:
+            # send empty msg for Charm++ group creation (on every PE)
+            msg = charm.packMsg(None, [], {b'constrained': True})
+            gid = charm.lib.CkCreateGroup(C.idx[GROUP], epIdx, msg)
+            proxy = cls(gid)
+            # real msg goes only to section elements
+            proxy = charm.split(proxy, 1, elems=[onPEs], cons=[-1, epIdx, header, args])[0]
         if creation_future is not None:
             proxy.creation_future = creation_future
         return proxy
@@ -386,32 +497,38 @@ def group_ckNew_gen(C, epIdx):
 def group_proxy_contribute(proxy, contributeInfo):
     charm.CkContributeToGroup(contributeInfo, proxy.gid, proxy.elemIdx)
 
+def groupsecproxy_contribute(proxy, contributeInfo):
+    charm.CkContributeToSection(contributeInfo, proxy.section[1], proxy.section[0])
 
 class Group(object):
 
     type_id = GROUP
 
-    def __new__(cls, C, args=[]):
+    def __new__(cls, C, args=[], onPEs=None):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise Charm4PyError("Only subclasses of Chare can be member of Group")
         if C not in charm.proxyClasses[GROUP]:
             raise Charm4PyError(str(C) + ' not registered for use in Groups')
-        return charm.proxyClasses[GROUP][C].ckNew(args)
+        return charm.proxyClasses[GROUP][C].ckNew(args, onPEs)
 
     @classmethod
     def initMember(cls, obj, gid):
         obj.thisIndex = charm.myPe()
         obj.thisProxy = charm.proxyClasses[GROUP][obj.__class__](gid)
         obj._contributeInfo = charm.lib.initContributeInfo(gid, obj.thisIndex, CONTRIBUTOR_TYPE_GROUP)
+        obj._scookies = defaultdict(int)
 
     @classmethod
     def __baseEntryMethods__(cls):
         return ["__init__"]
 
     @classmethod
-    def __getProxyClass__(C, cls):
+    def __getProxyClass__(C, cls, sectionProxy=False):
         # print("Creating group proxy class for class " + cls.__name__)
-        proxyClassName = cls.__name__ + 'GroupProxy'
+        if not sectionProxy:
+            proxyClassName = cls.__name__ + 'GroupProxy'
+        else:
+            proxyClassName = cls.__name__ + 'GroupSecProxy'
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[GROUP][cls]
         for m in entryMethods:
@@ -437,10 +554,18 @@ class Group(object):
         M["__init__"] = group_proxy_ctor
         M["__getitem__"] = group_proxy_elem
         M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
-        M["ckContribute"] = group_proxy_contribute  # function called when target proxy is Group
-        M["__getstate__"] = group_proxy__getstate__
-        M["__setstate__"] = group_proxy__setstate__
-        return type(proxyClassName, (), M)  # create and return proxy class
+        M["__getsecproxy__"] = group_getsecproxy
+        if not sectionProxy:
+            M["ckContribute"] = group_proxy_contribute  # function called when target proxy is Group
+            M["__getstate__"] = group_proxy__getstate__
+            M["__setstate__"] = group_proxy__setstate__
+        else:
+            M["ckContribute"] = groupsecproxy_contribute  # function called when target proxy is Group
+            M["__getstate__"] = groupsecproxy__getstate__
+            M["__setstate__"] = groupsecproxy__setstate__
+        proxyCls = type(proxyClassName, (), M)  # create and return proxy class
+        proxyCls.issec = sectionProxy
+        return proxyCls
 
 
 class ArrayMap(Chare):
@@ -461,13 +586,38 @@ def array_proxy__getstate__(proxy):
 def array_proxy__setstate__(proxy, state):
     proxy.aid, proxy.ndims, proxy.elemIdx = state
 
+def array_getsecproxy(proxy, sinfo):
+    if proxy.issec:
+        secproxy = proxy.__class__(proxy.aid, proxy.ndims)
+    else:
+        secproxy = proxy.__secproxyclass__(proxy.aid, proxy.ndims)
+    secproxy.section = sinfo
+    return secproxy
+
+def arraysecproxy__getstate__(proxy):
+    return (proxy.aid, proxy.ndims, proxy.elemIdx, proxy.section)
+
+def arraysecproxy__setstate__(proxy, state):
+    proxy.aid, proxy.ndims, proxy.elemIdx, proxy.section = state
+
 def array_proxy_elem(proxy, idx):  # array proxy [] overload method
-    proxy_clone = proxy.__class__(proxy.aid, proxy.ndims)
-    if type(idx) == int: idx = (idx,)
-    if len(idx) != proxy_clone.ndims:
-        raise Charm4PyError("Dimensions of index " + str(idx) + " don't match array dimensions")
-    proxy_clone.elemIdx = tuple(idx)
-    return proxy_clone
+    ndims = proxy.ndims
+    isslice = True
+    idxtype = type(idx)
+    if idxtype == int:
+        idx = (idx,)
+        isslice = False
+    elif idxtype == slice:
+        idx = (idx,)
+    assert len(idx) == ndims, "Dimensions of index " + str(idx) + " don't match array dimensions"
+    if not isslice or not isinstance(idx[0], slice):
+        proxy_clone = proxy.__class__(proxy.aid, ndims)
+        proxy_clone.elemIdx = tuple(idx)
+        return proxy_clone
+    else:
+        for _slice in idx:
+            assert _slice.start is not None and _slice.stop is not None, 'Must specify start and stop indexes for array slicing'
+        return charm.split(proxy, 1, slicing=idx)[0]
 
 def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
@@ -496,14 +646,22 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                     header[b'bcast'] = True
                     if retmode > 1:
                         header[b'bcastret'] = True
-        destObj = None
-        aid = proxy.aid
-        if Options.local_msg_optim and (len(args) > 0):
-            array = charm.arrays[aid]
-            if elemIdx in array:
-                destObj = array[elemIdx]
-        msg = charm.packMsg(destObj, args, header)
-        charm.CkArraySend(aid, elemIdx, ep, msg)
+        if not proxy.issec or elemIdx != ():
+            destObj = None
+            aid = proxy.aid
+            if Options.local_msg_optim and (len(args) > 0):
+                array = charm.arrays[aid]
+                if elemIdx in array:
+                    destObj = array[elemIdx]
+            msg = charm.packMsg(destObj, args, header)
+            charm.CkArraySend(aid, elemIdx, ep, msg)
+        else:
+            root, sid = proxy.section
+            header[b'sid'] = sid
+            if Options.local_msg_optim and root == charm._myPe:
+                charm.sectionMgr.thisProxy[root].sendToSectionLocal(sid, ep, header, *args)
+            else:
+                charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
     return proxy_entry_method
@@ -563,6 +721,9 @@ def array_ckInsert_gen(epIdx):
 def array_proxy_contribute(proxy, contributeInfo):
     charm.CkContributeToArray(contributeInfo, proxy.aid, proxy.elemIdx)
 
+def arraysecproxy_contribute(proxy, contributeInfo):
+    charm.CkContributeToSection(contributeInfo, proxy.section[1], proxy.section[0])
+
 def array_proxy_doneInserting(proxy):
     charm.lib.CkDoneInserting(proxy.aid)
 
@@ -595,9 +756,12 @@ class Array(object):
         return ["__init__", "__init__", "AtSync"]
 
     @classmethod
-    def __getProxyClass__(C, cls):
+    def __getProxyClass__(C, cls, sectionProxy=False):
         # print("Creating array proxy class for class " + cls.__name__)
-        proxyClassName = cls.__name__ + 'ArrayProxy'
+        if not sectionProxy:
+            proxyClassName = cls.__name__ + 'ArrayProxy'
+        else:
+            proxyClassName = cls.__name__ + 'ArraySecProxy'
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
@@ -614,13 +778,20 @@ class Array(object):
         M["__init__"] = array_proxy_ctor
         M["__getitem__"] = array_proxy_elem
         M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
+        M["__getsecproxy__"] = array_getsecproxy
         M["ckInsert"] = array_ckInsert_gen(entryMethods[0].epIdx)
-        M["ckContribute"] = array_proxy_contribute  # function called when target proxy is Array
         M["ckDoneInserting"] = array_proxy_doneInserting
-        M["__getstate__"] = array_proxy__getstate__
-        M["__setstate__"] = array_proxy__setstate__
-        return type(proxyClassName, (), M)  # create and return proxy class
-
+        if not sectionProxy:
+            M["ckContribute"] = array_proxy_contribute  # function called when target proxy is Array
+            M["__getstate__"] = array_proxy__getstate__
+            M["__setstate__"] = array_proxy__setstate__
+        else:
+            M["ckContribute"] = arraysecproxy_contribute  # function called when target proxy is Array
+            M["__getstate__"] = arraysecproxy__getstate__
+            M["__setstate__"] = arraysecproxy__setstate__
+        proxyCls = type(proxyClassName, (), M)  # create and return proxy class
+        proxyCls.issec = sectionProxy
+        return proxyCls
 
 # ---------------------------------------------------
 

@@ -178,10 +178,13 @@ class EntryMethodThreadManager(object):
                         ret = getattr(obj, entry_method.name)(*args)  # invoke entry method
                         if b'block' in header:
                             if b'bcast' in header:
+                                sid = None
+                                if b'sid' in header:
+                                    sid = header[b'sid']
                                 if b'bcastret' in header:
-                                    obj.contribute(ret, charm.reducers.gather, header[b'block'])
+                                    obj.contribute(ret, charm.reducers.gather, header[b'block'], sid)
                                 else:
-                                    obj.contribute(None, None, header[b'block'])
+                                    obj.contribute(None, None, header[b'block'], sid)
                             else:
                                 header[b'block'].send(ret)
                     except Exception as e:
@@ -280,14 +283,13 @@ class EntryMethodThreadManager(object):
         self.futures[fid] = f
         return f
 
-    def createCollectiveFuture(self, fid):
+    def createCollectiveFuture(self, fid, proxy):
         """ fid is supplied in this case and has to be the same for all distributed chares """
         tid = get_ident()
         if tid == self.main_thread_id:
             self.throwNotThreadedError()
         thread_state = self.threads[tid]
         obj = thread_state.obj
-        proxy = obj.thisProxy
         f = CollectiveFuture(fid, thread_state, proxy, 1)
         self.coll_futures[(fid, obj)] = f
         return f

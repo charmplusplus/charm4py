@@ -163,6 +163,31 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/sections/simple.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/sections/slice.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/sections/callbacks.py",
+        "requires_py_version": 3
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/sections/multirand-split-combine.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/sections/constrained_groups.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/sections/allreduce.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "examples/hello/group_hello.py"
     },
     {
