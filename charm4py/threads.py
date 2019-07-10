@@ -175,7 +175,8 @@ class EntryMethodThreadManager(object):
         thread_state = ThreadState(tid, obj, entry_method)
         self.threads[tid] = thread_state
         if self.PROFILING:
-            threading.current_thread().em_callstack = [entry_method]
+            ems = [entry_method]
+            threading.current_thread().em_callstack = ems
             entry_method.startMeasuringTime()
         with self.entryMethodRunning:
             try:
