@@ -4,7 +4,6 @@ if sys.version_info < (3, 0, 0):
     from thread import get_ident
 else:
     from threading import get_ident
-import time
 import array
 
 
@@ -140,9 +139,16 @@ class EntryMethodThreadManager(object):
             with self.entryMethodRunning:
                 t = threading.Thread(target=self.entryMethodRun_thread,
                                      args=(obj, entry_method, args, header))
+                if self.PROFILING:
+                    ems = threading.current_thread().em_callstack
+                    if len(ems) > 0:
+                        ems[-1].stopMeasuringTime()
                 t.start()
                 self.entryMethodRunning.wait()  # wait until entry method finishes OR pauses
                 self.threadStopped(self.threads[t.ident])
+                if self.PROFILING:
+                    if len(ems) > 0:
+                        ems[-1].startMeasuringTime()
 
     def threadStopped(self, thread_state):
         """ Called by main thread when entry method thread has finished/paused """
@@ -168,6 +174,9 @@ class EntryMethodThreadManager(object):
         tid = get_ident()
         thread_state = ThreadState(tid, obj, entry_method)
         self.threads[tid] = thread_state
+        if self.PROFILING:
+            threading.current_thread().em_callstack = [entry_method]
+            entry_method.startMeasuringTime()
         with self.entryMethodRunning:
             try:
                 while True:
@@ -189,6 +198,10 @@ class EntryMethodThreadManager(object):
                                 header[b'block'].send(ret)
                     except Exception as e:
                         charm.process_em_exc(e, obj, header)
+                    if self.PROFILING:
+                        entry_method.stopMeasuringTime()
+                        ems.pop()
+                        assert len(ems) == 0
                     thread_state.notify = False
                     thread_state.idle = True
                     thread_state.obj = None
@@ -199,6 +212,9 @@ class EntryMethodThreadManager(object):
                         break
                     thread_state.obj = obj
                     thread_state.em = entry_method
+                    if self.PROFILING:
+                        entry_method.startMeasuringTime()
+                        ems.append(entry_method)
             except SystemExit:
                 exit_code = sys.exc_info()[1].code
                 if exit_code is None:
@@ -209,11 +225,13 @@ class EntryMethodThreadManager(object):
                 charm.exit(exit_code)
             except Exception:
                 thread_state.error = sys.exc_info()[1]  # store exception for main thread
+                if self.PROFILING and entry_method.running:
+                    entry_method.stopMeasuringTime()
             self.entryMethodRunning.notify()  # notify main thread that done
 
     def throwNotThreadedError(self):
-        raise NotThreadedError("Entry method '" + charm.mainThreadEntryMethod.C.__name__ + "." +
-                               charm.mainThreadEntryMethod.name +
+        raise NotThreadedError("Entry method '" + charm.last_ntem.C.__name__ + "." +
+                               charm.last_ntem.name +
                                "' must be marked as 'threaded' to block")
 
     def pauseThread(self):
@@ -228,12 +246,19 @@ class EntryMethodThreadManager(object):
         if thread_state.notify:
             obj = thread_state.obj
             obj._thread_notify_target.threadPaused(obj._thread_notify_data)
+        if self.PROFILING:
+            ems = threading.current_thread().em_callstack
+            if len(ems) > 0:
+                ems[-1].stopMeasuringTime()
         with thread_state.wait_cv:
             self.entryMethodRunning.notify()    # notify main thread that I'm pausing
             self.entryMethodRunning.release()
             thread_state.wait_cv.wait()
             self.entryMethodRunning.acquire()   # got what I was waiting for, resuming
             #print("result got here", tid, thread_state.wait_result)
+        if self.PROFILING:
+            if len(ems) > 0:
+                ems[-1].startMeasuringTime()
         #self.entryMethodRunning.acquire()
         return thread_state.wait_result
 
@@ -254,12 +279,12 @@ class EntryMethodThreadManager(object):
             self.entryMethodRunning.acquire()
         #with self.entryMethodRunning:
         if self.PROFILING:
-            charm.mainThreadEntryMethod.stopMeasuringTime()
-            thread_state.em.startMeasuringTime()
+            ems = threading.current_thread().em_callstack
+            if len(ems) > 0:
+                ems[-1].stopMeasuringTime()
         self.entryMethodRunning.wait()  # main thread waits because threaded entry method resumes
-        if self.PROFILING:
-            thread_state.em.stopMeasuringTime()
-            charm.mainThreadEntryMethod.startMeasuringTime()
+        if self.PROFILING and len(ems) > 0:
+            ems[-1].startMeasuringTime()
         self.threadStopped(thread_state)
 
     def createFuture(self, senders=1):

@@ -136,70 +136,64 @@ class CharmLib(object):
   @ffi.def_extern()
   def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
-      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
+      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
-      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
+      charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def recvGroupMsg_py2(gid, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
-      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
+      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def recvGroupMsg_py3(gid, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
-      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
+      charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, dcopy_start)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, dcopy_start)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
       charm.handleGeneralError()
 
@@ -413,24 +407,22 @@ class CharmLib(object):
   @ffi.def_extern()
   def arrayElemJoin_py2(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], t0, -1)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], -1)
     except:
       charm.handleGeneralError()
 
   @ffi.def_extern()
   def arrayElemJoin_py3(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
-      t0 = None
       if charm.options.profiling:
-        t0 = time.time()
+        charm._entrytime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
-      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), t0, -1)
+      charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), -1)
     except:
       charm.handleGeneralError()
 
