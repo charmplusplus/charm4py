@@ -1,7 +1,12 @@
 from . import wait
 import time
 import sys
-from threading import current_thread, get_ident
+from threading import current_thread
+if sys.version_info < (3, 0, 0):
+    from thread import get_ident
+else:
+    from threading import get_ident
+
 
 class EntryMethod(object):
 
