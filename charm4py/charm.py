@@ -527,10 +527,8 @@ class Charm(object):
         self.register(Worker, (GROUP,))
 
         if self.options.profiling:
-            self.internalChareTypes.add(CharmRemote)
-            self.internalChareTypes.add(SectionManager)
-            self.internalChareTypes.add(PoolScheduler)
-            self.internalChareTypes.add(Worker)
+            self.internalChareTypes.update({SectionManager, CharmRemote,
+                                            PoolScheduler, Worker})
 
     def _createInternalChares(self):
         Group(CharmRemote)
@@ -580,7 +578,7 @@ class Charm(object):
             self.contribute = profile_send_function(self.contribute)
             self.triggerCallableEM = entry_method.EntryMethod(self.__class__,
                                                               'triggerCallable',
-                                                              self.options.profiling)
+                                                              True)
         if self.options.quiet and '++quiet' not in sys.argv:
             sys.argv += ['++quiet']
         elif '++quiet' in sys.argv:
