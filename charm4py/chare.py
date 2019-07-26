@@ -319,6 +319,8 @@ class Mainchare(object):
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            if m.name == '__init__':
+                continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
                 f = profile_send_function(mainchare_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
@@ -534,6 +536,8 @@ class Group(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            if m.name == '__init__':
+                continue
             if m.name == 'updateGlobals' and cls == CharmRemote:
                 if Options.profiling:
                     f = profile_send_function(update_globals_proxy_method_gen(m.epIdx))
@@ -752,8 +756,11 @@ class Array(object):
 
     @classmethod
     def __baseEntryMethods__(cls):
-        # 2nd __init__ used to register migration constructor
-        return ["__init__", "__init__", "AtSync"]
+        # 2nd method is used for 2 purposes:
+        # - to register the migration constructor on Charm++ side (note that this migration constructor does nothing)
+        # - Chare.migrated() is called whenever a chare has completed migration.
+        #   The EntryMethod object with this name is used to profile Chare.migrated() calls.
+        return ['__init__', 'migrated', 'AtSync']
 
     @classmethod
     def __getProxyClass__(C, cls, sectionProxy=False):
@@ -767,6 +774,8 @@ class Array(object):
         for m in entryMethods:
             if m.epIdx == -1:
                 raise Charm4PyError("Unregistered entry method")
+            if m.name in {'__init__', 'migrated'}:
+                continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
                 f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))

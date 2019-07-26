@@ -837,35 +837,32 @@ cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv):
 
 cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start):
   try:
-    t0 = None
     if PROFILING:
-      t0 = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvChareMsg((onPe, <uintptr_t>objPtr), ep, recv_buffer, t0, dcopy_start)
+    charm.recvChareMsg((onPe, <uintptr_t>objPtr), ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
 
 cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start):
   try:
-    t0 = None
     if PROFILING:
-      t0 = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvGroupMsg(gid, ep, recv_buffer, t0, dcopy_start)
+    charm.recvGroupMsg(gid, ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
 
 cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start):
   cdef int i = 0
   try:
-    t0 = None
     if PROFILING:
-      t0 = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, dcopy_start)
+    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
 
@@ -894,12 +891,11 @@ cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int s
 cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, int msgSize):
   cdef int i = 0
   try:
-    t0 = None
     if PROFILING:
-      t0 = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
-    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, t0, -1)
+    charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, -1)
   except:
     charm.handleGeneralError()
 

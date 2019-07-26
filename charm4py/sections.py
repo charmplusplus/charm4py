@@ -1,6 +1,5 @@
 from . import charm, Chare, Group, Reducer, when
 from collections import defaultdict
-from time import time
 
 
 # Reduction Info object: holds state for an in-progress reduction
@@ -29,6 +28,7 @@ class SectionManager(Chare):
     def __init__(self):
         assert not hasattr(charm, 'sectionMgr')
         charm.sectionMgr = self
+        self.profiling = charm.options.profiling
         self.sections = defaultdict(SectionManager.SectionEntry)  # stores section entries for this PE
         self.send_ep = self.thisProxy.sendToSection.ep
 
@@ -81,7 +81,6 @@ class SectionManager(Chare):
             em = charm.entryMethods[ep]
             obj = object.__new__(em.C)  # create object but don't call __init__
             Group.initMember(obj, gid)
-            charm.mainThreadEntryMethod = em
             super(em.C, obj).__init__()  # call Chare class __init__ first
             obj.thisProxy = obj.thisProxy.__getsecproxy__((root, sid))
             entry.local_elems = [obj]
@@ -89,7 +88,7 @@ class SectionManager(Chare):
             charm.groups[gid] = obj
             if gid in charm.groupMsgBuf:
                 for ep, header, args in charm.groupMsgBuf[gid]:
-                    charm.invokeEntryMethod(obj, ep, header, args, time())
+                    charm.invokeEntryMethod(obj, ep, header, args)
                 del charm.groupMsgBuf[gid]
         else:
             entry.local_elems = [charm.groups[gid]]
@@ -107,13 +106,19 @@ class SectionManager(Chare):
             return
 
         if len(entry.children) > 0:
+            profiling = self.profiling
+            if profiling:
+                em = charm.runningEntryMethod
+                em.startMeasuringSendTime()
             msg = charm.packMsg(None, [sid, ep, header] + list(args), {})
             charm.lib.CkGroupSendMulti(self.thisProxy.gid, entry.children,
                                        self.send_ep, msg)
             del msg
+            if profiling:
+                em.stopMeasuringSendTime()
 
         for obj in entry.local_elems:
-            charm.invokeEntryMethod(obj, ep, header, args, time())
+            charm.invokeEntryMethod(obj, ep, header, args)
 
     def sendToSection(self, sid, ep, header, *args):
         entry = self.sections[sid]
@@ -122,13 +127,20 @@ class SectionManager(Chare):
             return
 
         if len(entry.children) > 0:
+            profiling = self.profiling
+            if profiling:
+                em = charm.runningEntryMethod
+                em.startMeasuringSendTime()
             # SectionManagerExt in Charm++ has a pointer to the multicast message,
             # this tells it to forward the msg to the children using CkSendMsgBranchMulti
             # (thus avoiding any copies)
             charm.lib.sendToSection(self.thisProxy.gid, entry.children)
+            if profiling:
+                charm.recordSend(charm.msg_recv_stats[4])  # send size is same as last received msg size
+                em.stopMeasuringSendTime()
 
         for obj in entry.local_elems:
-            charm.invokeEntryMethod(obj, ep, header, args, time())
+            charm.invokeEntryMethod(obj, ep, header, args)
 
     def contrib(self, sid, redno, data, reducer, cb):
         entry = self.sections[sid]

@@ -187,36 +187,33 @@ class CharmLib(object):
 
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if self.opts.profiling:
-        t0 = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvChareMsg((onPe, objPtr), ep, msg, t0, dcopy_start)
+      self.charm.recvChareMsg((onPe, objPtr), ep, msg, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
   def recvGroupMsg(self, gid, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if self.opts.profiling:
-        t0 = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvGroupMsg(gid, ep, msg, t0, dcopy_start)
+      self.charm.recvGroupMsg(gid, ep, msg, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
-      t0 = None
       if self.opts.profiling:
-        t0 = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       else: msg = b''
-      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, dcopy_start)
+      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
@@ -406,13 +403,12 @@ class CharmLib(object):
 
   def arrayElemJoin(self, aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
-      t0 = None
       if self.opts.profiling:
-        t0 = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
-      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, t0, -1)
+      self.charm.recvArrayMsg(aid, arrIndex, ep, msg, -1)
     except:
       self.charm.handleGeneralError()
 

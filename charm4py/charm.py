@@ -89,13 +89,6 @@ class Charm(object):
         self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
         self.groupMsgBuf = defaultdict(list)  # gid -> list of msgs received for constrained groups that haven't been created yet
         self.section_counter = 0
-        self.msg_send_sizes = []  # for profiling
-        self.msg_recv_sizes = []  # for profiling
-        self.runningEntryMethod = None  # currently running entry method (only used with profiling)
-        # track chare constructor call stack that occurs in mainchare due to
-        # inlining of constructor calls (only used with profiling)
-        self.mainchareEmStack = []
-        self.activeChares = set()  # for profiling (active chares on this PE)
         self.rebuildFuncs = (rebuildByteArray, rebuildArray, rebuildNumpyArray)
         self.sched_tagpool = set(range(1,100))  # pool of tags for scheduling callables
         self.sched_callables = {}
@@ -140,6 +133,21 @@ class Charm(object):
         # in interactive mode
         self.dynamic_register = sys.modules['__main__'].__dict__
         self.lb_requested = False
+
+    def __init_profiling__(self):
+        # these are attributes used only in profiling mode
+        import threading
+        threading.current_thread().em_callstack = []
+        # list of Chare types that are registered and used internally by the runtime
+        self.internalChareTypes = set()
+        # num_msgs_sent, min_size, max_size, sum_size, last_msg_sent_size
+        self.msg_send_stats = [0, int(10e6), 0, 0, -1]
+        # num_msgs_rcvd, min_size, max_size, sum_size, last_msg_rcvd_size
+        self.msg_recv_stats = [0, int(10e6), 0, 0, -1]
+        # currently running entry method
+        self.runningEntryMethod = None
+        # chares created on this PE
+        self.activeChares = set()
 
     def handleGeneralError(self):
         errorType, error, stacktrace = sys.exc_info()
@@ -204,20 +212,15 @@ class Charm(object):
         self._createInternalChares()
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
-        self.mainThreadEntryMethod = em
         super(em.C, obj).__init__()  # call Chare class __init__ first
         if self.entry_func is not None:
             assert isinstance(obj, chare.DefaultMainchare)
             obj.main = self.entry_func
-            del self.entry_func
         if self.options.profiling:
             self.activeChares.add((em.C, Mainchare))
-            em.startMeasuringTime()
         gc.collect()
         em.run(obj, {}, [args])  # now call the user's __init__
         self.chares[cid] = obj
-        if self.options.profiling:
-            em.stopMeasuringTime()
         if self.myPe() == 0:  # broadcast readonlies
             roData = {}
             for attr in dir(readonlies):  # attr is string
@@ -228,35 +231,25 @@ class Charm(object):
             self.lib.CkRegisterReadonly(b'charm4py_ro', b'charm4py_ro', msg)
         gc.collect()
 
-    def invokeEntryMethod(self, obj, ep, header, args, t0):
+    def invokeEntryMethod(self, obj, ep, header, args):
         em = self.entryMethods[ep]
-        opts = self.options
-        profiling = opts.profiling
-        if profiling:
-            em.addRecvTime(time.time() - t0)
-            em.startMeasuringTime()
-
         if (em.when_cond is not None) and (not em.when_cond.evaluateWhen(obj, args)):
             obj.__waitEnqueue__(em.when_cond, (0, em, header, args))
         else:
-            self.mainThreadEntryMethod = em
             em.run(obj, header, args)
-            if opts.auto_flush_wait_queues and obj._cond_next is not None:
+            if self.options.auto_flush_wait_queues and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 
-        if profiling:
-            em.stopMeasuringTime()
-
-    def recvChareMsg(self, chare_id, ep, msg, t0, dcopy_start):
+    def recvChareMsg(self, chare_id, ep, msg, dcopy_start):
         obj = self.chares[chare_id]
         header, args = self.unpackMsg(msg, dcopy_start, obj)
-        self.invokeEntryMethod(obj, ep, header, args, t0)
+        self.invokeEntryMethod(obj, ep, header, args)
 
-    def recvGroupMsg(self, gid, ep, msg, t0, dcopy_start):
+    def recvGroupMsg(self, gid, ep, msg, dcopy_start):
         if gid in self.groups:
             obj = self.groups[gid]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
-            self.invokeEntryMethod(obj, ep, header, args, t0)
+            self.invokeEntryMethod(obj, ep, header, args)
         else:
             em = self.entryMethods[ep]
             header, args = self.unpackMsg(msg, dcopy_start, None)
@@ -271,71 +264,43 @@ class Charm(object):
                 # constrained group instances are created by SectionManager
                 return
             assert gid not in self.groupMsgBuf
-            obj = object.__new__(em.C)  # create object but don't call __init__
-            Group.initMember(obj, gid)
-            self.mainThreadEntryMethod = em
-            super(em.C, obj).__init__()  # call Chare class __init__ first
             if self.options.profiling:
                 self.activeChares.add((em.C, Group))
-                if self.runningEntryMethod is not None:
-                    self.mainchareEmStack.append(self.runningEntryMethod)
-                    self.runningEntryMethod.stopMeasuringTime()
-                em.addRecvTime(time.time() - t0)
-                em.startMeasuringTime()
-            if not self.threadMgr.isMainThread():
-                # we are already inside a threaded entry method, so don't create a new thread
-                em.run_non_threaded(obj, header, args)  # now call the user's __init__
-            else:
-                em.run(obj, header, args)
+            obj = object.__new__(em.C)  # create object but don't call __init__
+            Group.initMember(obj, gid)
+            super(em.C, obj).__init__()  # call Chare class __init__ first
+            em.run(obj, header, args)  # now call the user's __init__
             self.groups[gid] = obj
-            if self.options.profiling:
-                em.stopMeasuringTime()
-                if len(self.mainchareEmStack) > 0:
-                    self.mainchareEmStack.pop().startMeasuringTime()
 
     def arrayMapProcNum(self, gid, index):
         return self.groups[gid].procNum(index)
 
-    def recvArrayMsg(self, aid, index, ep, msg, t0, dcopy_start):
+    def recvArrayMsg(self, aid, index, ep, msg, dcopy_start):
         # print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
         if index in self.arrays[aid]:
             obj = self.arrays[aid][index]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
-            self.invokeEntryMethod(obj, ep, header, args, t0)
+            self.invokeEntryMethod(obj, ep, header, args)
         else:
             em = self.entryMethods[ep]
             assert em.isCtor, "Specified array entry method not constructor"
             header, args = self.unpackMsg(msg, dcopy_start, None)
             if self.options.profiling:
                 self.activeChares.add((em.C, Array))
-                em.addRecvTime(time.time() - t0)
             if isinstance(args, Chare):  # obj migrating in
+                em = self.entryMethods[ep + 1]  # get 'migrated' EntryMethod object instead of __init__
                 obj = args
                 obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
                 self.arrays[aid][index] = obj
-                obj.migrated()
+                em.run(obj, {}, ())
             else:
                 obj = object.__new__(em.C)   # create object but don't call __init__
                 if b'single' in header:
                     Array.initMember(obj, aid, index, single=True)
                 else:
                     Array.initMember(obj, aid, index)
-                self.mainThreadEntryMethod = em
                 super(em.C, obj).__init__()  # call Chare class __init__ first
-                if self.options.profiling:
-                    if self.runningEntryMethod is not None:
-                        self.mainchareEmStack.append(self.runningEntryMethod)
-                        self.runningEntryMethod.stopMeasuringTime()
-                    em.startMeasuringTime()
-                if not self.threadMgr.isMainThread():
-                    # we are already inside a threaded entry method, so don't create a new thread
-                    em.run_non_threaded(obj, header, args)  # now call the user's array element __init__
-                else:
-                    em.run(obj, header, args)  # now call the user's array element __init__
-                if self.options.profiling:
-                    em.stopMeasuringTime()
-                    if len(self.mainchareEmStack) > 0:
-                        self.mainchareEmStack.pop().startMeasuringTime()
+                em.run(obj, header, args)  # now call the user's array element __init__
                 self.arrays[aid][index] = obj
 
     def unpackMsg(self, msg, dcopy_start, dest_obj):
@@ -417,7 +382,8 @@ class Charm(object):
                 if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
             msg = (header, args)
             msg = cPickle.dumps(msg, self.options.pickle_protocol)
-        if self.options.profiling: self.recordSend(len(msg) + dcopy_size)
+        if self.options.profiling:
+            self.recordSend(len(msg) + dcopy_size)
         return (msg, direct_copy_buffers)
 
     # register class C in Charm
@@ -501,12 +467,12 @@ class Charm(object):
                 entry_method.threaded(C.__init__)
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
-        ems = [entry_method.EntryMethod(C, m, profile=self.options.profiling)
-                                     for m in charm_type.__baseEntryMethods__()]
+        profilingOn = self.options.profiling
+        ems = [entry_method.EntryMethod(C, m, profilingOn) for m in charm_type.__baseEntryMethods__()]
 
         members = dir(C)
         if C == SectionManager:
-            ems.append(entry_method.EntryMethod(C, 'sendToSection', profile=self.options.profiling))
+            ems.append(entry_method.EntryMethod(C, 'sendToSection', profilingOn))
             members.remove('sendToSection')
         self.classEntryMethods[charm_type_id][C] = ems
 
@@ -520,8 +486,10 @@ class Charm(object):
                 continue  # filter out non-user methods
             if m in chare.method_restrictions['non_entry_method']:
                 continue
+            if charm_type_id != ARRAY and m in {'migrate', 'setMigratable'}:
+                continue
             # print(m)
-            em = entry_method.EntryMethod(C, m, profile=self.options.profiling)
+            em = entry_method.EntryMethod(C, m, profilingOn)
             self.classEntryMethods[charm_type_id][C].append(em)
         self.registered[C].add(charm_type)
 
@@ -557,6 +525,10 @@ class Charm(object):
                 entry_method.threaded(PoolScheduler.start)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
+
+        if self.options.profiling:
+            self.internalChareTypes.update({SectionManager, CharmRemote,
+                                            PoolScheduler, Worker})
 
     def _createInternalChares(self):
         Group(CharmRemote)
@@ -602,7 +574,11 @@ class Charm(object):
         self.started = True
 
         if self.options.profiling:
+            self.__init_profiling__()
             self.contribute = profile_send_function(self.contribute)
+            self.triggerCallableEM = entry_method.EntryMethod(self.__class__,
+                                                              'triggerCallable',
+                                                              True)
         if self.options.quiet and '++quiet' not in sys.argv:
             sys.argv += ['++quiet']
         elif '++quiet' in sys.argv:
@@ -806,18 +782,26 @@ class Charm(object):
         self.lib.scheduleTagAfter(tag, secs * 1000)
 
     def triggerCallable(self, tag):
+        if self.options.profiling:
+            self.triggerCallableEM.startMeasuringTime()
         cb, args = self.sched_callables.pop(tag)
         self.sched_tagpool.add(tag)
         cb(*args)
+        if self.options.profiling:
+            self.triggerCallableEM.stopMeasuringTime()
 
     def recordSend(self, size):
-        # TODO? might be better (certainly more memory efficient) to update msg stats
-        # like min, max, total, each time a send is recorded instead of storing the msg
-        # size of all sent messages and calculating stats at the end. same applies to receives
-        self.msg_send_sizes.append(size)
+        self.recordSendRecv(self.msg_send_stats, size)
 
     def recordReceive(self, size):
-        self.msg_recv_sizes.append(size)
+        self.recordSendRecv(self.msg_recv_stats, size)
+
+    def recordSendRecv(self, stats, size):
+        stats[0] += 1
+        stats[1] = min(size, stats[1])
+        stats[2] = max(size, stats[2])
+        stats[3] += size
+        stats[4] = size
 
     def __printTable__(self, table, sep):
         col_width = [max(len(x) for x in col) for col in zip(*table)]
@@ -826,58 +810,88 @@ class Charm(object):
             print("| " + " | ".join("{:{}}".format(x, col_width[i]) for i, x in enumerate(line)) + " |")
 
     def printStats(self):
-        if not self.started:
-            raise Charm4PyError('charm was not started')
+        assert self.started, 'charm was not started'
         if not self.options.profiling:
             print('NOTE: called charm.printStats() but profiling is disabled')
             return
 
-        if self.runningEntryMethod is not None:
+        em = self.runningEntryMethod
+        if em is not None:
             # record elapsed time of current entry method so that it is part of displayed stats
-            em = self.runningEntryMethod
             assert not em.measuringSendTime
             em.stopMeasuringTime()
             em.startMeasuringTime()
 
-        print("Timings for PE " + str(self.myPe()) + ":")
-        table = [["", "em", "send", "recv", "total"]]
+        print('Timings for PE', self.myPe(), ':')
+        table = [['', 'em', 'send', 'recv', 'total']]
         lineNb = 1
         sep = {}
         row_totals = [0.0] * 4
-        for C, charm_type in self.activeChares:
-            sep[lineNb] = "------ " + str(C) + " as " + charm_type.__name__ + " ------"
+        chares_sorted = sorted([(C.__module__, C.__name__,
+                                 charm_type.type_id, C, charm_type)
+                                 for C, charm_type in self.activeChares])
+        for _, _, _, C, charm_type in chares_sorted:
+            if C in self.internalChareTypes:
+                totaltime = 0.0
+                for em in self.classEntryMethods[charm_type.type_id][C]:
+                    if em.name == '__init__':
+                        continue
+                    totaltime += sum(em.times)
+                if totaltime < 0.001:
+                    continue
+            sep[lineNb] = '------ ' + str(C) + ' as ' + charm_type.__name__ + ' ------'
             for em in self.classEntryMethods[charm_type.type_id][C]:
-                if not em.profile: continue
+                if not em.profile:
+                    continue
+                if C == chare.DefaultMainchare and self.entry_func is not None and em.name == '__init__':
+                    em_name = self.entry_func.__module__ + '.' + self.entry_func.__name__ + ' (main function)'
+                else:
+                    em_name = em.name
                 vals = em.times + [sum(em.times)]
-                for i in range(len(row_totals)): row_totals[i] += vals[i]
-                table.append([em.name] + [str(round(v, 3)) for v in vals])
+                for i in range(len(row_totals)):
+                    row_totals[i] += vals[i]
+                table.append([em_name] + [str(round(v, 3)) for v in vals])
                 lineNb += 1
-        sep[lineNb] = "-------------------------------------------------------"
-        table.append([""] + [str(round(v, 3)) for v in row_totals])
+        sep[lineNb] = '-----------------------------------------------------------'
+        table.append([''] + [str(round(v, 3)) for v in row_totals])
         lineNb += 1
-        sep[lineNb] = "-------------------------------------------------------"
+        sep[lineNb] = '-----------------------------------------------------------'
         misc_overheads = [str(round(v, 3)) for v in self.lib.times]
-        table.append(["reductions", ' ', ' ', misc_overheads[0], misc_overheads[0]])
-        table.append(["custom reductions",   ' ', ' ', misc_overheads[1], misc_overheads[1]])
-        table.append(["migrating out",  ' ', ' ', misc_overheads[2], misc_overheads[2]])
+        table.append(['reductions', ' ', ' ', misc_overheads[0], misc_overheads[0]])
+        table.append(['custom reductions',   ' ', ' ', misc_overheads[1], misc_overheads[1]])
+        table.append(['migrating out',  ' ', ' ', misc_overheads[2], misc_overheads[2]])
         lineNb += 3
-        sep[lineNb] = "-------------------------------------------------------"
+        triggerCallableTotalTime = sum(self.triggerCallableEM.times)
+        if triggerCallableTotalTime > 0:
+            vals = self.triggerCallableEM.times + [triggerCallableTotalTime]
+            for i, v in enumerate(vals):
+                row_totals[i] += v
+            times = [str(round(v, 3)) for v in vals]
+            table.append(['triggerCallable'] + times)
+            lineNb += 1
+        sep[lineNb] = '-----------------------------------------------------------'
         row_totals[2] += sum(self.lib.times)
         row_totals[3] += sum(self.lib.times)
-        table.append([""] + [str(round(v, 3)) for v in row_totals])
+        table.append([''] + [str(round(v, 3)) for v in row_totals])
         lineNb += 1
         self.__printTable__(table, sep)
+
         for i in (0, 1):
             if i == 0:
-                print("\nMessages sent: " + str(len(self.msg_send_sizes)))
-                msgLens = self.msg_send_sizes
+                num_msgs = self.msg_send_stats[0]
+                min_msgsize, max_msgsize, sum_msgsize = self.msg_send_stats[1:4]
+                avg_msgsize = sum_msgsize / num_msgs
+                print('\nMessages sent: ' + str(num_msgs))
             else:
-                print("\nMessages received: " + str(len(self.msg_recv_sizes)))
-                msgLens = self.msg_recv_sizes
-            if len(msgLens) == 0: msgLens = [0.0]
-            msgSizeStats = [min(msgLens), sum(msgLens) / float(len(msgLens)), max(msgLens)]
-            print("Message size in bytes (min / mean / max): " + str([str(v) for v in msgSizeStats]))
-            print("Total bytes = " + str(round(sum(msgLens) / 1024.0 / 1024.0, 3)) + " MB")
+                num_msgs = self.msg_recv_stats[0]
+                min_msgsize, max_msgsize, sum_msgsize = self.msg_recv_stats[1:4]
+                avg_msgsize = sum_msgsize / num_msgs
+                print('\nMessages received: ' + str(num_msgs))
+            msgSizeStats = [min_msgsize, avg_msgsize, max_msgsize]
+            msgSizeStats = [round(val, 3) for val in msgSizeStats]
+            print('Message size in bytes (min / mean / max): ' + ' / '.join([str(v) for v in msgSizeStats]))
+            print('Total bytes = ' + str(round(sum_msgsize / 1024.0 / 1024.0, 3)) + ' MB')
+        print('')
 
     def lib_version_check(self, commit_id_str):
         req_version = tuple([int(n) for n in open(os.path.dirname(__file__) + '/libcharm_version', 'r').read().split('.')])
@@ -1057,9 +1071,12 @@ def load_charm_library(charm):
 def profile_send_function(func):
     def func_with_profiling(*args, **kwargs):
         em = charm.runningEntryMethod
-        em.startMeasuringSendTime()
-        ret = func(*args, **kwargs)
-        em.stopMeasuringSendTime()
+        if not em.measuringSendTime:
+            em.startMeasuringSendTime()
+            ret = func(*args, **kwargs)
+            em.stopMeasuringSendTime()
+        else:
+            ret = func(*args, **kwargs)
         return ret
     if hasattr(func, 'ep'):
         func_with_profiling.ep = func.ep
