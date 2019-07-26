@@ -28,8 +28,7 @@ class SectionManager(Chare):
     def __init__(self):
         assert not hasattr(charm, 'sectionMgr')
         charm.sectionMgr = self
-        global Options
-        Options = charm.options
+        self.profiling = charm.options.profiling
         self.sections = defaultdict(SectionManager.SectionEntry)  # stores section entries for this PE
         self.send_ep = self.thisProxy.sendToSection.ep
 
@@ -107,14 +106,15 @@ class SectionManager(Chare):
             return
 
         if len(entry.children) > 0:
-            if Options.profiling:
+            profiling = self.profiling
+            if profiling:
                 em = charm.runningEntryMethod
                 em.startMeasuringSendTime()
             msg = charm.packMsg(None, [sid, ep, header] + list(args), {})
             charm.lib.CkGroupSendMulti(self.thisProxy.gid, entry.children,
                                        self.send_ep, msg)
             del msg
-            if Options.profiling:
+            if profiling:
                 em.stopMeasuringSendTime()
 
         for obj in entry.local_elems:
@@ -127,14 +127,15 @@ class SectionManager(Chare):
             return
 
         if len(entry.children) > 0:
-            if Options.profiling:
+            profiling = self.profiling
+            if profiling:
                 em = charm.runningEntryMethod
                 em.startMeasuringSendTime()
             # SectionManagerExt in Charm++ has a pointer to the multicast message,
             # this tells it to forward the msg to the children using CkSendMsgBranchMulti
             # (thus avoiding any copies)
             charm.lib.sendToSection(self.thisProxy.gid, entry.children)
-            if Options.profiling:
+            if profiling:
                 charm.recordSend(charm.msg_recv_stats[4])  # send size is same as last received msg size
                 em.stopMeasuringSendTime()
 

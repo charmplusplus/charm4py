@@ -838,7 +838,7 @@ cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv):
 cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start):
   try:
     if PROFILING:
-      charm._entrytime = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvChareMsg((onPe, <uintptr_t>objPtr), ep, recv_buffer, dcopy_start)
@@ -848,7 +848,7 @@ cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, i
 cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start):
   try:
     if PROFILING:
-      charm._entrytime = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvGroupMsg(gid, ep, recv_buffer, dcopy_start)
@@ -859,7 +859,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
   cdef int i = 0
   try:
     if PROFILING:
-      charm._entrytime = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, dcopy_start)
@@ -892,7 +892,7 @@ cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, 
   cdef int i = 0
   try:
     if PROFILING:
-      charm._entrytime = time.time()
+      charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, -1)

@@ -137,7 +137,7 @@ class CharmLib(object):
   def recvChareMsg_py2(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
       charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
@@ -148,7 +148,7 @@ class CharmLib(object):
   def recvChareMsg_py3(onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       objPtr = int(ffi.cast("uintptr_t", objPtr))
       charm.recvChareMsg((onPe, objPtr), ep, ffi.buffer(msg, msgSize), dcopy_start)
@@ -159,7 +159,7 @@ class CharmLib(object):
   def recvGroupMsg_py2(gid, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
     except:
@@ -169,7 +169,7 @@ class CharmLib(object):
   def recvGroupMsg_py3(gid, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       charm.recvGroupMsg(gid, ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
@@ -179,7 +179,7 @@ class CharmLib(object):
   def recvArrayMsg_py2(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
@@ -190,7 +190,7 @@ class CharmLib(object):
   def recvArrayMsg_py3(aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), dcopy_start)
@@ -408,7 +408,7 @@ class CharmLib(object):
   def arrayElemJoin_py2(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize)[:], -1)
@@ -419,7 +419,7 @@ class CharmLib(object):
   def arrayElemJoin_py3(aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       if charm.options.profiling:
-        charm._entrytime = time.time()
+        charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), -1)

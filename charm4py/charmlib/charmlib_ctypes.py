@@ -188,7 +188,7 @@ class CharmLib(object):
   def recvChareMsg(self, onPe, objPtr, ep, msgSize, msg, dcopy_start):
     try:
       if self.opts.profiling:
-        self.charm._entrytime = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvChareMsg((onPe, objPtr), ep, msg, dcopy_start)
@@ -198,7 +198,7 @@ class CharmLib(object):
   def recvGroupMsg(self, gid, ep, msgSize, msg, dcopy_start):
     try:
       if self.opts.profiling:
-        self.charm._entrytime = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       self.charm.recvGroupMsg(gid, ep, msg, dcopy_start)
@@ -208,7 +208,7 @@ class CharmLib(object):
   def recvArrayMsg(self, aid, ndims, arrayIndex, ep, msgSize, msg, dcopy_start):
     try:
       if self.opts.profiling:
-        self.charm._entrytime = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
@@ -404,7 +404,7 @@ class CharmLib(object):
   def arrayElemJoin(self, aid, ndims, arrayIndex, ep, msg, msgSize):
     try:
       if self.opts.profiling:
-        self.charm._entrytime = time.time()
+        self.charm._precvtime = time.time()
         self.charm.recordReceive(msgSize)
       arrIndex = self.arrayIndexToTuple(ndims, arrayIndex)
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw

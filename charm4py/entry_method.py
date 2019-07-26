@@ -98,9 +98,9 @@ class EntryMethod(object):
             raise exception
 
     def startMeasuringTime(self):
-        if charm._entrytime > 0:
-            self.addRecvTime(time.time() - charm._entrytime)
-            charm._entrytime = -1
+        if charm._precvtime > 0:
+            self.addRecvTime(time.time() - charm._precvtime)
+            charm._precvtime = -1
         assert not self.running and charm.runningEntryMethod is None
         charm.runningEntryMethod = self
         self.running = True
