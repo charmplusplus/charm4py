@@ -142,7 +142,7 @@ class Chare(object):
             # unique across sections, and not conflict with non-section fids
             fid = (redno, sid[0], sid[1])
             proxy = section
-        f = charm.threadMgr.createCollectiveFuture(fid, proxy)
+        f = charm.threadMgr.createCollectiveFuture(fid, self, proxy)
         charm.contribute(data, reducer, f, self, section)
         return f
 
@@ -160,10 +160,6 @@ class Chare(object):
     def setMigratable(self, migratable):
         charm.lib.setMigratable(self.thisProxy.aid, self.thisIndex, migratable)
         self.migratable = migratable
-
-    # deposit value of one of the futures that was created by this chare
-    def _future_deposit_result(self, fid, result=None):
-        charm.threadMgr.depositFuture(fid, result)
 
     # deposit value of one of the collective futures that was created by this chare
     def _coll_future_deposit_result(self, fid, result=None):
@@ -233,7 +229,7 @@ method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__addLocal__', '__removeLocal__', '__flush_wait_queues__',
                  '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
-                 'AtSync', 'migrate', 'setMigratable', '_future_deposit_result',
+                 'AtSync', 'migrate', 'setMigratable',
                  '_coll_future_deposit_result', '__getRedNo__',
                  '__addThreadEventSubscriber__', '_getSectionLocations_'},
 
