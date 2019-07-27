@@ -269,8 +269,8 @@ class Charm(object):
             obj = object.__new__(em.C)  # create object but don't call __init__
             Group.initMember(obj, gid)
             super(em.C, obj).__init__()  # call Chare class __init__ first
-            em.run(obj, header, args)  # now call the user's __init__
             self.groups[gid] = obj
+            em.run(obj, header, args)  # now call the user's __init__
 
     def arrayMapProcNum(self, gid, index):
         return self.groups[gid].procNum(index)
@@ -300,8 +300,8 @@ class Charm(object):
                 else:
                     Array.initMember(obj, aid, index)
                 super(em.C, obj).__init__()  # call Chare class __init__ first
-                em.run(obj, header, args)  # now call the user's array element __init__
                 self.arrays[aid][index] = obj
+                em.run(obj, header, args)  # now call the user's array element __init__
 
     def unpackMsg(self, msg, dcopy_start, dest_obj):
         if msg[:7] == b"_local:":
