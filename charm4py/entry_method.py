@@ -13,9 +13,7 @@ class EntryMethod(object):
     def __init__(self, C, name, profile=False):
         self.C = C           # chare class to which this method belongs to
         self.name = name     # entry method name
-        self.isCtor = False  # true if method is constructor
         self.epIdx = -1      # entry method index assigned by Charm
-        self.profile = profile  # true if profiling this entry method's times
         if profile:
             self.times = [0.0, 0.0, 0.0]  # (time inside entry method, py send overhead, py recv overhead)
             self.running = False
