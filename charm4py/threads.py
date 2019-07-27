@@ -28,7 +28,7 @@ class Future(object):
     def __init__(self, fid, thread_state, src, nsenders):
         self.fid = fid                    # unique future ID within process
         self.thread_state = thread_state  # thread context where the future is created
-        self.src = src
+        self.src = src                    # PE where the future was created
         self.nsenders = nsenders          # number of senders
         self.values = []                  # values of the future (can be multiple in case of multiple senders)
         self.blocked = False              # flag to check if creator thread is blocked on future
