@@ -1008,6 +1008,10 @@ class CharmRemote(Chare):
     def eval(self, expression, module_name='__main__'):
         return eval(expression, sys.modules[module_name].__dict__)
 
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        charm.threadMgr.depositFuture(fid, result)
+
     def propagateException(self, error):
         if time.time() - charm.last_exception_timestamp >= 1.0:
             charm.last_exception_timestamp = time.time()

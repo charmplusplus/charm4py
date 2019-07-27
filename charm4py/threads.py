@@ -13,14 +13,22 @@ class NotThreadedError(Exception):
         self.message = msg
 
 
+# NOTE: currently objects with active threads cannot migrate (they have to
+# finish their threaded entry methods to do so). So, we can assume that
+# the result of a non-collective future can be sent to the PE where the future
+# was created. And therefore we don't need to include a proxy to the source
+# chare when sending a future.
+# Also, there is no situation currently where a collective future needs to
+# be pickled (so again we don't need to include the proxy).
+# See commit 25e2935 if need to resurrect code where proxies were included when
+# futures were pickled
+
 class Future(object):
 
-    def __init__(self, fid, thread_state, proxy, nsenders):
+    def __init__(self, fid, thread_state, src, nsenders):
         self.fid = fid                    # unique future ID within process
         self.thread_state = thread_state  # thread context where the future is created
-        self.proxy = proxy                # proxy to the chare that created the future
-        # TODO? only obtain proxy_state if actually serializing the future?
-        self.proxy_info = (proxy.__class__.__name__, proxy.__module__, proxy.__getstate__())
+        self.src = src                    # PE where the future was created
         self.nsenders = nsenders          # number of senders
         self.values = []                  # values of the future (can be multiple in case of multiple senders)
         self.blocked = False              # flag to check if creator thread is blocked on future
@@ -47,26 +55,19 @@ class Future(object):
 
     def send(self, result=None):
         """ Send a value to this future. """
-        self.getTargetProxyEntryMethod()(self.fid, result)
+        charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
 
     def __call__(self, result=None):
         self.send(result)
 
     def getTargetProxyEntryMethod(self):
-        if not hasattr(self, 'proxy'):
-            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
-            proxy = proxy_cls.__new__(proxy_cls)
-            proxy.__setstate__(self.proxy_info[2])
-            return proxy._future_deposit_result
-        else:
-            return self.proxy._future_deposit_result
+        return charm.thisProxy[self.src]._future_deposit_result
 
     def deposit(self, result):
         """ Deposit a value for this future. """
         self.values.append(result)
         if len(self.values) == self.nsenders:
             self.gotvalues = True
-            del self.proxy
             return True
         return False
 
@@ -76,25 +77,23 @@ class Future(object):
             threadMgr.resumeThread(self.thread_state, self.values)
 
     def __getstate__(self):
-        return (self.fid, self.proxy_info)
+        return (self.fid, self.src)
 
     def __setstate__(self, state):
-        self.fid, self.proxy_info = state
+        self.fid, self.src = state
 
 
 class CollectiveFuture(Future):
 
     def __init__(self, fid, tstate, proxy, nsenders):
-        super(CollectiveFuture, self).__init__(fid, tstate, proxy, nsenders)
+        super(CollectiveFuture, self).__init__(fid, tstate, -1, nsenders)
+        self.proxy = proxy
 
     def getTargetProxyEntryMethod(self):
-        if not hasattr(self, 'proxy'):
-            proxy_cls = getattr(sys.modules[self.proxy_info[1]], self.proxy_info[0])
-            proxy = proxy_cls.__new__(proxy_cls)
-            proxy.__setstate__(self.proxy_info[2])
-            return proxy._coll_future_deposit_result
-        else:
-            return self.proxy._coll_future_deposit_result
+        return self.proxy._coll_future_deposit_result
+
+    def send(self, result=None):
+        self.proxy._coll_future_deposit_result(self.fid, result)
 
 
 class ThreadState(object):
@@ -299,23 +298,16 @@ class EntryMethodThreadManager(object):
             self.throwNotThreadedError()
         fid = self.fidpool.pop()
         thread_state = self.threads[tid]
-        obj = thread_state.obj
-        if hasattr(obj, 'thisIndex'):
-            proxy = obj.thisProxy[obj.thisIndex]
-        else:
-            proxy = obj.thisProxy
-
-        f = Future(fid, thread_state, proxy, senders)
+        f = Future(fid, thread_state, charm._myPe, senders)
         self.futures[fid] = f
         return f
 
-    def createCollectiveFuture(self, fid, proxy):
+    def createCollectiveFuture(self, fid, obj, proxy):
         """ fid is supplied in this case and has to be the same for all distributed chares """
         tid = get_ident()
         if tid == self.main_thread_id:
             self.throwNotThreadedError()
         thread_state = self.threads[tid]
-        obj = thread_state.obj
         f = CollectiveFuture(fid, thread_state, proxy, 1)
         self.coll_futures[(fid, obj)] = f
         return f
@@ -333,6 +325,7 @@ class EntryMethodThreadManager(object):
         f = self.coll_futures[(fid, obj)]
         if f.deposit(result):
             del self.coll_futures[(fid, obj)]
+            del f.proxy
             f.resume(self)
 
     def cancelFuture(self, f):
