@@ -208,7 +208,7 @@ class Charm(object):
         assert onPe == self.myPe()
         assert cid not in self.chares, "Chare " + str(cid) + " already instantiated"
         em = self.entryMethods[ep]
-        assert em.isCtor, "Specified mainchare entry method is not constructor"
+        assert em.name == '__init__', 'Specified mainchare entry method is not constructor'
         self._createInternalChares()
         obj = object.__new__(em.C)  # create object but don't call __init__
         Mainchare.initMember(obj, cid)
@@ -253,7 +253,7 @@ class Charm(object):
         else:
             em = self.entryMethods[ep]
             header, args = self.unpackMsg(msg, dcopy_start, None)
-            if not em.isCtor:
+            if em.name != '__init__':
                 # this is not a constructor msg and the group hasn't been
                 # created yet. this should only happen for constrained groups
                 # (buffering of msgs for regular groups that haven't
@@ -283,7 +283,7 @@ class Charm(object):
             self.invokeEntryMethod(obj, ep, header, args)
         else:
             em = self.entryMethods[ep]
-            assert em.isCtor, "Specified array entry method not constructor"
+            assert em.name == '__init__', 'Specified array entry method not constructor'
             header, args = self.unpackMsg(msg, dcopy_start, None)
             if self.options.profiling:
                 self.activeChares.add((em.C, Array))
@@ -394,8 +394,6 @@ class Charm(object):
         C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
         # if self.myPe() == 0: print("charm4py:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
         for i, em in enumerate(entryMethods):
-            if i == 0:
-                em.isCtor = True
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
         proxyClass = charm_type.__getProxyClass__(C)
@@ -841,7 +839,7 @@ class Charm(object):
                     continue
             sep[lineNb] = '------ ' + str(C) + ' as ' + charm_type.__name__ + ' ------'
             for em in self.classEntryMethods[charm_type.type_id][C]:
-                if not em.profile:
+                if not hasattr(em, 'times'):
                     continue
                 if C == chare.DefaultMainchare and self.entry_func is not None and em.name == '__init__':
                     em_name = self.entry_func.__module__ + '.' + self.entry_func.__name__ + ' (main function)'
