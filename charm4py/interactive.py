@@ -20,6 +20,8 @@ def future_():
 class InteractiveConsole(Chare, InteractiveInterpreter):
 
     def __init__(self, args):
+        global Charm4PyError
+        from .charm import Charm4PyError
         # restore original tty stdin and stdout (else readline won't work correctly)
         os.dup2(charm.origStdinFd, 0)
         os.dup2(charm.origStoutFd, 1)
