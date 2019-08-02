@@ -114,6 +114,7 @@ class EntryMethodThreadManager(object):
     def __init__(self):
         global charm, Charm4PyError
         from .charm import charm, Charm4PyError
+        self.options = charm.options
         self.PROFILING = charm.options.profiling
         self.main_thread_id = get_ident()    # ID of the charm4py process main thread
         # condition variable used by main thread to pause while threaded entry method is running
@@ -320,8 +321,13 @@ class EntryMethodThreadManager(object):
         if f.deposit(result):
             del self.futures[fid]
             self.fidpool.append(fid)
-            # resume if blocked
+            # resume if a thread is blocked on the future
+            obj = f.thread_state.obj
             f.resume(self)
+            # this is necessary because the result is being deposited from an
+            # entry method of CharmRemote, not the object that we resumed
+            if obj and self.options.auto_flush_wait_queues and obj._cond_next is not None:
+                obj.__flush_wait_queues__()
 
     def depositCollectiveFuture(self, fid, result, obj):
         f = self.coll_futures[(fid, obj)]
