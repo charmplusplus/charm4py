@@ -112,7 +112,9 @@ class EntryMethodThreadManager(object):
     """ Creates and manages entry method threads """
 
     def __init__(self):
-        self.PROFILING = Options.profiling
+        global charm, Charm4PyError
+        from .charm import charm, Charm4PyError
+        self.PROFILING = charm.options.profiling
         self.main_thread_id = get_ident()    # ID of the charm4py process main thread
         # condition variable used by main thread to pause while threaded entry method is running
         self.entryMethodRunning = threading.Condition()
@@ -338,12 +340,3 @@ class EntryMethodThreadManager(object):
 
     # TODO: method to cancel collective future. the main issue with this is
     # that the future would need to be canceled on every chare waiting on it
-
-
-charm, Options, Charm4PyError = None, None, None
-
-def charmStarting():
-    from .charm import charm, Charm4PyError
-    globals()['charm'] = charm
-    globals()['Options'] = charm.options
-    globals()['Charm4PyError'] = Charm4PyError

@@ -810,13 +810,8 @@ for i in CHARM_TYPES:
         charm_type_id_to_class[i] = Array
 
 
-charm, Options, Charm4PyError, profile_send_function = None, None, None, None
-
 def charmStarting():
+    global charm, Options, Reducer, Charm4PyError, CharmRemote, profile_send_function
     from .charm import charm, Charm4PyError, CharmRemote, profile_send_function
-    globals()['charm'] = charm
-    globals()['Reducer'] = charm.reducers
-    globals()['Options'] = charm.options
-    globals()['Charm4PyError'] = Charm4PyError
-    globals()['CharmRemote'] = CharmRemote
-    globals()['profile_send_function'] = profile_send_function
+    Options = charm.options
+    Reducer = charm.reducers

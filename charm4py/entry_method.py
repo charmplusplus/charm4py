@@ -162,8 +162,6 @@ def threaded_ext(event_notify=False):
     return _threaded
 
 
-charm = None
-
 def charmStarting():
+    global charm
     from .charm import charm
-    globals()['charm'] = charm
