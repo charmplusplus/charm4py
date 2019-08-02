@@ -509,8 +509,8 @@ class Charm(object):
         self.register_order.append(C)
 
     def _registerInternalChares(self):
+        global SectionManager
         from .sections import SectionManager
-        globals()['SectionManager'] = SectionManager
         self.register(SectionManager, (GROUP,))
 
         self.register(CharmRemote, (GROUP,))
@@ -620,7 +620,7 @@ class Charm(object):
                         raise Charm4PyError("Chares must not inherit from Group, Array or"
                                            " Mainchare. Refer to new API")
 
-        for module in (chare, entry_method, threads, wait):
+        for module in (chare, entry_method, wait):
             module.charmStarting()
         self.threadMgr = threads.EntryMethodThreadManager()
         self.createFuture = self.threadMgr.createFuture
