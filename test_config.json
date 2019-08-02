@@ -52,6 +52,10 @@
         "path": "tests/when/when_test2.py"
     },
     {
+        "force_min_processes": 4,
+        "path": "tests/when/stencil.py"
+    },
+    {
         "path": "tests/reductions/group_reduction.py"
     },
     {
