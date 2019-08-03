@@ -654,6 +654,7 @@ class CharmLib(object):
     self.CkGroupExtSend = self.lib.CkGroupExtSend
     self.CkChareExtSend = self.lib.CkChareExtSend
     self.lib.CkExtContributeToChare.argtypes = (c_void_p, c_int, c_void_p)
+    self.lib.CkStartQDExt_ChareCallback.argtypes = (c_int, c_void_p, c_int, c_int)
 
     self.CcdCallFnAfterCallback_cb = CFUNCTYPE(None, c_void_p, c_double)(self.CcdCallFnAfterCallback)
 
