@@ -136,8 +136,6 @@ class Charm(object):
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
-        import threading
-        threading.current_thread().em_callstack = []
         # list of Chare types that are registered and used internally by the runtime
         self.internalChareTypes = set()
         # num_msgs_sent, min_size, max_size, sum_size, last_msg_sent_size

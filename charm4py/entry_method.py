@@ -1,55 +1,46 @@
 from . import wait
-import time
+from time import time
 import sys
-from threading import current_thread
-if sys.version_info < (3, 0, 0):
-    from thread import get_ident
-else:
-    from threading import get_ident
+from greenlet import greenlet, getcurrent
 
 
 class EntryMethod(object):
 
     def __init__(self, C, name, profile=False):
-        self.C = C           # chare class to which this method belongs to
-        self.name = name     # entry method name
-        self.epIdx = -1      # entry method index assigned by Charm
+        self.C = C  # chare class to which this method belongs to
+        self.name = name  # entry method name
+        self.epIdx = -1  # entry method index assigned by Charm
         if profile:
-            self.times = [0.0, 0.0, 0.0]  # (time inside entry method, py send overhead, py recv overhead)
+            # (time inside entry method, py send overhead, py recv overhead)
+            self.times = [0.0, 0.0, 0.0]
             self.running = False
-            self.run_non_threaded = self._run_non_threaded_prof
-        else:
-            self.run_non_threaded = self._run_non_threaded
 
         method = getattr(C, name)
-
         if hasattr(method, '_ck_threaded'):
-            self.isThreaded = True  # true if entry method runs in its own thread
-            self.run = self.run_threaded
+            if not profile:
+                self.run = self._run_th
+            else:
+                self.run = self._run_th_prof
             self.thread_notify = hasattr(method, '_ck_threaded_notify') and method._ck_threaded_notify
         else:
-            self.isThreaded = False
-            self.run = self.run_non_threaded
+            if not profile:
+                self.run = self._run
+            else:
+                self.run = self._run_prof
 
         self.when_cond = None
         if hasattr(method, 'when_cond'):
-            # template object specifying the 'when' condition clause for this entry method
+            # template object specifying the 'when' condition clause
+            # for this entry method
             self.when_cond = getattr(method, 'when_cond')
             if isinstance(self.when_cond, wait.ChareStateMsgCond):
                 self.when_cond_func = self.when_cond.cond_func
 
-    def run_threaded(self, obj, header, args):
-        threadMgr = charm.threadMgr
-        if get_ident() == threadMgr.main_thread_id:
-            # run entry method of the given object in its own thread
-            threadMgr.startThread(obj, self, args, header)
-        else:
-            # we are already running in a separate thread, use that one
-            self.run_non_threaded(obj, header, args)
-
-    def _run_non_threaded(self, obj, header, args):
+    def _run(self, obj, header, args):
         """ run entry method of the given object in the current thread """
-        charm.last_ntem = self  # last non-threaded entry method
+        # set last entry method launched (won't necessarily coincide with
+        # currently running entry method)
+        charm.last_em_exec = self
         try:
             ret = getattr(obj, self.name)(*args)
         except SystemExit:
@@ -70,21 +61,21 @@ class EntryMethod(object):
                 if b'sid' in header:
                     sid = header[b'sid']
                 if b'bcastret' in header:
-                    obj.contribute(ret, charm.reducers.gather, blockFuture, sid)
+                    charm.contribute(ret, charm.reducers.gather, blockFuture, obj, sid)
                 else:
-                    obj.contribute(None, None, blockFuture, sid)
+                    charm.contribute(None, None, blockFuture, obj, sid)
             else:
                 blockFuture.send(ret)  # send result back to remote
 
-    def _run_non_threaded_prof(self, obj, header, args):
-        ems = current_thread().em_callstack
+    def _run_prof(self, obj, header, args):
+        ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
         self.startMeasuringTime()
         ems.append(self)
         exception = None
         try:
-            self._run_non_threaded(obj, header, args)
+            self._run(obj, header, args)
         except Exception as e:
             exception = e
         assert self == ems[-1]
@@ -95,14 +86,46 @@ class EntryMethod(object):
         if exception is not None:
             raise exception
 
+    def _run_th(self, obj, header, args):
+        gr = greenlet(self._run)
+        gr.obj = obj
+        gr.notify = self.thread_notify
+        obj._numthreads += 1
+        gr.switch(obj, header, args)
+        if gr.dead:
+            obj._numthreads -= 1
+
+    def _run_th_prof(self, obj, header, args):
+        ems = getcurrent().em_callstack
+        if len(ems) > 0:
+            ems[-1].stopMeasuringTime()
+        gr = greenlet(self._run)
+        gr.obj = obj
+        gr.notify = self.thread_notify
+        gr.em_callstack = [self]
+        self.startMeasuringTime()
+        obj._numthreads += 1
+        exception = None
+        try:
+            gr.switch(obj, header, args)
+        except Exception as e:
+            exception = e
+        if gr.dead:
+            obj._numthreads -= 1
+        self.stopMeasuringTime()
+        if len(ems) > 0:
+            ems[-1].startMeasuringTime()
+        if exception is not None:
+            raise exception
+
     def startMeasuringTime(self):
         if charm._precvtime > 0:
-            self.addRecvTime(time.time() - charm._precvtime)
+            self.addRecvTime(time() - charm._precvtime)
             charm._precvtime = -1
         assert not self.running and charm.runningEntryMethod is None
         charm.runningEntryMethod = self
         self.running = True
-        self.startTime = time.time()
+        self.startTime = time()
         self.sendTime = 0.0
         self.measuringSendTime = False
 
@@ -110,18 +133,18 @@ class EntryMethod(object):
         assert self.running and charm.runningEntryMethod == self
         self.running = False
         charm.runningEntryMethod = None
-        total = time.time() - self.startTime
+        total = time() - self.startTime
         self.times[0] += total - self.sendTime
         self.times[1] += self.sendTime
 
     def startMeasuringSendTime(self):
         assert not self.measuringSendTime
-        self.sendStartTime = time.time()
+        self.sendStartTime = time()
         self.measuringSendTime = True
 
     def stopMeasuringSendTime(self):
         assert self.measuringSendTime
-        self.sendTime += time.time() - self.sendStartTime
+        self.sendTime += time() - self.sendStartTime
         self.measuringSendTime = False
 
     def addRecvTime(self, t):

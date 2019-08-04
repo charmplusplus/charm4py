@@ -13,9 +13,11 @@ before_install:
 install:
   - pip2 install --user cffi
   - pip2 install --user numpy
+  - pip2 install --user greenlet
   - pip3 install --user cffi
   - pip3 install --user numpy
   - pip3 install --user cython
+  - pip3 install --user greenlet
 script:
   - git clone https://github.com/UIUC-PPL/charm charm_src/charm
   - export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"

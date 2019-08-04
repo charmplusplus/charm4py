@@ -1,9 +1,6 @@
 from . import wait
 import sys
-if sys.version_info[0] < 3:
-    from thread import get_ident
-else:
-    from threading import get_ident
+from greenlet import getcurrent
 from collections import defaultdict
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
@@ -50,7 +47,7 @@ class Chare(object):
         # linked list of active wait condition objects
         self._cond_next = None
         self._cond_last = self
-        self._num_threads = 0
+        self._numthreads = 0
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:
@@ -113,7 +110,7 @@ class Chare(object):
         else:
             cond_template = wait_conditions[cond_str]
         if not cond_template.cond_func(self):
-            self.__waitEnqueue__(cond_template, (1, get_ident()))
+            self.__waitEnqueue__(cond_template, (1, getcurrent()))
             charm.threadMgr.pauseThread()
 
     def contribute(self, data, reducer, callback, section=None):
