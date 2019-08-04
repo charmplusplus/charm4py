@@ -441,11 +441,15 @@ class Charm(object):
         if (self.myPe() == 0) and (not self.options.quiet):
             import platform
             from . import charm4py_version
+            py_impl = platform.python_implementation()
             out_msg = ("charm4py> Running Charm4py version " + charm4py_version +
                        " on Python " + str(platform.python_version()) + " (" +
-                       str(platform.python_implementation()) + "). Using '" +
+                       py_impl + "). Using '" +
                        self.lib.name + "' interface to access Charm++")
-            if self.lib.name != "cython":
+            if py_impl == 'PyPy':
+                if self.lib.name != 'cffi':
+                    out_msg += ", **WARNING**: cffi recommended for best performance"
+            elif self.lib.name != 'cython':
                 out_msg += ", **WARNING**: cython recommended for best performance"
             print(out_msg)
             if sys.version_info < (3,0,0):
