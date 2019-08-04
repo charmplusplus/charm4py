@@ -454,6 +454,8 @@ class Charm(object):
             print(out_msg)
             if sys.version_info < (3,0,0):
                 print('\ncharm4py> DEPRECATION: Python 2 support is ending. Some new features may not work.\n')
+            if self.options.profiling:
+                print('Charm4py> Profiling is ON (this affects performance)')
 
         for C in self.register_order:
             self.registerInCharm(C)
