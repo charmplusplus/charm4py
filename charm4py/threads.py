@@ -139,21 +139,19 @@ class EntryMethodThreadManager(object):
             # we make the parent to be the main thread
             parent = gr.parent
             gr.parent = main_gr
-            parent.switch()
+            return parent.switch()
         else:
-            main_gr.switch()
-        return gr.wait_result
+            return main_gr.switch()
 
     def _resumeThread(self, gr, arg):
         """ Deposit a result or signal that a local entry method thread is waiting on,
             and resume it. This executes on the main thread.
         """
         #assert getcurrent() == self.main_gr
-        gr.wait_result = arg
         if gr.notify:
             obj = gr.obj
             obj._thread_notify_target.threadResumed(obj._thread_notify_data)
-        gr.switch()
+        gr.switch(arg)
         if gr.dead:
             gr.obj._numthreads -= 1
 
