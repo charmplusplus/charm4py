@@ -143,7 +143,7 @@ class ChareStateCond(object):
             elif elem[0] == 1:
                 # is thread
                 tid = elem[1]
-                charm.threadMgr.resumeThreadTid(tid, None)
+                charm.threadMgr.resumeThread(tid, None)
             dequeued = True
             if len(self.wait_queue) == 0:
                 break

@@ -135,6 +135,9 @@
         "path": "tests/thread_entry_methods/test1.py"
     },
     {
+        "path": "tests/thread_entry_methods/test2.py"
+    },
+    {
         "path": "tests/thread_entry_methods/test1_when.py"
     },
     {

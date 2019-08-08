@@ -19,11 +19,15 @@ class Test(Chare):
                 x = self.thisProxy[i].getVal(ret=True).get()
                 assert x == 53 * i * (73 + pes[i])
 
-        self.contribute(None, None, self.thisProxy[0].done)
+        self.reduce(self.thisProxy.verify)
 
     @threaded
     def getVal(self):
         return 53 * testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0]
+
+    def verify(self):
+        assert self._numthreads == 0
+        self.reduce(self.thisProxy[0].done)
 
     def done(self):
         charm.printStats()
