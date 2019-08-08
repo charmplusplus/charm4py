@@ -38,8 +38,8 @@ class EntryMethod(object):
 
     def _run(self, obj, header, args):
         """ run entry method of the given object in the current thread """
-        # set last entry method launched (won't necessarily coincide with
-        # currently running entry method)
+        # set last entry method executed (note that 'last_em_exec' won't
+        # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
         try:
             ret = getattr(obj, self.name)(*args)

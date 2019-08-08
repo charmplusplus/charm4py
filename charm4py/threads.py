@@ -1,5 +1,5 @@
 import array
-from greenlet import greenlet, getcurrent
+from greenlet import getcurrent
 
 
 class NotThreadedError(Exception):
@@ -16,18 +16,19 @@ class NotThreadedError(Exception):
 # Also, there is no situation currently where a collective future needs to
 # be pickled (so again we don't need to include the proxy).
 # See commit 25e2935 if need to resurrect code where proxies were included when
-# futures were pickled
+# futures were pickled.
 
 class Future(object):
 
-    def __init__(self, fid, gr, src, nsenders):
-        self.fid = fid  # unique future ID within process
+    def __init__(self, fid, gr, src, num_vals):
+        self.fid = fid  # unique future ID within the process that created it
         self.gr = gr  # greenlet that created the future
-        self.src = src
-        self.nsenders = nsenders  # number of senders
-        self.values = []  # values of the future (can be multiple in case of multiple senders)
-        self.blocked = False  # flag to check if creator thread is blocked on future
-        self.gotvalues = False  # flag to check if values have been received
+        self.src = src  # PE where the future was created (not used for collective futures)
+        self.nvals = num_vals  # number of values that the future expects to receive
+        self.values = []  # values of the future
+        self.blocked = False  # flag to check if creator thread is blocked on the future
+        self.gotvalues = False  # flag to check if expected number of values have been received
+        self.error = None  # if the future receives an Exception, it is set here
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -35,17 +36,13 @@ class Future(object):
         """
         if not self.gotvalues:
             self.blocked = True
-            self.values = charm.threadMgr.pauseThread()
+            self.values = threadMgr.pauseThread()
 
-        if self.nsenders == 1:
-            val = self.values[0]
-            if isinstance(val, Exception):
-                raise val
-            return val
+        if self.error is not None:
+            raise self.error
 
-        for val in self.values:
-            if isinstance(val, Exception):
-                raise val
+        if self.nvals == 1:
+            return self.values[0]
         return self.values
 
     def send(self, result=None):
@@ -61,7 +58,9 @@ class Future(object):
     def deposit(self, result):
         """ Deposit a value for this future. """
         self.values.append(result)
-        if len(self.values) == self.nsenders:
+        if isinstance(result, Exception):
+            self.error = result
+        if len(self.values) == self.nvals:
             self.gotvalues = True
             return True
         return False
@@ -80,8 +79,8 @@ class Future(object):
 
 class CollectiveFuture(Future):
 
-    def __init__(self, fid, gr, proxy, nsenders):
-        super(CollectiveFuture, self).__init__(fid, gr, -1, nsenders)
+    def __init__(self, fid, gr, proxy, num_vals):
+        super(CollectiveFuture, self).__init__(fid, gr, -1, num_vals)
         self.proxy = proxy
 
     def getTargetProxyEntryMethod(self):
@@ -94,8 +93,9 @@ class CollectiveFuture(Future):
 class EntryMethodThreadManager(object):
 
     def __init__(self):
-        global charm, Charm4PyError
+        global charm, Charm4PyError, threadMgr
         from .charm import charm, Charm4PyError
+        threadMgr = self
         self.options = charm.options
         self.main_gr = getcurrent()  # main greenlet
         # pool of Future IDs for futures created by this ThreadManager. Can
@@ -114,7 +114,7 @@ class EntryMethodThreadManager(object):
 
     def objMigrating(self, obj):
         if obj._numthreads > 0:
-            raise Charm4PyError('Migration of chares with active threads is not yet supported')
+            raise Charm4PyError('Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):
         raise NotThreadedError("Entry method '" + charm.last_em_exec.C.__name__ + "." +
@@ -123,7 +123,8 @@ class EntryMethodThreadManager(object):
 
     def pauseThread(self):
         """ Called by an entry method thread to wait for something.
-            Returns data that the thread was waiting for, or None if it was waiting for an event
+            Returns data that the thread was waiting for, or None if it was
+            waiting for an event
         """
         gr = getcurrent()
         main_gr = self.main_gr
@@ -165,17 +166,13 @@ class EntryMethodThreadManager(object):
         if len(ems) > 0:
             ems[-1].startMeasuringTime()
 
-    def createFuture(self, senders=1):
-        """ Creates a new Future object by obtaining/creating a unique future ID. The
-            future also has some attributes related to the creator object's proxy to allow
-            remote chares to send values to the future's creator. The new future object is
-            saved in the self.futures dict, and will be deleted whenever its values are received.
-        """
+    def createFuture(self, num_vals=1):
+        """ Creates a new Future object by obtaining a unique (local) future ID. """
         gr = getcurrent()
         if gr == self.main_gr:
             self.throwNotThreadedError()
-        fid = self.fidpool.pop()
-        f = Future(fid, gr, charm._myPe, senders)
+        fid = self.fidpool.pop()  # get a unique local Future ID from pool
+        f = Future(fid, gr, charm._myPe, num_vals)
         self.futures[fid] = f
         return f
 
@@ -214,7 +211,7 @@ class EntryMethodThreadManager(object):
         del self.futures[fid]
         self.fidpool.append(fid)
         f.gotvalues = True
-        f.values = [None] * f.nsenders
+        f.values = [None] * f.nvals
         f.resume(self)
 
     # TODO: method to cancel collective future. the main issue with this is
