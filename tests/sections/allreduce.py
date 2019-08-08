@@ -30,7 +30,7 @@ def main(args):
     g = Group(Test)
     gsec = g[::2]  # make a section with even numbered elements
 
-    f = charm.createFuture(senders=2)
+    f = charm.createFuture(2)
     g.work(f, charm.numPes())
     gsec.work(f, charm.numPes() // 2, gsec)
     f.get()
