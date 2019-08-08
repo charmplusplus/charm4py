@@ -13,11 +13,11 @@ class Cell(Chare):
         for i in range(1, 4):
             self.nbs.append(self.thisProxy[(idx + i) % numChares])
             self.nbs.append(self.thisProxy[(idx - i) % numChares])
+        self.iteration = -1
         self.msgs_recvd = 0
 
     @threaded
     def work(self, done_fut):
-        self.iter_complete = charm.createFuture()
         for self.iteration in range(NUM_ITER):
             for nb in self.nbs:
                 nb.recvData(self.iteration, None)
