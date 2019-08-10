@@ -5,7 +5,22 @@ from charm4py import charm, Chare, Group, Array, Reducer
 CHARES_PER_PE = 5
 
 
+class Test(Chare):
+
+    def __init__(self):
+        if isinstance(self.thisIndex, tuple):
+            myIndex = self.thisIndex[0]
+        else:
+            myIndex = self.thisIndex
+        if charm.numPes() <= 20 or myIndex == 0:
+            print('Test', self.thisIndex, 'created')
+
+    def work(self, main):
+        self.contribute(1, Reducer.sum, main.done)
+
+
 class Main(Chare):
+
     def __init__(self, args):
         Group(Test).work(self.thisProxy)
         Array(Test, charm.numPes() * CHARES_PER_PE).work(self.thisProxy)
@@ -15,21 +30,9 @@ class Main(Chare):
         self.count += result
         self.countReductions += 1
         if self.countReductions == 2:
-          assert self.count == (charm.numPes() + charm.numPes() * CHARES_PER_PE)
-          print("Program done")
-          exit()
-
-
-class Test(Chare):
-
-    def __init__(self):
-        if isinstance(self.thisIndex, tuple): myIndex = self.thisIndex[0]
-        else: myIndex = self.thisIndex
-        if charm.numPes() <= 20 or myIndex == 0:
-          print("Test", self.thisIndex, "created")
-
-    def work(self, main):
-        self.contribute(1, Reducer.sum, main.done)
+            assert self.count == (charm.numPes() + charm.numPes() * CHARES_PER_PE)
+            print('Program done')
+            exit()
 
 
 charm.start(Main)

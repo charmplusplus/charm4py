@@ -4,7 +4,7 @@ from greenlet import getcurrent
 from collections import defaultdict
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
-# (3) to form Arrays. To achieve this, charm4py can register with the Charm++ library up to 3
+# (3) to form Arrays. To achieve this, Charm4py can register with the Charm++ library up to 3
 # different types for the given class (a Mainchare, a Group and an Array), and each type will
 # register its own entry methods, even though the definition (body) of the entry methods in Python is the same.
 MAINCHARE, GROUP, ARRAY = range(3)
@@ -51,7 +51,7 @@ class Chare(object):
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:
-            raise Charm4PyError("Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE")
+            raise Charm4PyError('Local msg buffer full. Increase LOCAL_MSG_BUF_SIZE')
         h = self._local_free_head
         self._local_free_head = self._local[self._local_free_head]
         self._local[h] = msg
@@ -302,7 +302,7 @@ class Mainchare(object):
 
     @classmethod
     def __baseEntryMethods__(cls):
-        return ["__init__"]
+        return ['__init__']
 
     @classmethod
     def __getProxyClass__(C, cls):
@@ -311,7 +311,7 @@ class Mainchare(object):
         M = dict()  # proxy methods
         for m in charm.classEntryMethods[MAINCHARE][cls]:
             if m.epIdx == -1:
-                raise Charm4PyError("Unregistered entry method")
+                raise Charm4PyError('Unregistered entry method')
             if m.name == '__init__':
                 continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
@@ -501,7 +501,7 @@ class Group(object):
 
     def __new__(cls, C, args=[], onPEs=None):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
-            raise Charm4PyError("Only subclasses of Chare can be member of Group")
+            raise Charm4PyError('Only subclasses of Chare can be member of Group')
         if C not in charm.proxyClasses[GROUP]:
             raise Charm4PyError(str(C) + ' not registered for use in Groups')
         return charm.proxyClasses[GROUP][C].ckNew(args, onPEs)
@@ -515,7 +515,7 @@ class Group(object):
 
     @classmethod
     def __baseEntryMethods__(cls):
-        return ["__init__"]
+        return ['__init__']
 
     @classmethod
     def __getProxyClass__(C, cls, sectionProxy=False):
@@ -528,7 +528,7 @@ class Group(object):
         entryMethods = charm.classEntryMethods[GROUP][cls]
         for m in entryMethods:
             if m.epIdx == -1:
-                raise Charm4PyError("Unregistered entry method")
+                raise Charm4PyError('Unregistered entry method')
             if m.name == '__init__':
                 continue
             if m.name == 'updateGlobals' and cls == CharmRemote:
@@ -548,18 +548,18 @@ class Group(object):
         if cls == CharmRemote and sys.version_info >= (3, 0, 0):
             # TODO remove this and change rexec to exec when Python 2 support is dropped
             M['exec'] = M['rexec']
-        M["__init__"] = group_proxy_ctor
-        M["__getitem__"] = group_proxy_elem
-        M["ckNew"] = group_ckNew_gen(cls, entryMethods[0].epIdx)
-        M["__getsecproxy__"] = group_getsecproxy
+        M['__init__'] = group_proxy_ctor
+        M['__getitem__'] = group_proxy_elem
+        M['ckNew'] = group_ckNew_gen(cls, entryMethods[0].epIdx)
+        M['__getsecproxy__'] = group_getsecproxy
         if not sectionProxy:
-            M["ckContribute"] = group_proxy_contribute  # function called when target proxy is Group
-            M["__getstate__"] = group_proxy__getstate__
-            M["__setstate__"] = group_proxy__setstate__
+            M['ckContribute'] = group_proxy_contribute  # function called when target proxy is Group
+            M['__getstate__'] = group_proxy__getstate__
+            M['__setstate__'] = group_proxy__setstate__
         else:
-            M["ckContribute"] = groupsecproxy_contribute  # function called when target proxy is Group
-            M["__getstate__"] = groupsecproxy__getstate__
-            M["__setstate__"] = groupsecproxy__setstate__
+            M['ckContribute'] = groupsecproxy_contribute  # function called when target proxy is Group
+            M['__getstate__'] = groupsecproxy__getstate__
+            M['__setstate__'] = groupsecproxy__setstate__
         proxyCls = type(proxyClassName, (), M)  # create and return proxy class
         proxyCls.issec = sectionProxy
         return proxyCls
@@ -670,9 +670,9 @@ def array_ckNew_gen(C, epIdx):
         if type(dims) == int: dims = (dims,)
 
         if dims is None and ndims == -1:
-            raise Charm4PyError("Bounds and number of dimensions for array cannot be empty in ckNew")
+            raise Charm4PyError('Bounds and number of dimensions for array cannot be empty in ckNew')
         elif dims is not None and ndims != -1 and ndims != len(dims):
-            raise Charm4PyError("Number of bounds should match number of dimensions")
+            raise Charm4PyError('Number of bounds should match number of dimensions')
         elif dims is None and ndims != -1:  # create an empty array
             dims = (0,) * ndims
 
@@ -702,7 +702,7 @@ def array_ckNew_gen(C, epIdx):
 def array_ckInsert_gen(epIdx):
     def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False):
         if type(index) == int: index = (index,)
-        assert len(index) == proxy.ndims, "Invalid index dimensions passed to ckInsert"
+        assert len(index) == proxy.ndims, 'Invalid index dimensions passed to ckInsert'
         header = {}
         if single:
             header[b'single'] = True
@@ -731,7 +731,7 @@ class Array(object):
 
     def __new__(cls, C, dims=None, ndims=-1, args=[], map=None, useAtSync=False):
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
-            raise Charm4PyError("Only subclasses of Chare can be member of Array")
+            raise Charm4PyError('Only subclasses of Chare can be member of Array')
         if C not in charm.proxyClasses[ARRAY]:
             raise Charm4PyError(str(C) + ' not registered for use in Arrays')
         return charm.proxyClasses[ARRAY][C].ckNew(dims, ndims, args, map, useAtSync)
@@ -766,7 +766,7 @@ class Array(object):
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
             if m.epIdx == -1:
-                raise Charm4PyError("Unregistered entry method")
+                raise Charm4PyError('Unregistered entry method')
             if m.name in {'__init__', 'migrated'}:
                 continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
@@ -777,20 +777,20 @@ class Array(object):
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
-        M["__init__"] = array_proxy_ctor
-        M["__getitem__"] = array_proxy_elem
-        M["ckNew"] = array_ckNew_gen(cls, entryMethods[0].epIdx)
-        M["__getsecproxy__"] = array_getsecproxy
-        M["ckInsert"] = array_ckInsert_gen(entryMethods[0].epIdx)
-        M["ckDoneInserting"] = array_proxy_doneInserting
+        M['__init__'] = array_proxy_ctor
+        M['__getitem__'] = array_proxy_elem
+        M['ckNew'] = array_ckNew_gen(cls, entryMethods[0].epIdx)
+        M['__getsecproxy__'] = array_getsecproxy
+        M['ckInsert'] = array_ckInsert_gen(entryMethods[0].epIdx)
+        M['ckDoneInserting'] = array_proxy_doneInserting
         if not sectionProxy:
-            M["ckContribute"] = array_proxy_contribute  # function called when target proxy is Array
-            M["__getstate__"] = array_proxy__getstate__
-            M["__setstate__"] = array_proxy__setstate__
+            M['ckContribute'] = array_proxy_contribute  # function called when target proxy is Array
+            M['__getstate__'] = array_proxy__getstate__
+            M['__setstate__'] = array_proxy__setstate__
         else:
-            M["ckContribute"] = arraysecproxy_contribute  # function called when target proxy is Array
-            M["__getstate__"] = arraysecproxy__getstate__
-            M["__setstate__"] = arraysecproxy__setstate__
+            M['ckContribute'] = arraysecproxy_contribute  # function called when target proxy is Array
+            M['__getstate__'] = arraysecproxy__getstate__
+            M['__setstate__'] = arraysecproxy__setstate__
         proxyCls = type(proxyClassName, (), M)  # create and return proxy class
         proxyCls.issec = sectionProxy
         return proxyCls

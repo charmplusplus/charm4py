@@ -115,7 +115,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                     source = '\n'.join(self.buffer)
                     charm.thisProxy.registerNewChareType(newChareTypeName, source, ret=1).get()
                     if self.options.verbose > 0:
-                        self.write('charm4py> Broadcasted Chare definition\n')
+                        self.write('Charm4py> Broadcasted Chare definition\n')
                     return
 
             line = self.buffer[0]
@@ -136,7 +136,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 if self.options.broadcast_imports:
                     charm.thisProxy.rexec('\n'.join(self.buffer), ret=1).get()
                     if self.options.verbose > 0:
-                        self.write('charm4py> Broadcasted import statement\n')
+                        self.write('Charm4py> Broadcasted import statement\n')
 
                 new_modules = set(sys.modules.keys()) - prev_modules
                 chare_types = []
@@ -161,7 +161,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                         if self.options.verbose > 0:
                             self.write('Broadcasted the following chare definitions: ' + str([str(C) for C in chare_types]) + '\n')
                     else:
-                        self.write('charm4py> ERROR: import module(s) contain Chare definitions but the import was not broadcasted\n')
+                        self.write('Charm4py> ERROR: import module(s) contain Chare definitions but the import was not broadcasted\n')
                 return
         except:
             self.showtraceback()
