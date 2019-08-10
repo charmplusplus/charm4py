@@ -133,6 +133,8 @@ class Charm(object):
         # in interactive mode
         self.dynamic_register = sys.modules['__main__'].__dict__
         self.lb_requested = False
+        self.threadMgr = threads.EntryMethodThreadManager(self)
+        self.createFuture = self.Future = self.threadMgr.createFuture
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
@@ -626,8 +628,7 @@ class Charm(object):
 
         for module in (chare, entry_method, wait):
             module.charmStarting()
-        self.threadMgr = threads.EntryMethodThreadManager()
-        self.createFuture = self.threadMgr.createFuture
+        self.threadMgr.start()
 
         self.lb_requested = '+balancer' in sys.argv
         self.lib.start()

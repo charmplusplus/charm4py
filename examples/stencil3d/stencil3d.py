@@ -2,7 +2,7 @@
 # This version doesn't use NumPy. It runs fairly well on PyPy, but NumPy+Numba version
 # (stencil3d_numba.py) performs much better
 
-from charm4py import charm, Chare, Array, when
+from charm4py import charm, Chare, Array, when, Future
 from charm4py import readonlies as ro
 import time
 import math
@@ -50,7 +50,7 @@ def main(args):
     print("Block Dimensions: " + str((ro.blockDimX, ro.blockDimY, ro.blockDimZ)))
 
     # Create new array of worker chares
-    sim_done = charm.createFuture()
+    sim_done = Future()
     array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done], useAtSync=True)
     charm.awaitCreation(array)
 

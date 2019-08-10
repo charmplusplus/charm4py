@@ -19,6 +19,7 @@ except:
 if os.environ.get('CHARM_NOLOAD', '0') == '0':
     from .charm import charm, readonlies, Options
     Reducer = charm.reducers
+    Future = charm.createFuture
 
     from .entry_method import when, threaded, threaded_ext
 
