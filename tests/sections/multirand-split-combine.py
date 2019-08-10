@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, Reducer
+from charm4py import charm, Chare, Group, Array, Reducer, Future
 import random
 import numpy
 
@@ -120,14 +120,14 @@ def main(args):
 
     for _ in range(NUM_ARRAYS):
         proxy = Array(Test, random.randint(1, charm.numPes() * 10), args=[cid])
-        f = charm.createFuture()
+        f = Future()
         proxy.getIds(f)
         collections.append(Collection(f.get(), proxy))
         cid += 1
 
     for _ in range(NUM_GROUPS):
         proxy = Group(Test, args=[cid])
-        f = charm.createFuture()
+        f = Future()
         proxy.getIds(f)
         collections.append(Collection(f.get(), proxy))
         cid += 1
@@ -183,7 +183,7 @@ def main(args):
             c.proxy.recvSecProxy(sid, c.proxy, ret=1).get()
 
     for _ in range(NUM_ITER):
-        futures = [charm.createFuture() for _ in range(len(collections))]
+        futures = [Future() for _ in range(len(collections))]
         charm.thisProxy.updateGlobals({'DATA_VERIFY' : random.randint(0,100000)}, ret=1).get()
         data = DATA_VERIFY
         for i, c in enumerate(collections):

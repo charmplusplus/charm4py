@@ -1,4 +1,4 @@
-from . import charm, Chare, threaded
+from . import charm, Chare, threaded, Future
 from . import chare
 import sys
 import time
@@ -12,7 +12,7 @@ HANG_CHECK_FREQ = 0.5  # in secs
 
 
 def future_():
-    f = charm.createFuture()
+    f = Future()
     charm.dynamic_register['_f'] = f
     return f
 

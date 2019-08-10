@@ -133,6 +133,8 @@ class Charm(object):
         # in interactive mode
         self.dynamic_register = sys.modules['__main__'].__dict__
         self.lb_requested = False
+        self.threadMgr = threads.EntryMethodThreadManager(self)
+        self.createFuture = self.Future = self.threadMgr.createFuture
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
@@ -626,8 +628,7 @@ class Charm(object):
 
         for module in (chare, entry_method, wait):
             module.charmStarting()
-        self.threadMgr = threads.EntryMethodThreadManager()
-        self.createFuture = self.threadMgr.createFuture
+        self.threadMgr.start()
 
         self.lb_requested = '+balancer' in sys.argv
         self.lib.start()
@@ -685,7 +686,7 @@ class Charm(object):
         sid = (self._myPe, self.section_counter)
         self.section_counter += 1
         pes = set()
-        futures = [charm.createFuture() for _ in range(len(proxies))]
+        futures = [charm.Future() for _ in range(len(proxies))]
         for i, proxy in enumerate(proxies):
             secproxy = None
             if proxy.issec:
@@ -706,7 +707,7 @@ class Charm(object):
         if proxy.issec:
             secproxy = proxy
         if elems is None:
-            f = charm.createFuture()
+            f = charm.Future()
             proxy._getSectionLocations_(sid0, numsections, section_func, slicing, None, f, secproxy)
             section_pes = f.get()
         else:
@@ -718,7 +719,7 @@ class Charm(object):
                 # have to collect locations
                 section_pes = elems
             else:
-                f = charm.createFuture()
+                f = charm.Future()
                 proxy._getSectionLocations_(sid0, numsections, None, None, elems, f, secproxy)
                 section_pes = f.get()
         secProxies = []
@@ -755,7 +756,7 @@ class Charm(object):
             self.lib.CkStartQD_ChareCallback(cb_proxy.cid, callback.ep, fid)
 
     def waitQD(self):
-        f = self.createFuture()
+        f = self.Future()
         f.ignorehang = True
         self.startQD(f)
         f.get()
@@ -764,7 +765,7 @@ class Charm(object):
         if self.threadMgr.isMainThread():
             time.sleep(secs)
         else:
-            f = self.createFuture()
+            f = self.Future()
             f.ignorehang = True
             self.scheduleCallableAfter(f, secs)
             f.get()

@@ -1,7 +1,7 @@
 # Port of examples/charm++/load_balancing/stencil3d from Charm++ codebase
 # This version uses NumPy and Numba
 
-from charm4py import charm, Chare, Group, Array, when
+from charm4py import charm, Chare, Group, Array, when, Future
 from charm4py import readonlies as ro
 import time
 import math
@@ -57,7 +57,7 @@ def main(args):
     # So, I create NumbaPrecompiler and Stencil array at the same time and wait for both (below)
     #charm.awaitCreation(nb_precomps) # wait until Numba functions are compiled
 
-    sim_done = charm.createFuture()
+    sim_done = Future()
     array = Array(Stencil, (ro.num_chare_x, ro.num_chare_y, ro.num_chare_z), args=[sim_done], useAtSync=True)
     charm.awaitCreation(nb_precomps, array)
 

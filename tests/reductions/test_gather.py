@@ -21,7 +21,7 @@ class Main(Chare):
         charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, '__main__', ret=True).get()
         arrProxy.doGather()
         grpProxy.doGather()
-        red_future = charm.createFuture()
+        red_future = charm.Future()
         arrProxy.doGather(red_future)
         self.done_gather_single(red_future.get())
 

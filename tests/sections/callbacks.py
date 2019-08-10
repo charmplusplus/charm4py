@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, Reducer
+from charm4py import charm, Chare, Group, Array, Reducer, Future
 import numpy
 
 
@@ -76,63 +76,63 @@ def main(args):
 
     for collection, secProxy, numchares in collections:
 
-        f = charm.createFuture()
+        f = Future()
         expected = numchares * 3
         collection.setTest(f, expected, ret=1).get()
         collection.work1(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = (numchares // 2) * 3
         secProxy.setTest(f, expected, ret=1).get()
         secProxy.work1(secProxy.recvResult, secProxy)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = numpy.arange(100, dtype='float64')
         expected *= numchares
         collection.setTest(f, expected, ret=1).get()
         collection.work2(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = numpy.arange(100, dtype='float64')
         expected *= (numchares // 2)
         secProxy.setTest(f, expected, ret=1).get()
         secProxy.work2(secProxy.recvResult, secProxy)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = [str(i) for i in range(numchares)]
         collection.setTest(f, expected, ret=1).get()
         collection.work3(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = [str(i) for i in range(numchares) if i % 2 == 1]
         secProxy.setTest(f, expected, ret=1).get()
         secProxy.work3(secProxy.recvResult, secProxy)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = None
         collection.setTest(f, expected, ret=1).get()
         collection.work4(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = None
         secProxy.setTest(f, expected, ret=1).get()
         secProxy.work4(secProxy.recvResult, secProxy)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = 'test section callback'
         collection.setTest(f, expected, ret=1).get()
         collection.work5(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
-        f = charm.createFuture()
+        f = Future()
         expected = None
         collection.setTest(f, expected, ret=1).get()
         charm.startQD(secProxy.recvResult)

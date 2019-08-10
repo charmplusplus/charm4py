@@ -278,7 +278,7 @@ def mainchare_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, 
         blockFuture = None
         cid = proxy.cid  # chare ID
         if 'ret' in kwargs and kwargs['ret']:
-            header[b'block'] = blockFuture = charm.createFuture()
+            header[b'block'] = blockFuture = charm.Future()
         destObj = None
         if Options.local_msg_optim and (cid in charm.chares) and (len(args) > 0):
             destObj = charm.chares[cid]
@@ -397,7 +397,7 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         if 'ret' in kwargs:
             retmode = kwargs['ret']
             if retmode > 0:
-                header[b'block'] = blockFuture = charm.createFuture()
+                header[b'block'] = blockFuture = charm.Future()
                 if elemIdx == -1:
                     header[b'bcast'] = True
                     if retmode > 1:
@@ -439,7 +439,7 @@ def update_globals_proxy_method_gen(ep):
         if 'ret' in kwargs:
             retmode = kwargs['ret']
             if retmode > 0:
-                header[b'block'] = blockFuture = charm.createFuture()
+                header[b'block'] = blockFuture = charm.Future()
                 if elemIdx == -1:
                     header[b'bcast'] = True
                     if retmode > 1:
@@ -469,7 +469,7 @@ def group_ckNew_gen(C, epIdx):
         header = {}
         creation_future = None
         if not charm.threadMgr.isMainThread() and ArrayMap not in C.mro():
-            creation_future = charm.createFuture()
+            creation_future = charm.Future()
             header[b'block'] = creation_future
             header[b'bcast'] = True
             header[b'creation'] = True
@@ -638,7 +638,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         if 'ret' in kwargs:
             retmode = kwargs['ret']
             if retmode > 0:
-                header[b'block'] = blockFuture = charm.createFuture()
+                header[b'block'] = blockFuture = charm.Future()
                 if elemIdx == ():
                     header[b'bcast'] = True
                     if retmode > 1:
@@ -686,7 +686,7 @@ def array_ckNew_gen(C, epIdx):
 
         header, creation_future = {}, None
         if sum(dims) > 0 and not charm.threadMgr.isMainThread():
-            creation_future = charm.createFuture()
+            creation_future = charm.Future()
             header[b'block'] = creation_future
             header[b'bcast'] = True
             header[b'creation'] = True
@@ -707,7 +707,7 @@ def array_ckInsert_gen(epIdx):
         if single:
             header[b'single'] = True
             if not charm.threadMgr.isMainThread():
-                proxy.creation_future = charm.createFuture()
+                proxy.creation_future = charm.Future()
                 header[b'block'] = proxy.creation_future
                 header[b'bcast'] = True
                 header[b'creation'] = True

@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, threaded, when
+from charm4py import charm, Chare, Array, threaded, when, Future
 
 
 NUM_ITER = 500
@@ -21,7 +21,7 @@ class Cell(Chare):
         for self.iteration in range(NUM_ITER):
             for nb in self.nbs:
                 nb.recvData(self.iteration, None)
-            self.iter_complete = charm.createFuture()
+            self.iter_complete = Future()
             self.iter_complete.get()
         self.reduce(done_fut)
 
@@ -37,7 +37,7 @@ def main(args):
     numChares = charm.numPes() * CHARES_PER_PE
     cells = Array(Cell, numChares, args=[numChares])
     charm.awaitCreation(cells)
-    f = charm.createFuture()
+    f = Future()
     cells.work(f)
     f.get()
     exit()

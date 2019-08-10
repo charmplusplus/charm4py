@@ -29,7 +29,7 @@ def main(args):
 
     charm.awaitCreation(g1, g2, a1, a2)
 
-    wait_alldone = [charm.createFuture() for _ in range(4)]
+    wait_alldone = [charm.Future() for _ in range(4)]
     i = 0
     for collection in (g1, g2):
         collection.run(charm.numPes(), wait_alldone[i])

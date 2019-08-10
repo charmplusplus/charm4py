@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group
+from charm4py import charm, Chare, Group, Future
 
 
 # NOTE: there is a better implementation of this in charm4py/pool.py
@@ -92,8 +92,8 @@ def main(args):
         print("\nRun this example with at least 5 PEs\n")
         exit()
     pool = Chare(Master, onPE=0)  # create one Master called 'pool' on PE 0
-    f1 = charm.createFuture()
-    f2 = charm.createFuture()
+    f1 = Future()
+    f2 = Future()
     tasks1 = [1, 2, 3, 4, 5]
     tasks2 = [1, 3, 5, 7, 9]
     pool.map_async(f, 2, tasks1, f1)

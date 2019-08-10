@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Reducer, threaded
+from charm4py import charm, Chare, Reducer, threaded, Future
 
 
 class Test(Chare):
@@ -21,13 +21,13 @@ class Controller(Chare):
 
         N = charm.numPes() * 3
         a1 = charm.thisProxy[0].createArray(Test, N, ret=True).get()
-        f = charm.createFuture()
+        f = Future()
         a1.work(f, 5)
         assert f.get() == N * 5
 
         N = 25
         a2 = charm.thisProxy[0].createArray(Test, (5, 5), args=[33], ret=True).get()
-        f = charm.createFuture()
+        f = Future()
         a2.work(f, 6)
         assert f.get() == N * (6 + 33)
 

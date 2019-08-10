@@ -1,5 +1,5 @@
-from charm4py import charm, Chare, Group, Array
-from charm4py.threads import Future
+from charm4py import charm, Chare, Group, Array, Future
+from charm4py import threads
 from time import time
 
 CHARES_PER_PE = 8
@@ -68,19 +68,19 @@ class Main(Chare):
         self.testQD(callback=qdArrayReceivers.recvQD)
         self.testQD(callback=qdGroupReceivers[1].recvQD)
         self.testQD(callback=qdArrayReceivers[1].recvQD)
-        self.testQD(callback=charm.createFuture())
+        self.testQD(callback=Future())
         self.testQD(callback=None)
 
         exit()
 
     def testQD(self, callback):
         self.qdReached = False
-        check_fut = charm.createFuture()
+        check_fut = Future()
         t0 = time()
         self.workers.start()
         if callback is not None:
             charm.startQD(callback)
-            if isinstance(callback, Future):
+            if isinstance(callback, threads.Future):
                 callback.get()
                 print('QD reached')
             else:

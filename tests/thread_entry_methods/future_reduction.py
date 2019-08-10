@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Reducer
+from charm4py import charm, Chare, Group, Reducer, Future
 
 
 def my_sum(contribs):
@@ -15,8 +15,8 @@ class Test(Chare):
 
 
 def main(args):
-    f1 = charm.createFuture()
-    f2 = charm.createFuture()
+    f1 = Future()
+    f2 = Future()
     Group(Test, args=[f1, f2])
     assert f1.get() == charm.numPes()
     assert f2.get() == charm.numPes()

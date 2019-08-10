@@ -1,4 +1,4 @@
-from charm4py import charm, Array, Chare, Reducer
+from charm4py import charm, Array, Chare, Reducer, Future
 
 
 CHARES_PER_PE = 4
@@ -8,7 +8,7 @@ def main(args):
     numChares = min(charm.numPes() * CHARES_PER_PE, 64)
     testProxy = Array(Test, numChares)
 
-    f = charm.createFuture(num_vals=numChares)
+    f = Future(num_vals=numChares)
     testProxy.getData(f)
 
     data = f.get()

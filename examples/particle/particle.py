@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, when, Reducer
+from charm4py import charm, Chare, Array, when, Reducer, Future
 import time
 import random
 import math
@@ -121,7 +121,7 @@ def main(args):
     cellSize = (SIM_BOX_SIZE / arrayDims[0], SIM_BOX_SIZE / arrayDims[1])
 
     # create 2D Cell chare array and start simulation
-    simDone = charm.createFuture()
+    simDone = Future()
     # array creation happens asynchronously
     cells = Array(Cell, arrayDims,
                   args=[arrayDims, cellSize, MAX_START_PARTICLES_PER_CELL, simDone],

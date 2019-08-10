@@ -92,17 +92,20 @@ class CollectiveFuture(Future):
 
 class EntryMethodThreadManager(object):
 
-    def __init__(self):
+    def __init__(self, _charm):
         global charm, Charm4PyError, threadMgr
-        from .charm import charm, Charm4PyError
+        from .charm import Charm4PyError
+        charm = _charm
         threadMgr = self
         self.options = charm.options
-        self.main_gr = getcurrent()  # main greenlet
         # pool of Future IDs for futures created by this ThreadManager. Can
         # have as many active futures as the size of this pool
         self.fidpool = array.array('H', range(30000, 0, -1))
         self.futures = {}  # future ID -> Future object
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
+
+    def start(self):
+        self.main_gr = getcurrent()  # main greenlet
         if not self.options.profiling:
             self.resumeThread = self._resumeThread
         else:

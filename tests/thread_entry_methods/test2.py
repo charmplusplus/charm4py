@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, threaded
+from charm4py import charm, Chare, Group, Array, threaded, Future
 
 
 NUM_ITER = 300
@@ -32,8 +32,8 @@ def main(args):
     a = Array(Test, numChares)
     g = Group(Test)
     charm.awaitCreation(a, g)
-    f1 = charm.createFuture()
-    f2 = charm.createFuture()
+    f1 = Future()
+    f2 = Future()
     a.start(f1)
     g.start(f2)
     f1.get()

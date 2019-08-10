@@ -1,4 +1,4 @@
-from . import charm, Chare, Group, threaded_ext, threads
+from . import charm, Chare, Group, threaded_ext, threads, Future
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
@@ -372,9 +372,9 @@ class Pool(object):
         else:
             tasks = list(iterable)
         if multi_future:
-            result = [charm.createFuture() for _ in range(len(tasks))]
+            result = [Future() for _ in range(len(tasks))]
         else:
-            result = charm.createFuture()
+            result = Future()
         # TODO shouldn't send task objects to a central place. what if they are large?
         self.pool_scheduler.start(func, tasks, result, ncores, chunksize, allow_nested)
         return result
@@ -392,9 +392,9 @@ class Pool(object):
         else:
             tasks = list(iterable)
         if multi_future:
-            result = [charm.createFuture() for _ in range(len(tasks))]
+            result = [Future() for _ in range(len(tasks))]
         else:
-            result = charm.createFuture()
+            result = Future()
         # TODO shouldn't send task objects to a central place. what if they are large?
         self.pool_scheduler.start(None, tasks, result, ncores, chunksize, allow_nested)
         return result
