@@ -16,7 +16,7 @@ class Test(Chare):
 def main(args):
     g1 = Group(Test)
     g2 = Group(Test)
-    done = charm.createFuture()
+    done = charm.Future()
 
     main_globals = {}
     main_globals['group1_proxy'] = g1

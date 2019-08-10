@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array
+from charm4py import charm, Chare, Group, Array, Future
 from charm4py.threads import Future
 from time import time
 
@@ -68,14 +68,14 @@ class Main(Chare):
         self.testQD(callback=qdArrayReceivers.recvQD)
         self.testQD(callback=qdGroupReceivers[1].recvQD)
         self.testQD(callback=qdArrayReceivers[1].recvQD)
-        self.testQD(callback=charm.createFuture())
+        self.testQD(callback=Future())
         self.testQD(callback=None)
 
         exit()
 
     def testQD(self, callback):
         self.qdReached = False
-        check_fut = charm.createFuture()
+        check_fut = Future()
         t0 = time()
         self.workers.start()
         if callback is not None:

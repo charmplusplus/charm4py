@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Reducer
+from charm4py import charm, Chare, Array, Reducer, Future
 import random
 
 
@@ -36,7 +36,7 @@ def main(args):
     for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:
         secProxy = charm.split(array, 1, member)[0]
         array.setSecProxy(secProxy, ret=1).get()
-        f = charm.createFuture()
+        f = Future()
         secProxy.ping(f)
         assert len(f.get()) < size
 
@@ -46,7 +46,7 @@ def main(args):
         assert len(elems) == size
         section_elems = random.sample(elems, size // 2)
         secProxy = charm.split(array, 1, elems=section_elems)[0]
-        f = charm.createFuture()
+        f = Future()
         secProxy.ping2(f, secProxy)
         assert f.get() == sorted(section_elems)
         assert secProxy.getElems(ret=2).get() == sorted(section_elems)

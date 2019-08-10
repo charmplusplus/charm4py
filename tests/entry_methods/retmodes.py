@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, Reducer, threaded
+from charm4py import charm, Chare, Group, Array, Reducer, threaded, Future
 import random
 
 
@@ -23,10 +23,10 @@ class Test(Chare):
 
 
 def main(args):
-    f1 = charm.createFuture()
-    f2 = charm.createFuture()
-    done1 = charm.createFuture()
-    done2 = charm.createFuture()
+    f1 = Future()
+    f2 = Future()
+    done1 = Future()
+    done2 = Future()
     a = Array(Test, charm.numPes() * 10, args=[f1, done1])
     g = Group(Test, args=[f2, done2])
 

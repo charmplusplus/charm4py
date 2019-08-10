@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, when
+from charm4py import charm, Chare, Group, when, Future
 import random
 import time
 
@@ -37,7 +37,7 @@ def main(args):
         ids.append(i)
     random.shuffle(ids)
 
-    done = charm.createFuture()
+    done = Future()
     g.start(done, ret=True).get()
     t0 = time.time()
     for id in ids:

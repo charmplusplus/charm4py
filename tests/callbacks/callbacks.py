@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, Reducer, threaded
+from charm4py import charm, Chare, Group, Array, Reducer, threaded, Future
 import sys
 
 
@@ -6,7 +6,7 @@ class Controller(Chare):
 
     @threaded
     def start(self, workers, callback):
-        f = charm.createFuture()
+        f = Future()
         workers.work(f)
         result = f.get()
         callback(result)
@@ -56,7 +56,7 @@ class Main(Chare):
         self.wait('self.done == ' + str(charm.numPes()))
         self.done = -1
 
-        f = charm.createFuture()
+        f = Future()
         controllers[3].start(workers, f)
         assert f.get() == (charm.numPes() * (charm.numPes() - 1)) // 2
 

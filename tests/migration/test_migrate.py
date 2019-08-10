@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Reducer
+from charm4py import charm, Chare, Array, Reducer, Future
 import numpy
 import math
 
@@ -43,7 +43,7 @@ class Test(Chare):
 
 
 def main(args):
-    home_pes = charm.createFuture()
+    home_pes = Future()
     array = Array(Test, charm.numPes() * 4, args=[home_pes], useAtSync=True)
     charm.thisProxy.updateGlobals({'all_created' : True, 'arrayElemHomeMap' : home_pes.get()},
                                   '__main__', ret=True).get()

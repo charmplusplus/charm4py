@@ -1,4 +1,4 @@
-from charm4py import charm, Array, Chare, Reducer
+from charm4py import charm, Array, Chare, Reducer, Future
 
 
 CHARES_PER_PE = 4
@@ -7,9 +7,9 @@ CHARES_PER_PE = 4
 def main(args):
     testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
 
-    sum_f = charm.createFuture()
-    min_f = charm.createFuture()
-    max_f = charm.createFuture()
+    sum_f = Future()
+    min_f = Future()
+    max_f = Future()
     testProxy.getStats((sum_f, min_f, max_f))
 
     print('[Main] Sum: ' + str(sum_f.get()) + ', Min: ' + str(min_f.get()) + ', Max: ' + str(max_f.get()))

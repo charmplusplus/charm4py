@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, threaded
+from charm4py import charm, Chare, Array, threaded, Future
 from time import time
 import numpy as np
 
@@ -53,7 +53,7 @@ def main(args):
     pings = Array(Ping, 2)
     charm.awaitCreation(pings)
     for _ in range(2):
-        done_future = charm.createFuture()
+        done_future = Future()
         pings[0].start(done_future, threaded)
         totalTime = done_future.get()
         print("ping pong time per iter (us)=", totalTime / NITER * 1000000)
