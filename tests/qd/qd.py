@@ -1,5 +1,5 @@
 from charm4py import charm, Chare, Group, Array, Future
-from charm4py.threads import Future
+from charm4py import threads
 from time import time
 
 CHARES_PER_PE = 8
@@ -80,7 +80,7 @@ class Main(Chare):
         self.workers.start()
         if callback is not None:
             charm.startQD(callback)
-            if isinstance(callback, Future):
+            if isinstance(callback, threads.Future):
                 callback.get()
                 print('QD reached')
             else:
