@@ -104,8 +104,6 @@ class EntryMethodThreadManager(object):
         charm = _charm
         threadMgr = self
         self.options = charm.options
-        # pool of Future IDs for futures created by this ThreadManager. Can
-        # have as many active futures as the size of this pool
         self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
