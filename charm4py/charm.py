@@ -926,7 +926,6 @@ class Charm(object):
             method). """
         return self.lib.getTopoSubtrees(root_pe, pes, bfactor)
 
-    # TODO take into account situations where myPe and numPes could change (shrink/expand?) and possibly SMP mode in future
     def myPe(self):
         return self._myPe
 
