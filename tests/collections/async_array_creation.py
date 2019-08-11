@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Reducer, threaded, Future
+from charm4py import charm, Chare, Reducer, coro, Future
 
 
 class Test(Chare):
@@ -15,7 +15,7 @@ class Test(Chare):
 
 class Controller(Chare):
 
-    @threaded
+    @coro
     def start(self):
         assert charm.myPe() == 1
 

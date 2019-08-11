@@ -1,9 +1,9 @@
-from charm4py import charm, Chare, Group, Array, threaded
+from charm4py import charm, Chare, Group, Array, coro
 
 
 class Test(Chare):
 
-    @threaded
+    @coro
     def __init__(self, x):
         if charm.myPe() == 0:
             print(self.thisIndex, x)

@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, threaded, when, Future
+from charm4py import charm, Chare, Array, coro, when, Future
 
 
 NUM_ITER = 500
@@ -16,7 +16,7 @@ class Cell(Chare):
         self.iteration = -1
         self.msgs_recvd = 0
 
-    @threaded
+    @coro
     def work(self, done_fut):
         for self.iteration in range(NUM_ITER):
             for nb in self.nbs:

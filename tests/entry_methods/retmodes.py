@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, Reducer, threaded, Future
+from charm4py import charm, Chare, Group, Array, Reducer, coro, Future
 import random
 
 
@@ -17,7 +17,7 @@ class Test(Chare):
                 self.contribute(None, None, self.callback_test_done)
         return self.myval
 
-    @threaded
+    @coro
     def getVal_th(self, bcast):
         return self.getVal(bcast)
 

@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, threaded
+from charm4py import charm, Chare, Group, coro
 import proxies_same_name_aux
 
 
@@ -14,7 +14,7 @@ class Test(Chare):
     def __init__(self):
         assert charm.myPe() == 2
 
-    @threaded
+    @coro
     def test(self, proxy, method_name):
         assert getattr(proxy[1], method_name)(ret=1).get() == 32255
 

@@ -1,4 +1,4 @@
-from . import charm, Chare, threaded, Future
+from . import charm, Chare, coro, Future
 from . import chare
 import sys
 import time
@@ -66,7 +66,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
             # go through charm scheduler to keep things moving
             self.thisProxy.null(ret=1).get()
 
-    @threaded
+    @coro
     def start(self):
         self.write('\nCharm4py interactive shell (beta)\n')
         self.write('charm.options.interactive.verbose = ' + str(self.options.verbose) + '\n')

@@ -1,10 +1,10 @@
-from charm4py import charm, Chare, Group, threaded
+from charm4py import charm, Chare, Group, coro
 import random
 
 
 class Controller(Chare):
 
-    @threaded
+    @coro
     def start(self):
         # print('Controller running on PE', charm.myPe())
         for i in range(charm.numPes()):

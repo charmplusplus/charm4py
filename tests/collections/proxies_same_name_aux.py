@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, threaded
+from charm4py import charm, Chare, coro
 
 
 class Hello(Chare):
@@ -13,6 +13,6 @@ class Test(Chare):
     def __init__(self):
         assert charm.myPe() == 1
 
-    @threaded
+    @coro
     def test(self, proxy, method_name):
         assert getattr(proxy[3], method_name)(ret=1).get() == 68425

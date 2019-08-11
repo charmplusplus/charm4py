@@ -16,12 +16,12 @@ class EntryMethod(object):
             self.running = False
 
         method = getattr(C, name)
-        if hasattr(method, '_ck_threaded'):
+        if hasattr(method, '_ck_coro'):
             if not profile:
                 self.run = self._run_th
             else:
                 self.run = self._run_th_prof
-            self.thread_notify = hasattr(method, '_ck_threaded_notify') and method._ck_threaded_notify
+            self.thread_notify = hasattr(method, '_ck_coro_notify') and method._ck_coro_notify
         else:
             if not profile:
                 self.run = self._run
@@ -172,17 +172,17 @@ def when(cond_str):
     return _when
 
 
-def threaded(func):
-    func._ck_threaded = True
+def coro(func):
+    func._ck_coro = True
     return func
 
 
-def threaded_ext(event_notify=False):
-    def _threaded(func):
-        func._ck_threaded = True
-        func._ck_threaded_notify = event_notify
+def coro_ext(event_notify=False):
+    def _coro(func):
+        func._ck_coro = True
+        func._ck_coro_notify = event_notify
         return func
-    return _threaded
+    return _coro
 
 
 def charmStarting():

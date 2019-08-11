@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, threaded
+from charm4py import charm, Chare, Group, Array, coro
 
 
 class Test(Chare):
@@ -23,15 +23,15 @@ class Test(Chare):
     def good(self):
         return self.idx
 
-    @threaded
+    @coro
     def bad_th(self):
         return self.bad()
 
-    @threaded
+    @coro
     def allbad_th(self):
         return self.allbad()
 
-    @threaded
+    @coro
     def good_th(self):
         return self.good()
 

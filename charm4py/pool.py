@@ -1,4 +1,4 @@
-from . import charm, Chare, Group, threaded_ext, threads, Future
+from . import charm, Chare, Group, coro_ext, threads, Future
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
@@ -270,7 +270,7 @@ class Worker(Chare):
         # TODO: when to purge entries from this dict?
         self.funcs = {}  # job ID -> function used by this job ID
 
-    @threaded_ext(event_notify=True)
+    @coro_ext(event_notify=True)
     def runTaskSingleFunc_th(self, func, args, result_destination, job_id):
         self.runTaskSingleFunc(func, args, result_destination, job_id)
 
@@ -281,7 +281,7 @@ class Worker(Chare):
             func = self.funcs[job_id]
         self.runTask(func, args, result_destination, job_id)
 
-    @threaded_ext(event_notify=True)
+    @coro_ext(event_notify=True)
     def runTask_th(self, func, args, result_destination, job_id):
         self.runTask(func, args, result_destination, job_id)
 
@@ -303,7 +303,7 @@ class Worker(Chare):
             if not isinstance(result_destination, int):
                 result_destination.send(e)
 
-    @threaded_ext(event_notify=True)
+    @coro_ext(event_notify=True)
     def runChunkSingleFunc_th(self, func, chunk, result_destination, job_id):
         self.runChunkSingleFunc(func, chunk, result_destination, job_id)
 
@@ -318,7 +318,7 @@ class Worker(Chare):
         except Exception as e:
             self.send_chunk_exc(e, result_destination, job_id)
 
-    @threaded_ext(event_notify=True)
+    @coro_ext(event_notify=True)
     def runChunk_th(self, _, chunk, result_destination, job_id):
         try:
             results = [func(args) for func, args in chunk]

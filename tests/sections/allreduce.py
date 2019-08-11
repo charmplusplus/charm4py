@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, threaded, Reducer, Future
+from charm4py import charm, Chare, Group, Array, coro, Reducer, Future
 
 
 NUM_ITER = 100
@@ -9,7 +9,7 @@ class Test(Chare):
     def __init__(self):
         self.numallreduce = 0
 
-    @threaded
+    @coro
     def work(self, f, numchares, secproxy=None):
         for _ in range(NUM_ITER):
             result = self.allreduce(1, Reducer.sum, section=secproxy).get()
