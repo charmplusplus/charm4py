@@ -234,7 +234,7 @@ class ReductionManager(object):
         else:
             if not hasattr(pyReducer, 'hasPreprocess'):
                 from .charm import Charm4PyError
-                raise Charm4PyError("Please register reducer '" + reducer.__name__ + "' with addReducer")
+                raise Charm4PyError('Invalid reducer ' + str(reducer) + '. Reducers must be functions registered with addReducer')
             if pyReducer.hasPreprocess:
                 data = pyReducer.preprocess(data, contributor)
             rednMsg = ({b"custom_reducer": pyReducer.__name__}, [data])
