@@ -117,6 +117,7 @@ class Chare(object):
         charm.contribute(data, reducer, callback, self, section)
 
     def reduce(self, callback, data=None, reducer=None, section=None):
+        assert callable(callback), 'First argument to reduce must be a callback'
         charm.contribute(data, reducer, callback, self, section)
 
     def allreduce(self, data=None, reducer=None, section=None):
