@@ -201,9 +201,14 @@ class EntryMethodThreadManager(object):
 
     def depositFuture(self, fid, result):
         """ Set a value of a future that is being managed by this ThreadManager. """
-        f = self.futures[fid]
+        futures = self.futures
+        try:
+            f = futures[fid]
+        except KeyError:
+            raise Charm4PyError('No pending future with fid=' + str(fid) + '. A common reason is '
+                                'sending to a future that already received its value(s)')
         if f.deposit(result):
-            del self.futures[fid]
+            del futures[fid]
             # resume if a thread is blocked on the future
             obj = f.gr.obj
             f.resume(self)
