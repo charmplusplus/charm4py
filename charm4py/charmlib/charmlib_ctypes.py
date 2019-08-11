@@ -527,7 +527,7 @@ class CharmLib(object):
         returnBuffers[0] = ctypes.cast(c_char_p(pickledData), POINTER(c_char))
         returnBufferSizes[0] = len(pickledData)
       else:
-        # do nothing, use message as is (was created by charm4py)
+        # do nothing, use message as is (was created by Charm4py)
         returnBuffers[0]     = ctypes.cast(data, c_char_p)
         returnBufferSizes[0] = dataSize
 

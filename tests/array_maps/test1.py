@@ -15,8 +15,9 @@ class MyMap(ArrayMap):
 class MyChare(Chare):
 
     def __init__(self, last):
-        assert charm.myPe() == index_to_pe(self.thisIndex), "ArrayMap failed"
-        if last: self.contribute(None, None, charm.thisProxy[0].exit)
+        assert charm.myPe() == index_to_pe(self.thisIndex), 'ArrayMap failed'
+        if last:
+            self.contribute(None, None, charm.thisProxy[0].exit)
 
 
 def main(args):
@@ -27,7 +28,7 @@ def main(args):
         else:
             dim_size = 2
         if nDims < 6:
-            Array(MyChare, [dim_size]*nDims, args=[False], map=array_map)
+            Array(MyChare, [dim_size] * nDims, args=[False], map=array_map)
         else:
             dyn_array = Array(MyChare, ndims=nDims, map=array_map)
             for idx in itertools.product(range(dim_size), repeat=nDims):
