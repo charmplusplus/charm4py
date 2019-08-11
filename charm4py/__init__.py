@@ -21,7 +21,7 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
     Reducer = charm.reducers
     Future = charm.createFuture
 
-    from .entry_method import when, coro, coro_ext, threaded
+    from .entry_method import when, coro, coro_ext, coro as threaded
 
     from .chare import Chare, Group, Array, ArrayMap
 

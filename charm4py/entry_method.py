@@ -172,11 +172,6 @@ def when(cond_str):
     return _when
 
 
-def threaded(func):
-    func._ck_coro = True
-    return func
-
-
 def coro(func):
     func._ck_coro = True
     return func
