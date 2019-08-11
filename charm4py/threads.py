@@ -2,6 +2,12 @@ import array
 from greenlet import getcurrent
 
 
+# Future IDs (fids) are sometimes carried as reference numbers inside
+# Charm++ CkCallback objects. The data type most commonly used for
+# this is unsigned short, hence this limit
+FIDMAXVAL = 65535
+
+
 class NotThreadedError(Exception):
     def __init__(self, msg):
         super(NotThreadedError, self).__init__(msg)
@@ -98,9 +104,7 @@ class EntryMethodThreadManager(object):
         charm = _charm
         threadMgr = self
         self.options = charm.options
-        # pool of Future IDs for futures created by this ThreadManager. Can
-        # have as many active futures as the size of this pool
-        self.fidpool = array.array('H', range(30000, 0, -1))
+        self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
 
@@ -174,9 +178,16 @@ class EntryMethodThreadManager(object):
         gr = getcurrent()
         if gr == self.main_gr:
             self.throwNotThreadedError()
-        fid = self.fidpool.pop()  # get a unique local Future ID from pool
+        # get a unique local Future ID
+        global FIDMAXVAL
+        futures = self.futures
+        assert len(futures) < FIDMAXVAL, 'Too many pending futures, cannot create more'
+        fid = (self.lastfid % FIDMAXVAL) + 1
+        while fid in futures:
+            fid = (fid % FIDMAXVAL) + 1
+        self.lastfid = fid
         f = Future(fid, gr, charm._myPe, num_vals)
-        self.futures[fid] = f
+        futures[fid] = f
         return f
 
     def createCollectiveFuture(self, fid, obj, proxy):
@@ -193,7 +204,6 @@ class EntryMethodThreadManager(object):
         f = self.futures[fid]
         if f.deposit(result):
             del self.futures[fid]
-            self.fidpool.append(fid)
             # resume if a thread is blocked on the future
             obj = f.gr.obj
             f.resume(self)
@@ -212,7 +222,6 @@ class EntryMethodThreadManager(object):
     def cancelFuture(self, f):
         fid = f.fid
         del self.futures[fid]
-        self.fidpool.append(fid)
         f.gotvalues = True
         f.values = [None] * f.nvals
         f.resume(self)
