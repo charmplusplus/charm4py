@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, threaded
+from charm4py import charm, Chare, Group, Array, coro
 
 
 class Test(Chare):
@@ -6,7 +6,7 @@ class Test(Chare):
     def getIdx(self):
         return self.thisIndex
 
-    @threaded
+    @coro
     def getIdx_th(self):
         return self.thisIndex
 

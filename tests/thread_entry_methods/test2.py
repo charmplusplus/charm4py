@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, threaded, Future
+from charm4py import charm, Chare, Group, Array, coro, Future
 
 
 NUM_ITER = 300
@@ -6,7 +6,7 @@ NUM_ITER = 300
 
 class Test(Chare):
 
-    @threaded
+    @coro
     def start(self, done_future):
         self.done_future = done_future
         self.iteration = 0
@@ -14,7 +14,7 @@ class Test(Chare):
             assert self.thisProxy[self.thisIndex].work(ret=1).get() == 3625
         self.reduce(self.thisProxy.verify)
 
-    @threaded
+    @coro
     def work(self):
         if self.iteration % 2 == 0:
             mype = charm.myPe()

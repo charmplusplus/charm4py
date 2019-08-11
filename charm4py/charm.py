@@ -465,11 +465,11 @@ class Charm(object):
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, 'More than one entry point has been specified'
             self.mainchareRegistered = True
-            # make mainchare constructor always threaded
+            # make mainchare constructor always a coroutine
             if sys.version_info < (3, 0, 0):
-                entry_method.threaded(C.__init__.im_func)
+                entry_method.coro(C.__init__.im_func)
             else:
-                entry_method.threaded(C.__init__)
+                entry_method.coro(C.__init__)
         charm_type = chare.charm_type_id_to_class[charm_type_id]
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         profilingOn = self.options.profiling
@@ -525,9 +525,9 @@ class Charm(object):
         from .pool import PoolScheduler, Worker
         if self.interactive:
             if sys.version_info < (3, 0, 0):
-                entry_method.threaded(PoolScheduler.start.im_func)
+                entry_method.coro(PoolScheduler.start.im_func)
             else:
-                entry_method.threaded(PoolScheduler.start)
+                entry_method.coro(PoolScheduler.start)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
@@ -572,7 +572,7 @@ class Charm(object):
             self.interactive = True
             self.dynamic_register.update({'charm': charm, 'Chare': Chare, 'Group': Group,
                                           'Array': Array, 'Reducer': self.reducers,
-                                          'threaded': entry_method.threaded})
+                                          'threaded': entry_method.coro, 'coro': entry_method.coro})
 
         if self.started:
             raise Charm4PyError('charm.start() can only be called once')
@@ -776,7 +776,7 @@ class Charm(object):
             if not hasattr(proxy, 'creation_future'):
                 if not proxy.__class__.__name__.endswith('Proxy'):
                     raise Charm4PyError('Did not pass a proxy to awaitCreation? ' + str(type(proxy)))
-                raise Charm4PyError('awaitCreation can only be used if creation triggered from threaded entry method')
+                raise Charm4PyError('awaitCreation can only be used if creation triggered from a coroutine entry method')
             proxy.creation_future.get()
             del proxy.creation_future
 

@@ -124,9 +124,9 @@ class EntryMethodThreadManager(object):
             raise Charm4PyError('Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):
-        raise NotThreadedError("Entry method '" + charm.last_em_exec.C.__name__ + "." +
+        raise NotThreadedError("Method '" + charm.last_em_exec.C.__name__ + "." +
                                charm.last_em_exec.name +
-                               "' must be marked as 'threaded' to block")
+                               "' must be a couroutine to be able to suspend (decorate it with @coro)")
 
     def pauseThread(self):
         """ Called by an entry method thread to wait for something.

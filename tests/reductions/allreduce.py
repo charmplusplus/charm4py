@@ -1,9 +1,9 @@
-from charm4py import charm, Chare, Group, Array, Reducer, threaded
+from charm4py import charm, Chare, Group, Array, Reducer, coro
 
 
 class Test(Chare):
 
-    @threaded
+    @coro
     def run(self, numChares, done_future):
         if isinstance(self.thisIndex, tuple):
             index = self.thisIndex[0]

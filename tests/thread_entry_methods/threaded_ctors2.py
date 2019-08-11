@@ -1,20 +1,20 @@
-from charm4py import charm, Chare, Group, Array, threaded
+from charm4py import charm, Chare, Group, Array, coro
 
 
 class A(Chare):
 
-    @threaded
+    @coro
     def __init__(self):
         self.x = 65824
 
-    @threaded
+    @coro
     def getVal(self):
         return self.x
 
 
 class B(Chare):
 
-    @threaded
+    @coro
     def __init__(self, grp_proxy):
         x = grp_proxy[self.thisIndex[0]].getVal(ret=True).get()
         assert x == 65824

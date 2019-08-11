@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, threaded, Future
+from charm4py import charm, Chare, Array, coro, Future
 from time import time
 import numpy as np
 
@@ -35,7 +35,7 @@ class Ping(Chare):
                 return
         self.neighbor.recv(data)
 
-    @threaded
+    @coro
     def recv_th(self, data):
         if self.myIndex == 0:
             self.iter += 1

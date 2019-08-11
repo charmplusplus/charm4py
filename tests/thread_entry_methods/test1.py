@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Group, threaded, Reducer
+from charm4py import charm, Chare, Array, Group, coro, Reducer
 import time
 
 charm.options.profiling = True
@@ -12,7 +12,7 @@ class Test(Chare):
         # gather list of PEs on which each array element is located and broadcast to every member
         self.contribute(charm.myPe(), Reducer.gather, self.thisProxy.start)
 
-    @threaded
+    @coro
     def start(self, pes):
         for j in range(ITERATIONS):
             for i in range(numChares):
@@ -21,7 +21,7 @@ class Test(Chare):
 
         self.reduce(self.thisProxy.verify)
 
-    @threaded
+    @coro
     def getVal(self):
         return 53 * testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0]
 

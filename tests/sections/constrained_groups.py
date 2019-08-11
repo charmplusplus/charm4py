@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Reducer, threaded
+from charm4py import charm, Chare, Group, Reducer, coro
 import random
 
 
@@ -17,7 +17,7 @@ class Test(Chare):
     def getIdx(self):
         return self.thisIndex
 
-    @threaded
+    @coro
     def testallreduce(self):
         result = self.allreduce(self.thisIndex, Reducer.gather).get()
         assert result == sorted(section_pes)

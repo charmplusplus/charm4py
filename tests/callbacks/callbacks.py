@@ -1,10 +1,10 @@
-from charm4py import charm, Chare, Group, Array, Reducer, threaded, Future
+from charm4py import charm, Chare, Group, Array, Reducer, coro, Future
 import sys
 
 
 class Controller(Chare):
 
-    @threaded
+    @coro
     def start(self, workers, callback):
         f = Future()
         workers.work(f)
