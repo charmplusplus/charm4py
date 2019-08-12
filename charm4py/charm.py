@@ -982,6 +982,12 @@ class CharmRemote(Chare):
     def myPe(self):
         return charm.myPe()
 
+    def LBTurnInstrumentOn(self):
+        charm.lib.LBTurnInstrumentOn()
+
+    def LBTurnInstrumentOff(self):
+        charm.lib.LBTurnInstrumentOff()
+
     def addReducer(self, func):
         charm.addReducer(func)
 
