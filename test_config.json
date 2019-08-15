@@ -102,6 +102,10 @@
     },
     {
         "force_min_processes": 4,
+        "path": "tests/collections/proxy_eq.py"
+    },
+    {
+        "force_min_processes": 4,
         "path": "tests/exceptions/test.py"
     },
     {
