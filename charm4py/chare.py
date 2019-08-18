@@ -222,6 +222,46 @@ class Chare(object):
         # send result to future via a reduction
         charm.contribute(result, Reducer._sectionloc, f, self, proxy)
 
+    def __initchannelattrs__(self):
+        self.__channels__ = []  # port -> channel._Channel object
+        self.__pendingChannels__ = []  # channels that have not finished establishing connections
+
+    def __findPendingChannel__(self, remote, started_locally):
+        for i, ch in enumerate(self.__pendingChannels__):
+            if ch.locally_initiated == started_locally and ch.remote == remote:
+                del self.__pendingChannels__[i]
+                return ch
+        return None
+
+    def _channelConnect__(self, remote_proxy, remote_port):  # entry method
+        if not hasattr(self, '__channels__'):
+            self.__initchannelattrs__()
+        ch = self.__findPendingChannel__(remote_proxy, True)
+        if ch is not None:
+            assert not ch.established
+            ch.remote_port = remote_port
+            if ch.established_fut is not None:
+                ch.established_fut.send()
+            else:
+                ch.setEstablished()
+        else:
+            from .channel import _Channel
+            local_port = len(self.__channels__)
+            ch = _Channel(local_port, remote_proxy, False)
+            self.__channels__.append(ch)
+            self.__pendingChannels__.append(ch)
+            ch.remote_port = remote_port
+
+    def _channelRecv__(self, port, seqno, *msg):  # entry method
+        ch = self.__channels__[port]
+        if len(msg) == 1:
+            msg = msg[0]
+        if ch.recv_fut is not None and seqno == ch.recv_seqno:
+            ch.recv_fut.send((ch, msg))
+        else:
+            assert seqno not in ch.data, 'Channel buffer is full'
+            ch.data[seqno] = msg
+
 
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
@@ -229,7 +269,9 @@ method_restrictions = {
                  '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
                  'AtSync', 'migrate', 'setMigratable',
                  '_coll_future_deposit_result', '__getRedNo__',
-                 '__addThreadEventSubscriber__', '_getSectionLocations_'},
+                 '__addThreadEventSubscriber__', '_getSectionLocations_',
+                 '__initchannelattrs__', '__findPendingChannel__',
+                 '_channelConnect__', '_channelRecv__'},
 
     # these methods of Chare cannot be entry methods. NOTE that any methods starting
     # and ending with '__' are automatically excluded from being entry methods
