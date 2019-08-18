@@ -567,12 +567,14 @@ class Charm(object):
 
         if interactive:
             from .interactive import InteractiveConsole as entry
+            from .channel import Channel
             self.origStdinFd = os.dup(0)
             self.origStoutFd = os.dup(1)
             self.interactive = True
             self.dynamic_register.update({'charm': charm, 'Chare': Chare, 'Group': Group,
                                           'Array': Array, 'Reducer': self.reducers,
-                                          'threaded': entry_method.coro, 'coro': entry_method.coro})
+                                          'threaded': entry_method.coro, 'coro': entry_method.coro,
+                                          'Channel': Channel})
 
         if self.started:
             raise Charm4PyError('charm.start() can only be called once')
