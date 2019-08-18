@@ -630,6 +630,8 @@ class Charm(object):
         for module in (chare, entry_method, wait):
             module.charmStarting()
         self.threadMgr.start()
+        from .channel import waitgen
+        self.iwait = waitgen
 
         self.lb_requested = '+balancer' in sys.argv
         self.lib.start()
@@ -640,6 +642,8 @@ class Charm(object):
             charm.abort('Cannot migrate elements that are part of a section '
                         '(this will be supported in a future version)')
         self.threadMgr.objMigrating(obj)
+        if hasattr(obj, '__channels__'):
+            assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
         del obj._contributeInfo  # don't want to pickle this
         pickled_chare = cPickle.dumps(({}, obj), self.options.pickle_protocol)
         # facilitate garbage collection (especially by removing cyclical references)

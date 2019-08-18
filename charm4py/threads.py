@@ -96,6 +96,18 @@ class CollectiveFuture(Future):
         self.proxy._coll_future_deposit_result(self.fid, result)
 
 
+class LocalFuture(object):
+
+    def __init__(self):
+        self.gr = getcurrent()  # greenlet that created the future
+
+    def send(self, result=None):
+        threadMgr.resumeThread(self.gr, result)
+
+    def get(self):
+        return threadMgr.pauseThread()
+
+
 class EntryMethodThreadManager(object):
 
     def __init__(self, _charm):

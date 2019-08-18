@@ -169,6 +169,22 @@
         "path": "tests/futures/multi_futures.py"
     },
     {
+        "force_min_processes": 4,
+        "path": "tests/channels/test1.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/channels/test2.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/channels/test_numpy.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "tests/channels/inorder.py"
+    },
+    {
         "force_min_processes": 2,
         "path": "tests/qd/qd.py"
     },
