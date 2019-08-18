@@ -3,6 +3,11 @@ if sys.version_info < (2, 7, 0):
     raise RuntimeError('Charm4py requires Python 2.7 or higher')
 import atexit
 import os
+try:
+    import greenlet
+except ImportError:
+    print('Charm4py requires the greenlet package. It can be installed via pip')
+    exit(-1)
 
 
 charm4py_version = 'unknown'
