@@ -64,6 +64,8 @@ class _Channel(object):
         return ret
 
 
+# generator that yields channels as they become ready (have a msg ready to
+# receive immediately)
 def waitgen(channels):
     n = len(channels)
     f = LocalFuture()

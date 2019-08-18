@@ -96,6 +96,9 @@ class CollectiveFuture(Future):
         self.proxy._coll_future_deposit_result(self.fid, result)
 
 
+# LocalFuture is a future meant to be used strictly locally. It should not be
+# be sent to other PEs. It is more lightweight than a regular future: creation,
+# sending to the future and resuming is faster.
 class LocalFuture(object):
 
     def __init__(self):

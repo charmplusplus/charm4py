@@ -224,7 +224,7 @@ class Chare(object):
 
     def __initchannelattrs__(self):
         self.__channels__ = []  # port -> channel._Channel object
-        self.__pendingChannels__ = []  # channels which have not finished establishing connections
+        self.__pendingChannels__ = []  # channels that have not finished establishing connections
 
     def __findPendingChannel__(self, remote, started_locally):
         for i, ch in enumerate(self.__pendingChannels__):
