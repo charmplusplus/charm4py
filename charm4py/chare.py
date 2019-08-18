@@ -265,6 +265,9 @@ def mainchare_proxy__eq__(proxy, other):
     else:
         return False
 
+def mainchare_proxy__hash__(proxy):
+    return hash(proxy.cid)
+
 def mainchare_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
         num_args = len(args)
@@ -334,6 +337,7 @@ class Mainchare(object):
         M['__getstate__'] = mainchare_proxy__getstate__
         M['__setstate__'] = mainchare_proxy__setstate__
         M['__eq__'] = mainchare_proxy__eq__
+        M['__hash__'] = mainchare_proxy__hash__
         return type(proxyClassName, (), M)  # create and return proxy class
 
 
@@ -364,6 +368,12 @@ def group_proxy__eq__(proxy, other):
         return proxy.gid == other.gid and proxy.elemIdx == other.elemIdx
     else:
         return False
+
+def group_proxy__hash__(proxy):
+    if proxy.issec:
+        return hash(proxy.section)
+    else:
+        return hash((proxy.gid, proxy.elemIdx))
 
 def group_getsecproxy(proxy, sinfo):
     if proxy.issec:
@@ -570,6 +580,7 @@ class Group(object):
         M['__init__'] = group_proxy_ctor
         M['__getitem__'] = group_proxy_elem
         M['__eq__'] = group_proxy__eq__
+        M['__hash__'] = group_proxy__hash__
         M['ckNew'] = group_ckNew_gen(cls, entryMethods[0].epIdx)
         M['__getsecproxy__'] = group_getsecproxy
         if not sectionProxy:
@@ -613,6 +624,12 @@ def array_proxy__eq__(proxy, other):
         return proxy.aid == other.aid and proxy.elemIdx == other.elemIdx
     else:
         return False
+
+def array_proxy__hash__(proxy):
+    if proxy.issec:
+        return hash(proxy.section)
+    else:
+        return hash((proxy.aid, proxy.elemIdx))
 
 def array_getsecproxy(proxy, sinfo):
     if proxy.issec:
@@ -811,6 +828,7 @@ class Array(object):
         M['__init__'] = array_proxy_ctor
         M['__getitem__'] = array_proxy_elem
         M['__eq__'] = array_proxy__eq__
+        M['__hash__'] = array_proxy__hash__
         M['ckNew'] = array_ckNew_gen(cls, entryMethods[0].epIdx)
         M['__getsecproxy__'] = array_getsecproxy
         M['ckInsert'] = array_ckInsert_gen(entryMethods[0].epIdx)
