@@ -26,6 +26,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         os.dup2(charm.origStdinFd, 0)
         os.dup2(charm.origStoutFd, 1)
         charm.dynamic_register['future'] = future_
+        charm.dynamic_register['self'] = self
         InteractiveInterpreter.__init__(self, locals=charm.dynamic_register)
         self.filename = '<console>'
         self.resetbuffer()
