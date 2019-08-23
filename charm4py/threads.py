@@ -51,6 +51,12 @@ class Future(object):
             return self.values[0]
         return self.values
 
+    def ready(self):
+        return self.gotvalues
+
+    def waitReady(self, f):
+        self.blocked = 2
+
     def send(self, result=None):
         """ Send a value to this future. """
         charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
@@ -72,7 +78,10 @@ class Future(object):
         return False
 
     def resume(self, threadMgr):
-        if self.blocked:
+        if self.blocked == 2:
+            self.blocked = False
+            threadMgr.resumeThread(self.gr, self)
+        elif self.blocked:
             self.blocked = False
             threadMgr.resumeThread(self.gr, self.values)
 

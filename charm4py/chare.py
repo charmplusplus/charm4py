@@ -256,8 +256,13 @@ class Chare(object):
         ch = self.__channels__[port]
         if len(msg) == 1:
             msg = msg[0]
-        if ch.recv_fut is not None and seqno == ch.recv_seqno:
-            ch.recv_fut.send((ch, msg))
+        if ch.wait_ready is not None and seqno == ch.recv_seqno:
+            ch.data[seqno] = msg
+            f = ch.wait_ready
+            ch.wait_ready = None
+            f.send(ch)
+        elif ch.recv_fut is not None and seqno == ch.recv_seqno:
+            ch.recv_fut.send(msg)
         else:
             assert seqno not in ch.data, 'Channel buffer is full'
             ch.data[seqno] = msg
