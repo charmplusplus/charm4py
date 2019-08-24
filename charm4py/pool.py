@@ -2,6 +2,7 @@ from . import charm, Chare, Group, coro_ext, threads, Future
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
+from copy import deepcopy
 import sys
 
 
@@ -29,25 +30,35 @@ class Chunk(object):
 
 class Job(object):
 
-    def __init__(self, id, func, tasks, result, ncores, chunksize, threaded):
+    def __init__(self, id, func, tasks, result, ncores, chunksize):
         self.id = id
         self.max_cores = ncores
         self.n_avail = ncores
         self.func = func  # if func is not None, function is the same for all tasks in the job
         self.workers = []  # ID of workers who have executed tasks from this job
         self.chunked = chunksize > 1
-        self.threaded = threaded
+        self.threaded = False
         self.failed = False
         assert chunksize > 0
+        if func is not None:
+            self.threaded = hasattr(func, '_ck_coro')
+        else:
+            # this is not efficient, especially considering that we iterate over
+            # the tasks again below. This case is only needed for submit(). Might
+            # just want to consider removing submit() to simplify code?
+            for func_, args in tasks:
+                if hasattr(func_, '_ck_coro'):
+                    self.threaded = True
+                    break
         if self.chunked:
-            if isinstance(result, threads.Future):
+            if result is None or isinstance(result, threads.Future):
                 self.results = [None] * len(tasks)
                 self.future = result
                 self.tasks = [Chunk(tasks[i:i+chunksize], i) for i in range(0, len(tasks), chunksize)]
             else:
                 self.tasks = [Chunk(tasks[i:i+chunksize], result[i:i+chunksize]) for i in range(0, len(tasks), chunksize)]
         else:
-            if isinstance(result, threads.Future):
+            if result is None or isinstance(result, threads.Future):
                 self.results = [None] * len(tasks)
                 self.future = result
                 if func is not None:
@@ -87,15 +98,7 @@ class PoolScheduler(Chare):
         self.worker_knows = defaultdict(set)
         self.setMigratable(False)
 
-    def start(self, func, tasks, result, ncores, chunksize, allow_nested):
-        assert ncores != 0
-        if ncores < 0:
-            ncores = self.num_workers
-        elif ncores > self.num_workers:
-            print('charm.pool Warning: requested more cores than are '
-                  'available. Using max available cores')
-            ncores = self.num_workers
-
+    def __start__(self, func, tasks, result):
         if self.workers is None:
             assert self.num_workers > 0, 'Run with more than 1 PE to use charm.pool'
             # first time running a job, create Group of workers
@@ -118,19 +121,43 @@ class PoolScheduler(Chare):
                     for func_, args in tasks:
                         self.workers.check(func_.__module__, func_.__name__, ret=1).get()
             except Exception as e:
-                if isinstance(result, threads.Future):
+                if result is None:
+                    raise e
+                elif isinstance(result, threads.Future):
                     result.send(e)
                 else:
                     for f in result:
                         f.send(e)
-                return
 
-        job_id = self.job_id_pool.pop()
-        job = Job(job_id, func, tasks, result, ncores, chunksize, allow_nested)
-        self.jobs[job_id] = job
+    def __addJob__(self, job):
+        self.jobs[job.id] = job
         self.job_last.job_next = job
         self.job_last = job
         job.job_next = None
+
+    def startSingleTask(self, func, *args):
+        self.__start__(func, None, None)
+        job = Job(self.job_id_pool.pop(), func, (args,), None, self.num_workers, 1)
+        self.__addJob__(job)
+        if job.threaded:
+            job.remote = self.workers.runTask_star_th
+        else:
+            job.remote = self.workers.runTask_star
+        self.schedule()
+
+    def start(self, func, tasks, result, ncores, chunksize):
+        assert ncores != 0
+        if ncores < 0:
+            ncores = self.num_workers
+        elif ncores > self.num_workers:
+            print('charm.pool Warning: requested more cores than are '
+                  'available. Using max available cores')
+            ncores = self.num_workers
+
+        self.__start__(func, tasks, result)
+
+        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize)
+        self.__addJob__(job)
 
         if job.chunked:
             if job.func is not None:
@@ -220,7 +247,7 @@ class PoolScheduler(Chare):
             self.job_id_pool.add(job_id)
             for worker_id in job.workers:
                 self.worker_knows[worker_id].remove(job.id)
-            if result is not None:
+            if result is not None and job.future is not None:
                 job.future.send(job.results)
         self.schedule()
 
@@ -257,7 +284,10 @@ class PoolScheduler(Chare):
             for worker_id in job.workers:
                 self.worker_knows[worker_id].remove(job.id)
             if hasattr(job, 'future'):
-                job.future.send(job.exception)
+                if job.future is not None:
+                    job.future.send(job.exception)
+                else:
+                    raise job.exception
         self.schedule()
 
 
@@ -296,8 +326,28 @@ class Worker(Chare):
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
             if isinstance(e, NotThreadedError):
-                e = Charm4PyError('Use allow_nested=True to allow launching tasks'
-                                  ' from tasks with charm.pool')
+                e = Charm4PyError('Function ' + str(func) + ' must be decorated with @coro to be able to suspend')
+            charm.prepareExceptionForSend(e)
+            self.scheduler.taskError(self.thisIndex, job_id, e)
+            if not isinstance(result_destination, int):
+                result_destination.send(e)
+
+    @coro_ext(event_notify=True)
+    def runTask_star_th(self, func, args, result_destination, job_id):
+        self.runTask_star(func, args, result_destination, job_id)
+
+    def runTask_star(self, func, args, result_destination, job_id):
+        try:
+            result = func(*args)
+            if isinstance(result_destination, int):
+                self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
+            else:
+                # assume result_destination is a future
+                result_destination.send(result)
+                self.scheduler.taskFinished(self.thisIndex, job_id)
+        except Exception as e:
+            if isinstance(e, NotThreadedError):
+                e = Charm4PyError('Function ' + str(func) + ' must be decorated with @coro to be able to suspend')
             charm.prepareExceptionForSend(e)
             self.scheduler.taskError(self.thisIndex, job_id, e)
             if not isinstance(result_destination, int):
@@ -346,8 +396,7 @@ class Worker(Chare):
 
     def send_chunk_exc(self, e, result_destination, job_id):
         if isinstance(e, NotThreadedError):
-            e = Charm4PyError('Use allow_nested=True to allow launching tasks'
-                              ' from tasks with charm.pool')
+            e = Charm4PyError('Function not decorated with @coro tried to suspend')
         charm.prepareExceptionForSend(e)
         self.scheduler.taskError(self.thisIndex, job_id, e)
         if not isinstance(result_destination, int):
@@ -358,48 +407,50 @@ class Worker(Chare):
         eval(func_name, sys.modules[func_module].__dict__)
 
 
-# This acts as an interface to charm.pool. It is not a chare
-# An instance of this object exists on every process
+# This acts as an interface to charm.pool. It is not a chare.
+# An instance of this exists on every process
 class Pool(object):
 
     def __init__(self, pool_scheduler):
         # proxy to PoolScheduler singleton chare
         self.pool_scheduler = pool_scheduler
+        self.mype = charm.myPe()
 
-    def map_async(self, func, iterable, ncores=-1, multi_future=False, chunksize=1, allow_nested=False):
-        if isinstance(iterable, list):
-            tasks = iterable
-        else:
-            tasks = list(iterable)
+    def Task(self, func, args):
+        if self.mype == 0:
+            # since the PoolScheduler is on PE 0, it will get references to the
+            # same objects that the caller has when creating a Task from PE0.
+            # But PoolScheduler doesn't send the task out immediately, which
+            # means that the args shouldn't be modified after creating a Task
+            # on PE 0. But the internals of this are hidden from the user, so
+            # it is not obvious. The safest thing is to copy them so users
+            # don't have to worry about this special case
+            args = deepcopy(args)
+        # unpack the arguments for sending to allow benefiting from direct copy
+        self.pool_scheduler.startSingleTask(func, *args)
+
+    def map(self, func, iterable, chunksize=1, ncores=-1):
+        result = Future()
+        # TODO shouldn't send task objects to a central place. what if they are large?
+        self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
+        return result.get()
+
+    def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False):
+        if self.mype == 0:
+            # see deepcopy comment above (only need this for async case since
+            # the sync case won't return until all the tasks have finished)
+            iterable = deepcopy(iterable)
         if multi_future:
-            result = [Future() for _ in range(len(tasks))]
+            result = [Future() for _ in range(len(iterable))]
         else:
             result = Future()
-        # TODO shouldn't send task objects to a central place. what if they are large?
-        self.pool_scheduler.start(func, tasks, result, ncores, chunksize, allow_nested)
+        self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result
 
-    def map(self, func, iterable, ncores=-1, chunksize=1, allow_nested=False):
-        return self.map_async(func, iterable, ncores, multi_future=False,
-                              chunksize=chunksize,
-                              allow_nested=allow_nested).get()
-
-    # iterable is sequence of (function, args) tuples
+    # iterable is a sequence of (function, args) tuples
     # NOTE: this API may change in the future
-    def submit_async(self, iterable, ncores=-1, multi_future=False, chunksize=1, allow_nested=False):
-        if isinstance(iterable, list):
-            tasks = iterable
-        else:
-            tasks = list(iterable)
-        if multi_future:
-            result = [Future() for _ in range(len(tasks))]
-        else:
-            result = Future()
-        # TODO shouldn't send task objects to a central place. what if they are large?
-        self.pool_scheduler.start(None, tasks, result, ncores, chunksize, allow_nested)
-        return result
+    def submit(self, iterable, chunksize=1, ncores=-1):
+        return self.map(None, iterable, chunksize, ncores)
 
-    def submit(self, iterable, ncores=-1, multi_future=False, chunksize=1, allow_nested=False):
-        return self.submit_async(iterable, ncores, multi_future=False,
-                                 chunksize=chunksize,
-                                 allow_nested=allow_nested).get()
+    def submit_async(self, iterable, chunksize=1, ncores=-1, multi_future=False):
+        return self.map_async(None, iterable, chunksize, ncores, multi_future)
