@@ -79,10 +79,12 @@ class Future(object):
 
     def resume(self, threadMgr):
         if self.blocked == 2:
+            # someone is waiting for future to become ready, signal by sending myself
             self.blocked = False
             threadMgr.resumeThread(self.gr, self)
         elif self.blocked:
             self.blocked = False
+            # someone is waiting on the future, signal by sending the values
             threadMgr.resumeThread(self.gr, self.values)
 
     def __getstate__(self):
