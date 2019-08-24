@@ -35,7 +35,8 @@ class _Channel(object):
         self.send_seqno = 0
         self.recv_seqno = 0
         self.data = {}
-        self.recv_fut = None
+        self.recv_fut = None  # this future is used to block on self.recv()
+        self.wait_ready = None  # this future is used to block on ready (by charm.iwait())
         self.established = False
         self.established_fut = None
         self.locally_initiated = locally_initiated
@@ -44,6 +45,12 @@ class _Channel(object):
         self.established = True
         del self.established_fut
         del self.locally_initiated
+
+    def ready(self):
+        return self.recv_seqno in self.data
+
+    def waitReady(self, f):
+        self.wait_ready = f
 
     def send(self, *msg):
         if not self.established:
@@ -58,26 +65,7 @@ class _Channel(object):
             ret = self.data.pop(self.recv_seqno)
         else:
             self.recv_fut = LocalFuture()
-            ch, ret = self.recv_fut.get()
+            ret = self.recv_fut.get()
             self.recv_fut = None
         self.recv_seqno = (self.recv_seqno + 1) % CHAN_BUF_SIZE
         return ret
-
-
-# generator that yields channels as they become ready (have a msg ready to
-# receive immediately)
-def waitgen(channels):
-    n = len(channels)
-    f = LocalFuture()
-    for ch in channels:
-        if ch.recv_seqno in ch.data:
-            n -= 1
-            yield ch
-        else:
-            ch.recv_fut = f
-    while n > 0:
-        ch, msg = threadMgr.pauseThread()
-        ch.data[ch.recv_seqno] = msg
-        ch.recv_fut = None
-        n -= 1
-        yield ch

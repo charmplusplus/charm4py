@@ -24,7 +24,7 @@ from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
 from . import entry_method
 from . import threads
-from .threads import Future
+from .threads import Future, LocalFuture
 from . import reduction
 from . import wait
 import array
@@ -632,8 +632,6 @@ class Charm(object):
         for module in (chare, entry_method, wait):
             module.charmStarting()
         self.threadMgr.start()
-        from .channel import waitgen
-        self.iwait = waitgen
 
         self.lb_requested = '+balancer' in sys.argv
         self.lib.start()
@@ -799,6 +797,22 @@ class Charm(object):
         cb(*args)
         if self.options.profiling:
             self.triggerCallableEM.stopMeasuringTime()
+
+    # generator that yields objects (works for Futures and Channels) as they
+    # become ready (have a msg ready to receive immediately)
+    def iwait(self, objs):
+        n = len(objs)
+        f = LocalFuture()
+        for obj in objs:
+            if obj.ready():
+                n -= 1
+                yield obj
+            else:
+                obj.waitReady(f)
+        while n > 0:
+            obj = self.threadMgr.pauseThread()
+            n -= 1
+            yield obj
 
     def recordSend(self, size):
         self.recordSendRecv(self.msg_send_stats, size)
