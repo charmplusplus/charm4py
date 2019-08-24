@@ -526,8 +526,10 @@ class Charm(object):
         if self.interactive:
             if sys.version_info < (3, 0, 0):
                 entry_method.coro(PoolScheduler.start.im_func)
+                entry_method.coro(PoolScheduler.startSingleTask.im_func)
             else:
                 entry_method.coro(PoolScheduler.start)
+                entry_method.coro(PoolScheduler.startSingleTask)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 

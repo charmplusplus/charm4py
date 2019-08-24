@@ -36,21 +36,20 @@ def main(args):
             for func in (myfunc, None):
                 for multi_future in (False, True):
                     for chunk_size in (1, 4):
-                        for nested in (False, True):
-                            try:
-                                if func is None:
-                                    tasks = [(myfunc, i) for i in range(num_tasks)]
-                                    result = charm.pool.submit_async(tasks, multi_future=multi_future, chunksize=chunk_size, allow_nested=nested)
-                                else:
-                                    tasks = range(num_tasks)
-                                    result = charm.pool.map_async(func, tasks, multi_future=multi_future, chunksize=chunk_size, allow_nested=nested)
-                                if multi_future:
-                                    result = [f.get() for f in result]
-                                else:
-                                    result = result.get()
-                                assert trial == 1 and result == [x**2 for x in range(num_tasks)]
-                            except MyException:
-                                assert trial == 0
+                        try:
+                            if func is None:
+                                tasks = [(myfunc, i) for i in range(num_tasks)]
+                                result = charm.pool.submit_async(tasks, multi_future=multi_future, chunksize=chunk_size)
+                            else:
+                                tasks = range(num_tasks)
+                                result = charm.pool.map_async(func, tasks, multi_future=multi_future, chunksize=chunk_size)
+                            if multi_future:
+                                result = [f.get() for f in result]
+                            else:
+                                result = result.get()
+                            assert trial == 1 and result == [x**2 for x in range(num_tasks)]
+                        except MyException:
+                            assert trial == 0
     exit()
 
 
