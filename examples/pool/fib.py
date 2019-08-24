@@ -5,11 +5,12 @@ from charm4py import charm, coro
 # parallelism (creating tasks from tasks). However, it is not efficient,
 # because the computation performed by each task (grainsize) is too small.
 
-
 @coro
 def fib(n):
     if n < 2:
         return n
+    # this will block here for the result of fib(n-1) and fib(n-2),
+    # which is why we mark fib as a coroutine
     return sum(charm.pool.map(fib, [n-1, n-2]))
 
 
