@@ -726,10 +726,10 @@ class CharmLib(object):
     self.CkMyPe = lib.CkMyPeHook
     self.CkNumPes = lib.CkNumPesHook
     self.CkExit = lib.realCkExit
-    self.CkPrintf = lib.CmiPuts
+    self.CkPrintf = lib.CmiPrintf
 
   def CkAbort(self, msg):
-    lib.CmiAbortHook(msg.encode())
+    lib.CmiAbort(b"%s", ffi.new("char[]", msg.encode()))
 
   def LBTurnInstrumentOn(self):
     lib.LBTurnInstrumentOn()

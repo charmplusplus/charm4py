@@ -8,8 +8,8 @@ cdef extern from "charm.h":
     int CkNumPesHook();
     double CkWallTimerHook();
     void realCkExit(int exitcode);
-    void CmiAbortHook(const char *);
-    void CmiPuts(const char *);
+    void CmiAbort(const char *, ...);
+    void CmiPrintf(const char *, ...);
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
 
