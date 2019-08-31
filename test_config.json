@@ -223,66 +223,64 @@
     },
     {
         "force_min_processes": 4,
-        "path": "examples/hello/group_hello.py"
+        "path": "examples/dist-task-scheduler/scheduler.py"
+    },
+    {
+        "condition": "numbaInstalled",
+        "force_min_processes": 4,
+        "path": "examples/fibonacci/fib-numba.py"
     },
     {
         "force_min_processes": 4,
-        "path": "examples/hello/group_hello2.py"
+        "path": "examples/fibonacci/fib.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "examples/hello/group_hello.py"
     },
     {
         "force_min_processes": 4,
         "path": "examples/hello/array_hello.py"
     },
     {
-        "force_min_processes": 4,
-        "path": "examples/hello/dynamic_array.py"
-    },
-    {
-        "force_min_processes": 4,
-        "path": "examples/hello/cons_args_hello.py"
+        "path": "examples/jacobi/jacobi2d.py",
+        "args": "128 32"
     },
     {
         "force_min_processes": 4,
         "path": "examples/multi-module/main.py"
     },
     {
-        "path": "examples/particle/particle.py",
-        "args": "6 3 2500 +balancer GreedyRefineLB"
-    },
-    {
-        "condition": "not numbaInstalled",
-        "path": "examples/stencil3d/stencil3d.py",
-        "args": "8 4 +balancer GreedyRefineLB +LBDebug 1"
+        "force_min_processes": 4,
+        "path": "examples/nqueen/nqueen.py"
     },
     {
         "condition": "numbaInstalled",
-        "path": "examples/stencil3d/stencil3d_numba.py",
-        "args": "64 32 +balancer GreedyRefineLB +LBDebug 1"
+        "force_min_processes": 4,
+        "path": "examples/nqueen/nqueen-numba.py"
+    },
+    {
+        "path": "examples/parallel-map/square.py"
+    },
+    {
+        "path": "examples/particle/particle.py",
+        "args": "8 4 2500 +balancer GreedyRefineLB"
+    },
+    {
+        "path": "examples/simple/start.py"
+    },
+    {
+        "path": "examples/simple/chares.py"
+    },
+    {
+        "path": "examples/simple/reduction.py"
+    },
+    {
+        "path": "examples/simple/hello_world.py"
     },
     {
         "condition": "numbaInstalled",
         "path": "examples/wave2d/wave2d.py",
-        "args": "1500"
-    },
-    {
-        "path": "examples/pool/pool1.py"
-    },
-    {
-        "path": "examples/pool/fib.py"
-    },
-    {
-        "path": "examples/tutorial/start.py"
-    },
-    {
-        "path": "examples/tutorial/chares.py"
-    },
-    {
-        "path": "examples/tutorial/reduction.py"
-    },
-    {
-        "path": "examples/tutorial/hello_world.py"
-    },
-    {
-        "path": "examples/tutorial/hello_world2.py"
+        "args": "300 -1 --NO-RENDER"
     }
 ]

@@ -6,14 +6,24 @@ import goodbye
 class Main(Chare):
 
     def __init__(self, args):
-        hellos = Group(hello.Hello)
-        byes = Group(goodbye.Goodbye)
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy, 'byes': byes}, 'hello', ret=True).get()
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, 'goodbye', ret=True).get()
-        hellos.SayHi()
+        # create Group of chares of type hello.Hello
+        hello_chares = Group(hello.Hello)
+        # create Group of chares of type goodbye.Goodbye
+        bye_chares = Group(goodbye.Goodbye)
+        # add bye_chares proxy to globals of module hello on every process
+        charm.thisProxy.updateGlobals({'bye_chares': bye_chares},
+                                      module_name='hello', ret=True).get()
+        # add mainchare proxy to globals of module goodbye on every process
+        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy},
+                                      module_name='goodbye', ret=True).get()
+        # broadcast a message to the hello chares
+        hello_chares.SayHi()
 
     def done(self):
         exit()
 
 
+# Start a main chare of type Main. We specify to the charm runtime which
+# modules contain Chare definitions. Note that the __main__ module is always
+# searched for chare definitions, so we don't have to specify it
 charm.start(Main, modules=['hello', 'goodbye'])
