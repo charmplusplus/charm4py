@@ -201,7 +201,7 @@ def main(args):
 
     if numbaFound:
         # wait until Numba functions are compiled on every PE, so we can get consistent benchmark results
-        charm.thisProxy.exec('numba_precompile()', ret=True).get()
+        charm.thisProxy.rexec('numba_precompile()', ret=True).get()
         print('Numba compilation complete')
     else:
         print('!!WARNING!! Numba not found. Will run without Numba but it will be very slow')

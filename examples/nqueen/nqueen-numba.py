@@ -68,7 +68,7 @@ def main(args):
 
     # compile numba functions on every PE before starting, to get
     # consistent benchmark results
-    charm.thisProxy.exec('numbaPrecompile()', ret=1).get()
+    charm.thisProxy.rexec('numbaPrecompile()', ret=1).get()
 
     startTime = time()
     # initialize empty solution, solution holds the column number where a queen is placed, for each row

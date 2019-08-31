@@ -12,18 +12,20 @@ Requirements
 ------------
 
 - tkinter (Python interface to Tk GUI toolkit)
-  Windows: This package should come preinstalled with Python
-  Linux: There should be a python3-tk or similar package for your Linux distribution
+
+  - Windows: This package should come preinstalled with Python
+
+  - Linux: There should be a python3-tk or similar package for your Linux distribution
 
 - Python Image Library (PIL)
-  Make sure it is a recent version. Can install with `pip install pillow`
+  *Make sure it is a recent version*. Can install with ``pip install pillow``
 
 - Numba (see https://numba.pydata.org/ for installation instructions)
 
 If tkinter or PIL is not found, the simulation will run but it won't show
 an animation.
 
-You can run without Numba, removing @numba.jit from the code, but the simulation
+You can run without Numba, removing ``@numba.jit`` from the code, but the simulation
 **will run VERY slowly**.
 
 

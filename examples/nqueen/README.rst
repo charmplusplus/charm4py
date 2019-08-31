@@ -2,16 +2,16 @@
 This program solves the N-Queen problem in parallel.
 See https://en.wikipedia.org/wiki/Eight_queens_puzzle for more information.
 Basically, it does a recursive parallel state space search of the whole tree
-of board states, noting the number of solutions found.
+of board states, recording the number of solutions found.
 
 The focus of this example is on simplicity rather than raw speed
 of *the sequential computation*. The scaling performance, however,
-should be good given a suitable grainsize
+should be good given a suitable grainsize.
 
-Note that the GRAINSIZE parameter is critical for performance. The parameter
+Note that the GRAINSIZE parameter is *critical for performance*. The parameter
 means that when there are GRAINSIZE rows left to explore in a branch of the
 tree, the remainder of the subtree will be explored on that process using a
-sequential algorithm.
+sequential algorithm:
 
 - If GRAINSIZE is too low, *many* tasks will be spawned and you will pay the
   cost of creating them, scheduling and communication.

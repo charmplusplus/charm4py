@@ -8,11 +8,11 @@ the boundary of their cell are sent to the corresponding neighboring cell.
 To illustrate **the load balancing capabilities of Charm4py**, we try to induce
 load imbalance at the beginning of the simulation by concentrating all the
 particles near the center of the grid (chares with more particles do more
-work). Note that even with these conditions, whether there is actual load
+work). Note that even with these conditions, whether there is load
 imbalance and whether anything can be done about it depends on several other
 factors (see below for a discussion).
 
-An scenario which should show significant load imbalance and where Charm dynamic
+An scenario which should show significant load imbalance and where dynamic
 load balancing improves performance is this:
 
 Cell array of size 8 x 4, running on 4 PEs:
@@ -44,7 +44,7 @@ the overloaded chares happen to be.
 
 For example, if we have only one chare per PE, even if there is imbalance we
 can gain nothing by migrating chares. Therefore we need multiple chares per PE,
-also known as overdecomposition.
+also known as *overdecomposition*.
 
 Even with overdecomposition, say we launch the simulation with 4 processes,
 and we have 8 chares per PE. Now assume initially we have only 4 "heavy" chares,

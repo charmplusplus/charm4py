@@ -49,7 +49,7 @@ def main(args):
     charm.thisProxy.updateGlobals({'GRAINSIZE': GRAINSIZE}, ret=1).get()
     # precompile fib_seq on every process before the actual computation starts,
     # by calling the function. this helps get consistent benchmark results
-    charm.thisProxy.exec('fib_seq(3)', ret=1).get()
+    charm.thisProxy.rexec('fib_seq(3)', ret=1).get()
     print('Calculating fibonacci of N=' + str(n) + ', grainsize=', GRAINSIZE)
     t0 = time.time()
     result = fib(n)
