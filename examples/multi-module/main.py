@@ -11,11 +11,12 @@ class Main(Chare):
         # create Group of chares of type goodbye.Goodbye
         bye_chares = Group(goodbye.Goodbye)
         # add bye_chares proxy to globals of module hello on every process
-        charm.thisProxy.updateGlobals({'bye_chares': bye_chares},
-                                      module_name='hello', ret=True).get()
+        future1 = charm.thisProxy.updateGlobals({'bye_chares': bye_chares},
+                                                module_name='hello', ret=True)
         # add mainchare proxy to globals of module goodbye on every process
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy},
-                                      module_name='goodbye', ret=True).get()
+        future2 = charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy},
+                                                module_name='goodbye', ret=True)
+        charm.await(future1, future2)
         # broadcast a message to the hello chares
         hello_chares.SayHi()
 

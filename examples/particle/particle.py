@@ -116,9 +116,9 @@ class Cell(Chare):
             for i, channel in enumerate(self.neighbors):
                 channel.send(outgoingParticles[self.neighbor_indexes[i]])
 
-            # receive incoming particles from neighboring cells. iwait iteratively
+            # receive incoming particles from neighboring cells. iawait iteratively
             # yields channels as they become ready (have data to receive)
-            for channel in charm.iwait(self.neighbors):
+            for channel in charm.iawait(self.neighbors):
                 incoming = channel.recv()
                 self.particles += [Particle(float(incoming[i]),
                                             float(incoming[i+1])) for i in range(0, len(incoming), 2)]

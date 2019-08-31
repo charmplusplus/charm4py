@@ -83,9 +83,9 @@ class Jacobi(Chare):
             if not self.bottomBound:
                 self.bottom_nb.send(TOP, self.temperature[1:blockDimX+1, blockDimY])
 
-            # receive ghost data from neighbors. iwait iteratively yields
+            # receive ghost data from neighbors. iawait iteratively yields
             # channels as they become ready (have data to receive)
-            for nb in charm.iwait(self.nbs):
+            for nb in charm.iawait(self.nbs):
                 direction, ghosts = nb.recv()
                 if direction == LEFT:
                     self.temperature[0, 1:len(ghosts)+1] = ghosts
