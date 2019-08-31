@@ -2,7 +2,7 @@ from charm4py import charm
 
 
 def square(x):
-    return x ** 2
+    return x**2
 
 
 def main(args):

@@ -1,24 +1,29 @@
 from charm4py import charm, Chare, Group
 
+# This example creates a Group of Hello chares (a Group means that one instance
+# will be created on each PE). A message is sent to the chare on the first PE,
+# and then each chare forwards a modified message to the next chare.
+
 
 class Hello(Chare):
 
-    def __init__(self):
-        print('Hello', self.thisIndex, 'created')
-
-    def SayHi(self, hiNo):
-        print('Hi[' + str(hiNo) + '] from element', self.thisIndex)
-        if self.thisIndex + 1 < charm.numPes():
-            # Pass the hello on:
-            self.thisProxy[self.thisIndex + 1].SayHi(hiNo + 1)
-        else:
+    def sayHi(self, hello_num):
+        print('Hi[' + str(hello_num) + '] from element', self.thisIndex)
+        if self.thisIndex == charm.numPes() - 1:
+            # we reached the last element
             print('All done')
             exit()
+        else:
+            # pass the hello message to the next element
+            self.thisProxy[self.thisIndex + 1].sayHi(hello_num + 1)
 
 
 def main(args):
-    print('Running Hello on', charm.numPes(), 'processors')
-    Group(Hello)[0].SayHi(17)
+    print('\nRunning Hello on', charm.numPes(), 'processors')
+    # create a Group of Hello chares (there will be one chare per PE)
+    group_proxy = Group(Hello)
+    # send hello message to the first element
+    group_proxy[0].sayHi(17)
 
 
 charm.start(main)

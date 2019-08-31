@@ -1,9 +1,12 @@
 from charm4py import charm, Chare
-import time
 
 
 class Goodbye(Chare):
 
     def SayGoodbye(self):
-        print('Goodbye from PE', charm.myPe())
+        if charm.myPe() < 10:
+            print('Goodbye from PE', charm.myPe())
+        # goodbye chares do an empty reduction. after the reduction completes,
+        # the 'done' method of the mainchare will be called.
+        # mainProxy is a global of this module, set previously from the mainchare
         self.reduce(mainProxy.done)

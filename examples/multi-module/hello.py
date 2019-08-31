@@ -5,5 +5,8 @@ import time
 class Hello(Chare):
 
     def SayHi(self):
-        print('Hello from PE', charm.myPe(), 'on', time.strftime('%c'))
-        byes[(self.thisIndex + 1) % charm.numPes()].SayGoodbye()
+        if charm.myPe() < 10:
+            print('Hello from PE', charm.myPe(), 'on', time.strftime('%c'))
+        # call SayGoodbye method of the goodbye chare on my PE, bye_chares is
+        # a global variable of this module, set previously from the mainchare
+        bye_chares[charm.myPe()].SayGoodbye()
