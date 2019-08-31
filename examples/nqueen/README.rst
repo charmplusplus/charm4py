@@ -1,4 +1,6 @@
 
+**N-Queen parallel solver**
+
 This program solves the N-Queen problem in parallel.
 See https://en.wikipedia.org/wiki/Eight_queens_puzzle for more information.
 Basically, it does a recursive parallel state space search of the whole tree

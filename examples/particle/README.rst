@@ -1,4 +1,6 @@
 
+**2D particle simulation with dynamic load balancing**
+
 This is a simple simulation of particles moving randomly in a 2D space. The
 space is given by a box, and particles moving out of the box appear on the
 other side of it. The box is decomposed into a 2D grid of cells. Each cell is a

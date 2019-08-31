@@ -23,7 +23,7 @@ Requirements
 - Numba (see https://numba.pydata.org/ for installation instructions)
 
 If tkinter or PIL is not found, the simulation will run but it won't show
-an animation.
+any animation.
 
 You can run without Numba, removing ``@numba.jit`` from the code, but the simulation
 **will run VERY slowly**.
