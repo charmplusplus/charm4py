@@ -37,4 +37,4 @@ wave2d.py [num_iterations] [max_framerate]
     num_iterations: number of iterations to run the simulation (default: 3000)
 
     max_framerate: maximum framerate (in frames per second) (default: 60)
-                   Set to -1 for unlimited (up to the speed allowed by your hardware)
+    Set to -1 for unlimited (up to the speed allowed by your hardware)

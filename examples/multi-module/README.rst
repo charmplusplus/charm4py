@@ -3,9 +3,9 @@
 This example shows how to run a Charm4py program that has chare classes defined
 in different modules.
 
-Start ``main.py`` to run this program. For example:
+Start ``main.py`` to run this program. For example::
 
-$ python3 -m charmrun.start +p4 main.py
+    $ python3 -m charmrun.start +p4 main.py
 
 In this example, there are chare types defined in ``main.py``, ``hello.py`` and
 ``goodbye.py``. The modules which contain chare definitions are specified when
