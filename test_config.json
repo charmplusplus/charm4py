@@ -170,7 +170,7 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/futures/iwait.py"
+        "path": "tests/futures/iawait.py"
     },
     {
         "force_min_processes": 4,
@@ -190,7 +190,7 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/channels/iwait.py"
+        "path": "tests/channels/iawait.py"
     },
     {
         "force_min_processes": 2,
