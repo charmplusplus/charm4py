@@ -1,5 +1,5 @@
 
-This example implements a simple distributed job scheduler.
+This example implements a simple **distributed job scheduler**.
 
 Jobs consist of one or more tasks. The type of job supported in this
 example is "parallel map", that applies a function to the elements of an

@@ -1,5 +1,5 @@
 
-Jacobi iteration with a 2D array.
+**Jacobi iteration with a 2D array**
 
 This code uses a 2D blocked decomposition of a 2D array with more than one
 data element per chare. The code runs for a specified number of iterations,
