@@ -191,14 +191,12 @@ class ReductionManager(object):
 
     # return Charm internal reducer type code and data ready to be sent to Charm
     def prepare(self, data, reducer, contributor):
-
-        # nop reduction short circuit
         if (reducer is None) or (reducer == self.reducers.nop):
             return (self.reducers.nop, None, None)
 
-        pyReducer = None
         if type(reducer) == tuple:
             op, py_red_func = reducer
+            pyReducer = None
             dt = type(data)
             if isinstance(data, np.ndarray) or isinstance(data, np.number):
                 if not data.dtype.hasobject:
@@ -210,22 +208,21 @@ class ReductionManager(object):
                 c_type = self.array_type_map[data.typecode]
                 charm_reducer_type = self.red_table[op][c_type]
             else:
-                check_elems = data
-                if not hasattr(data, '__len__'):
-                    check_elems = [data]
-
-                PYTHON_BASIC_TYPES = self.python_type_map.keys()
-                t0 = type(check_elems[0])
-                for elem in check_elems:
-                    t = type(elem)
-                    if (t != t0) or (t not in PYTHON_BASIC_TYPES):
-                        pyReducer = py_red_func
-                        break
-                if pyReducer is None:
-                    c_type = self.python_type_map[t0]
+                try:
+                    c_type = self.python_type_map[dt]
                     charm_reducer_type = self.red_table[op][c_type]
-                    if not hasattr(data, '__len__'):
-                        data = [data]
+                    data = [data]
+                except:
+                    try:
+                        t0 = type(data[0])
+                        c_type = self.python_type_map[t0]
+                        charm_reducer_type = self.red_table[op][c_type]
+                        for elem in data:
+                            if type(elem) != t0:
+                                pyReducer = py_red_func
+                                break
+                    except:
+                        pyReducer = py_red_func
         else:
             pyReducer = reducer
 
