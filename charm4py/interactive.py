@@ -65,7 +65,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         sys.stdout.flush()
         if sched:
             # go through charm scheduler to keep things moving
-            self.thisProxy.null(ret=1).get()
+            self.thisProxy.null(awaitable=True).get()
 
     @coro
     def start(self):
@@ -104,7 +104,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         more = self.runsource(source, self.filename)
         if not more:
             self.resetbuffer()
-            self.thisProxy.null(ret=1).get()
+            self.thisProxy.null(awaitable=True).get()
         return more
 
     def runcode(self, code):
@@ -114,7 +114,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 if m is not None:
                     newChareTypeName = m.group(1)
                     source = '\n'.join(self.buffer)
-                    charm.thisProxy.registerNewChareType(newChareTypeName, source, ret=1).get()
+                    charm.thisProxy.registerNewChareType(newChareTypeName, source, awaitable=True).get()
                     if self.options.verbose > 0:
                         self.write('Charm4py> Broadcasted Chare definition\n')
                     return
@@ -135,7 +135,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 if module_name not in sys.modules:  # error importing the module
                     return
                 if self.options.broadcast_imports:
-                    charm.thisProxy.rexec('\n'.join(self.buffer), ret=1).get()
+                    charm.thisProxy.rexec('\n'.join(self.buffer), awaitable=True).get()
                     if self.options.verbose > 0:
                         self.write('Charm4py> Broadcasted import statement\n')
 
@@ -158,7 +158,7 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                                                     ' Mainchare. Refer to new API')
                 if len(chare_types) > 0:
                     if self.options.broadcast_imports:
-                        charm.thisProxy.registerNewChareTypes(chare_types, ret=1).get()
+                        charm.thisProxy.registerNewChareTypes(chare_types, awaitable=True).get()
                         if self.options.verbose > 0:
                             self.write('Broadcasted the following chare definitions: ' + str([str(C) for C in chare_types]) + '\n')
                     else:

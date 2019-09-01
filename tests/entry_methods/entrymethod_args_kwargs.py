@@ -36,42 +36,42 @@ class Main(Chare):
         g = Group(Test)
         a = Array(Test, charm.numPes() * 4)
 
-        self.thisProxy.startPhase(1, 2, 33, 44, ret=True).get()
-        g.startPhase(1, 2, 33, 44, ret=True).get()
-        a.startPhase(1, 2, 33, 44, ret=True).get()
+        self.thisProxy.startPhase(1, 2, 33, 44, awaitable=True).get()
+        g.startPhase(1, 2, 33, 44, awaitable=True).get()
+        a.startPhase(1, 2, 33, 44, awaitable=True).get()
         for collection in (g, a, self.thisProxy):
-            collection.recv(1, 2, ret=True).get()
-            collection.recv(1, 2, 33, ret=True).get()
-            collection.recv(1, 2, 33, 44, ret=True).get()
-            collection.recv(y=2, x=1, ret=True).get()
-            collection.recv(b=44, a=33, y=2, x=1, ret=True).get()
+            collection.recv(1, 2, awaitable=True).get()
+            collection.recv(1, 2, 33, awaitable=True).get()
+            collection.recv(1, 2, 33, 44, awaitable=True).get()
+            collection.recv(y=2, x=1, awaitable=True).get()
+            collection.recv(b=44, a=33, y=2, x=1, awaitable=True).get()
             if collection == g:
                 single_chare = 1
             elif collection == a:
                 single_chare = 4
             else:
                 continue
-            collection[single_chare].recv(1, 2, ret=True).get()
-            collection[single_chare].recv(1, 2, 33, ret=True).get()
-            collection[single_chare].recv(1, 2, 33, 44, ret=True).get()
-            collection[single_chare].recv(y=2, x=1, ret=True).get()
-            collection[single_chare].recv(b=44, a=33, y=2, x=1, ret=True).get()
+            collection[single_chare].recv(1, 2, awaitable=True).get()
+            collection[single_chare].recv(1, 2, 33, awaitable=True).get()
+            collection[single_chare].recv(1, 2, 33, 44, awaitable=True).get()
+            collection[single_chare].recv(y=2, x=1, awaitable=True).get()
+            collection[single_chare].recv(b=44, a=33, y=2, x=1, awaitable=True).get()
 
-        self.thisProxy.startPhase(10, 20, 3000, 4000, ret=True).get()
-        g.startPhase(10, 20, 3000, 4000, ret=True).get()
-        a.startPhase(10, 20, 3000, 4000, ret=True).get()
+        self.thisProxy.startPhase(10, 20, 3000, 4000, awaitable=True).get()
+        g.startPhase(10, 20, 3000, 4000, awaitable=True).get()
+        a.startPhase(10, 20, 3000, 4000, awaitable=True).get()
         for collection in (g, a, self.thisProxy):
-            collection.recv(10, 20, 3000, 4000, ret=True).get()
-            collection.recv(10, 20, 3000, b=4000, ret=True).get()
-            collection.recv(b=4000, a=3000, y=20, x=10, ret=True).get()
+            collection.recv(10, 20, 3000, 4000, awaitable=True).get()
+            collection.recv(10, 20, 3000, b=4000, awaitable=True).get()
+            collection.recv(b=4000, a=3000, y=20, x=10, awaitable=True).get()
             if collection == g:
                 single_chare = 1
             elif collection == a:
                 single_chare = 4
             else:
                 continue
-            collection[single_chare].recv(10, 20, 3000, b=4000, ret=True).get()
-            collection[single_chare].recv(b=4000, a=3000, y=20, x=10, ret=True).get()
+            collection[single_chare].recv(10, 20, 3000, b=4000, awaitable=True).get()
+            collection[single_chare].recv(b=4000, a=3000, y=20, x=10, awaitable=True).get()
 
         exit()
 

@@ -335,7 +335,7 @@ def mainchare_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, 
         header = {}
         blockFuture = None
         cid = proxy.cid  # chare ID
-        if 'ret' in kwargs and kwargs['ret']:
+        if ('ret' in kwargs and kwargs['ret']) or ('awaitable' in kwargs and kwargs['awaitable']):
             header[b'block'] = blockFuture = charm.Future()
         destObj = None
         if Options.local_msg_optim and (cid in charm.chares) and (len(args) > 0):
@@ -471,14 +471,14 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs:
-            retmode = kwargs['ret']
-            if retmode > 0:
-                header[b'block'] = blockFuture = charm.Future()
-                if elemIdx == -1:
-                    header[b'bcast'] = True
-                    if retmode > 1:
-                        header[b'bcastret'] = True
+        if 'ret' in kwargs and kwargs['ret']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == -1:
+                header[b'bcast'] = header[b'bcastret'] = True
+        elif 'awaitable' in kwargs and kwargs['awaitable']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == -1:
+                header[b'bcast'] = True
         if not proxy.issec or elemIdx != -1:
             destObj = None
             gid = proxy.gid
@@ -513,14 +513,14 @@ def update_globals_proxy_method_gen(ep):
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs:
-            retmode = kwargs['ret']
-            if retmode > 0:
-                header[b'block'] = blockFuture = charm.Future()
-                if elemIdx == -1:
-                    header[b'bcast'] = True
-                    if retmode > 1:
-                        header[b'bcastret'] = True
+        if 'ret' in kwargs and kwargs['ret']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == -1:
+                header[b'bcast'] = header[b'bcastret'] = True
+        elif 'awaitable' in kwargs and kwargs['awaitable']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == -1:
+                header[b'bcast'] = True
         if not proxy.issec or elemIdx != -1:
             destObj = None
             gid = proxy.gid
@@ -731,14 +731,14 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ret' in kwargs:
-            retmode = kwargs['ret']
-            if retmode > 0:
-                header[b'block'] = blockFuture = charm.Future()
-                if elemIdx == ():
-                    header[b'bcast'] = True
-                    if retmode > 1:
-                        header[b'bcastret'] = True
+        if 'ret' in kwargs and kwargs['ret']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == ():
+                header[b'bcast'] = header[b'bcastret'] = True
+        elif 'awaitable' in kwargs and kwargs['awaitable']:
+            header[b'block'] = blockFuture = charm.Future()
+            if elemIdx == ():
+                header[b'bcast'] = True
         if not proxy.issec or elemIdx != ():
             destObj = None
             aid = proxy.aid

@@ -92,7 +92,7 @@ class Collection(object):
                     if (cid, idx) not in insections:
                         insections[(cid, idx)] = []
                     insections[(cid, idx)].append(i)
-        charm.thisProxy.updateGlobals({'insections': insections}, ret=1).get()
+        charm.thisProxy.updateGlobals({'insections': insections}, awaitable=True).get()
         assert len(sections) == N
         for section in sections:
             assert len(section) > 0
@@ -180,11 +180,11 @@ def main(args):
         if c.proxy.issec:
             # this is a section proxy
             sid = c.proxy.section[1]
-            c.proxy.recvSecProxy(sid, c.proxy, ret=1).get()
+            c.proxy.recvSecProxy(sid, c.proxy, awaitable=True).get()
 
     for _ in range(NUM_ITER):
         futures = [Future() for _ in range(len(collections))]
-        charm.thisProxy.updateGlobals({'DATA_VERIFY' : random.randint(0,100000)}, ret=1).get()
+        charm.thisProxy.updateGlobals({'DATA_VERIFY' : random.randint(0,100000)}, awaitable=True).get()
         data = DATA_VERIFY
         for i, c in enumerate(collections):
             sid = None

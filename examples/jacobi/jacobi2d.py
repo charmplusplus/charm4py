@@ -174,7 +174,7 @@ def main(args):
                                    'blockDimY': blockDimY,
                                    'num_chare_x': num_chare_x,
                                    'num_chare_y': num_chare_y},
-                                   ret=True).get()
+                                   awaitable=True).get()
 
     print('\nRunning Jacobi on', charm.numPes(), 'processors with', num_chare_x, 'x', num_chare_y, 'chares')
     print('Array Dimensions:', arrayDimX, 'x', arrayDimY)
@@ -184,7 +184,7 @@ def main(args):
 
     if numbaFound:
         # wait until Numba functions are compiled on every PE, so we can get consistent benchmark results
-        charm.thisProxy.rexec('numba_precompile()', ret=True).get()
+        charm.thisProxy.rexec('numba_precompile()', awaitable=True).get()
         print('Numba compilation complete')
     else:
         print('!!WARNING!! Numba not found. Will run without Numba but it will be very slow')

@@ -31,7 +31,7 @@ class Main(Chare):
         arrProxy = Array(Test, ARRAY_SIZE)
         groupProxy = Group(TestGroup)
         charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy, 'arrProxy': arrProxy,
-                                       'groupProxy': groupProxy}, '__main__', ret=True).get()
+                                       'groupProxy': groupProxy}, '__main__', awaitable=True).get()
         arrProxy.doReduction()
 
     def done_int(self, reduction_result):

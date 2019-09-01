@@ -37,40 +37,34 @@ def main(args):
         indexes = list(range(num_elems))
         random_idxs = random.sample(indexes, int(max(len(indexes) * 0.8, 1)))
         for random_idx in random_idxs:
-            retval = collection[random_idx].getVal(False, ret=0)
+            retval = collection[random_idx].getVal(False, awaitable=False, ret=False)
             assert retval is None
 
-            retval = collection[random_idx].getVal(False, ret=1).get()
+            retval = collection[random_idx].getVal(False, ret=True).get()
             assert retval == vals[random_idx]
 
-            retval = collection[random_idx].getVal(False, ret=2).get()
-            assert retval == vals[random_idx]
-
-            retval = collection[random_idx].getVal_th(False, ret=0)
+            retval = collection[random_idx].getVal_th(False, awaitable=False, ret=False)
             assert retval is None
 
-            retval = collection[random_idx].getVal_th(False, ret=1).get()
+            retval = collection[random_idx].getVal_th(False, ret=True).get()
             assert retval == vals[random_idx]
 
-            retval = collection[random_idx].getVal_th(False, ret=2).get()
-            assert retval == vals[random_idx]
-
-        retval = collection.getVal(True, ret=0)
+        retval = collection.getVal(True, ret=False)
         assert retval is None
 
-        retval = collection.getVal(True, ret=1).get()
+        retval = collection.getVal(True, awaitable=True).get()
         assert retval is None
 
-        retval = collection.getVal(True, ret=2).get()
+        retval = collection.getVal(True, ret=True).get()
         assert retval == [vals[i] for i in range(num_elems)]
 
-        retval = collection.getVal_th(True, ret=0)
+        retval = collection.getVal_th(True, awaitable=False)
         assert retval is None
 
-        retval = collection.getVal_th(True, ret=1).get()
+        retval = collection.getVal_th(True, awaitable=True).get()
         assert retval is None
 
-        retval = collection.getVal_th(True, ret=2).get()
+        retval = collection.getVal_th(True, ret=True).get()
         assert retval == [vals[i] for i in range(num_elems)]
 
     done1.get()

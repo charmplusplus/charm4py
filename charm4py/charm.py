@@ -162,7 +162,7 @@ class Charm(object):
                 traceback.print_tb(stacktrace, limit=None)
             self.abort(errorType.__name__ + ': ' + str(error))
         else:
-            self.thisProxy[self.myPe()].propagateException(self.prepareExceptionForSend(error), ret=0)
+            self.thisProxy[self.myPe()].propagateException(self.prepareExceptionForSend(error))
 
     def prepareExceptionForSend(self, e):
         if not hasattr(e, 'remote_stacktrace'):

@@ -13,7 +13,7 @@ class Controller(Chare):
         pe = charm.myPe() - 1
         if pe == -1:
             pe = 0
-        charm.thisProxy[pe].exec('global MY_GLOBAL; MY_GLOBAL = 7262', __name__, ret=True).get()
+        charm.thisProxy[pe].exec('global MY_GLOBAL; MY_GLOBAL = 7262', __name__, awaitable=True).get()
         assert charm.thisProxy[pe].eval('MY_GLOBAL', __name__, ret=True).get() == 7262
 
         Group(Test)

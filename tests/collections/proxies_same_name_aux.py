@@ -15,4 +15,4 @@ class Test(Chare):
 
     @coro
     def test(self, proxy, method_name):
-        assert getattr(proxy[3], method_name)(ret=1).get() == 68425
+        assert getattr(proxy[3], method_name)(ret=True).get() == 68425

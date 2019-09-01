@@ -172,7 +172,7 @@ def main(args):
     cells = Array(Cell, array_dims,
                   args=[array_dims, max_particles_per_cell_start, sim_done],
                   useAtSync=True)
-    num_particles_per_cell = cells.getNumParticles(ret=2).get()
+    num_particles_per_cell = cells.getNumParticles(ret=True).get()
     print('Total particles created:', sum(num_particles_per_cell))
     print('Initial conditions:\n\tmin particles per cell:', min(num_particles_per_cell),
           '\n\tmax particles per cell:', max(num_particles_per_cell))
