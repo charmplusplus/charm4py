@@ -150,9 +150,9 @@ class Wave(Chare):
             bottom.send(UP, bottom_edge)
             top.send(DOWN, top_edge)
 
-            # receive ghost values from neighbors. iwait iteratively yields
+            # receive ghost values from neighbors. iawait iteratively yields
             # channels as they become ready (have data to receive)
-            for channel in charm.iwait((left, right, bottom, top)):
+            for channel in charm.iawait((left, right, bottom, top)):
                 side, ghost_values = channel.recv()
                 buffers[side] = ghost_values
 

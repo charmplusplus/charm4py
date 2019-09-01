@@ -20,7 +20,7 @@ def main(args):
 
     t0 = time.time()
     idx = 0
-    for f in charm.iwait(futures):
+    for f in charm.iawait(futures):
         assert f.get() == idx
         idx += 1
         print(time.time() - t0)
