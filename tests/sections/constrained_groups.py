@@ -26,15 +26,15 @@ class Test(Chare):
 def main(args):
     assert charm.numPes() > 1
     section_pes = random.sample(range(charm.numPes()), charm.numPes() // 2)
-    charm.thisProxy.updateGlobals({'section_pes': section_pes}, ret=1).get()
+    charm.thisProxy.updateGlobals({'section_pes': section_pes}, awaitable=True).get()
     g = Group(Test, onPEs=section_pes, args=[4862])
-    assert g[section_pes[0]].test2(ret=1).get() == 34589
-    g.test(ret=1).get()
+    assert g[section_pes[0]].test2(ret=True).get() == 34589
+    g.test(awaitable=True).get()
 
-    assert g.getIdx(ret=2).get() == sorted(section_pes)
-    assert g[section_pes[0]].getIdx(ret=1).get() == section_pes[0]
+    assert g.getIdx(ret=True).get() == sorted(section_pes)
+    assert g[section_pes[0]].getIdx(ret=True).get() == section_pes[0]
 
-    g.testallreduce(ret=1).get()
+    g.testallreduce(awaitable=True).get()
 
     exit()
 

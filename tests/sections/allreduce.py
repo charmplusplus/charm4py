@@ -34,7 +34,7 @@ def main(args):
     g.work(f, charm.numPes())
     gsec.work(f, charm.numPes() // 2, gsec)
     f.get()
-    g.verify(ret=1).get()
+    g.verify(awaitable=True).get()
     exit()
 
 

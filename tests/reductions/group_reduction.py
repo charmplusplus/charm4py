@@ -29,7 +29,7 @@ class Main(Chare):
         # create an array to test group-to-array reductions
         arrayProxy = Array(TestArray, ARRAY_SIZE)
         charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy, 'arrayProxy': arrayProxy},
-                                       '__main__', ret=True).get()
+                                       '__main__', awaitable=True).get()
         groupProxy.doReduction()
 
     def done_int(self, reduction_result):

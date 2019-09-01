@@ -20,7 +20,7 @@ class Controller(Chare):
             self.log = open(logfilename, 'a')
         else:
             self.log = sys.stdout
-        self.hosts = monitors.getHostName(ret=2).get()
+        self.hosts = monitors.getHostName(ret=True).get()
         for i, host in enumerate(self.hosts):
             print('Monitor', i, 'running on host', host)
         print('Going to run for', EXIT_AFTER_SECS, 'secs')

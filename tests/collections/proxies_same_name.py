@@ -16,7 +16,7 @@ class Test(Chare):
 
     @coro
     def test(self, proxy, method_name):
-        assert getattr(proxy[1], method_name)(ret=1).get() == 32255
+        assert getattr(proxy[1], method_name)(ret=True).get() == 32255
 
 
 def main(args):
@@ -26,8 +26,8 @@ def main(args):
     tester1 = Chare(Test, onPE=2)
     tester2 = Chare(proxies_same_name_aux.Test, onPE=1)
     charm.awaitCreation(g2, g1, tester2, tester1)
-    tester1.test(g2, 'check2', ret=1).get()
-    tester2.test(g1, 'check1', ret=1).get()
+    tester1.test(g2, 'check2', awaitable=True).get()
+    tester2.test(g1, 'check1', awaitable=True).get()
     exit()
 
 

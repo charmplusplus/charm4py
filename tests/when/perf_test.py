@@ -38,7 +38,7 @@ def main(args):
     random.shuffle(ids)
 
     done = Future()
-    g.start(done, ret=True).get()
+    g.start(done, awaitable=True).get()
     t0 = time.time()
     for id in ids:
         #g.recv_id(id)

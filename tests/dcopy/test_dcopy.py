@@ -16,7 +16,7 @@ CHARES_PER_PE = 10
 class Main(Chare):
 
     def __init__(self, args):
-        charm.thisProxy.updateGlobals({'mainProxy' : self.thisProxy}, '__main__', ret=True).get()
+        charm.thisProxy.updateGlobals({'mainProxy' : self.thisProxy}, '__main__', awaitable=True).get()
         self.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
 
     def start(self):

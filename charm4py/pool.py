@@ -116,10 +116,10 @@ class PoolScheduler(Chare):
         if charm.interactive:
             try:
                 if func is not None:
-                    self.workers.check(func.__module__, func.__name__, ret=1).get()
+                    self.workers.check(func.__module__, func.__name__, awaitable=True).get()
                 else:
                     for func_, args in tasks:
-                        self.workers.check(func_.__module__, func_.__name__, ret=1).get()
+                        self.workers.check(func_.__module__, func_.__name__, awaitable=True).get()
             except Exception as e:
                 if result is None:
                     raise e

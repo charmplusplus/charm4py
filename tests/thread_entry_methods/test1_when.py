@@ -49,7 +49,7 @@ def main(args):
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)
     charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},
-                                  '__main__', ret=True).get()
+                                  '__main__', awaitable=True).get()
     Array(Test, numChares)
 
 

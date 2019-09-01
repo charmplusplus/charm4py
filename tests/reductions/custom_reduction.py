@@ -28,7 +28,7 @@ class Main(Chare):
         print('Running reduction example on ' + str(charm.numPes()) + ' processors for ' + str(self.nElements) + ' elements, array dims=' + str(ARRAY_SIZE))
         arrProxy = Array(Test, ARRAY_SIZE)
         charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy, 'arrProxy': arrProxy,
-                                       'lastIdx': lastIdx}, '__main__', ret=True).get()
+                                       'lastIdx': lastIdx}, '__main__', awaitable=True).get()
         arrProxy.doReduction()
 
     def done_charm_builtin(self, result):

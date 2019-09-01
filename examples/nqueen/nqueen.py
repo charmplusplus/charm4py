@@ -52,7 +52,7 @@ def main(args):
     global_data['NUM_ROWS'] = NUM_ROWS
     global_data['GRAINSIZE'] = GRAINSIZE
     global_data['solution_count'] = 0  # to count number of solutions found on each PE
-    charm.thisProxy.updateGlobals(global_data, ret=1).get()
+    charm.thisProxy.updateGlobals(global_data, awaitable=True).get()
 
     startTime = time()
     # initialize empty solution, solution holds the column number where a queen is placed, for each row
@@ -61,7 +61,7 @@ def main(args):
     # wait until there is no work being done on any PE (quiescence detection)
     charm.waitQD()
     elapsed = time() - startTime
-    numSolutions = sum(charm.thisProxy.eval('solution_count', ret=2).get())
+    numSolutions = sum(charm.thisProxy.eval('solution_count', ret=True).get())
     print('There are', numSolutions, 'solutions to', NUM_ROWS, 'queens. Time taken:', round(elapsed, 3), 'secs')
     exit()
 

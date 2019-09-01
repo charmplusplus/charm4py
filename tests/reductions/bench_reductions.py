@@ -17,7 +17,7 @@ class Main(Chare):
 
     def __init__(self, args):
         charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy,
-                                       'NUM_CHARES': charm.numPes() * CHARES_PER_PE}, '__main__', ret=True).get()
+                                       'NUM_CHARES': charm.numPes() * CHARES_PER_PE}, '__main__', awaitable=True).get()
         self.arrayProxy = Array(Test, NUM_CHARES)
         self.arrayProxy.run()
         self.startTime = time.time()

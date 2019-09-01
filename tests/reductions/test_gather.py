@@ -18,7 +18,7 @@ class Main(Chare):
         print('Running gather example on', charm.numPes(), 'processors for', self.nElements, 'elements, array dims=', ARRAY_SIZE)
         arrProxy = Array(Test, ARRAY_SIZE)
         grpProxy = Group(TestGroup)
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, '__main__', ret=True).get()
+        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, '__main__', awaitable=True).get()
         arrProxy.doGather()
         grpProxy.doGather()
         red_future = charm.Future()

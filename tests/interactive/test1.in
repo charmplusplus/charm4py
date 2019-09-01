@@ -8,7 +8,7 @@ def my_except_hook(errorType, error, tb):
 sys.excepthook = my_except_hook
 
 import os
-charm.thisProxy.rexec("sys.path.append(os.path.join(os.getcwd(), 'tests', 'interactive'))", ret=True).get()
+charm.thisProxy.rexec("sys.path.append(os.path.join(os.getcwd(), 'tests', 'interactive'))", awaitable=True).get()
 
 assert charm.myPe() == 0
 
@@ -35,8 +35,8 @@ def myreducer(contribs):
     return [6282 for _ in range(len(contribs))]
 '''
 
-charm.thisProxy.exec(myreducer_src, ret=1).get()
-charm.thisProxy.addReducer(myreducer, ret=1).get()
+charm.thisProxy.exec(myreducer_src, awaitable=True).get()
+charm.thisProxy.addReducer(myreducer, awaitable=True).get()
 g.work2(future())
 assert all([x == 6282 for x in _f.get()])
 

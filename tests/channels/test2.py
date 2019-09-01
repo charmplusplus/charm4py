@@ -78,11 +78,11 @@ def main(args):
                 num_self_channels += 1
             gchannels[level][a].append(b)
             gchannels[level][b].append(a)
-    charm.thisProxy.updateGlobals({'gchannels': gchannels}, ret=1).get()
+    charm.thisProxy.updateGlobals({'gchannels': gchannels}, awaitable=True).get()
 
     done_fut = Future(8 * NUM_LEVELS)  # wait for 8 collections to finish 3 levels
     for collection in (g1, g2, g3, g4, a1, a2, a3, a4):
-        collection.setup(ret=1).get()
+        collection.setup(awaitable=True).get()
     print(NUM_CHANNELS * NUM_LEVELS, 'channels set up,', num_self_channels, 'self channels')
     for collection in (g1, g2, g3, g4, a1, a2, a3, a4):
         for lvl in range(NUM_LEVELS):

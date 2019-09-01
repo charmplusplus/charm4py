@@ -28,10 +28,10 @@ def main(args):
         for trial in range(2):
             if trial == 0:
                 # use bad func
-                charm.thisProxy.rexec(myfunc_bad_source, ret=1).get()
+                charm.thisProxy.rexec(myfunc_bad_source, awaitable=True).get()
             else:
                 # use good func
-                charm.thisProxy.rexec(myfunc_good_source, ret=1).get()
+                charm.thisProxy.rexec(myfunc_good_source, awaitable=True).get()
 
             for func in (myfunc, None):
                 for multi_future in (False, True):

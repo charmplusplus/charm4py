@@ -19,7 +19,7 @@ def main(args):
     # to the other PEs, so I set wait time to 0 on PE 0
     sleepTimes[0] = 0.0
     t0 = time.time()
-    a.work(sleepTimes, ret=True).get()  # wait for broadcast to complete
+    a.work(sleepTimes, awaitable=True).get()  # wait for broadcast to complete
     wait_time = time.time() - t0
     assert(wait_time >= max(sleepTimes))
     print(wait_time, max(sleepTimes))
@@ -28,7 +28,7 @@ def main(args):
     sleepTimes = [random.uniform(0.5, 1.5) for i in range(charm.numPes())]
     sleepTimes[0] = 0.0
     t0 = time.time()
-    g.work(sleepTimes, ret=True).get()  # wait for broadcast to complete
+    g.work(sleepTimes, awaitable=True).get()  # wait for broadcast to complete
     wait_time = time.time() - t0
     assert(wait_time >= max(sleepTimes))
     print(wait_time, max(sleepTimes))

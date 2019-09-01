@@ -35,21 +35,21 @@ def main(args):
     # for each array, create one section using member function to determine section membership
     for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:
         secProxy = charm.split(array, 1, member)[0]
-        array.setSecProxy(secProxy, ret=1).get()
+        array.setSecProxy(secProxy, awaitable=True).get()
         f = Future()
         secProxy.ping(f)
         assert len(f.get()) < size
 
     # for each array, create one section passing a random list of element indexes (half the size of the array)
     for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:
-        elems = array.getElems(ret=2).get()
+        elems = array.getElems(ret=True).get()
         assert len(elems) == size
         section_elems = random.sample(elems, size // 2)
         secProxy = charm.split(array, 1, elems=section_elems)[0]
         f = Future()
         secProxy.ping2(f, secProxy)
         assert f.get() == sorted(section_elems)
-        assert secProxy.getElems(ret=2).get() == sorted(section_elems)
+        assert secProxy.getElems(ret=True).get() == sorted(section_elems)
 
     exit()
 
