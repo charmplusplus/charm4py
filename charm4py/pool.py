@@ -39,6 +39,7 @@ class Job(object):
         self.chunked = chunksize > 1
         self.threaded = False
         self.failed = False
+        self.single_task = False
         assert chunksize > 0
         if func is not None:
             self.threaded = hasattr(func, '_ck_coro')
@@ -135,9 +136,10 @@ class PoolScheduler(Chare):
         self.job_last = job
         job.job_next = None
 
-    def startSingleTask(self, func, *args):
+    def startSingleTask(self, func, future, *args):
         self.__start__(func, None, None)
-        job = Job(self.job_id_pool.pop(), func, (args,), None, self.num_workers, 1)
+        job = Job(self.job_id_pool.pop(), func, (args,), future, self.num_workers, 1)
+        job.single_task = True
         self.__addJob__(job)
         if job.threaded:
             job.remote = self.workers.runTask_star_th
@@ -248,7 +250,10 @@ class PoolScheduler(Chare):
             for worker_id in job.workers:
                 self.worker_knows[worker_id].remove(job.id)
             if result is not None and job.future is not None:
-                job.future.send(job.results)
+                if job.single_task:
+                    job.future.send(job.results[0])
+                else:
+                    job.future.send(job.results)
         self.schedule()
 
     def threadPaused(self, worker_id):
@@ -416,7 +421,7 @@ class Pool(object):
         self.pool_scheduler = pool_scheduler
         self.mype = charm.myPe()
 
-    def Task(self, func, args):
+    def Task(self, func, args, ret=False, awaitable=False):
         if self.mype == 0:
             # since the PoolScheduler is on PE 0, it will get references to the
             # same objects that the caller has when creating a Task from PE0.
@@ -426,8 +431,12 @@ class Pool(object):
             # it is not obvious. The safest thing is to copy them so users
             # don't have to worry about this special case
             args = deepcopy(args)
+        f = None
+        if ret or awaitable:
+            f = Future()
         # unpack the arguments for sending to allow benefiting from direct copy
-        self.pool_scheduler.startSingleTask(func, *args)
+        self.pool_scheduler.startSingleTask(func, f, *args)
+        return f
 
     def map(self, func, iterable, chunksize=1, ncores=-1):
         result = Future()
