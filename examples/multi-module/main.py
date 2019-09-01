@@ -16,7 +16,7 @@ class Main(Chare):
         # add mainchare proxy to globals of module goodbye on every process
         future2 = charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy},
                                                 module_name='goodbye', ret=True)
-        charm.await(future1, future2)
+        charm.await((future1, future2))
         # broadcast a message to the hello chares
         hello_chares.SayHi()
 

@@ -816,13 +816,9 @@ class Charm(object):
             n -= 1
             yield obj
 
-    def await(self, *objs):
-        try:
-            for o in self.iawait(objs):
-                pass
-        except:
-            for o in self.iawait(objs[0]):
-                pass
+    def await(self, objs):
+        for o in self.iawait(objs):
+            pass
 
     def recordSend(self, size):
         self.recordSendRecv(self.msg_send_stats, size)
