@@ -49,7 +49,8 @@ class CharmLib(object):
     self.times = times
     self.send_bufs = ffi.new("char*[]", 60)  # supports up to 60 direct-copy entry method arguments
     self.send_buf_sizes = ffi.new("int[]", [0] * 60)
-    c_type_table = [None] * 12
+    c_type_table = [None] * 13
+    c_type_table[red.C_BOOL] = ('bool', 'bool[]', 'bool*', ffi.sizeof('bool'))
     c_type_table[red.C_CHAR] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
     c_type_table[red.C_SHORT] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
     c_type_table[red.C_INT] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
@@ -194,6 +195,32 @@ class CharmLib(object):
         charm.recordReceive(msgSize)
       arrIndex = tuple(ffi.cast(index_ctype[ndims], arrayIndex))
       charm.recvArrayMsg(aid, arrIndex, ep, ffi.buffer(msg, msgSize), dcopy_start)
+    except:
+      charm.handleGeneralError()
+
+  @ffi.def_extern()
+  def recvArrayBcast_py2(aid, ndims, nInts, numElems, arrayIndexes, ep, msgSize, msg, dcopy_start):
+    try:
+      if charm.options.profiling:
+        charm._precvtime = time.time()
+        charm.recordReceive(msgSize)
+      indexes = []
+      for i in range(numElems):
+        indexes.append(tuple(ffi.cast(index_ctype[ndims], arrayIndexes + (i*nInts))))
+      charm.recvArrayBcast(aid, indexes, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
+    except:
+      charm.handleGeneralError()
+
+  @ffi.def_extern()
+  def recvArrayBcast_py3(aid, ndims, nInts, numElems, arrayIndexes, ep, msgSize, msg, dcopy_start):
+    try:
+      if charm.options.profiling:
+        charm._precvtime = time.time()
+        charm.recordReceive(msgSize)
+      indexes = []
+      for i in range(numElems):
+        indexes.append(tuple(ffi.cast(index_ctype[ndims], arrayIndexes + (i*nInts))))
+      charm.recvArrayBcast(aid, indexes, ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
       charm.handleGeneralError()
 
@@ -707,6 +734,7 @@ class CharmLib(object):
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py2)
       lib.registerGroupMsgRecvExtCallback(lib.recvGroupMsg_py2)
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py2)
+      lib.registerArrayBcastRecvExtCallback(lib.recvArrayBcast_py2)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py2)
       lib.registerPyReductionExtCallback(lib.pyReduction_py2)
       lib.registerCreateCallbackMsgExtCallback(lib.createCallbackMsg_py2)
@@ -715,6 +743,7 @@ class CharmLib(object):
       lib.registerChareMsgRecvExtCallback(lib.recvChareMsg_py3)
       lib.registerGroupMsgRecvExtCallback(lib.recvGroupMsg_py3)
       lib.registerArrayMsgRecvExtCallback(lib.recvArrayMsg_py3)
+      lib.registerArrayBcastRecvExtCallback(lib.recvArrayBcast_py3)
       lib.registerArrayElemJoinExtCallback(lib.arrayElemJoin_py3)
       lib.registerPyReductionExtCallback(lib.pyReduction_py3)
       lib.registerCreateCallbackMsgExtCallback(lib.createCallbackMsg_py3)

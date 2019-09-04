@@ -304,6 +304,12 @@ class Charm(object):
                 self.arrays[aid][index] = obj
                 em.run(obj, header, args)  # now call the user's array element __init__
 
+    def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
+        header, args = self.unpackMsg(msg, dcopy_start, None)
+        array = self.arrays[aid]
+        for index in indexes:
+            self.invokeEntryMethod(array[index], ep, header, args)
+
     def unpackMsg(self, msg, dcopy_start, dest_obj):
         if msg[:7] == b'_local:':
             header, args = dest_obj.__removeLocal__(int(msg[7:]))
