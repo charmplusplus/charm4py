@@ -18,7 +18,7 @@ except ImportError:
 
 
 # identifiers for Charm internal reducers
-(SUM, PRODUCT, MAX, MIN) = range(4)
+(SUM, PRODUCT, MAX, MIN, AND, OR, XOR) = range(7)
 
 NUM_C_TYPES = 12
 # Set of integer identifiers for C types used with internal reducers
@@ -29,7 +29,7 @@ NUM_C_TYPES = 12
 # map names of C types (as they appear in CkReductionTypesExt) to their identifiers
 c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long':  C_LONG,  'long_long':  C_LONG_LONG,
                     'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG, 'ulong_long': C_ULONG_LONG,
-                    'float': C_FLOAT, 'double': C_DOUBLE}
+                    'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_CHAR}
 
 
 # ------------------- Reducers -------------------
@@ -83,6 +83,9 @@ class ReducerContainer(object):
         self.product = (PRODUCT, self._product)
         self.max     = (MAX,     self._max)
         self.min     = (MIN,     self._min)
+        self.logical_and = (AND, None)
+        self.logical_or  = (OR,  None)
+        self.logical_xor = (XOR, None)
 
     def addReducer(self, func, pre=None, post=None):
         if hasattr(self, func.__name__):
@@ -109,18 +112,20 @@ class ReductionManager(object):
         self.populateConversionTables()
 
     def populateConversionTables(self):
-
         import os
 
         # `red_table[op][c_type]` maps to `charm_reducer_type`, where:
         #     - op is the identifier for internal reducer (SUM, PRODUCT, MAX or INT)
         #     - c_type is identifier for C type (C_CHAR, C_SHORT, etc)
         #     - charm_reducer_type is value for internal reducer type as they appear in CkReductionTypesExt
-        self.red_table = [[]] * 4
+        self.red_table = [[]] * 7
         self.red_table[SUM]     = [0] * NUM_C_TYPES
         self.red_table[PRODUCT] = [0] * NUM_C_TYPES
         self.red_table[MAX]     = [0] * NUM_C_TYPES
         self.red_table[MIN]     = [0] * NUM_C_TYPES
+        self.red_table[AND]     = [0] * NUM_C_TYPES
+        self.red_table[OR]      = [0] * NUM_C_TYPES
+        self.red_table[XOR]     = [0] * NUM_C_TYPES
 
         fields = self.charm.lib.getReductionTypesFields()  # get names of fields in CkReductionTypesExt
         maxFieldVal = max([getattr(self.charm.ReducerType, f) for f in fields])
@@ -131,6 +136,8 @@ class ReductionManager(object):
                 continue
             elif f == 'external_py':
                 op, c_type_str = None, 'char'
+            elif f.startswith('logical'):
+                op, c_type_str =  f.split('_')[1:]
             else:
                 op, c_type_str = f.split('_', 1)        # e.g. from 'sum_long' extracts 'sum' and 'long'
             ctype_code = c_typename_to_id[c_type_str]   # e.g. map 'long' to C_LONG
@@ -141,6 +148,9 @@ class ReductionManager(object):
             elif op == 'product': self.red_table[PRODUCT][ctype_code] = f_val
             elif op == 'max':     self.red_table[MAX][ctype_code] = f_val
             elif op == 'min':     self.red_table[MIN][ctype_code] = f_val
+            elif op == 'and':     self.red_table[AND][ctype_code] = f_val
+            elif op == 'or':      self.red_table[OR][ctype_code] = f_val
+            elif op == 'xor':     self.red_table[XOR][ctype_code] = f_val
 
         # ------ numpy data types ------
         if haveNumpy:
@@ -184,10 +194,14 @@ class ReductionManager(object):
         # ------ python data types ------
 
         # map python types to internal reduction C code identifier
+        self.python_type_map = {float: C_DOUBLE, bool: C_CHAR}
         if os.name == 'nt':
-            self.python_type_map = {int: C_LONG_LONG, float: C_DOUBLE, bool: C_CHAR}
+            self.python_type_map[int] = C_LONG_LONG
         else:
-            self.python_type_map = {int: C_LONG, float: C_DOUBLE, bool: C_CHAR}
+            self.python_type_map[int] = C_LONG
+        if haveNumpy:
+            # this is a bit of a hack
+            self.python_type_map[np.bool_] = C_CHAR
 
     # return Charm internal reducer type code and data ready to be sent to Charm
     def prepare(self, data, reducer, contributor):
@@ -227,6 +241,7 @@ class ReductionManager(object):
             pyReducer = reducer
 
         if pyReducer is None:
+            assert charm_reducer_type > 0, 'Could not find a valid reducer. Check that datatype matches the operator'
             return (charm_reducer_type, data, c_type)
         else:
             if not hasattr(pyReducer, 'hasPreprocess'):

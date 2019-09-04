@@ -101,8 +101,7 @@ class Jacobi(Chare):
             max_error = check_and_compute(self.temperature, self.new_temperature,
                                           self.istart, self.ifinish, self.jstart, self.jfinish)
             self.temperature, self.new_temperature = self.new_temperature, self.temperature
-            # TODO: change reducer to logical_and when that gets merged
-            converged = self.allreduce(int(max_error <= THRESHOLD), Reducer.product).get()
+            converged = self.allreduce(max_error <= THRESHOLD, Reducer.logical_and).get()
             iteration += 1
 
         if self.thisIndex == (0, 0):
@@ -142,7 +141,7 @@ def check_and_compute(temperature, new_temperature, istart, ifinish, jstart, jfi
             if max_error <= difference:
                 max_error = difference
             new_temperature[i,j] = temperature_ith
-    return float(max_error)
+    return max_error
 
 
 def numba_precompile():

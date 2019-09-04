@@ -65,6 +65,10 @@
         "path": "tests/reductions/custom_reduction.py"
     },
     {
+        "force_min_processes": 4,
+        "path": "tests/reductions/logical_ops.py"
+    },
+    {
         "path": "tests/reductions/test_gather.py"
     },
     {
