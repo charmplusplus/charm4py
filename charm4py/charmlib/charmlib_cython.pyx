@@ -295,8 +295,8 @@ cdef int cur_buf = 1
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
-cdef c_type_table_typecodes = [None] * 12
-cdef int c_type_table_sizes[12]
+cdef c_type_table_typecodes = [None] * 13
+cdef int c_type_table_sizes[13]
 cdef int[SECTION_MAX_BFACTOR] section_children
 
 cdef object charm
@@ -325,6 +325,7 @@ class CharmLib(object):
     #print(charm_reducers.sum_long, charm_reducers.product_ushort, charm_reducers.max_char, charm_reducers.max_float, charm_reducers.min_char)
     #print(ReducerType.sum_long, ReducerType.product_ushort, ReducerType.max_char, ReducerType.max_float, ReducerType.min_char)
 
+    c_type_table_typecodes[red.C_BOOL] = 'b'
     c_type_table_typecodes[red.C_CHAR] = 'b'
     c_type_table_typecodes[red.C_SHORT] = 'h'
     c_type_table_typecodes[red.C_INT] = 'i'
@@ -338,6 +339,7 @@ class CharmLib(object):
     c_type_table_typecodes[red.C_FLOAT] = 'f'
     c_type_table_typecodes[red.C_DOUBLE] = 'd'
 
+    c_type_table_sizes[red.C_BOOL] = sizeof(char)
     c_type_table_sizes[red.C_CHAR] = sizeof(char)
     c_type_table_sizes[red.C_SHORT] = sizeof(short)
     c_type_table_sizes[red.C_INT] = sizeof(int)

@@ -20,16 +20,16 @@ except ImportError:
 # identifiers for Charm internal reducers
 (SUM, PRODUCT, MAX, MIN, AND, OR, XOR) = range(7)
 
-NUM_C_TYPES = 12
+NUM_C_TYPES = 13
 # Set of integer identifiers for C types used with internal reducers
-(C_CHAR,  C_SHORT,  C_INT,  C_LONG,  C_LONG_LONG,
+(C_BOOL,  C_CHAR,  C_SHORT,  C_INT,  C_LONG,  C_LONG_LONG,
  C_UCHAR, C_USHORT, C_UINT, C_ULONG, C_ULONG_LONG,
  C_FLOAT, C_DOUBLE) = range(NUM_C_TYPES)
 
 # map names of C types (as they appear in CkReductionTypesExt) to their identifiers
 c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long':  C_LONG,  'long_long':  C_LONG_LONG,
                     'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG, 'ulong_long': C_ULONG_LONG,
-                    'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_CHAR}
+                    'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_BOOL}
 
 
 # ------------------- Reducers -------------------
@@ -156,7 +156,7 @@ class ReductionManager(object):
         if haveNumpy:
 
             # map numpy data types to internal reduction C code identifier
-            self.numpy_type_map = {'bool': C_CHAR, 'int8': C_CHAR, 'int16': C_SHORT,
+            self.numpy_type_map = {'bool': C_BOOL, 'int8': C_CHAR, 'int16': C_SHORT,
                                    'int32': C_INT, 'int64': C_LONG, 'uint8': C_UCHAR,
                                    'uint16': C_USHORT, 'uint32': C_UINT, 'uint64': C_ULONG,
                                    #'float16': ?
@@ -194,14 +194,14 @@ class ReductionManager(object):
         # ------ python data types ------
 
         # map python types to internal reduction C code identifier
-        self.python_type_map = {float: C_DOUBLE, bool: C_CHAR}
+        self.python_type_map = {float: C_DOUBLE, bool: C_BOOL}
         if os.name == 'nt':
             self.python_type_map[int] = C_LONG_LONG
         else:
             self.python_type_map[int] = C_LONG
         if haveNumpy:
             # this is a bit of a hack
-            self.python_type_map[np.bool_] = C_CHAR
+            self.python_type_map[np.bool_] = C_BOOL
 
     # return Charm internal reducer type code and data ready to be sent to Charm
     def prepare(self, data, reducer, contributor):

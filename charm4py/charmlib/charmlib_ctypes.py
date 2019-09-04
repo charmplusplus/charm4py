@@ -1,5 +1,7 @@
 import ctypes
-from ctypes import c_int, c_short, c_char, c_long, c_longlong, c_uint, c_ushort, c_ubyte, c_ulong, c_ulonglong, c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
+from ctypes import c_int, c_short, c_char, c_long, c_longlong, c_byte, \
+                   c_uint, c_ushort, c_ubyte, c_ulong, c_ulonglong, \
+                   c_float, c_double, c_char_p, c_void_p, POINTER, CFUNCTYPE, Structure, sizeof
 import sys
 import os
 import time
@@ -109,7 +111,8 @@ class CharmLib(object):
     self.init(libcharm_path)
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
-    self.c_type_table = [None] * 12
+    self.c_type_table = [None] * 13
+    self.c_type_table[red.C_BOOL] = c_byte
     self.c_type_table[red.C_CHAR] = c_char
     self.c_type_table[red.C_SHORT] = c_short
     self.c_type_table[red.C_INT] = c_int

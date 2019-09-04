@@ -49,7 +49,8 @@ class CharmLib(object):
     self.times = times
     self.send_bufs = ffi.new("char*[]", 60)  # supports up to 60 direct-copy entry method arguments
     self.send_buf_sizes = ffi.new("int[]", [0] * 60)
-    c_type_table = [None] * 12
+    c_type_table = [None] * 13
+    c_type_table[red.C_BOOL] = ('bool', 'bool[]', 'bool*', ffi.sizeof('bool'))
     c_type_table[red.C_CHAR] = ('char', 'char[]', 'char*', ffi.sizeof('char'))
     c_type_table[red.C_SHORT] = ('short', 'short[]', 'short*', ffi.sizeof('short'))
     c_type_table[red.C_INT] = ('int', 'int[]', 'int*', ffi.sizeof('int'))
