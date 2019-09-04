@@ -95,6 +95,9 @@ ctypedef struct CkReductionTypesExt:
   int min_ulong_long
   int min_float
   int min_double
+  int logical_and_bool
+  int logical_or_bool
+  int logical_xor_bool
   int external_py
 
 cdef extern CkReductionTypesExt charm_reducers
@@ -128,6 +131,9 @@ class CkReductionTypesExt_Wrapper:
               'min_uint': charm_reducers.min_uint, 'min_ulong': charm_reducers.min_ulong,
               'min_float': charm_reducers.min_float, 'min_double': charm_reducers.min_double,
               'min_long_long': charm_reducers.min_long_long, 'min_ulong_long': charm_reducers.min_ulong_long,
+              'logical_and_bool': charm_reducers.logical_and_bool,
+              'logical_or_bool': charm_reducers.logical_or_bool,
+              'logical_xor_bool': charm_reducers.logical_xor_bool,
               'external_py': charm_reducers.external_py}
     for f,val in self.fields.items():
       setattr(self, f, val)
@@ -695,6 +701,7 @@ class CharmLib(object):
     registerChareMsgRecvExtCallback(recvChareMsg)
     registerGroupMsgRecvExtCallback(recvGroupMsg)
     registerArrayMsgRecvExtCallback(recvArrayMsg)
+    registerArrayBcastRecvExtCallback(recvArrayBcast)
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
     registerPyReductionExtCallback(pyReduction)
@@ -856,13 +863,26 @@ cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start)
     charm.handleGeneralError()
 
 cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start):
-  cdef int i = 0
   try:
     if PROFILING:
       charm._precvtime = time.time()
       charm.recordReceive(msgSize)
     recv_buffer.setMsg(msg, msgSize)
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, dcopy_start)
+  except:
+    charm.handleGeneralError()
+
+cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
+  cdef int i = 0
+  try:
+    if PROFILING:
+      charm._precvtime = time.time()
+      charm.recordReceive(msgSize)
+    recv_buffer.setMsg(msg, msgSize)
+    indexes = []
+    for i in range(numElems):
+        indexes.append(array_index_to_tuple(ndims, arrayIndexes + (i*nInts)))
+    charm.recvArrayBcast(aid, indexes, ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
 

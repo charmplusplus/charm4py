@@ -75,6 +75,9 @@ class ReducerTypes(Structure):
     ("min_ulong_long",      c_int),
     ("min_float",           c_int),
     ("min_double",          c_int),
+    ("logical_and_bool",    c_int),
+    ("logical_or_bool",     c_int),
+    ("logical_xor_bool",    c_int),
     ("external_py",         c_int)
   ]
 
@@ -214,6 +217,22 @@ class CharmLib(object):
       if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
       else: msg = b''
       self.charm.recvArrayMsg(aid, arrIndex, ep, msg, dcopy_start)
+    except:
+      self.charm.handleGeneralError()
+
+  def recvArrayBcast(self, aid, ndims, nInts, numElems, arrayIndexes, ep, msgSize, msg, dcopy_start):
+    try:
+      if self.opts.profiling:
+        self.charm._precvtime = time.time()
+        self.charm.recordReceive(msgSize)
+      indexes = []
+      arrayIndexes_p_val = ctypes.cast(arrayIndexes, c_void_p).value
+      sizeof_int = sizeof(c_int)
+      for i in range(numElems):
+        indexes.append(self.arrayIndexToTuple(ndims, arrayIndexes_p_val + sizeof_int * (i*nInts)))
+      if msgSize > 0: msg = ctypes.cast(msg, POINTER(c_char * msgSize)).contents.raw
+      else: msg = b''
+      self.charm.recvArrayBcast(aid, indexes, ep, msg, dcopy_start)
     except:
       self.charm.handleGeneralError()
 
@@ -619,6 +638,10 @@ class CharmLib(object):
     self.RECV_ARRAY_CB_TYPE = CFUNCTYPE(None, c_int, c_int, POINTER(c_int), c_int, c_int, POINTER(c_char), c_int)
     self.recvArrayCb = self.RECV_ARRAY_CB_TYPE(self.recvArrayMsg)
     self.lib.registerArrayMsgRecvExtCallback(self.recvArrayCb)
+
+    self.RECV_ARRAY_BCAST_CB_TYPE = CFUNCTYPE(None, c_int, c_int, c_int, c_int, POINTER(c_int), c_int, c_int, POINTER(c_char), c_int)
+    self.recvArrayBcastCb = self.RECV_ARRAY_BCAST_CB_TYPE(self.recvArrayBcast)
+    self.lib.registerArrayBcastRecvExtCallback(self.recvArrayBcastCb)
 
     self.ARRAY_MAP_PROCNUM_CB_TYPE = CFUNCTYPE(c_int, c_int, c_int, POINTER(c_int))
     self.arrayMapProcNumCb = self.ARRAY_MAP_PROCNUM_CB_TYPE(self.arrayMapProcNum)

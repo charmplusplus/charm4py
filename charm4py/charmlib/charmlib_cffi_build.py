@@ -67,6 +67,9 @@ ffibuilder.set_source("charm4py.charmlib._charmlib_cffi",
           int min_ulong_long;
           int min_float;
           int min_double;
+          int logical_and_bool;
+          int logical_or_bool;
+          int logical_xor_bool;
           int external_py;
         };
 
@@ -172,6 +175,9 @@ ffibuilder.cdef("""
         int min_ulong_long;
         int min_float;
         int min_double;
+        int logical_and_bool;
+        int logical_or_bool;
+        int logical_xor_bool;
         int external_py;
         ...;
     };
@@ -225,6 +231,7 @@ ffibuilder.cdef("""
     void registerChareMsgRecvExtCallback(void (*cb)(int, void*, int, int, char*, int));
     void registerGroupMsgRecvExtCallback(void (*cb)(int, int, int, char *, int));
     void registerArrayMsgRecvExtCallback(void (*cb)(int, int, int *, int, int, char *, int));
+    void registerArrayBcastRecvExtCallback(void (*cb)(int, int, int, int, int *, int, int, char *, int));
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
     void registerArrayElemJoinExtCallback(void (*cb)(int, int, int *, int, char*, int));
     void registerArrayResumeFromSyncExtCallback(void (*cb)(int, int, int *));
@@ -253,6 +260,8 @@ ffibuilder.cdef("""
     extern "Python" void recvGroupMsg_py3(int, int, int, char *, int);
     extern "Python" void recvArrayMsg_py2(int, int, int *, int, int, char *, int);
     extern "Python" void recvArrayMsg_py3(int, int, int *, int, int, char *, int);
+    extern "Python" void recvArrayBcast_py2(int, int, int, int, int *, int, int, char *, int);
+    extern "Python" void recvArrayBcast_py3(int, int, int, int, int *, int, int, char *, int);
     extern "Python" int  arrayElemLeave(int, int, int *, char**, int);
     extern "Python" void arrayElemJoin_py2(int, int, int *, int, char*, int);
     extern "Python" void arrayElemJoin_py3(int, int, int *, int, char*, int);
