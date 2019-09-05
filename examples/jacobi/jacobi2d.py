@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Future, coro, Channel, Reducer
+from charm4py import charm, Chare, Group, Array, Future, coro, Channel, Reducer
 import time
 import numpy as np
 try:
@@ -144,10 +144,11 @@ def check_and_compute(temperature, new_temperature, istart, ifinish, jstart, jfi
     return max_error
 
 
-def numba_precompile():
-    T = np.zeros((blockDimX+2, blockDimY+2), dtype=np.float64)
-    NT = np.zeros((blockDimX+2, blockDimY+2), dtype=np.float64)
-    check_and_compute(T, NT, 1, blockDimX+1, 1, blockDimY+1)
+class Util(Chare):
+    def compile(self):
+        T = np.zeros((blockDimX+2, blockDimY+2), dtype=np.float64)
+        NT = np.zeros((blockDimX+2, blockDimY+2), dtype=np.float64)
+        check_and_compute(T, NT, 1, blockDimX+1, 1, blockDimY+1)
 
 
 def main(args):
@@ -183,7 +184,7 @@ def main(args):
 
     if numbaFound:
         # wait until Numba functions are compiled on every PE, so we can get consistent benchmark results
-        charm.thisProxy.rexec('numba_precompile()', awaitable=True).get()
+        Group(Util).compile(awaitable=True).get()
         print('Numba compilation complete')
     else:
         print('!!WARNING!! Numba not found. Will run without Numba but it will be very slow')

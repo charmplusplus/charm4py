@@ -2,6 +2,7 @@ from charm4py import charm
 
 
 charm.options.local_msg_buf_size = 1000
+charm.options.remote_exec = True
 
 
 class MyException(Exception):
