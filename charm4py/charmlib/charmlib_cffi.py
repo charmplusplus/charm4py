@@ -205,8 +205,10 @@ class CharmLib(object):
         charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       indexes = []
+      index_c_type = index_ctype[ndims]
       for i in range(numElems):
-        indexes.append(tuple(ffi.cast(index_ctype[ndims], arrayIndexes + (i*nInts))))
+        indexes.append(tuple(ffi.cast(index_c_type, arrayIndexes)))
+        arrayIndexes += nInts
       charm.recvArrayBcast(aid, indexes, ep, ffi.buffer(msg, msgSize)[:], dcopy_start)
     except:
       charm.handleGeneralError()
@@ -218,8 +220,10 @@ class CharmLib(object):
         charm._precvtime = time.time()
         charm.recordReceive(msgSize)
       indexes = []
+      index_c_type = index_ctype[ndims]
       for i in range(numElems):
-        indexes.append(tuple(ffi.cast(index_ctype[ndims], arrayIndexes + (i*nInts))))
+        indexes.append(tuple(ffi.cast(index_c_type, arrayIndexes)))
+        arrayIndexes += nInts
       charm.recvArrayBcast(aid, indexes, ep, ffi.buffer(msg, msgSize), dcopy_start)
     except:
       charm.handleGeneralError()

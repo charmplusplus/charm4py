@@ -883,7 +883,8 @@ cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *array
     recv_buffer.setMsg(msg, msgSize)
     indexes = []
     for i in range(numElems):
-        indexes.append(array_index_to_tuple(ndims, arrayIndexes + (i*nInts)))
+        indexes.append(array_index_to_tuple(ndims, arrayIndexes))
+        arrayIndexes += nInts
     charm.recvArrayBcast(aid, indexes, ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
