@@ -1,4 +1,4 @@
-from charm4py import charm
+from charm4py import charm, Chare, Group
 from time import time
 import array
 
@@ -35,6 +35,11 @@ def valid_move(cur_row, solution, column):
     return True
 
 
+class Util(Chare):
+    def getSolutionCount(self):
+        return solution_count
+
+
 def main(args):
     NUM_ROWS = 5  # size of board is NUM_ROWS x NUM_ROWS
     if len(args) > 1:
@@ -61,7 +66,7 @@ def main(args):
     # wait until there is no work being done on any PE (quiescence detection)
     charm.waitQD()
     elapsed = time() - startTime
-    numSolutions = sum(charm.thisProxy.eval('solution_count', ret=True).get())
+    numSolutions = sum(Group(Util).getSolutionCount(ret=True).get())
     print('There are', numSolutions, 'solutions to', NUM_ROWS, 'queens. Time taken:', round(elapsed, 3), 'secs')
     exit()
 

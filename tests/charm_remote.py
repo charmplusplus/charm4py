@@ -1,6 +1,8 @@
 from charm4py import charm, Chare, Group, coro
 import random
 
+charm.options.remote_exec = True
+
 
 class Controller(Chare):
 

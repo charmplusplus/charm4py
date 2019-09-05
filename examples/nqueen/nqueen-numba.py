@@ -1,4 +1,4 @@
-from charm4py import charm
+from charm4py import charm, Chare, Group
 from time import time
 import numpy
 import numba
@@ -42,9 +42,14 @@ def valid_move(cur_row, solution, column):
     return True
 
 
-def numbaPrecompile():
-    # trigger compilation by running the function with dummy data (but correct types)
-    queen_seq(NUM_ROWS-1, numpy.full(NUM_ROWS, -1, dtype=numpy.int8))
+class Util(Chare):
+
+    def compile(self):
+        # trigger compilation by running the function with dummy data (but correct types)
+        queen_seq(NUM_ROWS-1, numpy.full(NUM_ROWS, -1, dtype=numpy.int8))
+
+    def getSolutionCount(self):
+        return solution_count
 
 
 def main(args):
@@ -68,7 +73,8 @@ def main(args):
 
     # compile numba functions on every PE before starting, to get
     # consistent benchmark results
-    charm.thisProxy.rexec('numbaPrecompile()', awaitable=True).get()
+    util = Group(Util)
+    util.compile(awaitable=True).get()
 
     startTime = time()
     # initialize empty solution, solution holds the column number where a queen is placed, for each row
@@ -77,7 +83,7 @@ def main(args):
     # wait until there is no work being done on any PE (quiescence detection)
     charm.waitQD()
     elapsed = time() - startTime
-    numSolutions = sum(charm.thisProxy.eval('solution_count', ret=True).get())
+    numSolutions = sum(util.getSolutionCount(ret=True).get())
     print('There are', numSolutions, 'solutions to', NUM_ROWS, 'queens. Time taken:', round(elapsed, 3), 'secs')
     exit()
 

@@ -1,4 +1,4 @@
-from charm4py import charm, coro
+from charm4py import charm, coro, Chare, Group
 import time
 import numba
 
@@ -36,6 +36,11 @@ def fib_seq(n):
         return fib_seq(n-1) + fib_seq(n-2)
 
 
+class Util(Chare):
+    def compile(self):
+        fib_seq(3)
+
+
 def main(args):
     print('\nUsage: fib-numba.py [n] [grainsize]')
     n = 40
@@ -49,7 +54,7 @@ def main(args):
     charm.thisProxy.updateGlobals({'GRAINSIZE': GRAINSIZE}, awaitable=True).get()
     # precompile fib_seq on every process before the actual computation starts,
     # by calling the function. this helps get consistent benchmark results
-    charm.thisProxy.rexec('fib_seq(3)', awaitable=True).get()
+    Group(Util).compile(awaitable=True).get()
     print('Calculating fibonacci of N=' + str(n) + ', grainsize=', GRAINSIZE)
     t0 = time.time()
     result = fib(n)

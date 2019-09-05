@@ -101,6 +101,7 @@ class Charm(object):
         self.options.local_msg_buf_size = 50
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
+        self.options.remote_exec = False
         self.options.interactive = Options()
         self.options.interactive.verbose = 1
         self.options.interactive.broadcast_imports = True
@@ -576,6 +577,7 @@ class Charm(object):
         if interactive:
             from .interactive import InteractiveConsole as entry
             from .channel import Channel
+            self.options.remote_exec = True
             self.origStdinFd = os.dup(0)
             self.origStoutFd = os.dup(1)
             self.interactive = True
@@ -1044,9 +1046,13 @@ class CharmRemote(Chare):
         return proxy
 
     def rexec(self, code, module_name='__main__'):
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         exec(code, sys.modules[module_name].__dict__)
 
     def eval(self, expression, module_name='__main__'):
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         return eval(expression, sys.modules[module_name].__dict__)
 
     # deposit value of one of the futures that was created on this PE
@@ -1067,6 +1073,8 @@ class CharmRemote(Chare):
         charm.printStats()
 
     def registerNewChareType(self, name, source):
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         exec(source, charm.dynamic_register)
         chare_type = charm.dynamic_register[name]
         charm.register(chare_type)
