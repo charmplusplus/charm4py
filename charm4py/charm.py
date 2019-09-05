@@ -1046,11 +1046,13 @@ class CharmRemote(Chare):
         return proxy
 
     def rexec(self, code, module_name='__main__'):
-        assert charm.options.remote_exec is True
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         exec(code, sys.modules[module_name].__dict__)
 
     def eval(self, expression, module_name='__main__'):
-        assert charm.options.remote_exec is True
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         return eval(expression, sys.modules[module_name].__dict__)
 
     # deposit value of one of the futures that was created on this PE
@@ -1071,7 +1073,8 @@ class CharmRemote(Chare):
         charm.printStats()
 
     def registerNewChareType(self, name, source):
-        assert charm.options.remote_exec is True
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         exec(source, charm.dynamic_register)
         chare_type = charm.dynamic_register[name]
         charm.register(chare_type)
