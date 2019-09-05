@@ -409,6 +409,8 @@ class Worker(Chare):
                 f.send(e)
 
     def check(self, func_module, func_name):
+        if charm.options.remote_exec is not True:
+            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         eval(func_name, sys.modules[func_module].__dict__)
 
 
