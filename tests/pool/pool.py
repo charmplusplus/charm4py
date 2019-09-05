@@ -8,13 +8,16 @@ NUM_TRIALS = 10
 def square(x):
     return x**2
 
+
 @coro
 def square_coro(x):
     f = Future()
     return x**2
 
+
 def add_val(x):
     return x + 5
+
 
 @coro
 def add_val_coro(x):
@@ -39,12 +42,12 @@ def main(args):
     funcs = [square, square_coro, add_val, add_val_coro]
     tasks = []
     for i in range(NUM_TASKS):
-        tasks.append((funcs[i%len(funcs)], i))
+        tasks.append((funcs[i % len(funcs)], i))
     for chunksize in (1, 8):
         t0 = time()
         for _ in range(NUM_TRIALS):
             result = charm.pool.submit(tasks, chunksize=chunksize)
-            assert result == [f(x) for f,x in tasks]
+            assert result == [f(x) for f, x in tasks]
         print('Elapsed=', time() - t0)
 
     exit()

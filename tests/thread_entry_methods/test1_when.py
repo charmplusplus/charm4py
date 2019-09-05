@@ -1,8 +1,7 @@
 from charm4py import charm, Chare, Array, Group, coro, when, Reducer
-import time
+
 
 charm.options.profiling = True
-
 ITERATIONS = 30
 
 
@@ -46,6 +45,7 @@ class Test2(Chare):
 
 
 def main(args):
+    global numChares, testGroup
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)
     charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},

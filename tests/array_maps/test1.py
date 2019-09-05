@@ -22,7 +22,7 @@ class MyChare(Chare):
 
 def main(args):
     array_map = Group(MyMap)
-    for nDims in range(1,7):
+    for nDims in range(1, 7):
         if nDims <= 3:
             dim_size = 4
         else:

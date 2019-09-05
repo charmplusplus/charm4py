@@ -20,10 +20,10 @@ def main(args):
     assert g[:charm.numPes():2].getIdx(ret=True).get() == elems
     assert g[0:charm.numPes()].getIdx_th(ret=True).get() != elems
 
-    a1 = Array(Test, (8,8))
+    a1 = Array(Test, (8, 8))
     a2 = Array(Test, 64)
 
-    indexes = a1[0:8:2,1:8:2].getIdx(ret=True).get()
+    indexes = a1[0:8:2, 1:8:2].getIdx(ret=True).get()
     assert len(indexes) == 8*8//4
     for idx in indexes:
         assert len(idx) == 2

@@ -21,7 +21,7 @@ class Hello(Chare):
             # send a hello message to the next element (in row-major order)
             nextIndex = list(self.thisIndex)
             num_dims = len(self.array_dims)
-            for i in range(num_dims-1,-1,-1):
+            for i in range(num_dims-1, -1, -1):
                 nextIndex[i] = (nextIndex[i] + 1) % self.array_dims[i]
                 if nextIndex[i] != 0:
                     break

@@ -29,8 +29,8 @@ class Test(Chare):
 
 
 def main(args):
-    array2d = Array(Test, (8,8))
-    array3d = Array(Test, (4,5,3))
+    array2d = Array(Test, (8, 8))
+    array3d = Array(Test, (4, 5, 3))
 
     # for each array, create one section using member function to determine section membership
     for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:

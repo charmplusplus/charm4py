@@ -11,12 +11,13 @@ charm.options.local_msg_optim = False
 MAX_ITER = 50
 DATA_LEN = 15000  # number of doubles
 CHARES_PER_PE = 10
+mainProxy = None
 
 
 class Main(Chare):
 
     def __init__(self, args):
-        charm.thisProxy.updateGlobals({'mainProxy' : self.thisProxy}, '__main__', awaitable=True).get()
+        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, '__main__', awaitable=True).get()
         self.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
 
     def start(self):

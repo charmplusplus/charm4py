@@ -1,5 +1,4 @@
 from charm4py import charm, Chare, Group, Array
-from time import time
 
 
 class Test(Chare):

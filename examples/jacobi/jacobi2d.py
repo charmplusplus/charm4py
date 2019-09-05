@@ -132,8 +132,8 @@ def check_and_compute(temperature, new_temperature, istart, ifinish, jstart, jfi
     for i in range(istart, ifinish):
         for j in range(jstart, jfinish):
             temperature_ith = (temperature[i,j]
-                            + temperature[i-1,j] + temperature[i+1,j]
-                            + temperature[i,j-1] + temperature[i,j+1]) * 0.2
+                               + temperature[i-1,j] + temperature[i+1,j]
+                               + temperature[i,j-1] + temperature[i,j+1]) * 0.2
             # update relative error
             difference = temperature_ith - temperature[i,j]
             if difference < 0:
@@ -152,6 +152,7 @@ class Util(Chare):
 
 
 def main(args):
+    global blockDimX, blockDimY, num_chare_x, num_chare_y
     if len(args) != 3 and len(args) != 5:
         print('\nUsage:\t', args[0], 'array_size block_size')
         print('\t', args[0], 'array_size_X array_size_Y block_size_X block_size_Y')

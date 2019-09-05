@@ -1,20 +1,24 @@
 from charm4py import charm
 
+
 allPes_check  = []
 evenPes_check = []
+
 
 def printWholeTree(root, current):
     allPes_check.append(current)
     parent, children = charm.getTopoTreeEdges(current, root, bfactor=2)
     print(current, "children=", children)
-    for c in children: printWholeTree(root, c)
+    for c in children:
+        printWholeTree(root, c)
 
 
 def printEvenNbTree(pes, current):
     evenPes_check.append(current)
     parent, children = charm.getTopoTreeEdges(current, pes[0], pes, bfactor=2)
     print(current, "children=", children)
-    for c in children: printEvenNbTree(pes, c)
+    for c in children:
+        printEvenNbTree(pes, c)
 
 
 def main(args):

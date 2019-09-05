@@ -67,6 +67,7 @@ def main(args):
     print('There are', len(chares), 'chares')
 
     # establish random channels between chares
+    global gchannels
     gchannels = {}
     num_self_channels = 0
     for level in range(NUM_LEVELS):

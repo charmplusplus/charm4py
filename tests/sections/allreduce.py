@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Group, Array, coro, Reducer, Future
+from charm4py import charm, Chare, Group, coro, Reducer, Future
 
 
 NUM_ITER = 100

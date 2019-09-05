@@ -1,5 +1,8 @@
 from charm4py import charm, Chare
 
+# this will be set by Main chare
+mainProxy = None
+
 
 class Goodbye(Chare):
 

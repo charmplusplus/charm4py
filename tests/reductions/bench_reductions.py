@@ -8,9 +8,12 @@ CHARES_PER_PE = 8
 NUM_ITER = 5000
 DATA_LEN = 20000  # number of values
 VAL_CHECK = float(sum(range(DATA_LEN)))
+mainProxy = None
+NUM_CHARES = 0
+
 
 def assert_almost_equal(actual, desired, tol):
-  assert abs(actual - desired) <= tol
+    assert abs(actual - desired) <= tol
 
 
 class Main(Chare):

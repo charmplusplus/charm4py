@@ -1,6 +1,9 @@
 from charm4py import charm, Chare, Group
 
 
+group1_proxy = group2_proxy = done_future = None
+
+
 class Test(Chare):
 
     def start(self):

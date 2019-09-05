@@ -1,6 +1,9 @@
 from charm4py import charm, Chare
 import time
 
+# this will be set by Main chare
+bye_chares = None
+
 
 class Hello(Chare):
 

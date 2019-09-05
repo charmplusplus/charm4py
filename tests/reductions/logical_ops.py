@@ -37,9 +37,9 @@ def main(args):
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doallfalse(f1, f2, f3, array=False)
-    assert f1.get() == False
-    assert f2.get() == False
-    assert f3.get() == False
+    assert bool(f1.get()) is False
+    assert bool(f2.get()) is False
+    assert bool(f3.get()) is False
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doallfalse(f1, f2, f3, array=True)
@@ -49,9 +49,9 @@ def main(args):
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doalltrue(f1, f2, f3, array=False)
-    assert f1.get() == True
-    assert f2.get() == True
-    assert f3.get() == False
+    assert bool(f1.get()) is True
+    assert bool(f2.get()) is True
+    assert bool(f3.get()) is False
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doalltrue(f1, f2, f3, array=True)
@@ -61,9 +61,9 @@ def main(args):
 
     f1, f2, f3 = Future(), Future(), Future()
     g.test1(f1, f2, f3)
-    assert f1.get() == False
-    assert f2.get() == True
-    assert f3.get() == False
+    assert bool(f1.get()) is False
+    assert bool(f2.get()) is True
+    assert bool(f3.get()) is False
 
     exit()
 

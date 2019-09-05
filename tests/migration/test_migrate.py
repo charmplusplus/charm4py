@@ -45,7 +45,7 @@ class Test(Chare):
 def main(args):
     home_pes = Future()
     array = Array(Test, charm.numPes() * 4, args=[home_pes], useAtSync=True)
-    charm.thisProxy.updateGlobals({'all_created' : True, 'arrayElemHomeMap' : home_pes.get()},
+    charm.thisProxy.updateGlobals({'all_created': True, 'arrayElemHomeMap': home_pes.get()},
                                   '__main__', awaitable=True).get()
     array.start()
 

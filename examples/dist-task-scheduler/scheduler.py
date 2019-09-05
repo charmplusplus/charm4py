@@ -2,6 +2,7 @@ from charm4py import charm, Chare, Group, Future
 
 # See README.rst
 
+
 class Job(object):
     """ This class is mainly for book-keeping (store and manage job state) """
 

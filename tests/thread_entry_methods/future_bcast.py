@@ -5,11 +5,11 @@ import time
 
 class Test(Chare):
 
-  def work(self, sleepTimes):
-    if isinstance(self.thisIndex, tuple):
-      time.sleep(sleepTimes[self.thisIndex[0]])
-    else:
-      time.sleep(sleepTimes[self.thisIndex])
+    def work(self, sleepTimes):
+        if isinstance(self.thisIndex, tuple):
+            time.sleep(sleepTimes[self.thisIndex[0]])
+        else:
+            time.sleep(sleepTimes[self.thisIndex])
 
 
 def main(args):

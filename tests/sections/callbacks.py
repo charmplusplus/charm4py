@@ -14,7 +14,7 @@ def odd_idx_chares(obj):
 
 def assert_allclose(actual, desired, tol):
     assert len(actual) == len(desired)
-    assert all([(abs(actual[i] - v) <= tol) for i,v in enumerate(desired)])
+    assert all([(abs(actual[i] - v) <= tol) for i, v in enumerate(desired)])
 
 
 class Test(Chare):

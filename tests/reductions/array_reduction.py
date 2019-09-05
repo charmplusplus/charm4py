@@ -6,11 +6,14 @@ import numpy
 # utility methods for assertions
 def assert_allclose(actual, desired, tol):
     assert len(actual) == len(desired)
-    assert sum([(abs(actual[i] - v) <= tol) for i,v in enumerate(desired)]) == len(actual)
+    assert sum([(abs(actual[i] - v) <= tol) for i, v in enumerate(desired)]) == len(actual)
 
 
 def assert_almost_equal(actual, desired, tol):
-    assert abs(actual -desired) <= tol
+    assert abs(actual - desired) <= tol
+
+
+mainProxy = arrProxy = groupProxy = None
 
 
 class Main(Chare):
@@ -20,10 +23,7 @@ class Main(Chare):
         self.recvdReductions = 0
 
         nDims = 1
-        ARRAY_SIZE = [10] * nDims # 1-D array with 10 elements
-        firstIdx = [0] * nDims
-        lastIdx = tuple([x-1 for x in ARRAY_SIZE])
-
+        ARRAY_SIZE = [10] * nDims  # 1-D array with 10 elements
         nElements = 1
         for x in ARRAY_SIZE:
             nElements *= x

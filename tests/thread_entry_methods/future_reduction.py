@@ -4,13 +4,14 @@ from charm4py import charm, Chare, Group, Reducer, Future
 def my_sum(contribs):
     return sum(contribs)
 
+
 Reducer.addReducer(my_sum)
 
 
 class Test(Chare):
 
     def __init__(self, future1, future2):
-        self.contribute(1, Reducer.sum,    future1)
+        self.contribute(1, Reducer.sum, future1)
         self.contribute(1, Reducer.my_sum, future2)
 
 

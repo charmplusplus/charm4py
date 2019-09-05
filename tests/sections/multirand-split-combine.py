@@ -12,6 +12,7 @@ NUM_GEN = 300
 DATA_VERIFY = 0
 NUM_ITER = 1
 VERBOSE = False
+insections = None
 
 
 def mygather(contribs):
@@ -19,6 +20,7 @@ def mygather(contribs):
     for c in contribs:
         result += c
     return result
+
 
 Reducer.addReducer(mygather)
 
@@ -104,8 +106,9 @@ class Collection(object):
 
 def partition(elems, N):
     num_elems = len(elems)
-    return [ elems[i*num_elems // N: (i+1)*num_elems // N]
-             for i in range(N) ]
+    return [elems[i*num_elems // N: (i+1)*num_elems // N]
+            for i in range(N)]
+
 
 def inSections(obj):
     if (obj.cid, obj.idx) in insections:
@@ -184,7 +187,7 @@ def main(args):
 
     for _ in range(NUM_ITER):
         futures = [Future() for _ in range(len(collections))]
-        charm.thisProxy.updateGlobals({'DATA_VERIFY' : random.randint(0,100000)}, awaitable=True).get()
+        charm.thisProxy.updateGlobals({'DATA_VERIFY': random.randint(0, 100000)}, awaitable=True).get()
         data = DATA_VERIFY
         for i, c in enumerate(collections):
             sid = None
