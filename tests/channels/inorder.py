@@ -13,6 +13,7 @@ class Test(Chare):
             assert ch.recv() == i
         done_fut()
 
+
 class Main(Chare):
 
     def __init__(self, args):

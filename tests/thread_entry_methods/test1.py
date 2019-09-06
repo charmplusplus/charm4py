@@ -1,8 +1,7 @@
 from charm4py import charm, Chare, Array, Group, coro, Reducer
-import time
+
 
 charm.options.profiling = True
-
 ITERATIONS = 30
 
 
@@ -41,6 +40,7 @@ class Test2(Chare):
 
 
 def main(args):
+    global numChares, testGroup
     # every chare sends to every other so don't want a ton of chares
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)

@@ -1,6 +1,9 @@
 from charm4py import charm, Chare, Array, Group, Reducer
 
 
+mainProxy = None
+
+
 class Main(Chare):
 
     def __init__(self, args):
@@ -9,9 +12,6 @@ class Main(Chare):
 
         nDims = 1
         ARRAY_SIZE = [10] * nDims
-        firstIdx = [0] * nDims
-        lastIdx = tuple([x-1 for x in ARRAY_SIZE])
-
         self.nElements = 1
         for x in ARRAY_SIZE:
             self.nElements *= x

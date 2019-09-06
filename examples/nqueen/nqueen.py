@@ -41,6 +41,7 @@ class Util(Chare):
 
 
 def main(args):
+    global NUM_ROWS, GRAINSIZE
     NUM_ROWS = 5  # size of board is NUM_ROWS x NUM_ROWS
     if len(args) > 1:
         NUM_ROWS = int(args[1])

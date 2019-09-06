@@ -13,7 +13,7 @@ def parseMethodArgs(s):
     arg_names = re.split(', *', s[1:-1])
     method_args = {}
     for i in range(1, len(arg_names)):
-      method_args[arg_names[i]] = i-1
+        method_args[arg_names[i]] = i-1
     return method_args
 
 

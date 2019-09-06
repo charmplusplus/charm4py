@@ -5,6 +5,7 @@ import time
 MAX_VALS = 10000
 PHASE_NUM = 10
 
+
 class Worker(Chare):
 
     def start(self, done_future):

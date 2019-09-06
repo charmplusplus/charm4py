@@ -1,4 +1,3 @@
-import array
 from greenlet import getcurrent
 
 

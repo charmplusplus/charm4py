@@ -1,4 +1,4 @@
-from .threads import threadMgr, LocalFuture
+from .threads import LocalFuture
 
 
 class Channel(object):

@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Group, Reducer
+from charm4py import charm, Chare, Array, Reducer
 
 
 def myReducer(contribs):
@@ -8,7 +8,12 @@ def myReducer(contribs):
     result.append(min([c[2] for c in contribs]))
     return result
 
+
 Reducer.addReducer(myReducer)
+
+
+mainProxy = arrProxy = None
+lastIdx = None
 
 
 class Main(Chare):
@@ -19,7 +24,6 @@ class Main(Chare):
 
         nDims = 1
         ARRAY_SIZE = [10] * nDims
-        firstIdx = [0] * nDims
         lastIdx = tuple([x-1 for x in ARRAY_SIZE])
 
         self.nElements = 1
@@ -81,14 +85,14 @@ class Test(Chare):
 
     def doReduction(self):
         # test contributing using built-in Charm reducer
-        self.contribute([1,self.thisIndex[0]], Reducer.sum, mainProxy.done_charm_builtin)
+        self.contribute([1, self.thisIndex[0]], Reducer.sum, mainProxy.done_charm_builtin)
         a = MyObject(self.thisIndex[0])
         # test contributing using built-in Python reducer
         self.contribute(a, Reducer.sum, mainProxy.done_python_builtin)
         # test product reducer
         self.contribute(a, Reducer.product, mainProxy.done_python_builtin)
         # test contributing using custom Python reducer
-        self.contribute([1,self.thisIndex[0],self.thisIndex[0]], Reducer.myReducer, mainProxy.done_python_custom)
+        self.contribute([1, self.thisIndex[0], self.thisIndex[0]], Reducer.myReducer, mainProxy.done_python_custom)
 
 
 charm.start(Main)

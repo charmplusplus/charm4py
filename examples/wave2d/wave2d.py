@@ -31,7 +31,7 @@ class Main(Chare):
         try:
             args.remove('--NO-RENDER')
             self.RENDER = False
-        except:
+        except ValueError:
             pass
 
         print('\nUsage: wave2d.py [num_iterations] [max_framerate])')
@@ -213,9 +213,9 @@ def fill_subimage(data, w, h, pressure):
             if p > 255: p = 255    # Keep values in valid range
             if p < -255: p = -255  # Keep values in valid range
             pos = 3*(i*w+j)
-            if p > 0: # Positive values are red
+            if p > 0:  # Positive values are red
                 data[pos:pos+3] = (255, 255-p, 255-p)
-            else: # Negative values are blue
+            else:  # Negative values are blue
                 data[pos:pos+3] = (255+p, 255+p, 255)
 
     # Draw a green border on right and bottom of this chare array's pixel buffer.

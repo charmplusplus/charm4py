@@ -24,7 +24,8 @@ class Test(Chare):
                 exit()
 
     def run(self):
-        if charm.myPe() == 0 or charm.myPe() > self.numParticipants: return
+        if charm.myPe() == 0 or charm.myPe() > self.numParticipants:
+            return
         #print("Group " + str(self.thisIndex) + " sending msg " + str(self.msgsSent))
         self.thisProxy[0].testWhen(charm.myPe(), "hi")
         self.msgsSent += 1

@@ -1,6 +1,6 @@
 from charm4py import charm, Chare, Array, coro, Future
 from time import time
-import numpy as np
+#import numpy as np
 
 PAYLOAD = 100  # number of bytes
 NITER = 10000

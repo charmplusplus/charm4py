@@ -10,6 +10,8 @@ class MyException(Exception):
         super(MyException, self).__init__()
 
 
+myfunc = None
+
 myfunc_bad_source = '''
 def myfunc(x):
     raise MyException

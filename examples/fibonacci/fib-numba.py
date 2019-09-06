@@ -42,6 +42,7 @@ class Util(Chare):
 
 
 def main(args):
+    global GRAINSIZE
     print('\nUsage: fib-numba.py [n] [grainsize]')
     n = 40
     if len(args) > 1:

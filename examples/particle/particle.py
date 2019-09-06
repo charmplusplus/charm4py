@@ -69,13 +69,13 @@ class Cell(Chare):
     def getNbIndexes(self, arrayDims):
         # return indexes of neighboring cells (N,NE,E,SE,S,SW,W,NW) with wrap around
         nbs = set()
-        x,y = self.thisIndex
+        x, y = self.thisIndex
         nb_x_coords = [(x-1)%arrayDims[0], x, (x+1)%arrayDims[0]]
         nb_y_coords = [(y-1)%arrayDims[1], y, (y+1)%arrayDims[1]]
         for nb_x in nb_x_coords:
             for nb_y in nb_y_coords:
-                if (nb_x,nb_y) != self.thisIndex:
-                    nbs.add((nb_x,nb_y))
+                if (nb_x, nb_y) != self.thisIndex:
+                    nbs.add((nb_x, nb_y))
         return list(nbs)
 
     def getNumParticles(self):
@@ -110,7 +110,7 @@ class Cell(Chare):
                     self.particles[i] = self.particles[-1]
                     self.particles.pop()
                 else:
-                   i += 1
+                    i += 1
 
             # send outgoing particles to neighboring cells
             for i, channel in enumerate(self.neighbors):

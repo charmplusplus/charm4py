@@ -1,9 +1,7 @@
 from charm4py import charm, Chare, Array, when
-import random
-import time
+
 
 charm.options.profiling = True
-
 X, Y, Z = 3, 7, 11
 WORKER_ITERS = 10
 TASKS_PER_WORKER = 40
@@ -27,7 +25,8 @@ class Worker(Chare):
     def doWork(self, x, y, z):
         assert(not self.ready)
         result = 0
-        for _ in range(WORKER_ITERS): result += (x*y*z)
+        for _ in range(WORKER_ITERS):
+            result += (x * y * z)
         self.thisProxy[self.thisIndex].workDone(result)
 
     def workDone(self, result):
@@ -59,10 +58,10 @@ class Controller(Chare):
             self.tasks_completed = 0
             self.iteration += 1
             if self.iteration == NUM_ITERS:
-              charm.printStats()
-              exit()
+                charm.printStats()
+                exit()
             else:
-              self.sendWork()
+                self.sendWork()
 
 
 def main(args):

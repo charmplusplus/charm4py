@@ -31,11 +31,9 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
     from .chare import Chare, Group, Array, ArrayMap
     from .channel import Channel
 
-
     def checkCharmStarted():
         if not charm.started:
             print('Program is exiting but charm was not started: charm.start() was not '
                   'called or error happened before start')
-
 
     atexit.register(checkCharmStarted)

@@ -1,4 +1,4 @@
-from charm4py import charm, Array, Chare, Reducer, Future
+from charm4py import charm, Array, Chare, Future
 
 
 CHARES_PER_PE = 4

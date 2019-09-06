@@ -553,7 +553,6 @@ class Charm(object):
         self.pool = Pool(pool_proxy)
         readonlies.charm_pool_proxy__h = pool_proxy
 
-
     def start(self, entry=None, classes=[], modules=[], interactive=False):
         """
         Start Charm4py program.
@@ -1001,8 +1000,6 @@ class Charm(object):
 
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
-
-
 
 
 class CharmRemote(Chare):
