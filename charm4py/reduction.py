@@ -12,8 +12,10 @@ except ImportError:
     # this is to avoid numpy dependency
     haveNumpy = False
     class NumpyDummyModule:
-        class ndarray: pass
-        class number: pass
+        class ndarray:
+            pass
+        class number:
+            pass
     np = NumpyDummyModule()
 
 
@@ -22,12 +24,12 @@ except ImportError:
 
 NUM_C_TYPES = 13
 # Set of integer identifiers for C types used with internal reducers
-(C_BOOL,  C_CHAR,  C_SHORT,  C_INT,  C_LONG,  C_LONG_LONG,
+(C_BOOL, C_CHAR, C_SHORT, C_INT, C_LONG, C_LONG_LONG,
  C_UCHAR, C_USHORT, C_UINT, C_ULONG, C_ULONG_LONG,
  C_FLOAT, C_DOUBLE) = range(NUM_C_TYPES)
 
 # map names of C types (as they appear in CkReductionTypesExt) to their identifiers
-c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long':  C_LONG,  'long_long':  C_LONG_LONG,
+c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LONG, 'long_long': C_LONG_LONG,
                     'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG, 'ulong_long': C_ULONG_LONG,
                     'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_BOOL}
 
@@ -38,17 +40,21 @@ c_typename_to_id = {'char':  C_CHAR,  'short':  C_SHORT,  'int':  C_INT,  'long'
 def _sum(contribs):
     return sum(contribs)
 
+
 def _product(contribs):
     result = contribs[0]
     for i in range(1, len(contribs)):
         result *= contribs[i]
     return result
 
+
 def _max(contribs):
     return max(contribs)
 
+
 def _min(contribs):
     return min(contribs)
+
 
 def _bcast_exc_reducer(contribs):
     # return first non empty contribution
@@ -56,13 +62,16 @@ def _bcast_exc_reducer(contribs):
         if c is not None:
             return c
 
+
 def gather(contribs):
     # contribs will be a list of list of tuples
     # first element of tuple is always array index of chare
     return sorted(chain(*contribs))
 
+
 def gather_preprocess(data, contributor):
     return [(contributor.thisIndex, data)]
+
 
 def gather_postprocess(contrib):
     return [tup[1] for tup in contrib]
@@ -112,8 +121,6 @@ class ReductionManager(object):
         self.populateConversionTables()
 
     def populateConversionTables(self):
-        import os
-
         # `red_table[op][c_type]` maps to `charm_reducer_type`, where:
         #     - op is the identifier for internal reducer (SUM, PRODUCT, MAX or INT)
         #     - c_type is identifier for C type (C_CHAR, C_SHORT, etc)
@@ -137,7 +144,7 @@ class ReductionManager(object):
             elif f == 'external_py':
                 op, c_type_str = None, 'char'
             elif f.startswith('logical'):
-                op, c_type_str =  f.split('_')[1:]
+                op, c_type_str = f.split('_')[1:]
             else:
                 op, c_type_str = f.split('_', 1)        # e.g. from 'sum_long' extracts 'sum' and 'long'
             ctype_code = c_typename_to_id[c_type_str]   # e.g. map 'long' to C_LONG
