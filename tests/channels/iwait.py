@@ -23,7 +23,7 @@ class Main(Chare):
 
         t0 = time.time()
         idx = 0
-        for ch in charm.iawait(channels):
+        for ch in charm.iwait(channels):
             assert ch.recv() == idx
             idx += 1
             print(time.time() - t0)

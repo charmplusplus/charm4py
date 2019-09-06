@@ -36,7 +36,7 @@ class _Channel(object):
         self.recv_seqno = 0
         self.data = {}
         self.recv_fut = None  # this future is used to block on self.recv()
-        self.wait_ready = None  # this future is used to block on ready (by charm.iawait())
+        self.wait_ready = None  # this future is used to block on ready (by charm.iwait())
         self.established = False
         self.established_fut = None
         self.locally_initiated = locally_initiated

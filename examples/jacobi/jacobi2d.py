@@ -85,7 +85,7 @@ class Jacobi(Chare):
 
             # receive ghost data from neighbors. iawait iteratively yields
             # channels as they become ready (have data to receive)
-            for nb in charm.iawait(self.nbs):
+            for nb in charm.iwait(self.nbs):
                 direction, ghosts = nb.recv()
                 if direction == LEFT:
                     self.temperature[0, 1:len(ghosts)+1] = ghosts

@@ -32,7 +32,7 @@ class Test(Chare):
             random.shuffle(channels)
             for ch in channels:
                 ch.send(me, start + i)
-            for ch in charm.iawait(channels):
+            for ch in charm.iwait(channels):
                 remote, data = ch.recv()
                 assert data == start + i
                 assert ch.remote == remote
