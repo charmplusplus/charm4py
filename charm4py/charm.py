@@ -809,7 +809,7 @@ class Charm(object):
 
     # generator that yields objects (works for Futures and Channels) as they
     # become ready (have a msg ready to receive immediately)
-    def iawait(self, objs):
+    def iwait(self, objs):
         n = len(objs)
         f = LocalFuture()
         for obj in objs:
@@ -823,8 +823,8 @@ class Charm(object):
             n -= 1
             yield obj
 
-    def await(self, objs):
-        for o in self.iawait(objs):
+    def wait(self, objs):
+        for o in self.iwait(objs):
             pass
 
     def recordSend(self, size):
