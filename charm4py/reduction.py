@@ -154,7 +154,6 @@ class ReductionManager(object):
 
         # ------ numpy data types ------
         if haveNumpy:
-
             # map numpy data types to internal reduction C code identifier
             self.numpy_type_map = {'bool': C_BOOL, 'int8': C_CHAR, 'int16': C_SHORT,
                                    'int32': C_INT, 'int64': C_LONG, 'uint8': C_UCHAR,
@@ -174,6 +173,16 @@ class ReductionManager(object):
             for c_type in range(NUM_C_TYPES):
                 if c_type in reverse_lookup:
                     self.rev_np_array_type_map[c_type] = reverse_lookup[c_type]
+            if self.rev_np_array_type_map[C_LONG] is None:
+                self.rev_np_array_type_map[C_LONG] = np.int_().dtype.name
+                self.rev_np_array_type_map[C_ULONG] = np.uint().dtype.name
+                assert np.dtype('int_').itemsize == self.charm.lib.sizeof(C_LONG)
+                assert np.dtype('uint').itemsize == self.charm.lib.sizeof(C_ULONG)
+            if self.rev_np_array_type_map[C_LONG_LONG] is None:
+                self.rev_np_array_type_map[C_LONG_LONG] = np.longlong().dtype.name
+                self.rev_np_array_type_map[C_ULONG_LONG] = np.ulonglong().dtype.name
+                assert np.dtype('longlong').itemsize == self.charm.lib.sizeof(C_LONG_LONG)
+                assert np.dtype('ulonglong').itemsize == self.charm.lib.sizeof(C_ULONG_LONG)
 
         # ------ array.array data types ------
 
@@ -189,16 +198,18 @@ class ReductionManager(object):
         for dt, c_type in self.array_type_map.items():
             assert array.array(dt).itemsize == self.charm.lib.sizeof(c_type)
 
-        self.rev_array_type_map = ['b', 'h', 'i', 'l', 'q', 'B', 'H', 'I', 'L', 'Q', 'f', 'd']
+        self.rev_array_type_map = ['b', 'b', 'h', 'i', 'l', 'q', 'B', 'H', 'I', 'L', 'Q', 'f', 'd']
+        assert len(self.rev_array_type_map) == NUM_C_TYPES
 
         # ------ python data types ------
 
         # map python types to internal reduction C code identifier
         self.python_type_map = {float: C_DOUBLE, bool: C_BOOL}
-        if os.name == 'nt':
-            self.python_type_map[int] = C_LONG_LONG
-        else:
+        if self.charm.lib.sizeof(C_LONG) >= 8:
             self.python_type_map[int] = C_LONG
+        else:
+            self.python_type_map[int] = C_LONG_LONG
+            assert self.charm.lib.sizeof(C_LONG_LONG) >= 8
         if haveNumpy:
             # this is a bit of a hack
             self.python_type_map[np.bool_] = C_BOOL
