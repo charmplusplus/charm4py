@@ -986,11 +986,11 @@ class Charm(object):
     def getPeHostRank(self, pe):
         return self.lib.CkPhysicalRank(pe)
 
-    def exit(self, exitCode=0):
-        self.lib.CkExit(exitCode)
+    def exit(self, exit_code=0):
+        self.lib.CkExit(exit_code)
 
-    def abort(self, msg):
-        self.lib.CkAbort(msg)
+    def abort(self, message):
+        self.lib.CkAbort(message)
 
     def addReducer(self, func):
         self.reducers.addReducer(func)
