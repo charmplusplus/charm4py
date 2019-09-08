@@ -2,6 +2,104 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+What's new in v1.0
+==================
+
+This is a major release, containing API changes, many new features, bug fixes
+and performance improvements. The highlights are:
+
+- Many improvements that simplify how Charm4py programs are written.
+  There have been API changes, but most of the old API is preserved for
+  backward compatibility. Please consult the documentation if you
+  encounter any issues, and consider migrating to the new API.
+
+- **Coroutines**: threaded entry methods are now referred to as coroutines (which is a more
+  common term) and the appropiate way to declare them is with the new
+  ``@coro`` decorator.
+
+  - Significant performance improvement of coroutines, now implemented using the
+    greenlet package.
+
+- **Channels**: can establish channels between arbitrary pairs of chares, and use
+  them to send/receive data inside coroutines.
+
+- **Sections**: it is now possible to split, slice and combine chare collections
+  in arbitrary ways, to form new collections called *sections*, containing some
+  subset or combination of elements. Sections are referenced by section proxies, and the usual operations
+  of broadcast and reductions are supported (uses efficient multicast trees
+  that only involve the PEs where the section elements are located).
+
+- Can now create Groups that are constrained to certain PEs, for example:
+  ``g = Group(MyChare, onPEs=[0,4,8...])``. This uses the sections implementation
+  underneath.
+
+- Keyword arguments are now correctly supported when calling remote methods.
+
+- Added ``charm.wait(awaitables)`` that waits for the given objects to become
+  ready (works for futures and channels).
+
+- Added ``charm.iwait(awaitables)`` that iteratively yields objects as they
+  become ready (works for futures and channels).
+
+- Huge rewrite and revision of examples to use new features (like coroutines
+  and channels), and added documentation and comments. New examples added.
+
+- Same applies to the tutorial and large parts of the documentation.
+
+- Added ARM support (tested on Raspberry Pi 3 B+).
+
+- **Pool**: added an interface to create single tasks. Tasks themselves can spawn
+  any number of other tasks. Python functions decorated with ``@coro`` can be
+  used as tasks that can wait for messages, other tasks to complete, etc.
+
+- Added Quiescence Detection (QD) support. Please see the manual and tutorial for
+  more information.
+
+- Can now use Futures and proxy methods as *callbacks*, that is: *callable* objects
+  that can be sent to other chares, and which those chares can call to send
+  values back. For example: ``someproxy[3].somemethod`` is a valid callback that can
+  be sent (requires Python 3+).
+
+- The ``ret=True`` keyword argument now has the same semantics for broadcast calls
+  as for point-to-point calls: the future will receive the return values.
+  For the broadcast case, it will be a list of return values
+  (of all the called elements), sorted by element index.
+
+- Added ``awaitable`` keyword argument to proxy calls, to wait for completion
+  without sending return values to the caller.
+
+- Better method to update globals: ``charm.updateGlobals(dict, module_name)``
+  is a remote method that can be called to update global values on any PE at
+  any time (typically used as a broadcast call). It has the same rules and semantics
+  as any other proxy call, so it can be waited upon.
+
+- Distributed exception handling: if a future is requested when invoking remote
+  methods (using ``awaitable=True`` or ``ret=True``) and an exception happens
+  in the remote method, it is propagated to the caller.
+
+- **Interactive mode**: several QOL improvements. Note that we consider this mode to still
+  be in beta, and encourage feedback. Some highlights:
+
+  - Improved launch process for interactive mode. Now also works with charmrun
+    in ssh mode (which can be used to launch an interactive session using multiple hosts).
+
+  - Can automatically broadcast import statements to other PEs (on by default).
+
+  - Can automatically broadcast and register Chare definitions (on by default).
+
+  - Exceptions (whether local or remote) should not crash the interactive
+    session anymore (thanks to distributed exception handling mentioned above).
+
+- Chares now have a method called ``migrated`` that applications can redefine
+  to get notified when a chare has migrated.
+
+- Added ``Chare.setMigratable(bool)`` to indicate whether a chare that is part
+  of an Array can be migrated or not.
+
+- All proxies implement ``__eq__`` and ``__hash__``, with correct results
+  between proxies generated locally and those obtained from a remote PE.
+  This allows, for example, checking proxies for equality, using them as
+  dictionary keys or inserting in sets.
 
 What's new in v0.12.3
 =====================
