@@ -42,7 +42,7 @@ except:
         from charm4py import _version
         charm4py_version = _version.version
     except:
-        raise DistutilsSetupError('Could not determine charm4py version')
+        raise DistutilsSetupError('Could not determine Charm4py version')
 
 
 def charm_built(charm_src_dir):
@@ -79,7 +79,7 @@ def check_cffi():
         import cffi
         version = tuple(int(v) for v in cffi.__version__.split('.'))
         if version < (1, 7):
-            raise DistutilsSetupError('charm4py requires cffi >= 1.7. '
+            raise DistutilsSetupError('Charm4py requires cffi >= 1.7. '
                                       'Installed version is ' + cffi.__version__)
     except ImportError:
         raise DistutilsSetupError('cffi is not installed')
@@ -103,7 +103,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
         if system == 'Windows' or system.lower().startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
-                                      ' Please download a charm4py binary wheel (64-bit Python required)')
+                                      ' Please download a Charm4py binary wheel (64-bit Python required)')
 
         if os.path.exists(os.path.join(charm_src_dir, 'charm.tar.gz')):
             log.info('Uncompressing charm.tar.gz...')
@@ -305,7 +305,7 @@ setuptools.setup(
     version=charm4py_version,
     author='Juan Galvez and individual contributors',
     author_email='jjgalvez@illinois.edu',
-    description='charm4py Parallel Programming Framework',
+    description='Charm4py Parallel Programming Framework',
     long_description=long_description,
     url='https://github.com/UIUC-PPL/charm4py',
     keywords='parallel parallel-programming distributed distributed-computing hpc HPC runtime',
@@ -321,7 +321,6 @@ setuptools.setup(
     install_requires=['numpy>=1.10.0', 'greenlet'],
     #python_requires='>=2.7, ~=3.4',
     classifiers=[
-        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: Free for non-commercial use',
         'Operating System :: MacOS :: MacOS X',
