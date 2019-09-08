@@ -4,424 +4,419 @@ Tutorial
 
 .. contents::
 
-This tutorial assumes that you have installed Charm4py as described in :doc:`install`.
-You can run any of these examples in an interactive Python shell (using multiple processes)
-by launching Charm4py in the following manner::
+This is a step-by-step tutorial to introduce the main concepts of Charm4py, and
+is meant to be done from an interactive session.
+It is not meant to provide realistic examples, or to cover every possible topic.
+For examples, you can refer to :doc:`examples`.
 
-    $ python3 -m charmrun.start +p4 ++interactive
+.. This tutorial assumes that you have installed Charm4py as described in :doc:`install`.
 
-and inserting code at the prompt. Note that in interactive mode the runtime is already
-started when the interactive shell appears, so ``charm.start()`` does *not* need to be called.
-For the examples below, you can directly call the main function or, alternatively, just run the body of the main
-function in the top-level shell.
+To begin, launch an interactive session with 2 processes::
 
-
-Program start and exit
-----------------------
-
-To start a Charm program, you need to invoke the ``charm.start(entry)`` method.
-We will begin with a simple example:
-
-.. code-block:: python
-
-    # start.py
-    from charm4py import charm
-
-    def main(args):
-        print("Charm program started on processor", charm.myPe())
-        print("Running on", charm.numPes(), "processors")
-        exit()
-
-    charm.start(main)  # call main([]) in interactive mode
+    $ python3 -m charmrun.start +p2 ++interactive
 
 
-We need to define an entry point to the Charm4py program, which we refer to as the
-Charm *main* function.
-In our example, it is the function called ``main`` .
-The main function runs on only one processor, typically processor 0, and is in charge
-of starting the creation and distribution of work across the system. The main function must take
-one argument to get the list of command-line arguments.
-In this example, we are specifying the
-function ``main`` as the main function by passing it to the ``start`` method.
+This launches Charm4py with two processes on the local host, with an interactive
+console running on the first process. In Charm4py, we also refer to processes
+as Processing Elements (PEs).
 
-The method ``numPes`` returns the number of processors (aka Processing Elements) on
-which the distributed program is running. The method ``myPe`` returns the processor
-number on which the caller resides.
+First steps
+-----------
 
-An explicit call to ``exit()`` is necessary to finish the parallel program, shutting down all
-processes. It can be called from any chare on any processor.
+The interactive console is actually a chare running on PE 0, and the prompt
+is running inside a coroutine of this chare. Typing::
 
-To launch the example with charmrun using 4 processes::
+    >>> self
+    <charm4py.interactive.InteractiveConsole object at 0x7f7d9b1290f0>
 
-    $ python -m charmrun.start +p4 start.py
+will show that ``self`` is an InteractiveConsole object. As mentioned, this
+object exists only on PE 0.
+
+Now, let's look at the ``charm`` object::
+
+    >>> charm
+    <charm4py.charm.Charm object at 0x7f7d9f6d9208>
+
+``charm`` exists on every PE. It represents the Charm runtime. We can query
+information from it::
+
+    >>> charm.myPe()
+    0
+
+Tells us that this process is PE 0.
+
+    >>> charm.numPes()
+    2
+    >>> charm.numHosts()
+    1
+
+The above tells us that we are running Charm4py with 2 PEs on 1 host.
 
 
-Defining Chares
----------------
+Chares
+------
 
-Chares are distributed objects that make up the parallel application (see :doc:`overview`).
-To define a Chare, simply define a class that is a subclass of ``Chare``.
+In this tutorial, we are going to be defining chares dynamically
+after the Charm runtime has started, and so these definitions need to be sent
+to other processes at runtime.
+Note that non-interactive applications typically have everything defined in the
+source files (which every process reads at startup).
 
-.. code-block:: python
-
-    from charm4py import Chare
-
-    class MyChare(Chare):
-
-        def __init__(self):
-            # chare initialization code here
-
-        def work(self, data):
-            # ... do something ...
-
-Any methods of ``MyChare`` will be remotely callable by other chares.
-
-For easy management of distributed objects, you can organize chares into distributed collections:
-
+Let's define a simple chare type. Paste the following in the console:
 
 .. code-block:: python
 
-    # chares.py
-    from charm4py import charm, Chare, Group, Array
+    class Simple(Chare):
+        def sayHi(self):
+            print('Hello from PE', charm.myPe())
+            return 'hi done'
 
-    class MyChare(Chare):
-        def __init__(self):
-            print("Hello from MyChare instance in processor", charm.myPe())
+You will see this::
 
-        def work(self, data):
-          pass
+    Charm4py> Broadcasted Chare definition
 
-    def main(args):
+We have defined a new chare of type ``Simple`` and the runtime has automatically broadcasted
+its definition to other processes. We can now create chares of this type and
+call their methods::
 
-        # create one instance of MyChare on every processor
-        my_group = Group(MyChare)
+    >>> chare = Chare(Simple, onPE=1)  # create a single chare on PE 1
+    >>> chare
+    <__main__.SimpleArrayProxy object at 0x7f7d9b129668>
+    >>> chare.sayHi()
+    Hello from PE 1
 
-        # create 3 instances of MyChare, distributed among the cores by the runtime
-        my_array = Array(MyChare, 3)
+It is important to note that ``chare`` is what is called a
+:ref:`Proxy <proxy-api-label>`. As we can
+see, remote methods are called via proxies, using regular Python method
+invocation syntax.
 
-        # create 2 x 2 instances of MyChare, indexed using 2D index and distributed
-        # among all cores by the runtime
-        my_2d_array = Array(MyChare, (2, 2))
-
-        charm.awaitCreation(my_group, my_array, my_2d_array)
-        exit()
-
-    charm.start(main)  # call main([]) in interactive mode
-
-The above program will create P + 3 + 2\*2 chares and print a message for each created
-chare, where P is the number of processors used to launch the program.
-This is the output for 2 PEs:
-
-.. code-block:: text
-
-    $ python -m charmrun.start +p2 chares.py ++quiet
-    Hello from MyChare instance in processor 0
-    Hello from MyChare instance in processor 0
-    Hello from MyChare instance in processor 0
-    Hello from MyChare instance in processor 0
-    Hello from MyChare instance in processor 0
-    Hello from MyChare instance in processor 1
-    Hello from MyChare instance in processor 1
-    Hello from MyChare instance in processor 1
-    Hello from MyChare instance in processor 1
-
-It is important to note that creation of chares across the system happens asynchronously.
-In other words, when the above calls to create collections return,
-the chares have not yet been created on all PEs. The ``awaitCreation`` method is
-used to wait for all the chares in the specified collections to be created.
-
-.. note::
-    Chares can be created at any point once the Charm *main* function has been reached.
-
-If a program defines new Chare types in files other than the one used to launch the
-application, the user needs to pass the names of those modules when starting charm.
-For example:
-
-.. code-block:: python
-
-    charm.start(main, ['module1', 'module2'])
-
-
-Remote method invocation
-------------------------
-
-To invoke methods on chares, a remote reference or *proxy* is needed. A proxy has the same
-methods as the chare that it references. For example, assuming we have a proxy to a
-``MyChare`` object, we can call method ``work`` like this:
-
-.. code-block:: python
-
-    # invoke method 'work' on the chare, passing list [1,2,3] as argument
-    proxy.work([1,2,3])
-
-Any number and type of arguments can be used, and the runtime will take care of sending
-the arguments if the destination is on a different host. We will also refer to
-invoking a remote method as sending a message.
-
-.. warning::
-
-    Make sure that the caller does not modify any objects passed as arguments
-    after making the call. It also should not attempt to reuse them if the callee is
-    expected to modify them.
-    The caller can safely discard any references to these objects if desired.
-
-References to collections serve as proxies to their elements. For example,
-``my_group`` above is a proxy to the group and its elements. To invoke a method on
-all elements in the group do:
-
-.. code-block:: python
-
-    my_group.work(x)    # 'work' is called on every element
-
-To invoke a method on a particular element do:
-
-.. code-block:: python
-
-    my_group[3].work(x)  # call 'work' on element with index 3
-
-To store a proxy referencing an individual element for later use:
-
-.. code-block:: python
-
-    elem_3_proxy = my_group[3]
-    elem_3_proxy.work(x)   # call 'work' on element with index 3 in my_group
-
-The above also applies to Chare Arrays. In the case of N-dimensional array indexes:
-
-.. code-block:: python
-
-    my_array[10,10].work(x)	# call 'work' on element (10,10)
+.. A proxy has the same methods as the chare(s) that it references.
 
 .. tip::
-    Proxies can be sent to other chares as arguments of methods.
+    Proxies are lightweight objects that can be sent to other chares.
 
-For performance reasons, method invocation is always *asynchronous* in Charm4py, i.e. methods
-return immediately without waiting for the actual method to be invoked on the remote
-object, and therefore without returning any result. Asynchronous method invocation
-is desirable because it leads to better overlap of computation and communication, and better
-resource utilization (which translates to more speed). Note that this does not mean
-that we cannot obtain a result from a remote chare as a result of calling
-one of its methods. There are two ways of doing this:
+The chare we created lives on PE 1, and that is where
+its method executes. Note that Charm4py automatically collects "prints" and
+sends them to PE 0, where they are actually printed.
 
-*1. Using Futures:*
+Remote method invocation is asynchronous, returns immediately,
+and by default does not return anything. We can wait for a call to complete or
+obtain a return value by requesting a :ref:`Future <futures-api-label>` using ``ret=True``::
 
-The user can request to obtain a future_ as a result of calling a remote method, by
-using the keyword ``ret``:
-
-.. _future: https://en.wikipedia.org/wiki/Futures_and_promises
-
-
-.. code-block:: python
-
-    def work(self):
-        # call method 'apply' of chares with index (10,10) and (20,20), requesting futures
-        future1 = my_array[10,10].apply(3, ret=True)
-        future2 = my_array[20,20].apply(3, ret=True)
-
-        # ... do more work ...
-
-        # I need the results now, call 'get' to obtain them. Will block until they arrive,
-        # or return immediately if the result has already arrived
-        x = future1.get()
-        y = future2.get()
-
-        # call 'apply' and block until result arrives
-        z = my_array[10,10].apply(5, ret=True).get()
-
-    def apply(self, x):
-        self.data += x          # apply parameter
-        return self.data.copy() # return result to caller
-
-The ``get`` method of a future will block the thread on the caller side while it waits for the result, but it
-is important to note that it does not block the whole process. Other available work in
-the process (including of the same chare that blocked) will continue to be executed.
+    >>> f = chare.sayHi(ret=True)
+    Hello from PE 1
+    >>> f
+    <charm4py.threads.Future object at 0x7f7d9b129f28>
+    >>> f.get()
+    'hi done'
 
 
-*2. With remote method invocation:*
+Remote method invocation is asynchronous
+----------------------------------------
+
+All method invocations via a proxy are *asynchronous*. Above, we called some
+remote methods, but they execute so quickly that it is not obvious that
+it happens asynchronously. To illustrate this more clearly, we will define a
+method that takes longer to execute.
+
+Paste the following into the console:
 
 .. code-block:: python
 
-    # --- in chare 0 ---
-    def work(self):
-        group[1].apply(3) # tell chare 1 to apply 3 to its data, returns immediately
+    class AsyncSimple(Chare):
+        def sayHi(self):
+            time.sleep(5)
+            print('Hello from PE', charm.myPe())
+            return 'hi done'
 
-    def storeResult(self, data):
-        # got resulting data from remote object
-        # do something with data
+Now, let's invoke the method::
 
-    # --- in chare 1 ---
-    def apply(self, x):
-      self.data += x  # apply parameter
-      group[0].storeResult(self.data.copy())  # return result to caller
+    >>> import time
+    Charm4py> Broadcasted import statement
+    >>> chare = Chare(AsyncSimple, onPE=1)
+    >>> chare.sayHi()
+
+As we can see, the call returns immediately. We won't see any output until
+the method completes (after 5 seconds).
+Now let's see what happens if we want to explicitly wait for the call to complete::
+
+    >>> f = chare.sayHi(awaitable=True)
+    >>> f.get()
+
+We request a future by making the call ``awaitable``. We can then block on the future
+to wait for completion. **It is important to note that this only blocks the
+current coroutine** (it does not block the whole process).
+
+Charm also has a nice feature called *quiescence detection* (QD) that can be used to detect
+when all PEs are idle. We can wait for QD like this::
+
+    >>> chare.sayHi()
+    >>> charm.waitQD()
 
 
-Reductions 101
---------------
+Chare Groups
+------------
 
-Reductions can be performed by members of a collection with the result being sent to
-any chare or future of your choice.
+In many situations we create *collections* of chares, which are distributed across
+processes by the runtime.
+First let's look at **Groups**, which are collections with one element per PE::
+
+    >>> g = Group(AsyncSimple)
+    >>> g
+    <__main__.AsyncSimpleGroupProxy object at 0x7f7d9f9f7fd0>
+    >>> g.sayHi(awaitable=True).get()
+    Hello from PE 0
+    Hello from PE 1
+
+We created a group of AsyncSimple chares and made an awaitable call. Note that
+because we don't refer to any specific element, the message is sent to every
+member (also known as a *broadcast*). We call ``get()`` on the obtained future,
+which blocks until the call completes on every member of the group. Note that
+we didn't get any return values. Let's request return values now::
+
+    >>> g.sayHi(ret=True).get()
+    Hello from PE 1
+    Hello from PE 0
+    ['hi done', 'hi done']
+
+As we can see, we got return values from every member. We can refer to specific
+members by using their index on the proxy. For groups, the index coincides with the
+PE number::
+
+    >>> g[1].sayHi(ret=True).get()
+    'hi done'
+    Hello from PE 1
+
+Chares have one primary collection to which they can belong to, and they have
+access to the collection proxy via their ``thisProxy`` attribute. They
+have access to their index in the collection via the ``thisIndex`` attribute.
+For example, define the following chare type:
 
 .. code-block:: python
 
-    # reduction.py
-    from charm4py import charm, Chare, Group, Reducer
+    class Test(Chare):
+        def start(self):
+            print('I am element', self.thisIndex, 'on PE', charm.myPe(),
+                  'sending a msg to element 1')
+            self.thisProxy[1].sayHi()
+        def sayHi(self):
+            print('Hello from element', self.thisIndex, 'on PE', charm.myPe())
 
-    class MyChare(Chare):
+Now, we will make element 0 send a message to element 1::
 
-        def work(self, data):
-            self.contribute(data, Reducer.sum, self.thisProxy[0].collectResult)
+    >>> g = Group(Test)
+    >>> g[0].start()
+    I am element 0 on PE 0 sending a msg to element 1
+    Hello from element 1 on PE 1
 
-        def collectResult(self, result):
-            print("Result is", result)
-            exit()
+You can store a proxy referencing an individual element, for later use::
 
-    def main(args):
-        my_group = Group(MyChare)
-        my_group.work(3)
+    >>> elem = g[0]
+    >>> elem.sayHi()
+    Hello from element 0 on PE 0
 
-    charm.start(main)  # call main([]) in interactive mode
+Chare Arrays
+------------
+
+Chare Arrays are a more versatile kind of distributed collection, which can have
+zero or multiple chares on a PE, and chares can migrate between processes.
+
+Let's create an Array of 4 chares of the previously defined type ``Test`` and
+see where the runtime places them::
+
+    >>> a = Array(Test, 4)
+    >>> a.sayHi()
+    Hello from element (2,) on PE 1
+    Hello from element (3,) on PE 1
+    Hello from element (0,) on PE 0
+    Hello from element (1,) on PE 0
+
+As we can see, it has created two on each PE.
+
+Array elements have N-dimensional indexes (from 1D to 6D), represented by
+a tuple. For example, let's create a 2 x 2 array instead::
+
+    >>> a = Array(Test, (2,2))
+    >>> a.sayHi()
+    Hello from element (0, 0) on PE 0
+    Hello from element (0, 1) on PE 0
+    Hello from element (1, 0) on PE 1
+    Hello from element (1, 1) on PE 1
+    >>> a[(1,0)].sayHi()
+    Hello from element (1, 0) on PE 1
 
 
-In the above code, every element in the group contributes the data received from
-main (int of value 3) and the result
-is added internally by Charm and sent to method ``collectResult`` of the first chare in the group
-(to the chare in processor 0 because Groups have one chare per PE).
-Chares that are members of a collection have an attribute called ``thisProxy`` that
-is a proxy to said collection.
+Charm is a chare too
+--------------------
 
-For the above code, the result of the reduction will be 3 x number of cores.
+The ``charm`` object is a chare too (part of a Group), which means it has methods that can
+be invoked remotely::
 
-Reductions are performed in the context of the collection to which the chare belongs
-to: all objects in that particular collection have to contribute for the reduction
-to finish.
+    >>> charm.thisProxy[1].myPe(ret=True).get()
+    1
 
-.. hint::
-    Reductions are highly optimized operations that are performed by the runtime in
-    parallel across hosts and processes, and are designed to be scalable up to the largest
-    systems, including supercomputers.
+Calls the method ``myPe()`` of ``charm`` on PE 1, and returns the value.
+
+In interactive mode, Charm also exposes ``exec`` and ``eval`` for dynamic
+remote code execution::
+
+    >>> charm.thisProxy[1].eval('charm.myPe()', ret=True).get()
+    1
+
+Note that remote exec and eval are only enabled by default in interactive mode.
+If you want to use them in regular non-interactive mode, you have to set
+``charm.options.remote_exec`` to ``True`` before the charm runtime is started.
+
+Broadcasting globals
+--------------------
+
+Suppose we want to broadcast and set globals on some or all processes. With what we
+know, we could easily implement our own way of doing this. For example, we
+could create a custom chare Group with a method that receives objects and
+stores them in the global namespace. However, charm provides a convenient
+remote method to do this::
+
+    >>> charm.thisProxy.updateGlobals({'MY_GLOBAL': 1234}, awaitable=True).get()
+    >>> charm.thisProxy.eval('MY_GLOBAL', ret=True).get()
+    [1234, 1234]
+
+As we can see, there is now a global called ``MY_GLOBAL`` in the main module's
+namespace on every PE. We can specify the Python module where we want to set
+the global variables as a second parameter to ``updateGlobals``. If left unspecified,
+it will use ``__main__`` (which is the same namespace where InteractiveConsole
+runs).
+
+Reductions
+----------
+
+Reductions are very useful to aggregate data among members of a collection in
+a way that is scalable and efficient, and send the results anywhere in
+the system via a callback.
+We will illustrate this with a simple example. First define the following chare type:
+
+.. code-block:: python
+
+    class RedTest(Chare):
+        def work(self, data, callback):
+            self.reduce(callback, data, Reducer.sum)
+        def printResult(self, result):
+            print('[' + str(self.thisIndex[0]) + '] Result is', result)
+
+Now we will create an Array of 20 of these chares and broadcast some data so that
+they can perform a "sum" reduction.
+Normally, each chare would provide its own unique data to a reduction, but in this
+case we broadcast the value for simplicity.
+As callback, we will provide a future::
+
+    >>> a = Array(RedTest, 20)
+    >>> f = Future()
+    >>> a.work(1, f)
+    >>> f.get()
+    20
+
+We manually created a future to receive the result, and passed data (int value 1) and the future via a
+broadcast call. The chares performed a reduction using the received data, and sent
+the result to the callback, in this case the future. Because we passed a value
+of 1, the result equals the number of chares. Note that **reductions happen asynchronously**,
+and don't block other ongoing tasks in the system.
+
+
+.. note::
+  Reductions are performed in the context of the collection to which the chare belongs
+  to: all objects in that particular collection have to contribute for
+  the reduction to complete.
+
+The other main type of callback used in Charm is a remote method of some chare(s).
+For example, we can send the result of the reduction to element 7 of the array::
+
+    >>> a.work(1, a[7].printResult)
+    [7] Result is 20
+
+You can even broadcast the result of the reduction to all elements using ``a.printResult`` as
+the callback. Try it and see what happens.
 
 Reductions are useful when data that is distributed among many objects across the
 system needs to be aggregated in some way, for example to obtain the maximum value
 in a distributed data set or to concatenate data in some fashion. The aggregation
-operations that are applied to the data are called *reducers*, and Charm4py includes
-several built-in reducers (including ``sum``, ``max``, ``min``, ``product``, ``gather``),
-as well as allowing users to easily define their own custom reducers for use in reductions.
-Please refer to the manual for more information.
+operations that are applied to the data are called **reducers**, and Charm4py includes
+several built-in reducers, including sum, max, min, product and gather. Users can
+also define their own reducers (see :ref:`Reducers <reducer-api-label>`).
 
-Arrays (array.array_) and `NumPy arrays`_ can be passed as contribution to many of
-Charm4py's built-in reducers. The reducer will be applied to elements
-having the same index in the array. The size of the result will thus be the same as
-that of each contribution.
+It is common to perform reduction operations on arrays::
 
-For example:
-
-.. code-block:: python
+    >>> import numpy
+    >>> f = Future()
+    >>> a.work(numpy.array([1,2,3]), f)
+    >>> f.get()
+    array([20, 40, 60])
 
 
-    def doWork(self):
-        a = numpy.array([0,1,2])  # all elements contribute the same data
-        self.contribute(a, Reducer.sum, target.collectResult)
-
-    def collectResult(self, a):
-        print(a)  # output is array([0, 4, 8]) when 4 elements contribute
+You can also do *empty reductions* to know when all the elements in a collection
+have reached a certain point. Simply provide a callback to the ``reduce`` call
+and omit the data and reducer.
 
 
+Channels
+--------
 
-.. _array.array: https://docs.python.org/3/library/array.html
+Channels in Charm4py are streams or pipes between chares (currently only
+point-to-point). They are useful for writing iterative applications where chares
+always send/recv to/from the same the set of chares.
 
-.. _NumPy arrays: https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html
-
-
-
-
-Hello World
------------
-
-Now we will show a full *Hello World* example, that prints a message from all processors:
+Here, we will establish a channel between the InteractiveConsole and another
+chare. First let's define the chare:
 
 .. code-block:: python
 
-    # hello_world.py
-    from charm4py import Chare, Group, charm
+    class Echo(Chare):
+        @coro
+        def run(self, remote_proxy):
+            ch = Channel(self, remote=remote_proxy)
+            while True:
+                x = ch.recv()
+                ch.send(x)
 
-    class Hello(Chare):
+Echo chares will establish a channel with whatever chare is passed to
+them in the ``run`` method, and will enter an infinite loop where they
+wait to receive something from the channel and then send it right back::
 
-        def SayHi(self):
-            print("Hello World from element", self.thisIndex)
+    >>> chare = Chare(Echo, onPE=1)
+    >>> chare.run(self.thisProxy)
+    >>> ch = Channel(self, remote=chare)
+    >>> ch.send('hello')
+    >>> ch.recv()
+    'hello'
+    >>> ch.send(1,2,3)
+    >>> ch.recv()
+    (1, 2, 3)
 
-    def main(args):
-        # create Group of Hello objects (one object exists and runs on each core)
-        hellos = Group(Hello)
-        # call method 'SayHi' of all group members, wait for method to be invoked on all
-        hellos.SayHi(ret=True).get()
-        exit()
-
-    charm.start(main)  # call main([]) in interactive mode
+Note that on calling ``recv()`` a coroutine suspends until there is something
+to receive.
 
 
+Pool
+----
 
-The *main* function requests the creation of a ``Group`` of chares of type ``Hello``.
-As explained above, group creation is asynchronous and as
-such the chares in the group have not been created yet when the call returns.
-Next, *main* tells all the members of the group to say hello, and blocks until
-the method is invoked on all members, because we don't want to exit the program
-until this happens. This is achieved by requesting a future (using
-``ret=True``), and waiting until the future resolves by calling ``get``.
+Charm4py also has a distributed pool of workers that can be used to execute transient
+tasks in parallel, where tasks are defined as Python functions. This pool
+automatically distributes tasks across processes and even multiple hosts.
 
-When the ``SayHi`` method is invoked on the remote chares, they print their message along
-with their index in the collection (which is stored in the attribute ``thisIndex``).
-For groups, the index is an ``int`` and coincides with the PE number on which the chare
-is located. For arrays, the index is a ``tuple``.
+A common operation is ``map``, which applies a function in parallel to the
+elements of an iterable and returns the list of results. For example::
 
-In this example, the runtime internally performs a reduction to know when all the group
-elements have concluded and sends the result to the *future*. The same effect can be achieved
-explicitly by the user like this:
+    >>> charm.pool.map(abs, range(-1,-20,-1))
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 
-.. code-block:: python
+If your tasks are very small, you will want to group them into chunks for
+efficiency. Pool can do this for you with the ``chunksize`` parameter
+(see :doc:`pool`).
 
-    # hello_world2.py
-    from charm4py import Chare, Group, charm
+Note that the pool of workers reserves PE 0 for a scheduler, so there are
+P-1 workers (P being the number of PEs). So you might want to adjust the
+number of processes accordingly.
 
-    class Hello(Chare):
-
-        def SayHi(self, future):
-            print("Hello World from element", self.thisIndex)
-            self.contribute(None, None, future)
-
-    def main(args):
-        # create Group of Hello objects (one object exists and runs on each core)
-        hellos = Group(Hello)
-        # call method 'SayHi' of all group members, wait for method to be invoked on all
-        f = charm.createFuture()
-        hellos.SayHi(f)
-        f.get()
-        exit()
-
-    charm.start(main)  # call main([]) in interactive mode
-
-As we can see, here the user explicitly creates a future and sends it to the group,
-who then initiate a reduction using the future as reduction target.
-
-Note that using a reduction to know when all the group members have finished is preferable
-to sending multiple point-to-point messages because, like explained earlier,
-reductions are optimized to be scalable on very large systems,
-and also simplify code.
-
-This is an example of the output of Hello World running of 4 processors:
-
-.. code-block:: text
-
-    $ python -m charmrun.start +p4 hello_world.py ++quiet
-    Hello World from element 0
-    Hello World from element 2
-    Hello World from element 1
-    Hello World from element 3
-
-The output brings us to an important fact:
-
-.. note::
-    For performance reasons, by default Charm does not enforce or guarantee any particular
-    order of delivery of messages (remote method invocations) or order in which chare
-    instances are created on remote processes. There are multiple mechanisms to sequence
-    messages. The ``when`` decorator is a simple and powerful mechanism to specify
-    when methods should be invoked.
+.. tip::
+  Tasks themselves can use the pool to create and wait for other tasks, which
+  is useful for implementing recursive parallel algorithms and state space
+  search (or similar) algorithms. There are examples of this in the source
+  code repository.

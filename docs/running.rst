@@ -14,11 +14,11 @@ charmrun
 After installing Charm4py as explained in the previous section, you can launch
 applications like this::
 
-    $ python -m charmrun.start +p4 myprogram.py
+    $ python3 -m charmrun.start +p4 myprogram.py
 
 The option ``+pN`` specifies how many processes to run the application with.
 
-Alternatively, if ``charmrun`` is in your PATH (this depends on where charm4py was
+Alternatively, if ``charmrun`` is in your PATH (this depends on where Charm4py was
 installed and your system configuration)::
 
     $ charmrun +p4 myprogram.py
@@ -26,15 +26,15 @@ installed and your system configuration)::
 You can launch an *interactive shell* using the ``++interactive`` option, for
 example::
 
-    $ python -m charmrun.start +p4 ++interactive
+    $ python3 -m charmrun.start +p4 ++interactive
 
 Charm4py programs accept the `same command-line parameters`_ as Charm++.
 
-.. _same command-line parameters: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
+.. _same command-line parameters: https://charm.readthedocs.io/en/latest/charm++/manual.html#running-charm-programs
 
 
 
-Running on Multiple Hosts
+Running on multiple hosts
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``charmrun`` can run an application on multiple hosts (e.g. a network of workstations)
@@ -50,16 +50,21 @@ specifying four hosts::
 
 The application can be launched like this::
 
-    $ charmrun +pN myprogram.py ++nodelist mynodelist.txt
+    $ python3 -m charmrun.start +pN myprogram.py ++nodelist mynodelist.txt
 
 With this method, charmrun uses ``ssh`` to log into remote machines and spawn processes.
 
-charmrun can also use the cluster's ``mpiexec`` job launcher instead of the built in ssh method.
+charmrun can also use the cluster's ``mpiexec`` job launcher instead of the built-in ssh method.
 
 See the `charmrun manual`_ for more information and alternative ways to work with nodelist
 files.
 
-.. _charmrun manual: http://charm.cs.illinois.edu/manuals/html/charm++/C.html
+.. important::
+  If you need to set environment variables on the remote hosts, you can let
+  charmrun do it by adding your export commands to a file called ``~/.charmrunrc``.
+
+
+.. _charmrun manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#running-charm-programs
 
 
 Using charmrun from a Python program
@@ -94,13 +99,20 @@ Solution
 mpirun (or equivalent)
 ----------------------
 
-If you have built charm4py to use MPI, you can launch charm4py applications
+If you have built Charm4py to use MPI, you can launch Charm4py applications
 using mpirun, mpiexec or other valid method on your system that supports
 launching MPI applications. For example::
 
     $ mpirun -np 4 /usr/bin/python3 myprogram.py
 
-See :doc:`install` for instructions on building charm4py for MPI.
+See :doc:`install` for instructions on building Charm4py for MPI.
+
+You can launch an *interactive shell* with mpirun like this (or similar command)::
+
+    $ mpirun -np 4 /usr/bin/python3 -m charm4py.interactive
+
+Note that the console has limited functionality in terms of tab completion, etc.
+due to stdin and stdout limitations when using mpirun.
 
 
 Using system job launchers
