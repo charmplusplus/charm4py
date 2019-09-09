@@ -286,7 +286,10 @@ cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
   return arrIndex
 
 
-cdef extern const char * const CmiCommitID
+# CmiCommitID name is mangled. until that is fixed, this
+# hack uses the mangled name directly (in charm.dll used
+# for Charm4py 1.0 release)
+cdef extern const char * const ?CmiCommitID@@3QEBDEB
 
 # supports up to NUM_DCOPY_BUFS direct-copy entry method arguments
 cdef (char*)[NUM_DCOPY_BUFS] send_bufs  # ?TODO bounds checking is needed where this is used
