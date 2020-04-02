@@ -9,7 +9,7 @@ import sys
 
 # more info about load balancing command-line options here:
 # https://charm.readthedocs.io/en/latest/charm++/manual.html#compiler-and-runtime-options-to-use-load-balancing-module
-sys.argv += ['+LBPeriod', '0.001', '+LBCommOff', '+LBObjOnly']
+sys.argv += ['+LBCommOff', '+LBObjOnly']
 
 NUM_ITER = 100
 SIM_BOX_SIZE = 100.0
