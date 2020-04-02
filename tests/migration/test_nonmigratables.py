@@ -1,6 +1,6 @@
 from charm4py import charm, Chare, Array
 import sys
-sys.argv += ['+balancer', 'RandCentLB', '+LBPeriod', '0.001']
+sys.argv += ['+balancer', 'RandCentLB']
 
 MAX_ITER = 100
 
