@@ -38,6 +38,12 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
 
 # ------------------- Reducers -------------------
 
+def _elementwiseOp(op, data):
+    returnVal = data[0]
+    for i in range(1,len(data)):
+        returnVal = op(returnVal, data[i])
+    return returnVal
+
 # apply an op to pairwise elements in a list of lists
 def _pairwiseOp( op, data ):
 
@@ -57,12 +63,10 @@ def _sum(contribs):
     except TypeError:
         return _pairwiseOp(op.add, contribs)
 
+
 def _product(contribs):
     try:
-        result = contribs[0]
-        for i in range(1, len(contribs)):
-            result *= contribs[i]
-        return result
+        return _elementwiseOp(op.mul, contribs)
     except TypeError:
         return _pairwiseOp(op.mul, contribs)
 
@@ -71,17 +75,35 @@ def _max(contribs):
     try:
         return max(contribs)
     except TypeError:
-        result = contribs[0]
-        for i in range(1,len(contribs)):
-            for j in range(len(contribs[i])):
-                result[j] = max(result[j], contribs[i][j])
-        return result
-
-        
+        return _pairwiseOp(max, contribs)
 
 
 def _min(contribs):
-    return min(contribs)
+    try:
+        return min(contribs)
+    except TypeError:
+        return _pairwiseOp(min, contribs)
+
+def _and(contribs):
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x,y: x and y, contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x,y: x and y, contribs)
+
+def _or(contribs):
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x,y: x or y, contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x,y: x or y, contribs)
+
+def _xor(contribs):
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x,y: x ^ y, contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x,y: x ^ y, contribs)
 
 
 def _bcast_exc_reducer(contribs):
@@ -112,6 +134,9 @@ class ReducerContainer(object):
         self.addReducer(_product)
         self.addReducer(_max)
         self.addReducer(_min)
+        self.addReducer(_and)
+        self.addReducer(_or)
+        self.addReducer(_xor)
         self.addReducer(_bcast_exc_reducer)
         self.addReducer(gather, pre=gather_preprocess, post=gather_postprocess)
 
@@ -120,9 +145,9 @@ class ReducerContainer(object):
         self.product = (PRODUCT, self._product)
         self.max     = (MAX,     self._max)
         self.min     = (MIN,     self._min)
-        self.logical_and = (AND, None)
-        self.logical_or  = (OR,  None)
-        self.logical_xor = (XOR, None)
+        self.logical_and = (AND, self._and)
+        self.logical_or  = (OR,  self._or)
+        self.logical_xor = (XOR, self._xor)
 
     def addReducer(self, func, pre=None, post=None):
         if hasattr(self, func.__name__):
