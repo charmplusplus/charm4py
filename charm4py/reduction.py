@@ -1,10 +1,12 @@
 import sys
+import operator as op
 if sys.version_info[0] < 3:
     import cPickle
 else:
     import pickle as cPickle
 from itertools import chain
 import array
+import time
 try:
     import numpy as np
     haveNumpy = True
@@ -36,20 +38,46 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
 
 # ------------------- Reducers -------------------
 
-# python versions of built-in reducers
-def _sum(contribs):
-    return sum(contribs)
+# apply an op to pairwise elements in a list of lists
+def _pairwiseOp( op, data ):
 
-
-def _product(contribs):
-    result = contribs[0]
-    for i in range(1, len(contribs)):
-        result *= contribs[i]
+    # TODO: Optimize for np types?
+    # TODO: assert all lists are same size
+    result = data[0]
+    for i in range(1, len(data)):
+        for j in range(len(data[i])):
+            result[j] = op(result[j], data[i][j])
     return result
 
 
+# python versions of built-in reducers
+def _sum(contribs):
+    try:
+        return sum(contribs)
+    except TypeError:
+        return _pairwiseOp(op.add, contribs)
+
+def _product(contribs):
+    try:
+        result = contribs[0]
+        for i in range(1, len(contribs)):
+            result *= contribs[i]
+        return result
+    except TypeError:
+        return _pairwiseOp(op.mul, contribs)
+
+
 def _max(contribs):
-    return max(contribs)
+    try:
+        return max(contribs)
+    except TypeError:
+        result = contribs[0]
+        for i in range(1,len(contribs)):
+            for j in range(len(contribs[i])):
+                result[j] = max(result[j], contribs[i][j])
+        return result
+
+        
 
 
 def _min(contribs):
