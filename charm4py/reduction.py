@@ -67,21 +67,24 @@ def _sum(contribs):
 def _product(contribs):
     try:
         return _elementwiseOp(op.mul, contribs)
-    except TypeError:
+    except TypeError as e:
+        print(type(contribs), type(contribs[0]), e)
         return _pairwiseOp(op.mul, contribs)
 
 
 def _max(contribs):
     try:
         return max(contribs)
-    except TypeError:
+    # Numpy can throw ValueError
+    except (TypeError, ValueError):
         return _pairwiseOp(max, contribs)
 
 
 def _min(contribs):
     try:
         return min(contribs)
-    except TypeError:
+    # Numpy can throw ValueError
+    except (TypeError, ValueError):
         return _pairwiseOp(min, contribs)
 
 def _and(contribs):

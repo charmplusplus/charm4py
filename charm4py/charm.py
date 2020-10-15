@@ -727,7 +727,10 @@ class Charm(object):
         else:
             if numsections == 1 and not isinstance(elems[0], list) and not isinstance(elems[0], set):
                 elems = [elems]
-            assert len(elems) == numsections
+            try:
+                assert len(elems) == numsections
+            except AssertionError:
+                print( len( elems ) ,numsections )
             if hasattr(proxy, 'gid') and not proxy.issec:
                 # in this case the elements are guaranteed to be PEs, so I don't
                 # have to collect locations

@@ -135,7 +135,8 @@ class Chare(object):
             # have to start at 1, and the fid carried in Charm++ CkCallbacks
             # can only contain the 'redno' part
             sid = section.section[1]
-            redno = self._scookies[sid] % 65535
+            assert self.scookies[sid] < 65534
+            redno = self.scookies[sid] % 65535
             # An object can participate in multiple sections. fids need to be
             # unique across sections, and not conflict with non-section fids
             fid = (redno, sid[0], sid[1])
