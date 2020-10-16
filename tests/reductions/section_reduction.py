@@ -24,7 +24,7 @@ def get_op_name( reducer_op ):
 @coro
 def test_op( done, op, vector_size, use_numpy = False ):
     if use_numpy:
-        data = np.random.rand(vector_size, 1)
+        data = np.random.rand(vector_size)
     else:
         data = list(range(0,vector_size))
 
@@ -34,10 +34,12 @@ def test_op( done, op, vector_size, use_numpy = False ):
     section = chares[ 0 : vector_size ]
     section.do_test( section, finished_future )
     val1, val2 = finished_future.get()
-    if get_op_name(op) == 'product':
-        print( list(val1), list(val2) )
+
     try:
-        assert list(val1) == list(val2)
+        if use_numpy:
+            assert np.isclose(val1, val2, atol = 1e-5).all()
+        else:
+            assert list(val1) == list(val2)
         print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
         done(True)
     except AssertionError as e:
@@ -47,9 +49,9 @@ def test_op( done, op, vector_size, use_numpy = False ):
 @coro
 def test_op_logical( done, op, vector_size, use_numpy = False ):
     if use_numpy:
-        data = np.random.rand(vector_size, 1)
+        data = np.random.rand(vector_size)
         p = 0.1
-        np.random.choice(a=[False, True], size=(vector_size, 1), p=[p, 1-p] )
+        np.random.choice(a=[False, True], size=(1, vector_size), p=[p, 1-p] )
     else:
         data = list(range(0,vector_size))
 
@@ -64,32 +66,13 @@ def test_op_logical( done, op, vector_size, use_numpy = False ):
         print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
         done(True)
     except AssertionError as e:
-        print( list(val1), list(val2) )
         print( f'[Main] Reduction with Reducer.{get_op_name(op)} is not correct.' )
         done( False )
-
-@coro
-def testElemwiseMult():
-    data = np.random.rand(10,1)
-
-    finished = Future()
-    chares = Array( TestVec, 10, args = [ Reducer.product, data ] )
-    section = chares[0:10]
-    chares.do_test( section, finished )
-    print(finished.get())
-
-
-
-
-
-
 
 def main(args):
 
     num_tests = 14
     test_futures = [Future() for _ in range( num_tests )]
-    testElemwiseMult()
-    exit()
 
     # tests that when all chares participate in a section
     # that the answer is the same as when the entire array reduces.
@@ -102,7 +85,8 @@ def main(args):
     test_op_logical( test_futures[6], Reducer.logical_xor, 100)
 
     # tests that when all chares participate in a section
-    # that the answer is the same as when the entire array reduces.
+    # that the answer is the same as when the entire array reduces,
+    # the values contributed are numpy arrays.
     test_op( test_futures[7], Reducer.sum, 500, True )
     test_op( test_futures[8], Reducer.product, 10, True )
     test_op( test_futures[9], Reducer.min, 100, True )

@@ -36,6 +36,8 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
                     'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_BOOL}
 
 
+def _useNumpyForReduction(contribs):
+    return haveNumpy and (type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray)
 # ------------------- Reducers -------------------
 
 def _elementwiseOp(op, data):
@@ -46,9 +48,6 @@ def _elementwiseOp(op, data):
 
 # apply an op to pairwise elements in a list of lists
 def _pairwiseOp( op, data ):
-
-    # TODO: Optimize for np types?
-    # TODO: assert all lists are same size
     result = data[0]
     for i in range(1, len(data)):
         for j in range(len(data[i])):
@@ -58,6 +57,9 @@ def _pairwiseOp( op, data ):
 
 # python versions of built-in reducers
 def _sum(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.add.reduce(contribs)
+
     try:
         return sum(contribs)
     except TypeError:
@@ -65,29 +67,39 @@ def _sum(contribs):
 
 
 def _product(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.multiply.reduce(contribs)
+
     try:
         return _elementwiseOp(op.mul, contribs)
     except TypeError as e:
-        print(type(contribs), type(contribs[0]), e)
         return _pairwiseOp(op.mul, contribs)
 
 
 def _max(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.maximum.reduce(contribs)
+
     try:
         return max(contribs)
-    # Numpy can throw ValueError
-    except (TypeError, ValueError):
+    except TypeError:
         return _pairwiseOp(max, contribs)
 
 
 def _min(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.minimum.reduce(contribs)
+
     try:
         return min(contribs)
     # Numpy can throw ValueError
-    except (TypeError, ValueError):
+    except TypeError:
         return _pairwiseOp(min, contribs)
 
 def _and(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.logical_and.reduce(contribs)
+
     try:
         iter(contribs[0])
         return _pairwiseOp(lambda x,y: x and y, contribs)
@@ -95,6 +107,9 @@ def _and(contribs):
         return _elementwiseOp(lambda x,y: x and y, contribs)
 
 def _or(contribs):
+    if haveNumpy and type(contribs[0] == np.ndarray):
+        return np.logical_or.reduce(contribs)
+
     try:
         iter(contribs[0])
         return _pairwiseOp(lambda x,y: x or y, contribs)
@@ -102,6 +117,9 @@ def _or(contribs):
         return _elementwiseOp(lambda x,y: x or y, contribs)
 
 def _xor(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.logical_xor.reduce(contribs)
+
     try:
         iter(contribs[0])
         return _pairwiseOp(lambda x,y: x ^ y, contribs)
