@@ -6,7 +6,6 @@ else:
     import pickle as cPickle
 from itertools import chain
 import array
-import time
 try:
     import numpy as np
     haveNumpy = True
