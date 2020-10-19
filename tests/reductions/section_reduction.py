@@ -1,5 +1,6 @@
 from charm4py import charm, Chare, Array, Reducer, Future, coro
 import numpy as np
+import random
 
 class TestVec(Chare):
     def __init__(self, op, myData):
@@ -23,10 +24,13 @@ def get_op_name( reducer_op ):
 
 @coro
 def test_op( done, op, vector_size, use_numpy = False ):
-    if use_numpy:
-        data = np.random.rand(vector_size)
+    if vector_size > 1:
+        if use_numpy:
+            data = np.random.rand(vector_size)
+        else:
+            data = list(range(0,vector_size))
     else:
-        data = list(range(0,vector_size))
+        data = random.uniform(0,5)
 
     finished_future = Future( 2 )
     chares = Array( TestVec, vector_size, args = [ op, data ] )
@@ -36,10 +40,13 @@ def test_op( done, op, vector_size, use_numpy = False ):
     val1, val2 = finished_future.get()
 
     try:
-        if use_numpy:
-            assert np.isclose(val1, val2, atol = 1e-5).all()
+        if vector_size > 1:
+            if use_numpy:
+                assert np.isclose(val1, val2, atol = 1e-5).all()
+            else:
+                assert list(val1) == list(val2)
         else:
-            assert list(val1) == list(val2)
+            assert val1 == val2
         print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
         done(True)
     except AssertionError as e:
@@ -48,21 +55,29 @@ def test_op( done, op, vector_size, use_numpy = False ):
 
 @coro
 def test_op_logical( done, op, vector_size, use_numpy = False ):
-    if use_numpy:
-        data = np.random.rand(vector_size)
-        p = 0.1
-        np.random.choice(a=[False, True], size=(1, vector_size), p=[p, 1-p] )
+    if vector_size > 1:
+        if use_numpy:
+            data = np.random.rand(vector_size)
+            p = 0.1
+            data = np.random.choice(a=[False, True], size=(vector_size), p=[p, 1-p] )
+        else:
+            data = list(map(bool,range(0,vector_size)))
     else:
-        data = list(range(0,vector_size))
+        data = bool(random.randint(0,1))
+
 
     finished_future = Future( 2 )
-    chares = Array( TestVec, vector_size, args = [ op, list(map(bool,range(0,vector_size))) ] )
+    chares = Array( TestVec, vector_size, args = [ op, data ] )
     chares.do_test( None, finished_future )
     section = chares[ 0 : vector_size ]
     section.do_test( section, finished_future )
     val1, val2 = finished_future.get()
+
     try:
-        assert list(val1) == list(val2)
+        if vector_size > 1:
+            assert list(val1) == list(val2)
+        else:
+            assert val1 == val2
         print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
         done(True)
     except AssertionError as e:
@@ -71,29 +86,51 @@ def test_op_logical( done, op, vector_size, use_numpy = False ):
 
 def main(args):
 
-    num_tests = 14
+    num_tests = 28
     test_futures = [Future() for _ in range( num_tests )]
+    fut = iter(test_futures)
 
     # tests that when all chares participate in a section
     # that the answer is the same as when the entire array reduces.
-    test_op( test_futures[0], Reducer.sum, 500 )
-    test_op( test_futures[1], Reducer.product, 10 )
-    test_op( test_futures[2], Reducer.min, 100 )
-    test_op( test_futures[3], Reducer.max, 100 )
-    test_op_logical( test_futures[4], Reducer.logical_and, 100)
-    test_op_logical( test_futures[5], Reducer.logical_or, 100)
-    test_op_logical( test_futures[6], Reducer.logical_xor, 100)
+    test_op( next(fut), Reducer.sum, 500 )
+    test_op( next(fut), Reducer.product, 10 )
+    test_op( next(fut), Reducer.min, 100 )
+    test_op( next(fut), Reducer.max, 100 )
+    test_op_logical( next(fut), Reducer.logical_and, 100)
+    test_op_logical( next(fut), Reducer.logical_or, 100)
+    test_op_logical( next(fut), Reducer.logical_xor, 100)
 
     # tests that when all chares participate in a section
     # that the answer is the same as when the entire array reduces,
     # the values contributed are numpy arrays.
-    test_op( test_futures[7], Reducer.sum, 500, True )
-    test_op( test_futures[8], Reducer.product, 10, True )
-    test_op( test_futures[9], Reducer.min, 100, True )
-    test_op( test_futures[10], Reducer.max, 100, True )
-    test_op_logical( test_futures[11], Reducer.logical_and, 100, True)
-    test_op_logical( test_futures[12], Reducer.logical_or, 100, True)
-    test_op_logical( test_futures[13], Reducer.logical_xor, 100, True)
+    test_op( next(fut), Reducer.sum, 500, True )
+    test_op( next(fut), Reducer.product, 10, True )
+    test_op( next(fut), Reducer.min, 100, True )
+    test_op( next(fut), Reducer.max, 100, True )
+    test_op_logical( next(fut), Reducer.logical_and, 100, True)
+    test_op_logical( next(fut), Reducer.logical_or, 100, True)
+    test_op_logical( next(fut), Reducer.logical_xor, 100, True)
+
+    # test that single-value reductions still work
+    test_op( next(fut), Reducer.sum, 1, False )
+    test_op( next(fut), Reducer.product, 1, False )
+    test_op( next(fut), Reducer.min, 1, False )
+    test_op( next(fut), Reducer.max, 1, False )
+    test_op_logical( next(fut), Reducer.logical_and, 1, False)
+    test_op_logical( next(fut), Reducer.logical_or, 1, False)
+    test_op_logical( next(fut), Reducer.logical_xor, 1, False)
+
+
+    # tests that when all chares participate in a section
+    # that the answer is the same as when the entire array reduces,
+    # # the values contributed are numpy arrays.
+    test_op( next(fut), Reducer.sum, 1, True )
+    test_op( next(fut), Reducer.product, 1, True )
+    test_op( next(fut), Reducer.min, 1, True )
+    test_op( next(fut), Reducer.max, 1, True )
+    test_op_logical( next(fut), Reducer.logical_and, 1, True)
+    test_op_logical( next(fut), Reducer.logical_or, 1, True)
+    test_op_logical( next(fut), Reducer.logical_xor, 1, True)
 
 
     passes = sum(map(lambda x: x.get(), test_futures))
