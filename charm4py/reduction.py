@@ -37,7 +37,7 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
 
 
 def _useNumpyForReduction(contribs):
-    return haveNumpy and (type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray)
+    return haveNumpy or (type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray)
 # ------------------- Reducers -------------------
 
 def _elementwiseOp(op, data):
