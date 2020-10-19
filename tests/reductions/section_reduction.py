@@ -47,10 +47,10 @@ def test_op( done, op, vector_size, use_numpy = False ):
                 assert list(val1) == list(val2)
         else:
             assert val1 == val2
-        print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
+        print( '[Main] Reduction with Reducer.%s passes.' % get_op_name(op) )
         done(True)
     except AssertionError as e:
-        print( f'[Main] Reduction with Reducer.{get_op_name(op)} is not correct.' )
+        print( '[Main] Reduction with Reducer.%s is not correct.' % get_op_name(op) )
         done( False )
 
 @coro
@@ -78,10 +78,10 @@ def test_op_logical( done, op, vector_size, use_numpy = False ):
             assert list(val1) == list(val2)
         else:
             assert val1 == val2
-        print( f'[Main] Reduction with Reducer.{get_op_name(op)} passes.' )
+        print( '[Main] Reduction with Reducer.%s passes.' % get_op_name(op) )
         done(True)
     except AssertionError as e:
-        print( f'[Main] Reduction with Reducer.{get_op_name(op)} is not correct.' )
+        print( '[Main] Reduction with Reducer.%s is not correct.' % get_op_name(op) )
         done( False )
 
 def main(args):
