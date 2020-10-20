@@ -6,6 +6,7 @@ else:
 from itertools import chain
 from functools import reduce
 import array
+import operator as op
 try:
     import numpy as np
     haveNumpy = True
