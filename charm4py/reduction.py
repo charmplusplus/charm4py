@@ -5,6 +5,7 @@ if sys.version_info[0] < 3:
 else:
     import pickle as cPickle
 from itertools import chain
+from functools import reduce
 import array
 try:
     import numpy as np
@@ -40,10 +41,7 @@ def _useNumpyForReduction(contribs):
 # ------------------- Reducers -------------------
 
 def _elementwiseOp(op, data):
-    returnVal = data[0]
-    for i in range(1,len(data)):
-        returnVal = op(returnVal, data[i])
-    return returnVal
+    return functools.reduce(op, data)
 
 # apply an op to pairwise elements in a list of lists
 def _pairwiseOp( op, data ):
@@ -91,7 +89,6 @@ def _min(contribs):
 
     try:
         return min(contribs)
-    # Numpy can throw ValueError
     except TypeError:
         return _pairwiseOp(min, contribs)
 
@@ -106,7 +103,7 @@ def _and(contribs):
         return _elementwiseOp(lambda x,y: x and y, contribs)
 
 def _or(contribs):
-    if haveNumpy and type(contribs[0] == np.ndarray):
+    if _useNumpyForReduction(contribs):
         return np.logical_or.reduce(contribs)
 
     try:
@@ -121,9 +118,9 @@ def _xor(contribs):
 
     try:
         iter(contribs[0])
-        return _pairwiseOp(lambda x,y: x ^ y, contribs)
+        return _pairwiseOp(lambda x,y: bool(x) ^ bool(y), contribs)
     except TypeError:
-        return _elementwiseOp(lambda x,y: x ^ y, contribs)
+        return _elementwiseOp(lambda x,y: bool(x) ^ bool(y), contribs)
 
 
 def _bcast_exc_reducer(contribs):
