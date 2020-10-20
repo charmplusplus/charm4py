@@ -40,7 +40,7 @@ def _useNumpyForReduction(contribs):
 # ------------------- Reducers -------------------
 
 def _elementwiseOp(op, data):
-    return functools.reduce(op, data)
+    return reduce(op, data)
 
 # apply an op to pairwise elements in a list of lists
 def _pairwiseOp( op, data ):
