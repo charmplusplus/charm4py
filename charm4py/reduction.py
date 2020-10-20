@@ -1,5 +1,4 @@
 import sys
-import operator as op
 if sys.version_info[0] < 3:
     import cPickle
 else:
