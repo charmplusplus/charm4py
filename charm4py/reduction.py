@@ -1,12 +1,12 @@
+import array
+from functools import reduce
+import operator as op
+from itertools import chain
 import sys
 if sys.version_info[0] < 3:
     import cPickle
 else:
     import pickle as cPickle
-from itertools import chain
-from functools import reduce
-import array
-import operator as op
 try:
     import numpy as np
     haveNumpy = True
@@ -37,14 +37,19 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
 
 
 def _useNumpyForReduction(contribs):
-    return haveNumpy or (type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray)
+    isNumpyType = type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray
+    # always prefer numpy when we can use it to take advantage of speed
+    # also, the non-section version will return numpy arrays when possible
+    return haveNumpy or isNumpyType
 # ------------------- Reducers -------------------
+
 
 def _elementwiseOp(op, data):
     return reduce(op, data)
 
+
 # apply an op to pairwise elements in a list of lists
-def _pairwiseOp( op, data ):
+def _pairwiseOp(op, data):
     result = data[0]
     for i in range(1, len(data)):
         for j in range(len(data[i])):
@@ -69,7 +74,7 @@ def _product(contribs):
 
     try:
         return _elementwiseOp(op.mul, contribs)
-    except TypeError as e:
+    except TypeError:
         return _pairwiseOp(op.mul, contribs)
 
 
@@ -92,15 +97,17 @@ def _min(contribs):
     except TypeError:
         return _pairwiseOp(min, contribs)
 
+
 def _and(contribs):
     if _useNumpyForReduction(contribs):
         return np.logical_and.reduce(contribs)
 
     try:
         iter(contribs[0])
-        return _pairwiseOp(lambda x,y: x and y, contribs)
+        return _pairwiseOp(lambda x, y: x and y, contribs)
     except TypeError:
-        return _elementwiseOp(lambda x,y: x and y, contribs)
+        return _elementwiseOp(lambda x, y: x and y, contribs)
+
 
 def _or(contribs):
     if _useNumpyForReduction(contribs):
@@ -108,9 +115,10 @@ def _or(contribs):
 
     try:
         iter(contribs[0])
-        return _pairwiseOp(lambda x,y: x or y, contribs)
+        return _pairwiseOp(lambda x, y: x or y, contribs)
     except TypeError:
-        return _elementwiseOp(lambda x,y: x or y, contribs)
+        return _elementwiseOp(lambda x, y: x or y, contribs)
+
 
 def _xor(contribs):
     if _useNumpyForReduction(contribs):
@@ -118,9 +126,9 @@ def _xor(contribs):
 
     try:
         iter(contribs[0])
-        return _pairwiseOp(lambda x,y: bool(x) ^ bool(y), contribs)
+        return _pairwiseOp(lambda x, y: bool(x) ^ bool(y), contribs)
     except TypeError:
-        return _elementwiseOp(lambda x,y: bool(x) ^ bool(y), contribs)
+        return _elementwiseOp(lambda x, y: bool(x) ^ bool(y), contribs)
 
 
 def _bcast_exc_reducer(contribs):
