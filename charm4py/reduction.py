@@ -1,10 +1,12 @@
+import array
+from functools import reduce
+import operator as op
+from itertools import chain
 import sys
 if sys.version_info[0] < 3:
     import cPickle
 else:
     import pickle as cPickle
-from itertools import chain
-import array
 try:
     import numpy as np
     haveNumpy = True
@@ -34,26 +36,99 @@ c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LO
                     'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_BOOL}
 
 
+def _useNumpyForReduction(contribs):
+    isNumpyType = type(contribs) == np.ndarray or type(contribs[0]) == np.ndarray
+    # always prefer numpy when we can use it to take advantage of speed
+    # also, the non-section version will return numpy arrays when possible
+    return haveNumpy or isNumpyType
 # ------------------- Reducers -------------------
 
-# python versions of built-in reducers
-def _sum(contribs):
-    return sum(contribs)
+
+def _elementwiseOp(op, data):
+    return reduce(op, data)
 
 
-def _product(contribs):
-    result = contribs[0]
-    for i in range(1, len(contribs)):
-        result *= contribs[i]
+# apply an op to pairwise elements in a list of lists
+def _pairwiseOp(op, data):
+    result = data[0]
+    for i in range(1, len(data)):
+        for j in range(len(data[i])):
+            result[j] = op(result[j], data[i][j])
     return result
 
 
+# python versions of built-in reducers
+def _sum(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.add.reduce(contribs)
+
+    try:
+        return sum(contribs)
+    except TypeError:
+        return _pairwiseOp(op.add, contribs)
+
+
+def _product(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.multiply.reduce(contribs)
+
+    try:
+        return _elementwiseOp(op.mul, contribs)
+    except TypeError:
+        return _pairwiseOp(op.mul, contribs)
+
+
 def _max(contribs):
-    return max(contribs)
+    if _useNumpyForReduction(contribs):
+        return np.maximum.reduce(contribs)
+
+    try:
+        return max(contribs)
+    except TypeError:
+        return _pairwiseOp(max, contribs)
 
 
 def _min(contribs):
-    return min(contribs)
+    if _useNumpyForReduction(contribs):
+        return np.minimum.reduce(contribs)
+
+    try:
+        return min(contribs)
+    except TypeError:
+        return _pairwiseOp(min, contribs)
+
+
+def _and(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.logical_and.reduce(contribs)
+
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x, y: x and y, contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x, y: x and y, contribs)
+
+
+def _or(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.logical_or.reduce(contribs)
+
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x, y: x or y, contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x, y: x or y, contribs)
+
+
+def _xor(contribs):
+    if _useNumpyForReduction(contribs):
+        return np.logical_xor.reduce(contribs)
+
+    try:
+        iter(contribs[0])
+        return _pairwiseOp(lambda x, y: bool(x) ^ bool(y), contribs)
+    except TypeError:
+        return _elementwiseOp(lambda x, y: bool(x) ^ bool(y), contribs)
 
 
 def _bcast_exc_reducer(contribs):
@@ -84,6 +159,9 @@ class ReducerContainer(object):
         self.addReducer(_product)
         self.addReducer(_max)
         self.addReducer(_min)
+        self.addReducer(_and)
+        self.addReducer(_or)
+        self.addReducer(_xor)
         self.addReducer(_bcast_exc_reducer)
         self.addReducer(gather, pre=gather_preprocess, post=gather_postprocess)
 
@@ -92,9 +170,9 @@ class ReducerContainer(object):
         self.product = (PRODUCT, self._product)
         self.max     = (MAX,     self._max)
         self.min     = (MIN,     self._min)
-        self.logical_and = (AND, None)
-        self.logical_or  = (OR,  None)
-        self.logical_xor = (XOR, None)
+        self.logical_and = (AND, self._and)
+        self.logical_or  = (OR,  self._or)
+        self.logical_xor = (XOR, self._xor)
 
     def addReducer(self, func, pre=None, post=None):
         if hasattr(self, func.__name__):

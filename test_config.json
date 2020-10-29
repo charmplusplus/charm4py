@@ -62,6 +62,9 @@
         "path": "tests/reductions/array_reduction.py"
     },
     {
+        "path": "tests/reductions/section_reduction.py"
+    },
+    {
         "path": "tests/reductions/custom_reduction.py"
     },
     {
