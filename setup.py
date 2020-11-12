@@ -48,10 +48,13 @@ except:
 def charm_built(charm_src_dir):
     library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
     if not os.path.exists(library_path):
+        print('Charm not built!')
         return False
     charmrun_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
     if not os.path.exists(charmrun_path):
+        print('Charm not built!')
         return False
+    print('Charm is built!')
     return True
 
 

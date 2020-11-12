@@ -8,6 +8,11 @@ from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 
+cdef extern from "Python.h":
+    char* PyUnicode_AsUTF8(object unicode)
+
+from libc.string cimport strcmp
+
 from ..charm import Charm4PyError
 from .. import reduction as red
 from cpython cimport array
@@ -101,6 +106,12 @@ ctypedef struct CkReductionTypesExt:
   int external_py
 
 cdef extern CkReductionTypesExt charm_reducers
+
+cdef char ** to_cstring_array(list_str):
+    cdef char **ret = <char **>malloc(len(list_str) * sizeof(char *))
+    for i in range(len(list_str)):
+        ret[i] = list_str[i]
+    return ret
 
 class CkReductionTypesExt_Wrapper:
 
@@ -500,10 +511,12 @@ class CharmLib(object):
     CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
-  def CkRegisterArray(self, str name, int numEntryMethods):
+  def CkRegisterArray(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    cdef char** c1 = to_cstring_array(entryMethodNames)
+    CkRegisterArrayExt(self.chareNames[-1], c1, numEntryMethods, &chareIdx, &startEpIdx)
+    free(c1);
     return chareIdx, startEpIdx
 
   def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):

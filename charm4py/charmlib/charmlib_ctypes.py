@@ -608,6 +608,7 @@ class CharmLib(object):
     if os.name != 'nt':
       p = os.environ.get('LIBCHARM_PATH')
       if p is not None: libcharm_path = p
+      print(libcharm_path)
       if libcharm_path is not None:
         self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'libcharm.so'))
       else:
