@@ -511,12 +511,12 @@ class CharmLib(object):
     CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
-  def CkRegisterArray(self, str name, list entryMethodNames, int numEntryMethods):
+  def CkRegisterArray(self, str name, list entryMethodNames, int emStart, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     cdef char** c1 = to_cstring_array(entryMethodNames)
-    CkRegisterArrayExt(self.chareNames[-1], c1, numEntryMethods, &chareIdx, &startEpIdx)
-    free(c1);
+    CkRegisterArrayExt(self.chareNames[-1], c1, emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    # free(c1);
     return chareIdx, startEpIdx
 
   def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):
