@@ -402,10 +402,10 @@ class Charm(object):
         entryMethods = self.classEntryMethods[charm_type_id][C]
         global entryNames
         global entryNamesLen
-        if libRegisterFunc.__name__ == 'CkRegisterArray':
+        if libRegisterFunc.__name__ == 'CkRegisterArray' or libRegisterFunc.__name__ == 'CkRegisterGroup':
             entryNames += [method.name.encode() for method in entryMethods]
-        else:
-            print('func name:', libRegisterFunc.__name__)
+        # else:
+            # print('func name:', libRegisterFunc.__name__)
         # if self.myPe() == 0: print("charm4py:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
         try:
             C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, entryNamesLen, len(entryMethods))

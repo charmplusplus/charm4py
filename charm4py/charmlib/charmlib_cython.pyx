@@ -493,10 +493,12 @@ class CharmLib(object):
     CkRegisterMainChareExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
-  def CkRegisterGroup(self, str name, int numEntryMethods):
+  def CkRegisterGroup(self, str name, list entryMethodNames, int emStart, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    # TODO: track these pointers so they can be freed at charm teardown?
+    cdef char** c1 = to_cstring_array(entryMethodNames)
+    CkRegisterGroupExt(self.chareNames[-1], c1, emStart, numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
   def CkRegisterSectionManager(self, str name, int numEntryMethods):
