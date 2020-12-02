@@ -487,10 +487,12 @@ class CharmLib(object):
     if msg is None: CkRegisterReadonlyExt(n1, n2, 0, NULL)
     else: CkRegisterReadonlyExt(n1, n2, len(msg), msg)
 
-  def CkRegisterMainchare(self, str name, int numEntryMethods):
+  def CkRegisterMainchare(self, str name, list entryMethodNames, int emStart, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterMainChareExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    # TODO: track these pointers so they can be freed at charm teardown?
+    cdef char** c1 = to_cstring_array(entryMethodNames)
+    CkRegisterMainChareExt(self.chareNames[-1], c1, emStart, numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
   def CkRegisterGroup(self, str name, list entryMethodNames, int emStart, int numEntryMethods):

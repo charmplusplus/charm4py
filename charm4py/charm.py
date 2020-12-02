@@ -398,11 +398,12 @@ class Charm(object):
 
     # register class C in Charm
     def registerInCharmAs(self, C, charm_type, libRegisterFunc):
+        import sys
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
         global entryNames
         global entryNamesLen
-        if libRegisterFunc.__name__ == 'CkRegisterArray' or libRegisterFunc.__name__ == 'CkRegisterGroup':
+        if libRegisterFunc.__name__ in ('CkRegisterArray', 'CkRegisterGroup', 'CkRegisterMainchare'):
             entryNames += [method.name.encode() for method in entryMethods]
         # else:
             # print('func name:', libRegisterFunc.__name__)
