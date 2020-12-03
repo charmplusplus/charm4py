@@ -403,7 +403,7 @@ class Charm(object):
         entryMethods = self.classEntryMethods[charm_type_id][C]
         global entryNames
         global entryNamesLen
-        if libRegisterFunc.__name__ in ('CkRegisterArray', 'CkRegisterGroup', 'CkRegisterMainchare'):
+        if libRegisterFunc.__name__ in ('CkRegisterArray', 'CkRegisterGroup', 'CkRegisterMainchare', 'CkRegisterSectionManager'):
             entryNames += [method.name.encode() for method in entryMethods]
         # else:
             # print('func name:', libRegisterFunc.__name__)
