@@ -22,6 +22,12 @@ except ImportError:
 index_ctype = ('', 'int[1]', 'int[2]', 'int[3]', 'short[4]', 'short[5]', 'short[6]')
 emptyMsg = cPickle.dumps(({},[]))
 
+
+def addStringsToList(targetList, strings):
+  for currentString in strings:
+    targetList.append(ffi.new("char[]", currentString.encode()))
+
+
 class ContributeInfo:
   def __init__(self, args):
     # Need to save these cdata objects or they will be deleted. Simply putting them
@@ -42,6 +48,8 @@ class CharmLib(object):
     charm = _charm
     self.name = 'cffi'
     self.chareNames = []
+    self.emNames = []
+    self.emNameStart = 0
     self.init()
     ReducerType = ffi.cast('struct CkReductionTypesExt*', lib.getReducersStruct())
     self.ReducerType = ReducerType
@@ -292,34 +300,54 @@ class CharmLib(object):
     if msg is None: lib.CkRegisterReadonlyExt(n1, n2, 0, ffi.NULL)
     else: lib.CkRegisterReadonlyExt(n1, n2, len(msg), msg)
 
-  def CkRegisterMainchare(self, name, numEntryMethods):
+  def CkRegisterMainchare(self, name, entryMethodNames, emStart, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
+    addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
-    lib.CkRegisterMainChareExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    lib.CkRegisterMainChareExt(self.chareNames[-1], self.emNames,
+                               self.emNameStart, numEntryMethods,
+                               chareIdx, startEpIdx)
+    self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterGroup(self, name, numEntryMethods):
+  def CkRegisterGroup(self, name, entryMethodNames, emStart, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
+    addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
-    lib.CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    lib.CkRegisterGroupExt(self.chareNames[-1], self.emNames,
+                           self.emNameStart, numEntryMethods,
+                           chareIdx, startEpIdx)
+    self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterSectionManager(self, name, numEntryMethods):
+  def CkRegisterSectionManager(self, name, entryMethodNames, emStart, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
+    addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
-    lib.CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    lib.CkRegisterSectionManagerExt(self.chareNames[-1], self.emNames,
+                               self.emNameStart, numEntryMethods,
+                               chareIdx, startEpIdx)
+    self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterArrayMap(self, name, numEntryMethods):
+  def CkRegisterArrayMap(self, name, entryMethodNames, emStart, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
+    addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
-    lib.CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    lib.CkRegisterArrayMapExt(self.chareNames[-1], self.emNames,
+                               self.emNameStart, numEntryMethods,
+                               chareIdx, startEpIdx)
+    self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterArray(self, name, numEntryMethods):
+  def CkRegisterArray(self, name, entryMethodNames, emStart, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
+    addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
-    lib.CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, chareIdx, startEpIdx)
+    lib.CkRegisterArrayExt(self.chareNames[-1], self.emNames,
+                           self.emNameStart, numEntryMethods,
+                           chareIdx, startEpIdx)
+    self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
   def CkCreateGroup(self, chareIdx, epIdx, msg):
