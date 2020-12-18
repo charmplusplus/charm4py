@@ -40,9 +40,6 @@ except ImportError:
 def SECTION_ALL(obj):
     return 0
 
-entryNames = list()
-entryNamesLen = 0
-
 class Options(object):
 
     def __str__(self):
@@ -401,23 +398,13 @@ class Charm(object):
         import sys
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        global entryNames
-        global entryNamesLen
         if libRegisterFunc.__name__ in ('CkRegisterArray', 'CkRegisterGroup', 'CkRegisterMainchare', 'CkRegisterSectionManager', 'CkRegisterArrayMap'):
             if libRegisterFunc.__name__ == 'CkRegisterSectionManager':
                 print([method.name for method in entryMethods])
-            entryNames += [method.name.encode() for method in entryMethods]
-        # else:
-            # print('func name:', libRegisterFunc.__name__)
-        # if self.myPe() == 0: print("charm4py:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
-        try:
-            C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, entryNamesLen, len(entryMethods))
-            entryNamesLen = len(entryNames)
+            entryNames = [method.name for method in entryMethods]
 
-        except Exception as e:
-            print(e)
-            C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
-        # if self.myPe() == 0: print("charm4py:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
+        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, len(entryMethods))
+
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em

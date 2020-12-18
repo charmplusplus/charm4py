@@ -300,7 +300,7 @@ class CharmLib(object):
     if msg is None: lib.CkRegisterReadonlyExt(n1, n2, 0, ffi.NULL)
     else: lib.CkRegisterReadonlyExt(n1, n2, len(msg), msg)
 
-  def CkRegisterMainchare(self, name, entryMethodNames, emStart, numEntryMethods):
+  def CkRegisterMainchare(self, name, entryMethodNames, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
@@ -310,7 +310,7 @@ class CharmLib(object):
     self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterGroup(self, name, entryMethodNames, emStart, numEntryMethods):
+  def CkRegisterGroup(self, name, entryMethodNames, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
@@ -320,7 +320,7 @@ class CharmLib(object):
     self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterSectionManager(self, name, entryMethodNames, emStart, numEntryMethods):
+  def CkRegisterSectionManager(self, name, entryMethodNames, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
@@ -330,7 +330,7 @@ class CharmLib(object):
     self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterArrayMap(self, name, entryMethodNames, emStart, numEntryMethods):
+  def CkRegisterArrayMap(self, name, entryMethodNames, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
@@ -340,7 +340,7 @@ class CharmLib(object):
     self.emNameStart = len(self.emNames)
     return chareIdx[0], startEpIdx[0]
 
-  def CkRegisterArray(self, name, entryMethodNames, emStart, numEntryMethods):
+  def CkRegisterArray(self, name, entryMethodNames, numEntryMethods):
     self.chareNames.append(ffi.new("char[]", name.encode()))
     addStringsToList(self.emNames, entryMethodNames)
     chareIdx, startEpIdx = ffi.new("int*"), ffi.new("int*")
