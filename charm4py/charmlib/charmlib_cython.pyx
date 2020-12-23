@@ -498,6 +498,7 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
+    # TODO: do we want to track/free these pointers?
     cdef char** c1 = to_cstring_array(self.emNames)
     CkRegisterMainChareExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
