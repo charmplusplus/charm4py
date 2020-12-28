@@ -54,7 +54,9 @@ except:
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-interfaces = ['ctypes', 'cffi', 'cython']
+# interfaces = ['ctypes', 'cffi', 'cython']
+# for the moment we want to disable ctypes
+interfaces = ['cffi', 'cython']
 supported_py_versions = {'ctypes': {2, 3},
                          'cffi'  : {2, 3},
                          'cython': {3}}
