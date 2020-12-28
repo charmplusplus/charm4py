@@ -19,7 +19,7 @@ install:
   - pip3 install --user cython
   - pip3 install --user greenlet
 script:
-  - git clone https://github.com/UIUC-PPL/charm charm_src/charm
+  - git clone -b charm4py_projections https://github.com/UIUC-PPL/charm charm_src/charm
   - export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
   - export CHARM_BUILD_PROCESSES=2
   - export CHARM4PY_BUILD_CFFI=1
