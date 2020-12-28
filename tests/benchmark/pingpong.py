@@ -1,6 +1,7 @@
 from charm4py import charm, Chare, Array, coro, Future
 from time import time
-#import numpy as np
+import numpy as np
+from numba import cuda
 
 PAYLOAD = 100  # number of bytes
 NITER = 10000
@@ -15,11 +16,15 @@ class Ping(Chare):
         else:
             self.neighbor = self.thisProxy[0]
 
-    def start(self, done_future, threaded=False):
+    def start(self, done_future, threaded=False, gpu=False):
+        assert threaded ^ gpu
         self.done_future = done_future
         self.iter = 0
-        #data = np.zeros(PAYLOAD, dtype='int8')
-        data = 3
+        if not gpu:
+            data = np.zeros(PAYLOAD, dtype='int8')
+        else:
+            pass
+        # data = 3
         self.startTime = time()
         if threaded:
             self.neighbor.recv_th(data)
@@ -50,11 +55,13 @@ def main(args):
     threaded = False
     if len(args) > 1 and args[1] == '-t':
         threaded = True
+    elif len(args) >1 and args[1] == '--gpu':
+        gpu = True
     pings = Array(Ping, 2)
     charm.awaitCreation(pings)
     for _ in range(2):
         done_future = Future()
-        pings[0].start(done_future, threaded)
+        pings[0].start(done_future, threaded, gpu)
         totalTime = done_future.get()
         print("ping pong time per iter (us)=", totalTime / NITER * 1000000)
     exit()
