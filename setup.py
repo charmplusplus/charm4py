@@ -13,6 +13,7 @@ import distutils
 
 
 build_mpi = False
+enable_tracing = False
 
 system = platform.system()
 libcharm_filename2 = None
@@ -121,6 +122,10 @@ def build_libcharm(charm_src_dir, build_dir):
         import multiprocessing
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
+
+        if enable_tracing:
+         extra_build_opts += " --enable-tracing "
+
         if system == 'Darwin':
             if build_mpi:
                 cmd = './build charm4py mpi-darwin-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
@@ -190,17 +195,23 @@ def build_libcharm(charm_src_dir, build_dir):
 class custom_install(install, object):
 
     user_options = install.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         install.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         install.finalize_options(self)
 
     def run(self):
@@ -210,17 +221,22 @@ class custom_install(install, object):
 class custom_build_py(build_py, object):
 
     user_options = build_py.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         build_py.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         build_py.finalize_options(self)
 
     def run(self):
@@ -233,17 +249,23 @@ class custom_build_py(build_py, object):
 class custom_build_ext(build_ext, object):
 
     user_options = build_ext.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         build_ext.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         build_ext.finalize_options(self)
 
     def run(self):
