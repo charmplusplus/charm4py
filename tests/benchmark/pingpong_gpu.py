@@ -1,62 +1,74 @@
-from charm4py import charm, Chare, Array, coro, Future
-from time import time
+from charm4py import charm, Chare, Array, coro, Future, Channel, Group
+import time
 import numpy as np
 from numba import cuda
 
-PAYLOAD = 100  # number of bytes
-NITER = 10000
-
-
 class Ping(Chare):
 
-    def __init__(self, gpu, num_iters):
-        self.gpu = gpu
-        self.myIndex = self.thisIndex[0]
-        if self.myIndex == 0:
-            self.neighbor = self.thisProxy[1]
-        else:
-            self.neighbor = self.thisProxy[0]
+    #TODO: How do we determine how many chares?
+    def __init__(self, use_gpudirect, print_format):
+        self.gpu_direct = use_gpudirect
+        self.num_chares = charm.numPes()
+        self.print_format = print_format
+        # self.am_low_chare = self.thisIndex < self.num_chares // 2
+        self.am_low_chare = self.thisIndex == 0
 
-    def start(self, done_future, payload_size):
-        self.done_future = done_future
-        self.iter = 0
-        data = np.zeros(payload_size, dtype='int8')
-        if self.gpu:
-            data = cuda.to_device(data)
-            self.startTime = time()
-
-        else:
-            self.neighbor.recv(data)
-
-    def recv(self, data):
-        data = cuda.to_device(data)
-        if self.myIndex == 0:
-            self.iter += 1
-            if self.iter == NITER:
-                totalTime = time() - self.startTime
-                self.done_future.send(totalTime)
-                return
-        data = data.copy_to_host()
-        self.neighbor.recv(data)
+        if self.am_low_chare:
+            print("Msg Size, Iterations, One-way Time (us), Bandwidth (bytes/us)")
 
     @coro
-    def recv_th(self, data):
-        if self.myIndex == 0:
-            self.iter += 1
-            if self.iter == NITER:
-                totalTime = time() - self.startTime
-                self.done_future.send(totalTime)
-                return
-        self.neighbor.recv_th(data)
+    def do_iteration(self, message_size, num_iters, done_future):
+        # TODO: How do we allocate device data again?
+        # dev_array = cuda.zeros(on_device)
+        # host_data = cuda.zeros(on_host)
+        data = np.zeros(message_size, dtype='int8')
+        partner_idx = int(not self.thisIndex)
+        # partner = self.thisProxy[self.thisIndex + self.num_chares // 2]
+        partner = self.thisProxy[partner_idx]
+        partner_channel = Channel(self, partner)
 
+        tstart = time.time()
+
+
+        for _ in range(num_iters):
+            if self.am_low_chare:
+                if not self.gpu_direct:
+                    dev_array = 0 # copy the device array to memory on device, TODO: use pinned memory?
+                # partner_channel.send(dev_array)
+                partner_channel.send(data)
+                partner_channel.recv()
+
+            # if not self.gpu_direct:
+            else:
+                partner_channel.recv()
+                partner_channel.send(data)
+                # copy the data back to the device
+
+        # TODO: should we have barrier (reduction) here?
+        tend = time.time()
+
+        elapsed_time = tend - tstart
+
+        if self.am_low_chare:
+            # display data here
+            self.display_iteration_data(elapsed_time, num_iters, message_size)
+
+        self.reduce(done_future)
+
+    def display_iteration_data(self, elapsed_time, num_iters, message_size):
+        elapsed_time /= 2 # 1-way performance, not RTT
+        elapsed_time /= num_iters # Time for each message
+        bandwidth = message_size / elapsed_time
+        if self.print_format == 0:
+            print(f'{message_size},{num_iters},{elapsed_time * 1e6},{bandwidth / 1e6}')
+        else:
+            print('Not implemented!')
 
 def main(args):
-    threaded = False
-    gpu = False
-    min_msg_size, max_mig_size, low_iter, high_iter, printFormat, gpu = 0
     if len(args) < 7:
         print("Doesn't have the required input params. Usage:"
-              "<max-msg-size> <low-iter> <high-iter> <print-format"
+              "<min-msg-size> <max-msg-size> <low-iter> "
+              "<high-iter> <print-format"
               "(0 for csv, 1 for "
               "regular)> <GPU (0 for CPU, 1 for GPU)>\n"
               )
@@ -67,16 +79,23 @@ def main(args):
     low_iter = int(args[3])
     high_iter = int(args[4])
     print_format = int(args[5])
-    gpu = int(args[6])
+    use_gpudirect = int(args[6])
 
-    pings = Array(Ping, 2, gpu)
+    pings = Group(Ping, args=[use_gpudirect, print_format])
     charm.awaitCreation(pings)
-    for _ in range(2):
+    msg_size = min_msg_size
+
+    while msg_size <= max_msg_size:
+        if msg_size <= 1048576:
+            iter = low_iter
+        else:
+            iter = high_iter
         done_future = Future()
-        pings[0].start(done_future, threaded, gpu)
-        totalTime = done_future.get()
-        print("ping pong time per iter (us)=", totalTime / NITER * 1000000)
-    exit()
+        pings.do_iteration(msg_size, iter, done_future)
+        done_future.get()
+        msg_size *= 2
+
+    charm.exit()
 
 
 charm.start(main)
