@@ -13,6 +13,11 @@ cdef extern from "charm.h":
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
 
+    """
+    #if CMK_CHARM4PY
+    #warn "CMK_CHARM4PY macro access within Cython~~~~~\n\n\n\n\n\n\n"
+    """ 
+
     int CmiPeOnSamePhysicalNode(int pe1, int pe2);
     int CmiNumPhysicalNodes();
     int CmiPhysicalNodeID(int pe);
