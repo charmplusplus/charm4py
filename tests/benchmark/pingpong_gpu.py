@@ -1,10 +1,13 @@
 from charm4py import charm, Chare, Array, coro, Future, Channel, Group
 import time
 import numpy as np
+from numba import cuda
+
+USE_PINNED = True
 
 class Ping(Chare):
-    def __init__(self, use_zerocopy, print_format):
-        self.zero_copy = use_zerocopy
+    def __init__(self, use_gpudirect, print_format):
+        self.gpu_direct = use_gpudirect
         self.num_chares = charm.numPes()
         self.print_format = print_format
         self.am_low_chare = self.thisIndex == 0
@@ -21,7 +24,12 @@ class Ping(Chare):
 
     @coro
     def do_iteration(self, message_size, num_iters, done_future):
-        data = np.zeros(message_size, dtype='int8')
+        if USE_PINNED:
+            h_data = cuda.pinned_array(message_size, dtype='int8')
+        else:
+            h_data = np.zeros(message_size, dtype='int8')
+        d_data = cuda.device_array(message_size, dtype='int8')
+        d_data.copy_to_device(h_data)
         partner_idx = int(not self.thisIndex)
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
@@ -30,18 +38,21 @@ class Ping(Chare):
 
         for _ in range(num_iters):
             if self.am_low_chare:
-                if not self.zero_copy:
-                    partner_channel.send(data)
-                    partner_channel.recv()
+                if not self.gpu_direct:
+                    d_data.copy_to_host(h_data)
+                    # partner_channel.send(dev_array)
+                    partner_channel.send(h_data)
+                    d_data.copy_to_device(partner_channel.recv())
                 else:
-                    raise NotImplementedError("TODO: ZeroCopy")
+                    raise NotImplementedError("TODO: GPU Direct")
 
             else:
-                if not self.zero_copy:
-                    partner_channel.recv()
-                    partner_channel.send(data)
+                if not self.gpu_direct:
+                    d_data.copy_to_device(partner_channel.recv())
+                    d_data.copy_to_host(h_data)
+                    partner_channel.send(h_data)
                 else:
-                    raise NotImplementedError("TODO: ZeroCopy")
+                    raise NotImplementedError("TODO: GPU Direct")
 
         tend = time.time()
 
@@ -80,9 +91,9 @@ def main(args):
     low_iter = int(args[3])
     high_iter = int(args[4])
     print_format = int(args[5])
-    use_zerocopy = int(args[6])
+    use_gpudirect = int(args[6])
 
-    pings = Group(Ping, args=[use_zerocopy, print_format])
+    pings = Group(Ping, args=[use_gpudirect, print_format])
     charm.awaitCreation(pings)
     msg_size = min_msg_size
 
