@@ -13,11 +13,6 @@ cdef extern from "charm.h":
     void LBTurnInstrumentOn();
     void LBTurnInstrumentOff();
 
-    """
-    #if CMK_CHARM4PY
-    #warn "CMK_CHARM4PY macro access within Cython~~~~~\n\n\n\n\n\n\n"
-    """ 
-
     int CmiPeOnSamePhysicalNode(int pe1, int pe2);
     int CmiNumPhysicalNodes();
     int CmiPhysicalNodeID(int pe);
@@ -75,6 +70,8 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+    int CkCudaEnabled();
+    int CUDAPointerOnDevice(const void *ptr);
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,

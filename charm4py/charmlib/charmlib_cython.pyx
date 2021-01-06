@@ -506,6 +506,9 @@ class CharmLib(object):
     CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
 
+  def CUDAPointerOnDevice(self, long address):
+    return CUDAPointerOnDevice(<const void*>address)
+
   def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):
     global cur_buf
     msg0, dcopy = msg
