@@ -5,6 +5,7 @@ from charm4py import charm, Chare, Future, coro
 TEST_VALUE = 42
 
 class TestChare(Chare):
+    @coro
     def __init__(self, done_future):
         self.done_future = done_future
         self.test_future = Future()
@@ -17,20 +18,19 @@ class TestChare(Chare):
     def wait_future(self):
         data = self.test_future.get()
         assert data == TEST_VALUE
-        print(data)
         self.done_future(data)
 
 
 def main(args):
     done_future = Future()
-    test_chare = Chare(TestChare, args=[done_future])
+    test_chare = Chare(TestChare, args=[done_future], onPE=1)
 
     test_chare.send_future(awaitable=True).get()
     test_chare.wait_future()
     assert done_future.get() == TEST_VALUE
 
     done_future = Future()
-    test_chare = Chare(TestChare, args=[done_future])
+    test_chare = Chare(TestChare, args=[done_future], onPE=1)
 
     # now make sure it works when we wait before sending
     test_chare.wait_future()
