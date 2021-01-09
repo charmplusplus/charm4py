@@ -1,6 +1,6 @@
 from ccharm cimport *
 from libc.stdlib cimport malloc, free
-from libc.string cimport memcpy
+from libc.string cimport memcpy, memset
 from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
 from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
@@ -292,12 +292,16 @@ cdef extern const char * const CmiCommitID
 cdef (char*)[NUM_DCOPY_BUFS] send_bufs  # ?TODO bounds checking is needed where this is used
 cdef int[NUM_DCOPY_BUFS] send_buf_sizes # ?TODO bounds checking is needed where this is used
 cdef int cur_buf = 1
+cdef int gpu_direct_buf_idx = 0
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
 cdef c_type_table_typecodes = [None] * 13
 cdef int c_type_table_sizes[13]
 cdef int[SECTION_MAX_BFACTOR] section_children
+cdef long[NUM_DCOPY_BUFS] gpu_direct_device_ptrs
+cdef long[NUM_DCOPY_BUFS] gpu_direct_buff_sizes
+cdef long[NUM_DCOPY_BUFS] gpu_direct_stream_ptrs
 
 cdef object charm
 cdef object charm_reducer_to_ctype
@@ -448,6 +452,35 @@ class CharmLib(object):
       send_buf_sizes[0] = <int>len(msg0)
       CkGroupExtSend_multi(group_id, num_pes, section_children, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
+
+  def CkArraySendWithDeviceData(self, int array_id, index not None, int ep,
+                                msg not None, list stream_ptrs):
+
+    global gpu_direct_buf_idx
+    cdef int i = 0
+    cdef int ndims = len(index)
+    assert ndims == 1
+    c_index[0] = index[0]
+    msg0, dcopy = msg
+    cdef int num_direct_buffers = gpu_direct_buf_idx + 1
+    # TODO: Message on assertion failure
+    assert num_direct_buffers <= NUM_DCOPY_BUFS
+    global gpu_direct_device_ptrs
+    global gpu_direct_stream_ptrs
+
+    if stream_ptrs:
+      for i in range(num_direct_buffers):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
+
+    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+                                 <void*> gpu_direct_device_ptrs,
+                                 <void*> gpu_direct_buff_sizes,
+                                 <void*> gpu_direct_stream_ptrs,
+                                 num_direct_buffers
+                                 )
+    gpu_direct_buf_idx = 0
 
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):
     global cur_buf
@@ -787,8 +820,12 @@ class CharmLib(object):
     else:
       direct_copy_hdr = []  # goes to header
       args = list(msgArgs)
+      msg_has_gpu_args = False
       global cur_buf
+      global gpu_direct_buf_idx
+      global gpu_direct_device_ptrs
       cur_buf = 1
+      gpu_direct_buf_idx = 0
       for i in range(len(args)):
         arg = msgArgs[i]
         if isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
@@ -806,6 +843,15 @@ class CharmLib(object):
           nbytes = len(a) * a.itemsize # NOTE that cython's array C interface doesn't expose itemsize attribute
           direct_copy_hdr.append((i, 1, (a.typecode), nbytes))
           send_bufs[cur_buf] = <char*>a.data.as_voidptr
+        elif CkCudaEnabled() and hasattr(arg, '__cuda_array_interface__'):
+          # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
+          # assumption: we can get nbytes from the arg directly
+          # TODO: verify this assertion for other types
+          gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg['__cuda_array_interface__']['data'][0]
+          gpu_direct_buff_sizes[gpu_direct_buf_idx] = arg.nbytes
+          cuda_dev_info = True
+          gpu_direct_buf_idx += 1
+          continue
         else:
           continue
         args[i] = None  # will direct-copy this arg so remove from args list
@@ -817,10 +863,12 @@ class CharmLib(object):
         msg = dumps((header, args), PICKLE_PROTOCOL)
       except:
         global cur_buf
+        global gpu_direct_buf_idx
         cur_buf = 1
+        gpu_direct_buf_idx = 0
         raise
     if PROFILING: charm.recordSend(len(msg) + dcopy_size)
-    return msg, None
+    return msg, cuda_dev_info
 
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)

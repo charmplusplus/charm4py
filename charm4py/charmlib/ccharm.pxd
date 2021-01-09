@@ -72,6 +72,15 @@ cdef extern from "charm.h":
 
     int CkCudaEnabled();
     int CUDAPointerOnDevice(const void *ptr);
+    void CkChareExtSendWithDeviceData(int aid, int *idx, int ndims,
+                                  int epIdx, int num_bufs, char *msg,
+                                  int msgSize,
+                                  void *devBufPtrs,
+                                  void *devBufSizesInBytes,
+                                  void *streamPtrs, int numDevBufs
+                                  );
+
+
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,

@@ -721,7 +721,10 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             for i in range(num_args, argcount):
                 argname = argnames[i]
                 # first look for argument in kwargs
-                if argname in kwargs:
+                # TODO: Should stream_ptrs be skipped?
+                if argname == 'stream_ptrs':
+                    continue
+                if argname in kwargs and argname:
                     args.append(kwargs[argname])
                 else:
                     # if not there, see if there is a default value
@@ -741,15 +744,26 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             if elemIdx == ():
                 header[b'bcast'] = True
         if not proxy.issec or elemIdx != ():
+            # TODO: Check that this is channel proxy method?
             destObj = None
             aid = proxy.aid
             if Options.local_msg_optim and (len(args) > 0):
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            msg = charm.packMsg(destObj, args, header)
-            charm.CkArraySend(aid, elemIdx, ep, msg)
+            msg, has_gpu_data = charm.packMsg(destObj, args, header)
+            if has_gpu_data:
+                if 'stream_ptrs' in kwargs and kwargs['stream_ptrs']:
+                    stream_ptrs = kwargs['stream_ptrs']
+                else:
+                    stream_ptrs = None
+                charm.CkArraySendWithDeviceData(aid, elemIdx, ep,
+                                                msg, stream_ptrs
+                                                )
+            else:
+                charm.CkArraySend(aid, elemIdx, ep, msg)
         else:
+            # TODO: Error if trying to send ZC data
             root, sid = proxy.section
             header[b'sid'] = sid
             if Options.local_msg_optim and root == charm._myPe:
