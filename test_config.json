@@ -173,6 +173,9 @@
         "path": "tests/futures/test_futures.py"
     },
     {
+        "path": "tests/futures/test_different_coroutines.py"
+    },
+    {
         "path": "tests/futures/multi_futures.py"
     },
     {
