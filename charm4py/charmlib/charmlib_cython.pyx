@@ -285,8 +285,17 @@ cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
       PyTuple_SET_ITEM(arrIndex, i, d)
   return arrIndex
 
-
 cdef extern const char * const CmiCommitID
+
+# cdef class PyCkDeviceBuffer:
+#     cdef CkDeviceBuffer c_buff
+
+#     @staticmethod
+#     cdef PyCkDeviceBuffer from_ptr(CkDeviceBuffer buf):
+#         cdef PyCkDeviceBuffer newBuf = PyCkDeviceBuffer.__new__(PyCkDeviceBuffer)
+#         newBuf.c_buff = buf
+#         return newBuf
+
 
 # supports up to NUM_DCOPY_BUFS direct-copy entry method arguments
 cdef (char*)[NUM_DCOPY_BUFS] send_bufs  # ?TODO bounds checking is needed where this is used
@@ -739,6 +748,7 @@ class CharmLib(object):
     registerChareMsgRecvExtCallback(recvChareMsg)
     registerGroupMsgRecvExtCallback(recvGroupMsg)
     registerArrayMsgRecvExtCallback(recvArrayMsg)
+    registerArrayMsgGPUDirectRecvExtCallback(recvGPUDirectMsg)
     registerArrayBcastRecvExtCallback(recvArrayBcast)
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
@@ -873,6 +883,17 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
+  def getGPUDirectData(self, list postbuf_ptrs, list gpu_recv_bufs, list stream_ptrs):
+    cdef int num_buffers = len(gpu_recv_bufs)
+    cdef int[num_buffers] gpu_buf_sizes
+    cdef (int*)[num_buffers] gpu_buf_ptrs
+    cdef int[num_buffers] stream_ptrs
+
+    for idx in range(num_buffers):
+      gpu_buf_sizes[idx] = gpu_recv_bufs[idx][0]
+      gpu_buf_ptrs[idx] = gpu_recv_bufs[idx][1]
+      stream_ptrs[idx] = streams_ptrs[idx]
+    CkGetGPUDirectData()
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
@@ -924,6 +945,25 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
+
+cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
+                           long *devBufSizes, void *devBufs, int msgSize,
+                           char *msg, int dcopy_start):
+    cdef int idx = 0
+    cdef void *bptr
+    try:
+      if PROFILING:
+        charm._precvtime = time.time()
+        charm.recordReceive(msgSize)
+      devBufInfo = []
+      for idx in range(numDevBuffs):
+        dev_buf = devBufs[idx]
+        devBufInfo.append((devBufSizes[idx], dev_buf))
+      recv_buffer.setMsg(msg, msgSize)
+      charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, mg, dcopy_start)
+    except:
+      charm.handleGeneralError()
+
 
 cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
   cdef int i = 0
@@ -1107,3 +1147,4 @@ cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
     charm.triggerCallable(<int>userParam)
   except:
     charm.handleGeneralError()
+

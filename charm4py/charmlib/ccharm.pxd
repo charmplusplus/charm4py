@@ -70,6 +70,7 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+    # TODO: Organize these to place them near their related functions
     int CkCudaEnabled();
     int CUDAPointerOnDevice(const void *ptr);
     void CkChareExtSendWithDeviceData(int aid, int *idx, int ndims,
@@ -80,9 +81,16 @@ cdef extern from "charm.h":
                                   void *streamPtrs, int numDevBufs
                                   );
 
+    void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, long*, void *, int, char*, int));
+
 
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
+
+
+# cdef extern from "ckrdmadevice.h":
+#     cdef cppclass CkDeviceBuffer:
+#         CkDeviceBuffer()
 
