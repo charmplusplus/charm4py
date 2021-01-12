@@ -123,6 +123,12 @@ class Charm(object):
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
+        # TODO: create a 'charm' CUDA interface
+        try:
+            from numba import cuda as numba_cuda
+            self.CUDA = numba_cuda
+        except ImportError:
+            raise Charm4PyError("Currently numba is required to use Charm4Py (temporary)")
         # entry point to Charm program. can be used in place of defining a Mainchare
         self.entry_func = None
         if self.lib.name == 'cython':
@@ -305,6 +311,14 @@ class Charm(object):
                 self.arrays[aid][index] = obj
                 em.run(obj, header, args)  # now call the user's array element __init__
 
+    def recvGPUDirectMsg(self, aid, index, ep,
+                         devBuf_ptrs, msg, dcopy_start
+                         ):
+        obj = self.arrays[aid][index]
+        header, args = self.unpackMsg(msg, dcopy_start, obj)
+        args.append(devBuf_ptrs)
+        self.invokeEntryMethod(obj, ep, header, args)
+
     def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
         header, args = self.unpackMsg(msg, dcopy_start, None)
         array = self.arrays[aid]
@@ -312,6 +326,7 @@ class Charm(object):
             self.invokeEntryMethod(array[index], ep, header, args)
 
     def unpackMsg(self, msg, dcopy_start, dest_obj):
+        # Issue Rgets for GPU data in unpackMsg? But how does recv work?
         if msg[:7] == b'_local:':
             header, args = dest_obj.__removeLocal__(int(msg[7:]))
         else:
@@ -331,6 +346,13 @@ class Charm(object):
                     args[-1] = reducer.postprocess(args[-1])
 
         return header, args
+
+    def getGPUDirectData(self, post_buffers, gpu_recv_bufs, stream_ptrs):
+        return_fut = self.Future()
+        if not streams:
+            stream_ptrs = [0] * len(post_buffers)
+        self.lib.getGPUDirectData(return_fut, post_buffers, gpu_recv_bufs, stream_ptrs)
+        return return_fut
 
     def packMsg(self, destObj, msgArgs, header):
         """Prepares a message for sending, given arguments to an entry method invocation.
@@ -1155,7 +1177,6 @@ def rebuildNumpyArray(data, shape, dt):
     a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
     a.shape = shape
     return a.copy()
-
 
 charm = Charm()
 readonlies = __ReadOnlies()
