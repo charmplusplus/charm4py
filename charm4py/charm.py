@@ -40,6 +40,11 @@ except ImportError:
 def SECTION_ALL(obj):
     return 0
 
+def getDeviceDataInfo(devArray):
+    return devArray['__cuda_array_interface__']['data']
+
+def getDeviceDataAddress(devArray):
+    return getDeviceDataInfo(devArray[0])
 
 class Options(object):
 
@@ -123,12 +128,6 @@ class Charm(object):
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
-        # TODO: create a 'charm' CUDA interface
-        try:
-            from numba import cuda as numba_cuda
-            self.CUDA = numba_cuda
-        except ImportError:
-            raise Charm4PyError("Currently numba is required to use Charm4Py (temporary)")
         # entry point to Charm program. can be used in place of defining a Mainchare
         self.entry_func = None
         if self.lib.name == 'cython':
@@ -347,11 +346,12 @@ class Charm(object):
 
         return header, args
 
-    def getGPUDirectData(self, post_buffers, gpu_recv_bufs, stream_ptrs):
+    def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
         return_fut = self.Future()
+        post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
         if not streams:
             stream_ptrs = [0] * len(post_buffers)
-        self.lib.getGPUDirectData(return_fut, post_buffers, gpu_recv_bufs, stream_ptrs)
+        self.lib.getGPUDirectData(post_buf_data, remote_bufs, stream_ptrs, return_fut)
         return return_fut
 
     def packMsg(self, destObj, msgArgs, header):
