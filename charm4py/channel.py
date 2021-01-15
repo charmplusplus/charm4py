@@ -1,5 +1,5 @@
 from .threads import LocalFuture
-from .charm4py import getGPUDirectData
+from .charm import Charm
 
 
 class Channel(object):
@@ -61,7 +61,7 @@ class _Channel(object):
         self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg)
         self.send_seqno = (self.send_seqno + 1) % CHAN_BUF_SIZE
 
-    def recv(self, *post_buffers, stream_ptrs = None:
+    def recv(self, *post_buffers, stream_ptrs = None):
         if self.recv_seqno in self.data:
             ret = self.data.pop(self.recv_seqno)
         else:
@@ -73,6 +73,6 @@ class _Channel(object):
         if post_buffers:
             gpu_recv_bufs = ret.pop()
             assert len(post_buffers) == len(gpu_recv_bufs)
-            recv_future = getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
+            Charm.recv_future = getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
         return ret
