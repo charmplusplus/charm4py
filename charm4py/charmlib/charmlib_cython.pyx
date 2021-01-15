@@ -883,17 +883,32 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
-  def getGPUDirectData(self, list postbuf_ptrs, list gpu_recv_bufs, list stream_ptrs):
-    cdef int num_buffers = len(gpu_recv_bufs)
-    cdef int[num_buffers] gpu_buf_sizes
-    cdef (int*)[num_buffers] gpu_buf_ptrs
-    cdef int[num_buffers] stream_ptrs
+  def getGPUDirectData(self, list post_buf_data, list remote_bufs, list stream_ptrs, return_fut):
+    cdef int num_buffers = len(post_buf_data)
+    cdef array.array int_array_template = array.array('i', [])
+    cdef array.array long_array_template = array.array('L', [])
+    cdef array.array recv_buf_sizes
+    cdef array.array recv_buf_ptrs
+    # pointers from the remote that we will be issuing Rgets for
+    # these are pointers to type CkDeviceBuffer
+    cdef array.array remote_buf_ptrs
+
+    recv_buf_sizes = array.clone(int_array_template, num_buffers, zero=False)
+    recv_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
+    stream_ptrs_forc = array.clone(long_array_template, num_buffers, zero=False)
+    remote_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
 
     for idx in range(num_buffers):
-      gpu_buf_sizes[idx] = gpu_recv_bufs[idx][0]
-      gpu_buf_ptrs[idx] = gpu_recv_bufs[idx][1]
-      stream_ptrs[idx] = streams_ptrs[idx]
-    CkGetGPUDirectData()
+      recv_buf_ptrs[idx] = post_buf_data[idx][0]
+      recv_buf_sizes[idx] = remote_bufs[idx][0]
+      remote_buf_ptrs = remote_bufs[idx][1]
+      stream_ptrs_forc[idx] = stream_ptrs[idx]
+      # what do we do about the return future? Need to turn it into some callback.
+    CkGetGPUDirectData(num_buffers, recv_buf_ptrs.data.as_voidptr,
+                       <int*> recv_buf_sizes.data.as_voidptr,
+                       remote_buf_ptrs.data.as_voidptr,
+                       stream_ptrs_forc.data.as_voidptr
+                       )
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
@@ -960,7 +975,7 @@ cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numD
         dev_buf = devBufs[idx]
         devBufInfo.append((devBufSizes[idx], dev_buf))
       recv_buffer.setMsg(msg, msgSize)
-      charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, mg, dcopy_start)
+      charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, msg, dcopy_start)
     except:
       charm.handleGeneralError()
 
