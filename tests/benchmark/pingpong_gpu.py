@@ -1,16 +1,16 @@
-from charm4py import charm, Chare, Array, coro, Future, Channel, Group
+from charm4py import charm, Chare, Array, coro, Future, Channel, Group, ArrayMap
 import time
 import numpy as np
 from numba import cuda
 
-USE_PINNED = True
+USE_PINNED = False
 
 class Ping(Chare):
     def __init__(self, use_gpudirect, print_format):
         self.gpu_direct = use_gpudirect
         self.num_chares = charm.numPes()
         self.print_format = print_format
-        self.am_low_chare = self.thisIndex == 0
+        self.am_low_chare = self.thisIndex[0] == 0
 
         if self.am_low_chare:
             if print_format == 0:
@@ -27,10 +27,13 @@ class Ping(Chare):
         if USE_PINNED:
             h_data = cuda.pinned_array(message_size, dtype='int8')
         else:
-            h_data = np.zeros(message_size, dtype='int8')
+            if self.am_low_chare:
+                h_data = np.ones(message_size, dtype='int8')
+            else:
+                h_data = np.zeros(message_size, dtype='int8')
         d_data = cuda.device_array(message_size, dtype='int8')
         d_data.copy_to_device(h_data)
-        partner_idx = int(not self.thisIndex)
+        partner_idx = int(not self.thisIndex[0])
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
 
@@ -40,11 +43,14 @@ class Ping(Chare):
             if self.am_low_chare:
                 if not self.gpu_direct:
                     d_data.copy_to_host(h_data)
-                    # partner_channel.send(dev_array)
                     partner_channel.send(h_data)
                     d_data.copy_to_device(partner_channel.recv())
                 else:
-                    raise NotImplementedError("TODO: GPU Direct")
+                    partner_channel.send(d_data)
+                    break
+                    # partner_channel.recv(d_data)
+                    # sleep because callbacks not implemented yet
+                    # charm.sleep(0.15)
 
             else:
                 if not self.gpu_direct:
@@ -52,7 +58,10 @@ class Ping(Chare):
                     d_data.copy_to_host(h_data)
                     partner_channel.send(h_data)
                 else:
-                    raise NotImplementedError("TODO: GPU Direct")
+                    partner_channel.recv(d_data)
+                    # d_data.copy_to_host(h_data)
+                    # print(h_data[0])
+                    # partner_channel.send(d_data)
 
         tend = time.time()
 
@@ -76,13 +85,19 @@ class Ping(Chare):
                   f'{elapsed_time * 1e6: <20} {bandwidth / 1e6: <20}'
                   )
 
+
+class ArrMap(ArrayMap):
+    def procNum(self, index):
+        return index[0] % 2
+
+
 def main(args):
     if len(args) < 7:
         print("Doesn't have the required input params. Usage:"
               "<min-msg-size> <max-msg-size> <low-iter> "
               "<high-iter> <print-format"
               "(0 for csv, 1 for "
-              "regular)> <GPU (0 for CPU, 1 for GPU)>\n"
+              "regular)> <GPU (0 for host staging, 1 for GPU Direct)>\n"
               )
         charm.exit(-1)
 
@@ -93,7 +108,8 @@ def main(args):
     print_format = int(args[5])
     use_gpudirect = int(args[6])
 
-    pings = Group(Ping, args=[use_gpudirect, print_format])
+    peMap = Group(ArrMap)
+    pings = Array(Ping, 2, args=[use_gpudirect, print_format], map = peMap)
     charm.awaitCreation(pings)
     msg_size = min_msg_size
 
