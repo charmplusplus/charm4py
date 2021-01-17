@@ -76,13 +76,18 @@ cdef extern from "charm.h":
     void CkChareExtSendWithDeviceData(int aid, int *idx, int ndims,
                                   int epIdx, int num_bufs, char *msg,
                                   int msgSize,
-                                  void *devBufPtrs,
-                                  void *devBufSizesInBytes,
-                                  void *streamPtrs, int numDevBufs
+                                  long *devBufPtrs,
+                                  long *devBufSizesInBytes,
+                                  long *streamPtrs, int numDevBufs
                                   );
 
     void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, long*, void *, int, char*, int));
-    void CkGetGPUDirectData(int numBuffers, void *recvBufPtrs, int *arrSizes, void *remoteBufInfo, void *streamPtrs);
+    void CkGetGPUDirectData(int numBuffers, void *recvBufPtrs, int *arrSizes,
+                            void *remoteBufInfo, void *streamPtrs, int *futureId);
+
+    int CkDeviceBufferSizeInBytes();
+
+    void registerDepositFutureWithIdFn(void (*cb)(void*, void*));
 
 
 
