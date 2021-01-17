@@ -751,8 +751,8 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            msg, has_gpu_data = charm.packMsg(destObj, args, header)
-            if has_gpu_data:
+            msg = charm.packMsg(destObj, args, header)
+            if msg[1]:
                 if 'stream_ptrs' in kwargs and kwargs['stream_ptrs']:
                     stream_ptrs = kwargs['stream_ptrs']
                 else:
