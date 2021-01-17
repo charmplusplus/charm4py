@@ -1,5 +1,5 @@
 from .threads import LocalFuture
-from .charm import Charm
+from .charm import charm
 
 
 class Channel(object):
@@ -71,8 +71,15 @@ class _Channel(object):
         self.recv_seqno = (self.recv_seqno + 1) % CHAN_BUF_SIZE
 
         if post_buffers:
-            gpu_recv_bufs = ret.pop()
+            gpu_recv_bufs = ret[-1]
+            ret = ret[:-1:1]
             assert len(post_buffers) == len(gpu_recv_bufs)
-            Charm.recv_future = getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
+            recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
         return ret
+
+
+
+
+
+
