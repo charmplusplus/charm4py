@@ -41,10 +41,10 @@ def SECTION_ALL(obj):
     return 0
 
 def getDeviceDataInfo(devArray):
-    return devArray['__cuda_array_interface__']['data']
+    return devArray.__cuda_array_interface__['data']
 
 def getDeviceDataAddress(devArray):
-    return getDeviceDataInfo(devArray[0])
+    return getDeviceDataInfo(devArray)[0]
 
 class Options(object):
 
@@ -125,6 +125,7 @@ class Charm(object):
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
+        self.CkArraySendWithDeviceData = self.lib.CkArraySendWithDeviceData
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
@@ -347,9 +348,9 @@ class Charm(object):
         return header, args
 
     def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
-        return_fut = self.Future()
+        return_fut = self.Future(len(post_buffers))
         post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
-        if not streams:
+        if not stream_ptrs:
             stream_ptrs = [0] * len(post_buffers)
         self.lib.getGPUDirectData(post_buf_data, remote_bufs, stream_ptrs, return_fut)
         return return_fut
