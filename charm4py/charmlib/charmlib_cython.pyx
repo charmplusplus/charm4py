@@ -908,10 +908,10 @@ class CharmLib(object):
       remote_buf_ptrs[idx] = remote_bufs[idx][1]
       stream_ptrs_forc[idx] = stream_ptrs[idx]
       # what do we do about the return future? Need to turn it into some callback.
-    CkGetGPUDirectData(num_buffers, recv_buf_ptrs.data.as_voidptr,
+    CkGetGPUDirectData(num_buffers, <void*><long>recv_buf_ptrs[0],
                        <int*> recv_buf_sizes.data.as_voidptr,
-                       remote_buf_ptrs.data.as_voidptr,
-                       stream_ptrs_forc.data.as_voidptr,
+                       <void*><long> remote_buf_ptrs[0],
+                       <void*><long> stream_ptrs_forc[0],
                        future_id
                        )
 
@@ -978,7 +978,7 @@ cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numD
       for idx in range(numDevBuffs):
         # Add the size of this buffer and a pointer to it to the info list
         devBufInfo.append((devBufSizes[idx],
-                           <long>(devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx)))
+                           <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx))
                           )
       recv_buffer.setMsg(msg, msgSize)
       charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, devBufInfo, recv_buffer, dcopy_start)
