@@ -47,7 +47,6 @@ class Ping(Chare):
                     d_data.copy_to_device(partner_channel.recv())
                 else:
                     partner_channel.send(d_data)
-                    break
                     # partner_channel.recv(d_data)
                     # sleep because callbacks not implemented yet
                     # charm.sleep(0.15)
