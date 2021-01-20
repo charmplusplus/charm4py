@@ -46,6 +46,7 @@ class Ping(Chare):
                     partner_channel.send(h_data)
                     d_data.copy_to_device(partner_channel.recv())
                 else:
+                    print("Sending ", hex(d_data.device_ctypes_pointer.value))
                     partner_channel.send(d_data)
                     # partner_channel.recv(d_data)
                     # sleep because callbacks not implemented yet
@@ -57,6 +58,7 @@ class Ping(Chare):
                     d_data.copy_to_host(h_data)
                     partner_channel.send(h_data)
                 else:
+                    print("Receiving ", hex(d_data.device_ctypes_pointer.value))
                     partner_channel.recv(d_data)
                     # d_data.copy_to_host(h_data)
                     # print(h_data[0])

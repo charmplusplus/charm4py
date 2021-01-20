@@ -75,6 +75,7 @@ class _Channel(object):
             ret = ret[:-1:1]
             assert len(post_buffers) == len(gpu_recv_bufs)
             recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
+            print('recv_future fid', recv_future.fid)
             recv_future.get()
         return ret
 
