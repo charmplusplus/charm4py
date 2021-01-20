@@ -359,6 +359,10 @@ class Charm(object):
         self.lib.getGPUDirectData(post_buf_data, remote_bufs, stream_ptrs, return_fut)
         return return_fut
 
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        self.threadMgr.depositFuture(fid, result)
+
     def packMsg(self, destObj, msgArgs, header):
         """Prepares a message for sending, given arguments to an entry method invocation.
 

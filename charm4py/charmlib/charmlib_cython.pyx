@@ -1061,7 +1061,7 @@ cdef void depositFutureWithId(void *param, void *msg):
   free(param)
   #charm._future_deposit_result(futureId)
   print('depositFutureWithId', futureId)
-  charm.thisProxy[1]._future_deposit_result(futureId)
+  charm._future_deposit_result(futureId)
 
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
