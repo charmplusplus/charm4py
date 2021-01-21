@@ -316,7 +316,6 @@ class Charm(object):
     def recvGPUDirectMsg(self, aid, index, ep,
                          devBuf_ptrs, msg, dcopy_start
                          ):
-        print('recvGPUDirectMsg')
         obj = self.arrays[aid][index]
         header, args = self.unpackMsg(msg, dcopy_start, obj)
         args.append(devBuf_ptrs)
@@ -351,7 +350,6 @@ class Charm(object):
         return header, args
 
     def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
-        print('getGPUDirectData')
         return_fut = self.Future(len(post_buffers))
         post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
         if not stream_ptrs:

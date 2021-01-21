@@ -465,7 +465,6 @@ class CharmLib(object):
   def CkArraySendWithDeviceData(self, int array_id, index not None, int ep,
                                 msg not None, list stream_ptrs):
 
-    print('CkArraySendWithDeviceData')
     global gpu_direct_buf_idx
     cdef int i = 0
     cdef int ndims = len(index)
@@ -888,7 +887,6 @@ class CharmLib(object):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
   def getGPUDirectData(self, list post_buf_data, list remote_bufs, list stream_ptrs, return_fut):
-    print('charmlib getGPUDirectData')
     cdef int num_buffers = len(post_buf_data)
     cdef int *future_id = <int*> malloc(sizeof(int))
     future_id[0] = return_fut.fid
@@ -910,16 +908,7 @@ class CharmLib(object):
       recv_buf_sizes[idx] = remote_bufs[idx][0]
       remote_buf_ptrs[idx] = remote_bufs[idx][1]
       stream_ptrs_forc[idx] = stream_ptrs[idx]
-      print("Op %d: dest ptr: %02x, size: %d, src DeviceBuffer ptr: %02x, stream ptr: %02x\n" %(idx, recv_buf_ptrs[idx], recv_buf_sizes[idx], remote_buf_ptrs[idx], stream_ptrs_forc[idx]));
     # what do we do about the return future? Need to turn it into some callback.
-    '''
-    CkGetGPUDirectData(num_buffers, <void*><long>recv_buf_ptrs[0],
-                       <int*> recv_buf_sizes.data.as_voidptr,
-                       <void*><long> remote_buf_ptrs[0],
-                       <void*><long> stream_ptrs_forc[0],
-                       future_id
-                       )
-                       '''
     CkGetGPUDirectData(num_buffers, <void*>recv_buf_ptrs.data.as_voidptr,
                        <int*>recv_buf_sizes.data.as_voidptr,
                        <void*>remote_buf_ptrs.data.as_voidptr,
@@ -1059,8 +1048,6 @@ cdef void depositFutureWithId(void *param, void *msg):
 # TODO: Figure out how this param value should be allocated/deallocated
   cdef int futureId = (<int*> param)[0]
   free(param)
-  #charm._future_deposit_result(futureId)
-  print('depositFutureWithId', futureId)
   charm._future_deposit_result(futureId)
 
 
