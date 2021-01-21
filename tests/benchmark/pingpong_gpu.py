@@ -47,9 +47,7 @@ class Ping(Chare):
                     d_data.copy_to_device(partner_channel.recv())
                 else:
                     partner_channel.send(d_data)
-                    # partner_channel.recv(d_data)
-                    # sleep because callbacks not implemented yet
-                    # charm.sleep(0.15)
+                    partner_channel.recv(d_data)
 
             else:
                 if not self.gpu_direct:
@@ -58,9 +56,7 @@ class Ping(Chare):
                     partner_channel.send(h_data)
                 else:
                     partner_channel.recv(d_data)
-                    # d_data.copy_to_host(h_data)
-                    # print(h_data[0])
-                    # partner_channel.send(d_data)
+                    partner_channel.send(d_data)
 
         tend = time.time()
 
@@ -111,6 +107,12 @@ def main(args):
     pings = Array(Ping, 2, args=[use_gpudirect, print_format], map = peMap)
     charm.awaitCreation(pings)
     msg_size = min_msg_size
+
+    # do a warmup iteration (should this be done for each size?)
+    done_future = Future()
+    pings.do_iteration(msg_size, high_iter, done_future)
+    done_future.get()
+
 
     while msg_size <= max_msg_size:
         if msg_size <= 1048576:
