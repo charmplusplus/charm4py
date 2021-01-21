@@ -25,14 +25,19 @@ class Ping(Chare):
     @coro
     def do_iteration(self, message_size, num_iters, done_future):
         if USE_PINNED:
-            h_data = cuda.pinned_array(message_size, dtype='int8')
+            h_data_send = cuda.pinned_array(message_size, dtype='int8')
+            h_data_recv = cuda.pinned_array(message_size, dtype='int8')
         else:
             if self.am_low_chare:
-                h_data = np.ones(message_size, dtype='int8')
+                h_data_send = np.ones(message_size, dtype='int8')
+                h_data_recv = np.ones(message_size, dtype='int8')
             else:
-                h_data = np.zeros(message_size, dtype='int8')
-        d_data = cuda.device_array(message_size, dtype='int8')
-        d_data.copy_to_device(h_data)
+                h_data_send = np.zeros(message_size, dtype='int8')
+                h_data_recv = np.zeros(message_size, dtype='int8')
+        d_data_send = cuda.device_array(message_size, dtype='int8')
+        d_data_recv = cuda.device_array(message_size, dtype='int8')
+        d_data_send.copy_to_device(h_data_send)
+        d_data_recv.copy_to_device(h_data_recv)
         partner_idx = int(not self.thisIndex[0])
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
@@ -42,21 +47,21 @@ class Ping(Chare):
         for _ in range(num_iters):
             if self.am_low_chare:
                 if not self.gpu_direct:
-                    d_data.copy_to_host(h_data)
-                    partner_channel.send(h_data)
-                    d_data.copy_to_device(partner_channel.recv())
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
+                    d_data_recv.copy_to_device(partner_channel.recv())
                 else:
-                    partner_channel.send(d_data)
-                    partner_channel.recv(d_data)
+                    partner_channel.send(d_data_send)
+                    partner_channel.recv(d_data_recv)
 
             else:
                 if not self.gpu_direct:
-                    d_data.copy_to_device(partner_channel.recv())
-                    d_data.copy_to_host(h_data)
-                    partner_channel.send(h_data)
+                    d_data_recv.copy_to_device(partner_channel.recv())
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
                 else:
-                    partner_channel.recv(d_data)
-                    partner_channel.send(d_data)
+                    partner_channel.recv(d_data_recv)
+                    partner_channel.send(d_data_send)
 
         tend = time.time()
 
