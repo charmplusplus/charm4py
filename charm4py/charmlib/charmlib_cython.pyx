@@ -889,6 +889,7 @@ class CharmLib(object):
   def getGPUDirectData(self, list post_buf_data, list remote_bufs, list stream_ptrs, return_fut):
     cdef int num_buffers = len(post_buf_data)
     cdef int *future_id = <int*> malloc(sizeof(int))
+    future_id[0] = return_fut.fid
     cdef array.array int_array_template = array.array('i', [])
     cdef array.array long_array_template = array.array('L', [])
     cdef array.array recv_buf_sizes
@@ -907,11 +908,11 @@ class CharmLib(object):
       recv_buf_sizes[idx] = remote_bufs[idx][0]
       remote_buf_ptrs[idx] = remote_bufs[idx][1]
       stream_ptrs_forc[idx] = stream_ptrs[idx]
-      # what do we do about the return future? Need to turn it into some callback.
-    CkGetGPUDirectData(num_buffers, <void*><long>recv_buf_ptrs[0],
-                       <int*> recv_buf_sizes.data.as_voidptr,
-                       <void*><long> remote_buf_ptrs[0],
-                       <void*><long> stream_ptrs_forc[0],
+    # what do we do about the return future? Need to turn it into some callback.
+    CkGetGPUDirectData(num_buffers, <void*>recv_buf_ptrs.data.as_voidptr,
+                       <int*>recv_buf_sizes.data.as_voidptr,
+                       <void*>remote_buf_ptrs.data.as_voidptr,
+                       <void*>stream_ptrs_forc.data.as_voidptr,
                        future_id
                        )
 
@@ -1048,6 +1049,7 @@ cdef void depositFutureWithId(void *param, void *msg):
   cdef int futureId = (<int*> param)[0]
   free(param)
   charm._future_deposit_result(futureId)
+
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
                             char **returnBuffers, int *returnBufferSizes):

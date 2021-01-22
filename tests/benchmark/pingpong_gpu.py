@@ -25,14 +25,19 @@ class Ping(Chare):
     @coro
     def do_iteration(self, message_size, num_iters, done_future):
         if USE_PINNED:
-            h_data = cuda.pinned_array(message_size, dtype='int8')
+            h_data_send = cuda.pinned_array(message_size, dtype='int8')
+            h_data_recv = cuda.pinned_array(message_size, dtype='int8')
         else:
             if self.am_low_chare:
-                h_data = np.ones(message_size, dtype='int8')
+                h_data_send = np.ones(message_size, dtype='int8')
+                h_data_recv = np.ones(message_size, dtype='int8')
             else:
-                h_data = np.zeros(message_size, dtype='int8')
-        d_data = cuda.device_array(message_size, dtype='int8')
-        d_data.copy_to_device(h_data)
+                h_data_send = np.zeros(message_size, dtype='int8')
+                h_data_recv = np.zeros(message_size, dtype='int8')
+        d_data_send = cuda.device_array(message_size, dtype='int8')
+        d_data_recv = cuda.device_array(message_size, dtype='int8')
+        d_data_send.copy_to_device(h_data_send)
+        d_data_recv.copy_to_device(h_data_recv)
         partner_idx = int(not self.thisIndex[0])
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
@@ -42,26 +47,21 @@ class Ping(Chare):
         for _ in range(num_iters):
             if self.am_low_chare:
                 if not self.gpu_direct:
-                    d_data.copy_to_host(h_data)
-                    partner_channel.send(h_data)
-                    d_data.copy_to_device(partner_channel.recv())
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
+                    d_data_recv.copy_to_device(partner_channel.recv())
                 else:
-                    partner_channel.send(d_data)
-                    break
-                    # partner_channel.recv(d_data)
-                    # sleep because callbacks not implemented yet
-                    # charm.sleep(0.15)
+                    partner_channel.send(d_data_send)
+                    partner_channel.recv(d_data_recv)
 
             else:
                 if not self.gpu_direct:
-                    d_data.copy_to_device(partner_channel.recv())
-                    d_data.copy_to_host(h_data)
-                    partner_channel.send(h_data)
+                    d_data_recv.copy_to_device(partner_channel.recv())
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
                 else:
-                    partner_channel.recv(d_data)
-                    # d_data.copy_to_host(h_data)
-                    # print(h_data[0])
-                    # partner_channel.send(d_data)
+                    partner_channel.recv(d_data_recv)
+                    partner_channel.send(d_data_send)
 
         tend = time.time()
 
@@ -112,6 +112,12 @@ def main(args):
     pings = Array(Ping, 2, args=[use_gpudirect, print_format], map = peMap)
     charm.awaitCreation(pings)
     msg_size = min_msg_size
+
+    # do a warmup iteration (should this be done for each size?)
+    done_future = Future()
+    pings.do_iteration(msg_size, high_iter, done_future)
+    done_future.get()
+
 
     while msg_size <= max_msg_size:
         if msg_size <= 1048576:

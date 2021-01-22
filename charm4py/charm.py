@@ -111,11 +111,13 @@ class Charm(object):
         self.options.interactive.verbose = 1
         self.options.interactive.broadcast_imports = True
 
+        '''
         if 'OMPI_COMM_WORLD_SIZE' in os.environ:
             # this is needed for OpenMPI, see:
             # https://svn.open-mpi.org/trac/ompi/wiki/Linkers
             import ctypes
             self.__libmpi__ = ctypes.CDLL('libmpi.so', mode=ctypes.RTLD_GLOBAL)
+        '''
         self.lib = load_charm_library(self)
         self.ReducerType = self.lib.ReducerType
         self.CkContributeToChare = self.lib.CkContributeToChare
@@ -354,6 +356,10 @@ class Charm(object):
             stream_ptrs = [0] * len(post_buffers)
         self.lib.getGPUDirectData(post_buf_data, remote_bufs, stream_ptrs, return_fut)
         return return_fut
+
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        self.threadMgr.depositFuture(fid, result)
 
     def packMsg(self, destObj, msgArgs, header):
         """Prepares a message for sending, given arguments to an entry method invocation.
