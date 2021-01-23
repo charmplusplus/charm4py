@@ -492,6 +492,34 @@ class CharmLib(object):
                                  )
     gpu_direct_buf_idx = 0
 
+  def CkArraySendWithDeviceDataFromPointers(self, int array_id, index not None, int ep,
+                                                msg not None, array.array gpu_src_ptrs,
+                                                array.array gpu_src_sizes,
+                                                list stream_ptrs, int num_bufs):
+
+    cdef int i = 0
+    cdef int ndims = len(index)
+    # assert ndims == 1
+    for i in range(ndims): c_index[i] = index[i]
+    msg0, dcopy = msg
+    dcopy = None
+
+    if stream_ptrs:
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+                                 <long*>gpu_src_ptrs.data.as_voidptr,
+                                 <long*>gpu_src_sizes.data.as_voidptr,
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    gpu_direct_buf_idx = 0
+
+
+
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):
     global cur_buf
     msg0, dcopy = msg
@@ -816,7 +844,7 @@ class CharmLib(object):
 
     return header, args
 
-  def packMsg(self, destObj, msgArgs not None, dict header):
+  def packMsg(self, destObj, msgArgs not None, dict header, pack_gpu=True):
     cdef int i = 0
     cdef int localTag
     cdef array.array a
@@ -841,13 +869,15 @@ class CharmLib(object):
       for i in range(len(args)):
         arg = msgArgs[i]
         if CkCudaEnabled() and hasattr(arg, '__cuda_array_interface__'):
-          # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
-          # assumption: we can get nbytes from the arg directly
-          # TODO: verify this assertion for other types
-          gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg.__cuda_array_interface__['data'][0]
-          gpu_direct_buff_sizes[gpu_direct_buf_idx] = arg.nbytes
-          cuda_dev_info = True
-          gpu_direct_buf_idx += 1
+          if pack_gpu:
+            # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
+            # assumption: we can get nbytes from the arg directly
+            # TODO: verify this assertion for other types
+            # gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg.__cuda_array_interface__['data'][0]
+            gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg.__cuda_array_interface__['data'][0]
+            gpu_direct_buff_sizes[gpu_direct_buf_idx] = arg.nbytes
+            cuda_dev_info = True
+            gpu_direct_buf_idx += 1
           args[i] = None  # TODO: should this be done?
           continue
         elif isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
@@ -886,10 +916,10 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
-  def getGPUDirectData(self, list post_buf_data, list remote_bufs, list stream_ptrs, return_fut):
+
+  def getGPUDirectData(self, list post_buf_data, list post_buf_sizes, array.array remote_bufs, list stream_ptrs, return_fut):
     cdef int num_buffers = len(post_buf_data)
-    cdef int *future_id = <int*> malloc(sizeof(int))
-    future_id[0] = return_fut.fid
+    cdef int future_id = return_fut.fid
     cdef array.array int_array_template = array.array('i', [])
     cdef array.array long_array_template = array.array('L', [])
     cdef array.array recv_buf_sizes
@@ -905,14 +935,26 @@ class CharmLib(object):
 
     for idx in range(num_buffers):
       recv_buf_ptrs[idx] = post_buf_data[idx]
-      recv_buf_sizes[idx] = remote_bufs[idx][0]
-      remote_buf_ptrs[idx] = remote_bufs[idx][1]
+      recv_buf_sizes[idx] = post_buf_sizes[idx]
+      remote_buf_ptrs[idx] = remote_bufs[idx]
       stream_ptrs_forc[idx] = stream_ptrs[idx]
     # what do we do about the return future? Need to turn it into some callback.
     CkGetGPUDirectData(num_buffers, <void*>recv_buf_ptrs.data.as_voidptr,
                        <int*>recv_buf_sizes.data.as_voidptr,
                        <void*>remote_buf_ptrs.data.as_voidptr,
                        <void*>stream_ptrs_forc.data.as_voidptr,
+                       future_id
+                       )
+
+  def getGPUDirectDataFromAddresses(self, array.array post_buf_ptrs, array.array post_buf_sizes, array.array remote_bufs, array.array stream_ptrs, return_fut):
+    cdef int num_buffers = len(post_buf_ptrs)
+    cdef int future_id = return_fut.fid
+    # pointers from the remote that we will be issuing Rgets for
+    # these are pointers to type CkDeviceBuffer
+    CkGetGPUDirectData(num_buffers, <void*>post_buf_ptrs.data.as_voidptr,
+                       <int*>post_buf_sizes.data.as_voidptr,
+                       <void*>remote_bufs.data.as_voidptr,
+                       <void*>stream_ptrs.data.as_voidptr,
                        future_id
                        )
 
@@ -970,19 +1012,19 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
 cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
                            long *devBufSizes, void *devBufs, int msgSize,
                            char *msg, int dcopy_start):
+
     cdef int idx = 0
     try:
       if PROFILING:
         charm._precvtime = time.time()
         charm.recordReceive(msgSize)
-      devBufInfo = []
+      devBufInfo = array.array('L', [0] * numDevBuffs)
       for idx in range(numDevBuffs):
-        # Add the size of this buffer and a pointer to it to the info list
-        devBufInfo.append((devBufSizes[idx],
-                           <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx))
-                          )
+        # Add the buffer's address to the list
+        devBufInfo[idx] = <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx)
       recv_buffer.setMsg(msg, msgSize)
       charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, devBufInfo, recv_buffer, dcopy_start)
+
     except:
       charm.handleGeneralError()
 
@@ -1045,9 +1087,7 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
     charm.handleGeneralError()
 
 cdef void depositFutureWithId(void *param, void *msg):
-# TODO: Figure out how this param value should be allocated/deallocated
-  cdef int futureId = (<int*> param)[0]
-  free(param)
+  cdef int futureId = <int> param
   charm._future_deposit_result(futureId)
 
 
