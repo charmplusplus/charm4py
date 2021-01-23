@@ -28,6 +28,7 @@ from .threads import Future, LocalFuture
 from . import reduction
 from . import wait
 import array
+import numpy as np
 try:
     import numpy
 except ImportError:
@@ -45,6 +46,9 @@ def getDeviceDataInfo(devArray):
 
 def getDeviceDataAddress(devArray):
     return getDeviceDataInfo(devArray)[0]
+
+def getDeviceDataSizeInBytes(devArray):
+    return devArray.nbytes
 
 class Options(object):
 
@@ -128,6 +132,7 @@ class Charm(object):
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
         self.CkArraySendWithDeviceData = self.lib.CkArraySendWithDeviceData
+        self.CkArraySendWithDeviceDataFromPointers = self.lib.CkArraySendWithDeviceDataFromPointers
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
@@ -319,6 +324,7 @@ class Charm(object):
         obj = self.arrays[aid][index]
         header, args = self.unpackMsg(msg, dcopy_start, obj)
         args.append(devBuf_ptrs)
+
         self.invokeEntryMethod(obj, ep, header, args)
 
     def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
@@ -352,9 +358,17 @@ class Charm(object):
     def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
         return_fut = self.Future(len(post_buffers))
         post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
+        post_buf_sizes = [getDeviceDataSizeInBytes(buf) for buf in post_buffers]
         if not stream_ptrs:
             stream_ptrs = [0] * len(post_buffers)
-        self.lib.getGPUDirectData(post_buf_data, remote_bufs, stream_ptrs, return_fut)
+        self.lib.getGPUDirectData(post_buf_data, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
+        return return_fut
+
+    def getGPUDirectDataFromAddresses(self, post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs):
+        return_fut = self.Future(len(post_buf_ptrs))
+        if not stream_ptrs:
+            stream_ptrs = array.array('L', [0] * len(post_buf_ptrs))
+        self.lib.getGPUDirectDataFromAddresses(post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
         return return_fut
 
     # deposit value of one of the futures that was created on this PE
