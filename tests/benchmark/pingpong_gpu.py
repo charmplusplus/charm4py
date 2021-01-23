@@ -2,8 +2,11 @@ from charm4py import charm, Chare, Array, coro, Future, Channel, Group, ArrayMap
 import time
 import numpy as np
 from numba import cuda
+import array
 
 USE_PINNED = True
+# provide the address/size data for GPU-direct addresses. Saves ~11us per iteration
+USE_ADDRESS_OPTIMIZATION = True
 WARMUP_ITERS = 10
 
 class Ping(Chare):
@@ -44,46 +47,51 @@ class Ping(Chare):
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
 
-        for _ in range(WARMUP_ITERS):
-            if self.am_low_chare:
-                if not self.gpu_direct:
-                    d_data_send.copy_to_host(h_data_send)
-                    partner_channel.send(h_data_send)
-                    d_data_recv.copy_to_device(partner_channel.recv())
-                else:
-                    partner_channel.send(d_data_send)
-                    partner_channel.recv(d_data_recv)
+        if USE_ADDRESS_OPTIMIZATION:
+            d_data_recv_addr = array.array('L', [0])
+            d_data_recv_size = array.array('L', [0])
+            d_data_send_addr = array.array('L', [0])
+            d_data_send_size = array.array('L', [0])
 
-            else:
-                if not self.gpu_direct:
-                    d_data_recv.copy_to_device(partner_channel.recv())
-                    d_data_send.copy_to_host(h_data_send)
-                    partner_channel.send(h_data_send)
-                else:
-                    partner_channel.recv(d_data_recv)
-                    partner_channel.send(d_data_send)
+            d_data_recv_addr[0] = d_data_recv.__cuda_array_interface__['data'][0]
+            d_data_recv_size[0] = d_data_recv.nbytes
+            d_data_send_addr[0] = d_data_send.__cuda_array_interface__['data'][0]
+            d_data_send_size[0] = d_data_send.nbytes
 
 
         tstart = time.time()
 
-        for _ in range(num_iters):
+        for iternum in range(num_iters + WARMUP_ITERS):
+            if iternum == WARMUP_ITERS:
+                tstart = time.time()
             if self.am_low_chare:
                 if not self.gpu_direct:
                     d_data_send.copy_to_host(h_data_send)
                     partner_channel.send(h_data_send)
                     d_data_recv.copy_to_device(partner_channel.recv())
                 else:
-                    partner_channel.send(d_data_send)
-                    partner_channel.recv(d_data_recv)
-
+                    if USE_ADDRESS_OPTIMIZATION:
+                        partner_channel.send(gpu_src_ptrs = d_data_send_addr, gpu_src_sizes = d_data_send_size)
+                        partner_channel.recv(post_buf_addresses = d_data_recv_addr,
+                                             post_buf_sizes = d_data_recv_size
+                                             )
+                    else:
+                        partner_channel.send(d_data_send)
+                        partner_channel.recv(d_data_recv)
             else:
                 if not self.gpu_direct:
                     d_data_recv.copy_to_device(partner_channel.recv())
                     d_data_send.copy_to_host(h_data_send)
                     partner_channel.send(h_data_send)
                 else:
-                    partner_channel.recv(d_data_recv)
-                    partner_channel.send(d_data_send)
+                    if USE_ADDRESS_OPTIMIZATION:
+                        partner_channel.recv(post_buf_addresses = d_data_recv_addr,
+                                             post_buf_sizes = d_data_recv_size
+                                             )
+                        partner_channel.send(gpu_src_ptrs = d_data_send_addr, gpu_src_sizes = d_data_send_size)
+                    else:
+                        partner_channel.recv(d_data_recv)
+                        partner_channel.send(d_data_send)
 
         tend = time.time()
 
