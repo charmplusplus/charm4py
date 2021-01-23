@@ -135,12 +135,6 @@ def main(args):
     charm.awaitCreation(pings)
     msg_size = min_msg_size
 
-    # do a warmup iteration (should this be done for each size?)
-    done_future = Future()
-    pings.do_iteration(msg_size, high_iter, done_future)
-    done_future.get()
-
-
     while msg_size <= max_msg_size:
         if msg_size <= 1048576:
             iter = low_iter
