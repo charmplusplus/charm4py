@@ -3,7 +3,8 @@ import time
 import numpy as np
 from numba import cuda
 
-USE_PINNED = False
+USE_PINNED = True
+WARMUP_ITERS = 10
 
 class Ping(Chare):
     def __init__(self, use_gpudirect, print_format):
@@ -34,6 +35,7 @@ class Ping(Chare):
             else:
                 h_data_send = np.zeros(message_size, dtype='int8')
                 h_data_recv = np.zeros(message_size, dtype='int8')
+
         d_data_send = cuda.device_array(message_size, dtype='int8')
         d_data_recv = cuda.device_array(message_size, dtype='int8')
         d_data_send.copy_to_device(h_data_send)
@@ -41,6 +43,26 @@ class Ping(Chare):
         partner_idx = int(not self.thisIndex[0])
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
+
+        for _ in range(WARMUP_ITERS):
+            if self.am_low_chare:
+                if not self.gpu_direct:
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
+                    d_data_recv.copy_to_device(partner_channel.recv())
+                else:
+                    partner_channel.send(d_data_send)
+                    partner_channel.recv(d_data_recv)
+
+            else:
+                if not self.gpu_direct:
+                    d_data_recv.copy_to_device(partner_channel.recv())
+                    d_data_send.copy_to_host(h_data_send)
+                    partner_channel.send(h_data_send)
+                else:
+                    partner_channel.recv(d_data_recv)
+                    partner_channel.send(d_data_send)
+
 
         tstart = time.time()
 
