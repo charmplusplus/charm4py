@@ -1,5 +1,6 @@
 from .threads import LocalFuture
 from .charm import charm
+import time
 
 
 class Channel(object):
@@ -53,15 +54,15 @@ class _Channel(object):
     def waitReady(self, f):
         self.wait_ready = f
 
-    def send(self, *msg):
+    def send(self, *msg, **kwargs):
         if not self.established:
             self.established_fut = LocalFuture()
             self.established_fut.get()
             self.setEstablished()
-        self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg)
+        self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg, **kwargs)
         self.send_seqno = (self.send_seqno + 1) % CHAN_BUF_SIZE
 
-    def recv(self, *post_buffers, stream_ptrs = None):
+    def recv(self, *post_buffers, post_buf_addresses = None, post_buf_sizes = None, stream_ptrs = None):
         if self.recv_seqno in self.data:
             ret = self.data.pop(self.recv_seqno)
         else:
@@ -72,10 +73,19 @@ class _Channel(object):
 
         if post_buffers:
             gpu_recv_bufs = ret[-1]
-            ret = ret[:-1:1]
+            # ret = ret[:-1:1]
             assert len(post_buffers) == len(gpu_recv_bufs)
             recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
+        elif post_buf_addresses != None:
+            gpu_recv_bufs = ret
+            # ret = ret[:-1:1]
+            assert len(post_buffers) == len(gpu_recv_bufs)
+            assert post_buf_sizes
+            recv_future = charm.getGPUDirectDataFromAddresses(post_buf_addresses, post_buf_sizes, gpu_recv_bufs, stream_ptrs)
+            recv_future.get()
+
+
         return ret
 
 
