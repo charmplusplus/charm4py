@@ -722,7 +722,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 argname = argnames[i]
                 # first look for argument in kwargs
                 # TODO: Should stream_ptrs be skipped?
-                if argname == 'stream_ptrs':
+                if argname in {'stream_ptrs', 'gpu_src_ptrs', 'gpu_src_sizes'}:
                     continue
                 if argname in kwargs and argname:
                     args.append(kwargs[argname])
@@ -751,15 +751,27 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            msg = charm.packMsg(destObj, args, header)
-            if msg[1]:
-                if 'stream_ptrs' in kwargs and kwargs['stream_ptrs']:
+            should_pack_gpu = True
+            if 'gpu_src_ptrs' in kwargs:
+                should_pack_gpu = False
+            msg = charm.packMsg(destObj, args, header, pack_gpu = should_pack_gpu)
+            if msg[1] or not should_pack_gpu:
+                if 'stream_ptrs' in kwargs:
                     stream_ptrs = kwargs['stream_ptrs']
                 else:
                     stream_ptrs = None
-                charm.CkArraySendWithDeviceData(aid, elemIdx, ep,
-                                                msg, stream_ptrs
-                                                )
+                if should_pack_gpu:
+                    charm.CkArraySendWithDeviceData(aid, elemIdx, ep,
+                                                    msg, stream_ptrs
+                                                    )
+                else:
+                    charm.CkArraySendWithDeviceDataFromPointers(aid, elemIdx, ep,
+                                                                msg, kwargs['gpu_src_ptrs'],
+                                                                kwargs['gpu_src_sizes'],
+                                                                stream_ptrs,
+                                                                len(kwargs['gpu_src_ptrs'])
+                                                    )
+
             else:
                 charm.CkArraySend(aid, elemIdx, ep, msg)
         else:
