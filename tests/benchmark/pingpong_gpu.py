@@ -7,6 +7,7 @@ import array
 USE_PINNED = True
 # provide the address/size data for GPU-direct addresses. Saves ~11us per iteration
 USE_ADDRESS_OPTIMIZATION = True
+LOW_ITER_THRESHOLD = 8192
 WARMUP_ITERS = 10
 
 class Ping(Chare):
@@ -144,7 +145,7 @@ def main(args):
     msg_size = min_msg_size
 
     while msg_size <= max_msg_size:
-        if msg_size <= 1048576:
+        if msg_size <= LOW_ITER_THRESHOLD:
             iter = low_iter
         else:
             iter = high_iter
