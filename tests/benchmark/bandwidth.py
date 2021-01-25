@@ -46,6 +46,14 @@ class Block(Chare):
         d_remote_data_addr = d_remote_data.__cuda_array_interface__['data'][0]
         h_remote_data_addr = h_remote_data.__array_interface__['data'][0]
 
+        if self.gpu_direct:
+            d_local_data_addr = array.array('L', [0])
+            d_local_data_size = array.array('L', [0])
+
+            d_local_data_addr[0] = d_local_data.__cuda_array_interface__['data'][0]
+            d_local_data_size[0] = d_local_data.nbytes
+
+
         partner_idx = int(not self.thisIndex[0])
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
@@ -64,7 +72,11 @@ class Block(Chare):
                         partner_channel.send(h_local_data)
                     partner_channel.recv()
                 else:
-                    pass
+                    for _ in range(windows):
+                        partner_channel.send(gpu_src_ptrs = d_local_data_addr,
+                                             gpu_src_sizes = d_local_data_size
+                                             )
+                    partner_channel.recv()
             else:
                 if not self.gpu_direct:
                     for _ in range(windows):
@@ -73,9 +85,11 @@ class Block(Chare):
                                            message_size, stream_address
                                            )
                     charm.lib.CudaStreamSynchronize(stream_address)
-                    partner_channel.send(1)
                 else:
-                    pass
+                    for _ in range(windows):
+                        partner_channel.recv(post_buf_addresses = d_local_data_addr,
+                                             post_buf_sizes = d_local_data_size)
+                partner_channel.send(1)
 
         tend = time.time()
         elapsed_time = tend - tstart
