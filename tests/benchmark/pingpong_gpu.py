@@ -48,7 +48,15 @@ class Ping(Chare):
         partner = self.thisProxy[partner_idx]
         partner_channel = Channel(self, partner)
 
-        if USE_ADDRESS_OPTIMIZATION:
+        my_stream = cuda.stream()
+        stream_address = my_stream.handle.value
+        d_data_send_addr = d_data_send.__cuda_array_interface__['data'][0]
+        h_data_send_addr = h_data_send.__array_interface__['data'][0]
+
+        d_data_recv_addr = d_data_recv.__cuda_array_interface__['data'][0]
+        h_data_recv_addr = h_data_recv.__array_interface__['data'][0]
+
+        if self.gpu_direct and USE_ADDRESS_OPTIMIZATION:
             d_data_recv_addr = array.array('L', [0])
             d_data_recv_size = array.array('L', [0])
             d_data_send_addr = array.array('L', [0])
@@ -67,9 +75,14 @@ class Ping(Chare):
                 tstart = time.time()
             if self.am_low_chare:
                 if not self.gpu_direct:
-                    d_data_send.copy_to_host(h_data_send)
+                    charm.lib.CudaDtoH(h_data_send_addr, d_data_send_addr, message_size, stream_address)
+                    charm.lib.CudaStreamSynchronize(stream_address)
+
                     partner_channel.send(h_data_send)
-                    d_data_recv.copy_to_device(partner_channel.recv())
+                    received = partner_channel.recv()
+
+                    charm.lib.CudaHtoD(d_data_recv_addr, received.__array_interface__['data'][0], message_size, stream_address)
+                    charm.lib.CudaStreamSynchronize(stream_address)
                 else:
                     if USE_ADDRESS_OPTIMIZATION:
                         partner_channel.send(gpu_src_ptrs = d_data_send_addr, gpu_src_sizes = d_data_send_size)
@@ -81,8 +94,12 @@ class Ping(Chare):
                         partner_channel.recv(d_data_recv)
             else:
                 if not self.gpu_direct:
-                    d_data_recv.copy_to_device(partner_channel.recv())
-                    d_data_send.copy_to_host(h_data_send)
+                    received = partner_channel.recv()
+
+                    charm.lib.CudaHtoD(d_data_recv_addr, received.__array_interface__['data'][0], message_size, stream_address)
+                    charm.lib.CudaDtoH(h_data_send_addr, d_data_send_addr, message_size, stream_address)
+                    charm.lib.CudaStreamSynchronize(stream_address)
+
                     partner_channel.send(h_data_send)
                 else:
                     if USE_ADDRESS_OPTIMIZATION:
