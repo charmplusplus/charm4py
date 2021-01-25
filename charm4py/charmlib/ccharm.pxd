@@ -1,5 +1,7 @@
 
 # libcharm wrapper for Cython
+cdef extern from "cuda_runtime.h":
+  ctypedef long cudaStream_t
 
 cdef extern from "charm.h":
 
@@ -89,14 +91,14 @@ cdef extern from "charm.h":
 
     void registerDepositFutureWithIdFn(void (*cb)(void*, void*));
 
+    void CkCUDAHtoD(void *dest, void *src, int nbytes, cudaStream_t stream);
+    void CkCUDADtoH(void *dest, void *src, int nbytes, cudaStream_t stream);
+    void CkCUDAStreamSynchronize(cudaStream_t stream);
+
 
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
 
-
-# cdef extern from "ckrdmadevice.h":
-#     cdef cppclass CkDeviceBuffer:
-#         CkDeviceBuffer()
 

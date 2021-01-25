@@ -957,6 +957,17 @@ class CharmLib(object):
                        <void*>stream_ptrs.data.as_voidptr,
                        future_id
                        )
+  def CudaHtoD(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
+      CkCUDAHtoD(<void*>destAddr, <void*>srcAddr,<int>nbytes, (<cudaStream_t*> streamAddr)[0]);
+
+  def CudaDtoH(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
+    CkCUDADtoH(<void*>destAddr, <void*>srcAddr,<int>int(nbytes), (<cudaStream_t*> streamAddr)[0]);
+
+  def CudaStreamSynchronize(self, long streamAddr):
+    CkCUDAStreamSynchronize((<cudaStream_t*>streamAddr)[0])
+
+
+
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
@@ -1027,7 +1038,6 @@ cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numD
 
     except:
       charm.handleGeneralError()
-
 
 cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
   cdef int i = 0
