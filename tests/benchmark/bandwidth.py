@@ -70,12 +70,12 @@ class Block(Chare):
                     charm.lib.CudaStreamSynchronize(stream_address)
                     for _ in range(windows):
                         partner_channel.send(h_local_data)
-                    partner_channel.recv()
                 else:
                     for _ in range(windows):
                         partner_channel.send(gpu_src_ptrs = d_local_data_addr,
                                              gpu_src_sizes = d_local_data_size
                                              )
+
                     partner_channel.recv()
             else:
                 if not self.gpu_direct:
