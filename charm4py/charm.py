@@ -334,7 +334,6 @@ class Charm(object):
             self.invokeEntryMethod(array[index], ep, header, args)
 
     def unpackMsg(self, msg, dcopy_start, dest_obj):
-        # Issue Rgets for GPU data in unpackMsg? But how does recv work?
         if msg[:7] == b'_local:':
             header, args = dest_obj.__removeLocal__(int(msg[7:]))
         else:
