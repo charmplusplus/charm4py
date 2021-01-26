@@ -78,7 +78,7 @@ class Block(Chare):
                                              gpu_src_sizes = d_local_data_size
                                              )
 
-                    partner_ack_channel.recv()
+                partner_ack_channel.recv()
             else:
                 if not self.gpu_direct:
                     for _ in range(windows):
