@@ -2,6 +2,7 @@ from charm4py import *
 from numba import cuda
 from argparse import ArgumentParser
 from enum import Enum
+import time
 
 class Defaults(Enum):
     GRID_WIDTH = 512,
@@ -45,6 +46,7 @@ def main(args):
                       default = Defaults.PRINT_ELEMENTS.value
                       )
     args = argp.parse_args()
+
     # charm.exit()
 
 # charm.start(main)
