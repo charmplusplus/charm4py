@@ -1,5 +1,4 @@
 from numba import cuda
-from numba.cuda import blockDim, blockIdx, threadIdx
 
 TILE_SIZE_3D = 8
 TILE_SIZE_2D = 16
@@ -18,69 +17,69 @@ def IDX(i,j,k, block_width, block_height):
 
 @cuda.jit
 def initKernel(temperature, block_width, block_height, block_depth):
-  i = blockDim.x * blockIdx.x + threadIdx.x
-  j = blockDim.y * blockIdx.y + threadIdx.y
-  k = blockDim.z * blockIdx.z + threadIdx.z
+  i = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+  j = cuda.blockDim.y * cuda.blockIdx.y + cuda.threadIdx.y
+  k = cuda.blockDim.z * cuda.blockIdx.z + cuda.threadIdx.z
 
   if i < block_width + 2 and j < block_height + 2 and k < block_depth + 2:
       temperature[IDX(i, j, k, block_width, block_height)] = 0
 
 @cuda.jit
 def ghostInitKernel(ghost, ghost_count):
-    i = blockDim.x * blockIdx.x + threadIdx.x
+    i = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
     if i < ghost_count:
         ghost[i] = 0
 
 @cuda.jit
 def leftBoundaryKernel(temperature, block_width, block_height, block_depth):
-  j = blockDim.x * blockIdx.x + threadIdx.x
-  k = blockDim.y * blockIdx.y + threadIdx.y
+  j = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+  k = cuda.blockDim.y * cuda.blockIdx.y + cuda.threadIdx.y
   if j < block_height and k < block_depth:
     temperature[IDX(0,1+j,1+k, block_width, block_height)] = 1;
 
 @cuda.jit
 def rightBoundaryKernel(temperature, block_width, block_height, block_depth):
-        j = blockDim.x*blockIdx.x+threadIdx.x
-        k = blockDim.y*blockIdx.y+threadIdx.y
+        j = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+        k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
         if j < block_height and k < block_depth:
             temperature[IDX(block_width+1,1+j,1+k, block_width, block_height)] = 1;
 
 
 @cuda.jit
 def topBoundaryKernel(temperature, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
         temperature[IDX(1+i,0,1+k, block_width, block_height)] = 1
 
 
 @cuda.jit
 def bottomBoundaryKernel(temperature, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
           temperature[IDX(1+i,block_height+1,1+k, block_width, block_height)] = 1
 
 @cuda.jit
 def frontBoundaryKernel(temperature, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
         temperature[IDX(1+i,1+j,0, block_width, block_height)] = 1;
 
 
 @cuda.jit
 def backBoundaryKernel(temperature, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
           temperature[IDX(1+i,1+j,block_depth+1, block_width, block_height)] = 1
 
 @cuda.jit
 def jacobiKernel(temp, new_temp, block_width, block_height, block_depth):
-    i = (blockDim.x*blockIdx.x+threadIdx.x)+1
-    j = (blockDim.y*blockIdx.y+threadIdx.y)+1
-    k = (blockDim.z*blockIdx.z+threadIdx.z)+1
+    i = (cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x)+1
+    j = (cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y)+1
+    k = (cuda.blockDim.z*cuda.blockIdx.z+cuda.threadIdx.z)+1
 
     if (i <= block_width and j <= block_height and k <= block_depth):
         new_temperature[IDX(i,j,k, block_width, block_height)] = \
@@ -95,48 +94,48 @@ def jacobiKernel(temp, new_temp, block_width, block_height, block_depth):
 
 @cuda.jit
 def leftPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    j = blockDim.x*blockIdx.x+threadIdx.x;
-    k = blockDim.y*blockIdx.y+threadIdx.y;
+    j = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x;
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y;
     if j < block_height and k < block_depth:
           ghost[block_height*k+j] = \
           temperature[IDX(1,1+j,1+k, block_width, block_height)]
 
 @cuda.jit
 def rightPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    j = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    j = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if j < block_height and k < block_depth:
         ghost[block_height*k+j] = \
         temperature[IDX(1,1+j,1+k, block_width, block_height)]
 
 @cuda.jit
 def topPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
         ghost[block_width*k+i] = \
         temperature[IDX(1+i,1,1+k, block_width, block_height)]
 
 @cuda.jit
 def bottomPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
         ghost[block_width*k+i] = \
         temperature[IDX(1+i,block_height,1+k, block_width, block_height)];
 
 @cuda.jit
 def frontPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
         temperature[IDX(1+i,1+j,0, block_width, block_height)] = \
         ghost[block_width*j+i]
 
 @cuda.jit
 def backPackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
         temperature[IDX(1+i,1+j,block_depth+1, block_width, block_height)] = \
             ghost[block_width*j+i]
@@ -144,8 +143,8 @@ def backPackingKernel(temperature, ghost, block_width, block_height, block_depth
 
 @cuda.jit
 def leftUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    j = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    j = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if j < block_height and k < block_depth:
         temperature[IDX(0,1+j,1+k, block_width, block_height)] = ghost[block_height*k+j]
 
@@ -153,36 +152,36 @@ def leftUnpackingKernel(temperature, ghost, block_width, block_height, block_dep
 
 @cuda.jit
 def rightUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    j = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    j = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if j < block_height and k < block_depth:
         temperature[IDX(block_width+1,1+j,1+k,  block_width, block_height)] = ghost[block_height*k+j]
 
 @cuda.jit
 def topUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
         temperature[IDX(1+i,0,1+k,  block_width, block_height)] = ghost[block_width*k+i]
 
 @cuda.jit
 def bottomUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    k = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    k = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and k < block_depth:
         temperature[IDX(1+i,block_height+1,1+k,  block_width, block_height)] = ghost[block_width*k+i]
 
 @cuda.jit
 def frontUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
         temperature[IDX(1+i,1+j,0,  block_width, block_height)] = ghost[block_width*j+i]
 
 @cuda.jit
 def backUnpackingKernel(temperature, ghost, block_width, block_height, block_depth):
-    i = blockDim.x*blockIdx.x+threadIdx.x
-    j = blockDim.y*blockIdx.y+threadIdx.y
+    i = cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x
+    j = cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y
     if i < block_width and j < block_height:
         temperature[IDX(1+i,1+j,block_depth+1,  block_width, block_height)] = ghost[block_width*j+i]
 
@@ -207,58 +206,58 @@ def invokeGhostInitKernels(ghosts, ghost_counts, stream):
         ghost_count = ghost_counts[i]
         grid_dim = ((ghost_count+block_dim[0]-1)//block_dim[0], 1, 1)
 
-        ghostInitKernel[grid_dim, block_dim, stream](ghosts, ghost_count)
+        ghostInitKernel[grid_dim, block_dim, stream](ghost, ghost_count)
 
 def invokeBoundaryKernels(d_temperature, block_width, block_height, block_depth, bounds, stream):
     block_dim = (TILE_SIZE_2D, TILE_SIZE_2D, 1)
 
-    if bounds(LEFT):
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[LEFT]:
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         leftBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                         block_width,
                                                         block_height,
                                                         block_depth
                                                         )
-    if bounds(RIGHT):
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[RIGHT]:
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         rightBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                          block_width,
                                                          block_height,
                                                          block_depth
                                                          )
 
-    if bounds(TOP):
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                      (block_depth+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[TOP]:
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                      (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         topBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                       block_width,
                                                       block_height,
                                                       block_depth
                                                       )
 
-    if bounds(BOTTOM):
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[BOTTOM]:
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         bottomBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                           block_width,
                                                           block_height,
                                                           block_depth
                                                           )
 
-    if bounds(FRONT):
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[FRONT]:
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         frontBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                          block_width,
                                                          block_height,
                                                          block_depth
                                                          )
 
-    if bounds(BACK):
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+    if bounds[BACK]:
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         backBoundaryKernel[grid_dim, block_dim, stream](d_temperature,
                                                         block_width,
                                                         block_height,
@@ -268,9 +267,9 @@ def invokeBoundaryKernels(d_temperature, block_width, block_height, block_depth,
 
 def invokeJacobiKernel(d_temperature, d_new_temperature, block_width, block_height, block_depth, stream):
     block_dim = (TILE_SIZE_3D, TILE_SIZE_3D, TILE_SIZE_3D)
-    grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                (block_height+(block_dim.y-1))//block_dim.y,
-                (block_depth+(block_dim.z-1))//block_dim.z)
+    grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                (block_height+(block_dim[1]-1))//block_dim[1],
+                (block_depth+(block_dim[2]-1))//block_dim[2])
 
     jacobiKernel[grid_dim, block_dim, stream](d_temperature,
                                               d_new_temperature,
@@ -280,12 +279,12 @@ def invokeJacobiKernel(d_temperature, d_new_temperature, block_width, block_heig
                                               )
 
 
-def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, block_depth, stream):
+def invokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, block_depth, stream):
     block_dim = (TILE_SIZE_2D, TILE_SIZE_2D, 1)
 
     if dir == LEFT:
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         leftPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                        d_ghost,
                                                        block_width,
@@ -293,8 +292,8 @@ def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, 
                                                        block_depth
                                                        )
     elif dir == RIGHT:
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         rightPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                         d_ghost,
                                                         block_width,
@@ -302,8 +301,8 @@ def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, 
                                                         block_depth
                                                         )
     elif dir == TOP:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         topPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                       d_ghost,
                                                       block_width,
@@ -311,8 +310,8 @@ def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, 
                                                       block_depth
                                                       )
     elif dir == BOTTOM:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         bottomPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                          d_ghost,
                                                          block_width,
@@ -320,8 +319,8 @@ def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, 
                                                          block_depth
                                                          )
     elif dir == FRONT:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         frontPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                         d_ghost,
                                                         block_width,
@@ -329,8 +328,8 @@ def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, 
                                                         block_depth
                                                         )
     elif dir == BACK:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         backPackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                        d_ghost,
                                                        block_width,
@@ -342,8 +341,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
     block_dim = (TILE_SIZE_2D, TILE_SIZE_2D, 1)
 
     if dir == LEFT:
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         leftUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                          d_ghost,
                                                          block_width,
@@ -351,8 +350,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
                                                          block_depth
                                                          )
     if dir == RIGHT:
-        grid_dim = ((block_height+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_height+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         rightUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                           d_ghost,
                                                           block_width,
@@ -360,8 +359,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
                                                           block_depth
                                                           )
     if dir == TOP:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         topUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                         d_ghost,
                                                         block_width,
@@ -369,8 +368,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
                                                         block_depth
                                                         )
     if dir == BOTTOM:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_depth+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_depth+(block_dim[1]-1))//block_dim[1], 1)
         bottomUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                            d_ghost,
                                                            block_width,
@@ -378,8 +377,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
                                                            block_depth
                                                            )
     if dir == FRONT:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         frontUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                           d_ghost,
                                                           block_width,
@@ -387,8 +386,8 @@ def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height
                                                           block_depth
                                                           )
     if dir == BACK:
-        grid_dim = ((block_width+(block_dim.x-1))//block_dim.x,
-                    (block_height+(block_dim.y-1))//block_dim.y, 1)
+        grid_dim = ((block_width+(block_dim[0]-1))//block_dim[0],
+                    (block_height+(block_dim[1]-1))//block_dim[1], 1)
         backUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
                                                          d_ghost,
                                                          block_width,
