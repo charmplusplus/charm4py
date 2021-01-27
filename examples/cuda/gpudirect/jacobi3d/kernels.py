@@ -284,4 +284,118 @@ def invokeJacobiKernel(d_temperature, d_new_temperature, block_width, block_heig
                                               )
 
 
+def inbokePackingKernel(d_temperature, d_ghost, dir, block_width, block_height, block_depth, stream):
+    block_dim = (TILE_SIZE_2D, TILE_SIZE_2D, 1)
 
+    if dir == LEFT:
+        grid_dim = ((block_height+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        leftPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                       d_ghost,
+                                                       block_width,
+                                                       block_height,
+                                                       block_depth
+                                                       )
+    elif dir == RIGHT:
+        grid_dim = ((block_height+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        rightPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                        d_ghost,
+                                                        block_width,
+                                                        block_height,
+                                                        block_depth
+                                                        )
+    elif dir == TOP:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        topPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                      d_ghost,
+                                                      block_width,
+                                                      block_height,
+                                                      block_depth
+                                                      )
+    elif dir == BOTTOM:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        bottomPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                         d_ghost,
+                                                         block_width,
+                                                         block_height,
+                                                         block_depth
+                                                         )
+    elif dir == FRONT:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_height+(block_dim.y-1))/block_dim.y, 1)
+        frontPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                        d_ghost,
+                                                        block_width,
+                                                        block_height,
+                                                        block_depth
+                                                        )
+    elif dir == BACK:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_height+(block_dim.y-1))/block_dim.y, 1)
+        backPackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                       d_ghost,
+                                                       block_width,
+                                                       block_height,
+                                                       block_depth
+                                                       )
+
+def invokeUnpackingKernel(d_temperature, d_ghost, dir, block_width, block_height, block_depth, stream):
+    block_dim = (TILE_SIZE_2D, TILE_SIZE_2D, 1)
+
+    if dir == LEFT:
+        grid_dim = ((block_height+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        leftUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                         d_ghost,
+                                                         block_width,
+                                                         block_height,
+                                                         block_depth
+                                                         )
+    if dir == RIGHT:
+        grid_dim = ((block_height+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        rightUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                          d_ghost,
+                                                          block_width,
+                                                          block_height,
+                                                          block_depth
+                                                          )
+    if dir == TOP:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        topUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                        d_ghost,
+                                                        block_width,
+                                                        block_height,
+                                                        block_depth
+                                                        )
+    if dir == BOTTOM:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_depth+(block_dim.y-1))/block_dim.y, 1)
+        bottomUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                           d_ghost,
+                                                           block_width,
+                                                           block_height,
+                                                           block_depth
+                                                           )
+    if dir == FRONT:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_height+(block_dim.y-1))/block_dim.y, 1)
+        frontUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                          d_ghost,
+                                                          block_width,
+                                                          block_height,
+                                                          block_depth
+                                                          )
+    if dir == BACK:
+        grid_dim = ((block_width+(block_dim.x-1))/block_dim.x,
+                    (block_height+(block_dim.y-1))/block_dim.y, 1)
+        backUnpackingKernel[grid_dim, block_dim, stream](d_temperature,
+                                                         d_ghost,
+                                                         block_width,
+                                                         block_height,
+                                                         block_depth
+                                                         )
