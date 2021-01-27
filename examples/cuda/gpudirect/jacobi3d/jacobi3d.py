@@ -85,6 +85,37 @@ def main(args):
           f"Zerocopy: {use_zerocopy}, Print: {print_elements}\n\n",
           )
 
+    charm.thisProxy.updateGlobals({'num_chares': num_chares,
+                                   'grid_width': grid_width,
+                                   'grid_height': grid_height,
+                                   'grid_depth': grid_depth,
+                                   'block_width': block_width,
+                                   'block_height': block_height,
+                                   'block_depth': block_depth,
+                                   'x_surf_count': x_surf_count,
+                                   'y_surf_count': y_surf_count,
+                                   'z_surf_count': z_surf_count,
+                                   'x_surf_size': x_surf_size,
+                                   'y_surf_size': y_surf_size,
+                                   'z_surf_size': z_surf_size,
+                                   'n_chares_x': n_chares_x,
+                                   'n_chares_y': n_chares_y,
+                                   'n_chares_z': n_chares_z,
+                                   'n_iters': n_iters,
+                                   'warmup_iters': warmup_iters,
+                                   'use_zerocopy': use_zerocopy,
+                                   'print_elements': print_elements
+                                   }, awaitable = True, module_name = 'block'
+                                  ).get()
+
+    init_done_future = Future()
+    block_proxy = Array(Block,
+                        dims=[n_chares_x, n_chares_y, n_chares_z],
+                        args = init_done_future
+                        )
+    init_done_future.get()
+    charm.exit()
+
 
 def calc_num_chares_per_dim(num_chares_total, grid_w, grid_h, grid_d):
     n_chares = [0, 0, 0]
@@ -117,6 +148,6 @@ def calc_num_chares_per_dim(num_chares_total, grid_w, grid_h, grid_d):
 
     return n_chares
 
-# charm.start(main)
+# charm.start(main, modules = ['block'])
 if __name__ == '__main__':
     main(None)
