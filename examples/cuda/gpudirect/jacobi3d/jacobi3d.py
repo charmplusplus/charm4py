@@ -54,10 +54,10 @@ def main(args):
     grid_height = args.grid_height
     grid_depth = args.grid_depth
     num_chares = args.num_chares
-    iterations = args.iterations
-    warmup_iterations = args.warmup_iterations
+    n_iters = args.iterations
+    warmup_iters = args.warmup_iterations
     use_zerocopy = args.use_zerocopy
-    print_blocks = args.print_blocks
+    print_elements = args.print_blocks
 
 
     num_chares_per_dim = calc_num_chares_per_dim(num_chares,
@@ -67,7 +67,7 @@ def main(args):
                                                  )
     n_chares_x, n_chares_y, n_chares_z = num_chares_per_dim
 
-    if reduce(lambda x, y: x*y, n_chares_per_dim) != num_chares:
+    if reduce(lambda x, y: x*y, num_chares_per_dim) != num_chares:
         print(f"ERROR: Bad grid of chares: {n_chares_x} x {n_chares_y} x "
               f"{n_chares_z} != {num_chares}"
               )
@@ -88,7 +88,7 @@ def main(args):
 
 
     # print configuration
-    print("\n[CUDA 3D Jacobi example]n")
+    print("\n[CUDA 3D Jacobi example]\n")
     print(f"Grid: {grid_width} x {grid_height} x {grid_depth}, "
           f"Block: {block_width} x {block_height} x {block_depth}, "
           f"Chares: {n_chares_x} x {n_chares_y} x {n_chares_z}, "
@@ -122,7 +122,7 @@ def main(args):
     init_done_future = Future()
     block_proxy = Array(Block,
                         dims=[n_chares_x, n_chares_y, n_chares_z],
-                        args = init_done_future
+                        args = [init_done_future]
                         )
     init_done_future.get()
     charm.exit()
@@ -131,7 +131,6 @@ def main(args):
 def calc_num_chares_per_dim(num_chares, grid_w, grid_h, grid_d):
     n_chares = [0, 0, 0]
     area = [0.0, 0.0, 0.0]
-    print(grid_w, grid_h, grid_d)
     area[0] = grid_w * grid_h
     area[1] = grid_w * grid_d
     area[2] = grid_h * grid_d
@@ -150,7 +149,7 @@ def calc_num_chares_per_dim(num_chares, grid_w, grid_h, grid_d):
                     ipz = nremain // ipy
                     surf = area[0] / ipx / ipy + area[1] / ipz + area[2] / ipy / ipz
 
-                    if surf < bestsuf:
+                    if surf < bestsurf:
                         bestsurf = surf
                         n_chares[0] = ipx
                         n_chares[1] = ipy
