@@ -23,21 +23,27 @@ def main(args):
                           "CUDA and GPU-Direct communication"
                           )
     argp.add_argument('-x', '--grid_width', help = "Grid width",
+                      type = int,
                       default = Defaults.GRID_WIDTH.value
                       )
     argp.add_argument('-y', '--grid_height', help = "Grid height",
+                      type = int,
                        default = Defaults.GRID_HEIGHT.value
                        )
     argp.add_argument('-z', '--grid_depth', help = "Grid depth",
+                      type = int,
                       default = Defaults.GRID_DEPTH.value
                       )
     argp.add_argument('-c', '--num_chares', help = "Number of chares",
+                      type = int,
                        default = Defaults.NUM_CHARES
                        )
     argp.add_argument('-i', '--iterations', help = "Number of iterations",
+                      type = int,
                       default = Defaults.NUM_ITERS.value
                       )
     argp.add_argument('-w', '--warmup_iterations', help = "Number of warmup iterations",
+                      type = int,
                       default = Defaults.WARMUP_ITERS.value
                       )
     argp.add_argument('-d', '--use_zerocopy', action = "store_true",
@@ -48,6 +54,8 @@ def main(args):
                       action = "store_true",
                       default = Defaults.PRINT_ELEMENTS.value
                       )
+
+    # only parse the known args because argparse sees the Charm++ args for some reason
     args, _ = argp.parse_known_args()
 
     grid_width = args.grid_width
@@ -160,5 +168,3 @@ def calc_num_chares_per_dim(num_chares, grid_w, grid_h, grid_d):
     return n_chares
 
 charm.start(main, modules = ['block'])
-# if __name__ == '__main__':
-    # main(None)
