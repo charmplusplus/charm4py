@@ -133,6 +133,10 @@ def main(args):
                         args = [init_done_future]
                         )
     init_done_future.get()
+
+    run_future = Future()
+    block_proxy.run(run_future)
+    run_future.get()
     charm.exit()
 
 
