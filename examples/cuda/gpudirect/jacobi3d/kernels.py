@@ -82,15 +82,15 @@ def jacobiKernel(temp, new_temp, block_width, block_height, block_depth):
     j = (blockDim.y*blockIdx.y+threadIdx.y)+1
     k = (blockDim.z*blockIdx.z+threadIdx.z)+1
 
-  if (i <= block_width && j <= block_height && k <= block_depth):
-      new_temperature[IDX(i,j,k, block_width, block_height)] =
-              (temperature[IDX(i,j,k, block_width, block_height)] +
-               temperature[IDX(i-1,j,k, block_width, block_height)] +
-               temperature[IDX(i+1,j,k, block_width, block_height)] +
-               temperature[IDX(i,j-1,k, block_width, block_height)] +
-               temperature[IDX(i,j+1,k, block_width, block_height)] +
-               temperature[IDX(i,j,k-1, block_width, block_height)] +
-               temperature[IDX(i,j,k+1, block_width, block_height)]) *
+    if (i <= block_width and j <= block_height and k <= block_depth):
+        new_temperature[IDX(i,j,k, block_width, block_height)] = \
+              (temperature[IDX(i,j,k, block_width, block_height)] + \
+               temperature[IDX(i-1,j,k, block_width, block_height)] + \
+               temperature[IDX(i+1,j,k, block_width, block_height)] + \
+               temperature[IDX(i,j-1,k, block_width, block_height)] + \
+               temperature[IDX(i,j+1,k, block_width, block_height)] + \
+               temperature[IDX(i,j,k-1, block_width, block_height)] + \
+               temperature[IDX(i,j,k+1, block_width, block_height)]) * \
               0.142857 # equivalent to dividing by 7
 
 @cuda.jit
@@ -98,7 +98,7 @@ def leftPackingKernel(temperature, ghost, block_width, block_height, block_depth
     j = blockDim.x*blockIdx.x+threadIdx.x;
     k = blockDim.y*blockIdx.y+threadIdx.y;
     if j < block_height and k < block_depth:
-          ghost[block_height*k+j] =
+          ghost[block_height*k+j] = \
           temperature[IDX(1,1+j,1+k, block_width, block_height)]
 
 @cuda.jit
@@ -106,17 +106,15 @@ def rightPackingKernel(temperature, ghost, block_width, block_height, block_dept
     j = blockDim.x*blockIdx.x+threadIdx.x
     k = blockDim.y*blockIdx.y+threadIdx.y
     if j < block_height and k < block_depth:
-        ghost[block_height*k+j] =
+        ghost[block_height*k+j] = \
         temperature[IDX(1,1+j,1+k, block_width, block_height)]
-  }
-
 
 @cuda.jit
 def topPackingKernel(temperature, ghost, block_width, block_height, block_depth):
     i = blockDim.x*blockIdx.x+threadIdx.x
     k = blockDim.y*blockIdx.y+threadIdx.y
     if i < block_width and k < block_depth:
-        ghost[block_width*k+i] =
+        ghost[block_width*k+i] = \
         temperature[IDX(1+i,1,1+k, block_width, block_height)]
 
 @cuda.jit
@@ -124,16 +122,15 @@ def bottomPackingKernel(temperature, ghost, block_width, block_height, block_dep
     i = blockDim.x*blockIdx.x+threadIdx.x
     k = blockDim.y*blockIdx.y+threadIdx.y
     if i < block_width and k < block_depth:
-        ghost[block_width*k+i] =
+        ghost[block_width*k+i] = \
         temperature[IDX(1+i,block_height,1+k, block_width, block_height)];
-  }
 
 @cuda.jit
 def frontPackingKernel(temperature, ghost, block_width, block_height, block_depth):
     i = blockDim.x*blockIdx.x+threadIdx.x
     j = blockDim.y*blockIdx.y+threadIdx.y
     if i < block_width and j < block_height:
-        temperature[IDX(1+i,1+j,0, block_width, block_height)] =
+        temperature[IDX(1+i,1+j,0, block_width, block_height)] = \
         ghost[block_width*j+i]
 
 @cuda.jit
@@ -141,8 +138,8 @@ def backPackingKernel(temperature, ghost, block_width, block_height, block_depth
     i = blockDim.x*blockIdx.x+threadIdx.x
     j = blockDim.y*blockIdx.y+threadIdx.y
     if i < block_width and j < block_height:
-        temperature[IDX(1+i,1+j,block_depth+1, block_width, block_height)] =
-        ghost[block_width*j+i]
+        temperature[IDX(1+i,1+j,block_depth+1, block_width, block_height)] = \
+            ghost[block_width*j+i]
 
 
 @cuda.jit
@@ -205,11 +202,10 @@ def invokeGhostInitKernels(ghosts, ghost_counts, stream):
     # be transferred automatically
     # https://docs.nvidia.com/cuda/cuda-c-programming-guide/#dim3
     block_dim = (256, 1, 1)
-    dim3 block_dim(256);
     for i in range(len(ghosts)):
         ghost = ghosts[i]
         ghost_count = ghost_counts[i]
-        grid_dim = (ghost_count+block_dim[0]-1)//block_dim[0], 1, 1)
+        grid_dim = ((ghost_count+block_dim[0]-1)//block_dim[0], 1, 1)
 
         ghostInitKernel[grid_dim, block_dim, stream](ghosts, ghost_count)
 
