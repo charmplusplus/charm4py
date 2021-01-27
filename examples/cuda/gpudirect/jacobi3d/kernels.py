@@ -76,7 +76,7 @@ def backBoundaryKernel(temperature, block_width, block_height, block_depth):
           temperature[IDX(1+i,1+j,block_depth+1, block_width, block_height)] = 1
 
 @cuda.jit
-def jacobiKernel(temp, new_temp, block_width, block_height, block_depth):
+def jacobiKernel(temperature, new_temperature, block_width, block_height, block_depth):
     i = (cuda.blockDim.x*cuda.blockIdx.x+cuda.threadIdx.x)+1
     j = (cuda.blockDim.y*cuda.blockIdx.y+cuda.threadIdx.y)+1
     k = (cuda.blockDim.z*cuda.blockIdx.z+cuda.threadIdx.z)+1
