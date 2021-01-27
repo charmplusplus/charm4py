@@ -4,6 +4,7 @@ import numpy as np
 from argparse import ArgumentParser
 from enum import Enum
 from functools import reduce
+from block import Block
 import time
 
 class Defaults(Enum):
@@ -47,7 +48,17 @@ def main(args):
                       action = "store_true",
                       default = Defaults.PRINT_ELEMENTS.value
                       )
-    args = argp.parse_args()
+    args, _ = argp.parse_known_args()
+
+    grid_width = args.grid_width
+    grid_height = args.grid_height
+    grid_depth = args.grid_depth
+    num_chares = args.num_chares
+    iterations = args.iterations
+    warmup_iterations = args.warmup_iterations
+    use_zerocopy = args.use_zerocopy
+    print_blocks = args.print_blocks
+
 
     num_chares_per_dim = calc_num_chares_per_dim(num_chares,
                                                                  grid_width,
@@ -148,6 +159,6 @@ def calc_num_chares_per_dim(num_chares_total, grid_w, grid_h, grid_d):
 
     return n_chares
 
-# charm.start(main, modules = ['block'])
-if __name__ == '__main__':
-    main(None)
+charm.start(main, modules = ['block'])
+# if __name__ == '__main__':
+    # main(None)
