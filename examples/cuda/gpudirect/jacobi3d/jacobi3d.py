@@ -128,7 +128,7 @@ def main(args):
     charm.exit()
 
 
-def calc_num_chares_per_dim(num_chares_total, grid_w, grid_h, grid_d):
+def calc_num_chares_per_dim(num_chares, grid_w, grid_h, grid_d):
     n_chares = [0, 0, 0]
     area = [0.0, 0.0, 0.0]
     print(grid_w, grid_h, grid_d)
