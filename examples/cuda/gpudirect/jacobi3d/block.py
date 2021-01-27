@@ -21,6 +21,7 @@ class Block(Chare):
         self.x = self.thisIndex[0]
         self.y = self.thisIndex[1]
         self.z = self.thisIndex[2]
+
         self.ghost_sizes = (x_surf_size, x_surf_size,
                             y_surf_size, y_surf_size,
                             z_surf_size, z_surf_size
@@ -34,6 +35,8 @@ class Block(Chare):
         self.bounds = [False] * kernels.DIR_COUNT
 
         empty = lambda x: [0] * x
+
+        self.neighbor_channels = empty(kernels.DIR_COUNT)
 
         self.h_temperature = None
         self.d_temperature = None
@@ -57,6 +60,34 @@ class Block(Chare):
     def init(self):
         self.init_bounds(self.x, self.y, self.z)
         self.init_device_data()
+        self.init_neighbor_channels()
+
+    def init_neighbor_channels(self):
+        n_channels = self.neighbors
+
+        if not self.bounds[kernels.LEFT]:
+            new_c = Channel(self, self.thisProxy[(self.x-1, self.y, self.z)])
+            self.neighbor_channels[kernels.LEFT] = new_c
+
+        if not self.bounds[kernels.RIGHT]:
+            new_c = Channel(self, self.thisProxy[(self.x+1, self.y, self.z)])
+            self.neighbor_channels[kernels.RIGHT] = new_c
+
+        if not self.bounds[kernels.TOP]:
+            new_c = Channel(self, self.thisProxy[(self.x, self.y-1, self.z)])
+            self.neighbor_channels[kernels.TOP] = new_c
+
+        if not self.bounds[kernels.BOTTOM]:
+            new_c = Channel(self, self.thisProxy[(self.x, self.y+1, self.z)])
+            self.neighbor_channels[kernels.BOTTOM] = new_c
+
+        if not self.bounds[kernels.FRONT]:
+            new_c = Channel(self, self.thisProxy[(self.x, self.y, self.z-1)])
+            self.neighbor_channels[kernels.FRONT] = new_c
+
+        if not self.bounds[kernels.BACK]:
+            new_c = Channel(self, self.thisProxy[(self.x, self.y, self.z+1)])
+            self.neighbor_channels[kernels.BACK] = new_c
 
     def init_device_data(self):
         temp_size = (block_width+2) * (block_height+2) * (block_depth+2)
