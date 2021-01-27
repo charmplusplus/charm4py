@@ -8,11 +8,11 @@ from block import Block
 import time
 
 class Defaults(Enum):
-    GRID_WIDTH = 512,
-    GRID_HEIGHT = 512,
-    GRID_DEPTH = 512,
-    NUM_ITERS = 512,
-    WARMUP_ITERS = 10,
+    GRID_WIDTH = 512
+    GRID_HEIGHT = 512
+    GRID_DEPTH = 512
+    NUM_ITERS = 512
+    WARMUP_ITERS = 10
     USE_ZEROCOPY = False
     PRINT_ELEMENTS = False
 
@@ -61,10 +61,10 @@ def main(args):
 
 
     num_chares_per_dim = calc_num_chares_per_dim(num_chares,
-                                                                 grid_width,
-                                                                 grid_height,
-                                                                 grid_depth
-                                                                 )
+                                                 grid_width,
+                                                 grid_height,
+                                                 grid_depth
+                                                 )
     n_chares_x, n_chares_y, n_chares_z = num_chares_per_dim
 
     if reduce(lambda x, y: x*y, n_chares_per_dim) != num_chares:
@@ -131,6 +131,7 @@ def main(args):
 def calc_num_chares_per_dim(num_chares_total, grid_w, grid_h, grid_d):
     n_chares = [0, 0, 0]
     area = [0.0, 0.0, 0.0]
+    print(grid_w, grid_h, grid_d)
     area[0] = grid_w * grid_h
     area[1] = grid_w * grid_d
     area[2] = grid_h * grid_d
