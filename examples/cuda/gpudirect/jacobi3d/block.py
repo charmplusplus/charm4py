@@ -2,10 +2,11 @@ from charm4py import *
 import array
 from numba import cuda
 import numpy as np
+import time
 import kernels
 
 def getArrayAddress(arr):
-    return arr.__cuda__array_interface__['data'][0]
+    return arr.__cuda_array_interface__['data'][0]
 
 def getArraySize(arr):
     return arr.nbytes
@@ -37,6 +38,7 @@ class Block(Chare):
         empty = lambda x: [0] * x
 
         self.neighbor_channels = empty(kernels.DIR_COUNT)
+        self.acive_neighbor_channels = None
 
         self.h_temperature = None
         self.d_temperature = None
@@ -49,7 +51,7 @@ class Block(Chare):
         self.d_send_ghosts_addr = empty(kernels.DIR_COUNT)
         self.d_recv_ghosts_addr = empty(kernels.DIR_COUNT)
         self.d_send_ghosts_size = empty(kernels.DIR_COUNT)
-        self.d_recv_ghotss_size = empty(kernels.DIR_COUNT)
+        self.d_recv_ghosts_size = empty(kernels.DIR_COUNT)
 
         self.stream = cuda.default_stream()
 
@@ -64,30 +66,46 @@ class Block(Chare):
 
     def init_neighbor_channels(self):
         n_channels = self.neighbors
+        active_neighbors = []
 
         if not self.bounds[kernels.LEFT]:
             new_c = Channel(self, self.thisProxy[(self.x-1, self.y, self.z)])
             self.neighbor_channels[kernels.LEFT] = new_c
+            # NOTE: we are adding the member 'recv_direction' to this channel!!!
+            new_c.recv_direction = kernels.LEFT
+            active_neighbors.append(new_c)
 
         if not self.bounds[kernels.RIGHT]:
             new_c = Channel(self, self.thisProxy[(self.x+1, self.y, self.z)])
             self.neighbor_channels[kernels.RIGHT] = new_c
+            new_c.recv_direction = kernels.RIGHT
+            active_neighbors.append(new_c)
 
         if not self.bounds[kernels.TOP]:
             new_c = Channel(self, self.thisProxy[(self.x, self.y-1, self.z)])
             self.neighbor_channels[kernels.TOP] = new_c
+            new_c.recv_direction = kernels.TOP
+            active_neighbors.append(new_c)
 
         if not self.bounds[kernels.BOTTOM]:
             new_c = Channel(self, self.thisProxy[(self.x, self.y+1, self.z)])
             self.neighbor_channels[kernels.BOTTOM] = new_c
+            new_c.recv_direction = kernels.BOTTOM
+            active_neighbors.append(new_c)
 
         if not self.bounds[kernels.FRONT]:
             new_c = Channel(self, self.thisProxy[(self.x, self.y, self.z-1)])
             self.neighbor_channels[kernels.FRONT] = new_c
+            new_c.recv_direction = kernels.FRONT
+            active_neighbors.append(new_c)
 
         if not self.bounds[kernels.BACK]:
             new_c = Channel(self, self.thisProxy[(self.x, self.y, self.z+1)])
             self.neighbor_channels[kernels.BACK] = new_c
+            new_c.recv_direction = kernels.BACK
+            active_neighbors.append(new_c)
+
+        self.active_neighbor_channels = active_neighbors
 
     def init_device_data(self):
         temp_size = (block_width+2) * (block_height+2) * (block_depth+2)
@@ -104,8 +122,8 @@ class Block(Chare):
                                                           dtype=np.float64
                                                           )
 
-                d_send_data = getArrayData(d_send_ghosts)
-                d_recv_data = getArrayData(d_send_ghosts)
+                d_send_data = getArrayData(self.d_send_ghosts[i])
+                d_recv_data = getArrayData(self.d_send_ghosts[i])
 
                 d_send_addr = array.array('L', [d_send_data[0]])
                 d_recv_addr = array.array('L', [d_recv_data[0]])
@@ -196,3 +214,108 @@ class Block(Chare):
             neighbors += 1
 
         self.neighbors = neighbors
+
+
+    @coro
+    def sendGhosts(self):
+        for dir in range(kernels.DIR_COUNT):
+            if not self.bounds[dir]:
+                self.sendGhost(dir)
+
+    def updateAndPack(self):
+        kernels.invokeJacobiKernel(self.d_temperature,
+                                   self.d_new_temperature,
+                                   block_width,
+                                   block_height,
+                                   block_depth,
+                                   self.stream
+                                   )
+
+        for i in range(kernels.DIR_COUNT):
+            if not self.bounds[i]:
+                ghosts = self.d_send_ghosts[i] if use_zerocopy else self.d_ghosts[i]
+
+                kernels.invokePackingKernel(self.d_temperature,
+                                            ghosts,
+                                            i,
+                                            block_width,
+                                            block_height,
+                                            block_depth,
+                                            self.stream
+                                            )
+                if not use_zerocopy:
+                    # TODO: change this to the CUDA hooks in charmlib
+                    self.d_ghosts[i].copy_to_host(self.h_ghosts[i])
+        self.stream.synchronize()
+
+
+    @coro
+    def sendGhost(self, direction):
+        send_ch = self.neighbor_channels[direction]
+
+        if use_zerocopy:
+            send_ch.send(gpu_src_ptrs = self.d_send_ghosts_addr[direction],
+                         gpu_src_sizes = self.d_send_ghosts_size[direction]
+                         )
+        else:
+            send_ch.send(self.h_ghosts[direction])
+
+    @coro
+    def recvGhosts(self):
+        for ch in charm.iwait(self.active_neighbor_channels):
+            # remember: we set 'recv_direction' member
+            # directly in the initialization phase
+            neighbor_idx = ch.recv_direction
+
+            if use_zerocopy:
+                ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[neighbor_idx],
+                        post_buf_sizes = self.d_recv_ghosts_size[neighbor_idx]
+                        )
+            else:
+                self.h_ghosts[neighbor_idx] = ch.recv()
+                self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
+                                                           stream=self.stream
+                                                           )
+
+            kernels.invokeUnpackingKernel(self.d_temperature,
+                                          self.d_ghosts[neighbor_idx],
+                                          ch.recv_direction,
+                                          block_width,
+                                          block_height,
+                                          block_depth,
+                                          self.stream
+                                          )
+        self.stream.synchronize()
+
+    @coro
+    def exchangeGhosts(self):
+        self.d_temperature, self.d_new_temperature = \
+            self.d_new_temperature, self.d_temperature
+
+        self.sendGhosts()
+        self.recvGhosts()
+
+    @coro
+    def run(self, done_future):
+        tstart = time.time()
+        comm_time = 0
+        for current_iter in range(n_iters + warmup_iters):
+            if current_iter == warmup_iters:
+                tstart = time.time()
+
+            self.my_iter = current_iter
+            self.updateAndPack()
+
+            comm_start_time = time.time()
+
+            self.exchangeGhosts()
+
+            if current_iter >= warmup_iters:
+                comm_time += time.time() - comm_start_time
+
+
+        tend = time.time()
+
+        if self.thisIndex == (0, 0, 0):
+            print(f'Elapsed time: {tend-tstart}')
+        self.reduce(done_future)
