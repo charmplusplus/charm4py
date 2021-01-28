@@ -1,26 +1,28 @@
 #!/bin/bash
 #BSUB -W 30
 #BSUB -P csc357
-#BSUB -nnodes 2
-#BSUB -J jacobi3d-charm4py-weak-n2
+#BSUB -nnodes 256
+#BSUB -J jacobi3d-charm4py-strong-n256
 
 # These need to be changed between submissions
 file=jacobi3d.py
-n_nodes=2
+n_nodes=256
 n_procs=$((n_nodes * 6))
 grid_width=3072
-grid_height=1536
-grid_depth=1536
+grid_height=3072
+grid_depth=3072
 
 # Function to display commands
 exe() { echo "\$ $@" ; "$@" ; }
 
 cd $HOME/work/charm4py/examples/cuda/gpudirect/jacobi3d
 
-conda activate charm4py
+#exe conda init bash
+#exe conda activate charm4py
+exe source activate charm4py
 
-export LD_LIBRARY_PATH=$HOME/work/ucx/install/lib:$HOME/work/pmix-3.1.5/install/lib:/sw/summit/gdrcopy/2.0/lib64:$LD_LIBRARY_PATH
-export UCX_MEMTYPE_CACHE=n
+exe export LD_LIBRARY_PATH=$HOME/work/ucx/install/lib:$HOME/work/pmix-3.1.5/install/lib:/sw/summit/gdrcopy/2.0/lib64:$LD_LIBRARY_PATH
+exe export UCX_MEMTYPE_CACHE=n
 
 ppn=1
 pemap="L0,4,8,84,88,92"
