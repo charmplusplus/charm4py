@@ -11,7 +11,7 @@ class Defaults(Enum):
     GRID_WIDTH = 512
     GRID_HEIGHT = 512
     GRID_DEPTH = 512
-    NUM_ITERS = 512
+    NUM_ITERS = 100
     WARMUP_ITERS = 10
     USE_ZEROCOPY = False
     PRINT_ELEMENTS = False

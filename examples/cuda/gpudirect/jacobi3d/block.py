@@ -319,6 +319,7 @@ class Block(Chare):
 
         if self.thisIndex == (0, 0, 0):
             elapsed_time = tend-tstart
-            print(f'Elapsed time: {round(elapsed_time,5)}')
-            print(f'Approximate time per iteration: {round(((elapsed_time/n_iters)*1e6),5)}')
+            print(f'Elapsed time: {round(elapsed_time,3)} s')
+            print(f'Average time per iteration: {round(((elapsed_time/n_iters)*1e3),3)} ms')
+            print(f'Communication time per iteration: {round(((comm_time/n_iters)*1e3),3)} ms')
         self.reduce(done_future)
