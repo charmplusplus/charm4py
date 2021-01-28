@@ -244,11 +244,13 @@ class Block(Chare):
                                             self.stream
                                             )
                 if not use_zerocopy:
-                    # self.d_ghosts[i].copy_to_host(self.h_ghosts[i])
+                    self.d_ghosts[i].copy_to_host(self.h_ghosts[i], self.stream)
+                    '''
                     charm.lib.CudaDtoH(self.h_ghosts[i].__array_interface__['data'][0],
                                        self.d_ghosts[i].__cuda_array_interface__['data'][0],
                                        self.d_ghosts[i].nbytes, 0
                                        )
+                                       '''
 
         self.stream.synchronize()
 
@@ -277,14 +279,15 @@ class Block(Chare):
                 recv_ghost = self.d_recv_ghosts[neighbor_idx]
             else:
                 self.h_ghosts[neighbor_idx] = ch.recv()
-                # self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
-                #                                            stream=self.stream
-                #                                            )
+                self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
+                                                           stream=self.stream
+                                                           )
+                '''
                 charm.lib.CudaHtoD(self.d_ghosts[neighbor_idx].__cuda_array_interface__['data'][0],
                                    self.h_ghosts[neighbor_idx].__array_interface__['data'][0],
                                    self.d_ghosts[neighbor_idx].nbytes, 0
                                    )
-
+                '''
                 recv_ghost = self.d_ghosts[neighbor_idx]
 
             kernels.invokeUnpackingKernel(self.d_temperature,
