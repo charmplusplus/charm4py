@@ -958,13 +958,13 @@ class CharmLib(object):
                        future_id
                        )
   def CudaHtoD(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
-      CkCUDAHtoD(<void*>destAddr, <void*>srcAddr,<int>nbytes, (<cudaStream_t*> streamAddr)[0]);
+      CkCUDAHtoD(<void*>destAddr, <void*>srcAddr,<int>nbytes, 0);
 
   def CudaDtoH(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
-    CkCUDADtoH(<void*>destAddr, <void*>srcAddr,<int>int(nbytes), (<cudaStream_t*> streamAddr)[0]);
+    CkCUDADtoH(<void*>destAddr, <void*>srcAddr,<int>int(nbytes), 0);
 
   def CudaStreamSynchronize(self, long streamAddr):
-    CkCUDAStreamSynchronize((<cudaStream_t*>streamAddr)[0])
+    CkCUDAStreamSynchronize(0)
 
 
 
