@@ -80,7 +80,7 @@ class _Channel(object):
         elif post_buf_addresses != None:
             gpu_recv_bufs = ret
             # ret = ret[:-1:1]
-            assert len(post_buffers) == len(gpu_recv_bufs)
+            assert len(post_buf_addresses) == len(gpu_recv_bufs)
             assert post_buf_sizes
             recv_future = charm.getGPUDirectDataFromAddresses(post_buf_addresses, post_buf_sizes, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
