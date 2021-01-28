@@ -159,7 +159,7 @@ def calc_num_chares_per_dim(num_chares, grid_w, grid_h, grid_d):
             while ipy <= nremain:
                 if not nremain % ipy:
                     ipz = nremain // ipy
-                    surf = area[0] / ipx / ipy + area[1] / ipz + area[2] / ipy / ipz
+                    surf = area[0] / ipx / ipy + area[1] / ipx / ipz + area[2] / ipy / ipz
 
                     if surf < bestsurf:
                         bestsurf = surf
