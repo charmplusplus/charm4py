@@ -248,7 +248,6 @@ class Block(Chare):
                     self.d_ghosts[i].copy_to_host(self.h_ghosts[i])
         self.stream.synchronize()
 
-
     @coro
     def sendGhost(self, direction):
         send_ch = self.neighbor_channels[direction]
@@ -271,14 +270,16 @@ class Block(Chare):
                 ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[neighbor_idx],
                         post_buf_sizes = self.d_recv_ghosts_size[neighbor_idx]
                         )
+                recv_ghost = self.d_recv_ghosts[neighbor_idx]
             else:
                 self.h_ghosts[neighbor_idx] = ch.recv()
                 self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
                                                            stream=self.stream
                                                            )
+                recv_ghost = self.d_ghosts[neighbor_idx]
 
             kernels.invokeUnpackingKernel(self.d_temperature,
-                                          self.d_ghosts[neighbor_idx],
+                                          recv_ghost,
                                           ch.recv_direction,
                                           block_width,
                                           block_height,
@@ -317,5 +318,7 @@ class Block(Chare):
         tend = time.time()
 
         if self.thisIndex == (0, 0, 0):
-            print(f'Elapsed time: {tend-tstart}')
+            elapsed_time = tend-tstart
+            print(f'Elapsed time: {round(elapsed_time,5)}')
+            print(f'Approximate time per iteration: {round(((elapsed_time/n_iters)*1e6),5)}')
         self.reduce(done_future)
