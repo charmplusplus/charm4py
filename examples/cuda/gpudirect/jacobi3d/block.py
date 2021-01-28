@@ -265,37 +265,41 @@ class Block(Chare):
 
     @coro
     def recvGhosts(self):
-        for ch in charm.iwait(self.active_neighbor_channels):
-            # remember: we set 'recv_direction' member
-            # directly in the initialization phase
-            neighbor_idx = ch.recv_direction
+        # Not using charm.iwait as it errors out with more than 2 processes
+        for dir in range(kernels.DIR_COUNT):
+            if not self.bounds[dir]:
+                self.recvGhost(dir)
 
-            if use_zerocopy:
-                ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[neighbor_idx],
-                        post_buf_sizes = self.d_recv_ghosts_size[neighbor_idx]
-                        )
-                recv_ghost = self.d_recv_ghosts[neighbor_idx]
-            else:
-                self.h_ghosts[neighbor_idx] = ch.recv()
-                '''
-                self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
-                                                           stream=self.stream
-                                                           )
-                '''
-                charm.lib.CudaHtoD(self.d_ghosts[neighbor_idx].__cuda_array_interface__['data'][0],
-                                   self.h_ghosts[neighbor_idx].__array_interface__['data'][0],
-                                   self.d_ghosts[neighbor_idx].nbytes, 0
-                                   )
-                recv_ghost = self.d_ghosts[neighbor_idx]
+    @coro
+    def recvGhost(self, direction):
+        recv_ch = self.neighbor_channels[direction]
 
-            kernels.invokeUnpackingKernel(self.d_temperature,
-                                          recv_ghost,
-                                          ch.recv_direction,
-                                          block_width,
-                                          block_height,
-                                          block_depth,
-                                          self.stream
-                                          )
+        if use_zerocopy:
+            recv_ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[direction],
+                         post_buf_sizes = self.d_recv_ghosts_size[direction]
+                         )
+            recv_ghost = self.d_recv_ghosts[direction]
+        else:
+            self.h_ghosts[direction] = recv_ch.recv()
+            '''
+            self.d_ghosts[direction].copy_to_device(self.h_ghosts[direction],
+                                                    stream=self.stream
+                                                    )
+                                                    '''
+            charm.lib.CudaHtoD(self.d_ghosts[direction].__cuda_array_interface__['data'][0],
+                               self.h_ghosts[direction].__array_interface__['data'][0],
+                               self.d_ghosts[direction].nbytes, 0
+                               )
+            recv_ghost = self.d_ghosts[direction]
+
+        kernels.invokeUnpackingKernel(self.d_temperature,
+                                      recv_ghost,
+                                      direction,
+                                      block_width,
+                                      block_height,
+                                      block_depth,
+                                      self.stream
+                                      )
         self.stream.synchronize()
 
     @coro
