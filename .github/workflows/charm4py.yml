@@ -10,6 +10,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: build-charm4py
       run: |
+        git fetch --unshallow # Need full repo for 'git describe' used by setup.py
         pip3 install setuptools cython cffi greenlet numpy
         git clone https://github.com/UIUC-PPL/charm charm_src/charm
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
