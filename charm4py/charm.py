@@ -28,6 +28,7 @@ from .threads import Future, LocalFuture
 from . import reduction
 from . import wait
 import array
+import greenlet
 try:
     import numpy
 except ImportError:
@@ -820,11 +821,60 @@ class Charm(object):
                 n -= 1
                 yield obj
             else:
+                print('waitready this')
+                obj.waitReady(f)
+        while n > 0:
+            print('thread paused')
+            obj = self.threadMgr.pauseThread()
+            print('thread resumed', obj)
+            n -= 1
+            print('n', n)
+            yield obj
+
+    def iwait_map(self, func, objs):
+        n = len(objs)
+        f = LocalFuture()
+        done_fut = LocalFuture()
+        remaining_grs = [n]
+
+        def map_func(remaining, obj):
+            gr = greenlet.getcurrent()
+            gr.notify = gr.parent.notify
+            gr.obj = gr.parent.obj
+            gr.fu = 1
+            func(obj)
+            remaining[0] -= 1
+
+        def gr_func():
+            return map_func(remaining_grs, obj)
+
+        for obj in objs:
+            if obj.ready():
+                new_gr = greenlet.greenlet(gr_func)
+                n -= 1
+                new_gr.switch()
+            else:
                 obj.waitReady(f)
         while n > 0:
             obj = self.threadMgr.pauseThread()
+            # if obj is None, then we are being resumed by a finishing greenlet
+            # and should pause
+            if obj is None:
+                continue
+
+            new_gr = greenlet.greenlet(gr_func)
             n -= 1
-            yield obj
+            obj = new_gr.switch()
+
+            # if ret is not None, then we are being resumed
+            #by the thread manager because a new object is ready to receive
+            if obj:
+                new_gr = greenlet.greenlet(gr_func)
+                n -= 1
+                new_gr.switch()
+
+        while remaining_grs[0]:
+            self.threadMgr.pauseThread()
 
     def wait(self, objs):
         for o in self.iwait(objs):

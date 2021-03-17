@@ -166,11 +166,15 @@ class EntryMethodThreadManager(object):
         if gr.notify:
             obj = gr.obj
             obj._thread_notify_target.threadPaused(obj._thread_notify_data)
-        if gr.parent != main_gr:
+        if False and gr.parent != main_gr:
             # this can happen with threaded chare constructors that are called
             # "inline" by Charm++ on the PE where the collection is created.
             # Initially it will switch back to the parent thread, but after that
             # we make the parent to be the main thread
+            # try:
+                # if gr.fu:
+                    # return main_gr.switch()
+            # except:
             parent = gr.parent
             gr.parent = main_gr
             return parent.switch()
