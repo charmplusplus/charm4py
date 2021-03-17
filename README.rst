@@ -3,8 +3,8 @@ Charm4py
 ========
 
 
-.. image:: https://travis-ci.com/UIUC-PPL/charm4py.svg?branch=master
-       :target: https://travis-ci.com/UIUC-PPL/charm4py
+.. image:: https://github.com/UIUC-PPL/charm4py/actions/workflows/charm4py.yml/badge.svg?event=push
+       :target: https://github.com/UIUC-PPL/charm4py/actions/workflows/charm4py.yml
 
 .. image:: http://readthedocs.org/projects/charm4py/badge/?version=latest
        :target: https://charm4py.readthedocs.io/
