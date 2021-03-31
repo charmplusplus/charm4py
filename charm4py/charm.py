@@ -816,25 +816,21 @@ class Charm(object):
     def iwait(self, objs):
         n = len(objs)
         f = LocalFuture()
+
         for obj in objs:
             if obj.ready():
                 n -= 1
                 yield obj
             else:
-                print('waitready this')
                 obj.waitReady(f)
         while n > 0:
-            print('thread paused')
             obj = self.threadMgr.pauseThread()
-            print('thread resumed', obj)
             n -= 1
-            print('n', n)
             yield obj
 
     def iwait_map(self, func, objs):
         n = len(objs)
         f = LocalFuture()
-        done_fut = LocalFuture()
         remaining_grs = [n]
 
         def map_func(remaining, obj):
@@ -852,27 +848,22 @@ class Charm(object):
             if obj.ready():
                 new_gr = greenlet.greenlet(gr_func)
                 n -= 1
-                new_gr.switch()
+                obj = new_gr.switch()
+                while obj:
+                    assert isinstance(obj, Channel)
+                    new_gr = greenlet.greenlet(gr_func)
+                    n -= 1
+                    obj = new_gr.switch()
             else:
                 obj.waitReady(f)
         while n > 0:
             obj = self.threadMgr.pauseThread()
-            # if obj is None, then we are being resumed by a finishing greenlet
-            # and should pause
-            if obj is None:
-                continue
-
-            new_gr = greenlet.greenlet(gr_func)
-            n -= 1
-            obj = new_gr.switch()
-
-            # if ret is not None, then we are being resumed
-            #by the thread manager because a new object is ready to receive
-            if obj:
+            while obj:
+                assert isinstance(obj, Channel)
                 new_gr = greenlet.greenlet(gr_func)
                 n -= 1
-                new_gr.switch()
-
+                obj = new_gr.switch()
+   
         while remaining_grs[0]:
             self.threadMgr.pauseThread()
 

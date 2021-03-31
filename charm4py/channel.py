@@ -68,4 +68,5 @@ class _Channel(object):
             ret = self.recv_fut.get()
             self.recv_fut = None
         self.recv_seqno = (self.recv_seqno + 1) % CHAN_BUF_SIZE
+
         return ret
