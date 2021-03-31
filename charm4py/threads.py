@@ -179,7 +179,8 @@ class EntryMethodThreadManager(object):
             gr.parent = main_gr
             return parent.switch()
         else:
-            return main_gr.switch()
+            ret_val = main_gr.switch()
+            return ret_val
 
     def _resumeThread(self, gr, arg):
         """ Deposit a result or signal that a local entry method thread is waiting on,
