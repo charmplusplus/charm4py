@@ -892,7 +892,6 @@ class Charm(object):
                 n -= 1
                 obj = new_gr.switch()
                 while obj:
-                    assert isinstance(obj, Channel)
                     new_gr = greenlet.greenlet(gr_func)
                     n -= 1
                     obj = new_gr.switch()
@@ -901,7 +900,6 @@ class Charm(object):
         while n > 0:
             obj = self.threadMgr.pauseThread()
             while obj:
-                assert isinstance(obj, Channel)
                 new_gr = greenlet.greenlet(gr_func)
                 n -= 1
                 obj = new_gr.switch()
