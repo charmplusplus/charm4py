@@ -246,13 +246,13 @@ class Block(Chare):
 
         self.stream.synchronize()
 
-    @coro
     def sendGhosts(self):
+        count = 0
         for dir in range(kernels.DIR_COUNT):
             if not self.bounds[dir]:
                 self.sendGhost(dir)
+                count += 1
 
-    @coro
     def sendGhost(self, direction):
         send_ch = self.neighbor_channels[direction]
 
@@ -263,19 +263,48 @@ class Block(Chare):
         else:
             send_ch.send(self.h_ghosts[direction])
 
-    @coro
     def recvGhosts(self):
-        # Not using charm.iwait as it errors out with more than 2 processes
-        for dir in range(kernels.DIR_COUNT):
-            if not self.bounds[dir]:
-                self.recvGhost(dir)
+        charm.iwait_map(self.recvGhost, self.active_neighbor_channels)
+        # for ch in charm.iwait(self.active_neighbor_channels):
+        #     # remember: we set 'recv_direction' member
+        #     # directly in the initialization phase
+        #     neighbor_idx = ch.recv_direction
 
-    @coro
-    def recvGhost(self, direction):
-        recv_ch = self.neighbor_channels[direction]
+        #     if use_zerocopy:
+        #         ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[neighbor_idx],
+        #                 post_buf_sizes = self.d_recv_ghosts_size[neighbor_idx]
+        #                 )
+        #         recv_ghost = self.d_recv_ghosts[neighbor_idx]
+        #     else:
+        #         self.h_ghosts[neighbor_idx] = ch.recv()
+        #         '''
+        #         self.d_ghosts[neighbor_idx].copy_to_device(self.h_ghosts[neighbor_idx],
+        #                                                    stream=self.stream
+        #                                                    )
+        #         '''
+        #         charm.lib.CudaHtoD(self.d_ghosts[neighbor_idx].__cuda_array_interface__['data'][0],
+        #                            self.h_ghosts[neighbor_idx].__array_interface__['data'][0],
+        #                            self.d_ghosts[neighbor_idx].nbytes, 0
+        #                            )
+        #         recv_ghost = self.d_ghosts[neighbor_idx]
 
+        #     kernels.invokeUnpackingKernel(self.d_temperature,
+        #                                   recv_ghost,
+        #                                   ch.recv_direction,
+        #                                   block_width,
+        #                                   block_height,
+        #                                   block_depth,
+        #                                   self.stream
+        #                                   )
+        # # Not using charm.iwait as it errors out with more than 2 processes
+        # for dir in range(kernels.DIR_COUNT):
+        #     if not self.bounds[dir]:
+        #         self.recvGhost(dir)
+
+    def recvGhost(self, recv_ch):
+        direction = recv_ch.recv_direction
         if use_zerocopy:
-            recv_ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[direction],
+            f = recv_ch.recv(post_buf_addresses = self.d_recv_ghosts_addr[direction],
                          post_buf_sizes = self.d_recv_ghosts_size[direction]
                          )
             recv_ghost = self.d_recv_ghosts[direction]
@@ -302,7 +331,7 @@ class Block(Chare):
                                       )
         self.stream.synchronize()
 
-    @coro
+    # @coro
     def exchangeGhosts(self):
         self.d_temperature, self.d_new_temperature = \
             self.d_new_temperature, self.d_temperature
@@ -327,7 +356,6 @@ class Block(Chare):
 
             if current_iter >= warmup_iters:
                 comm_time += time.time() - comm_start_time
-
 
         tend = time.time()
 

@@ -128,13 +128,13 @@ def main(args):
                                   ).get()
 
     init_done_future = Future()
+    run_future = Future()
     block_proxy = Array(Block,
                         dims=[n_chares_x, n_chares_y, n_chares_z],
                         args = [init_done_future]
                         )
     init_done_future.get()
 
-    run_future = Future()
     block_proxy.run(run_future)
     run_future.get()
     charm.exit()
