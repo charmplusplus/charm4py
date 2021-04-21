@@ -477,6 +477,7 @@ class CharmLib(object):
     assert num_direct_buffers <= NUM_DCOPY_BUFS
     global gpu_direct_device_ptrs
     global gpu_direct_stream_ptrs
+    global cur_buf
 
     if stream_ptrs:
       for i in range(num_direct_buffers):
@@ -484,12 +485,24 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
 
-    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
-                                 gpu_direct_device_ptrs,
-                                 gpu_direct_buff_sizes,
-                                 gpu_direct_stream_ptrs,
-                                 num_direct_buffers
-                                 )
+    if cur_buf <= 1:
+      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+                                   gpu_direct_device_ptrs,
+                                   gpu_direct_buff_sizes,
+                                   gpu_direct_stream_ptrs,
+                                   num_direct_buffers
+                                   )
+    else:
+      send_bufs[0] = <char*>msg0
+      send_buf_sizes[0] = <int>len(msg0)
+      CkChareExtSendWithDeviceData_multi(array_id, c_index, ndims, ep,
+                                         cur_buf, send_bufs, send_buf_sizes,
+                                         gpu_direct_device_ptrs,
+                                         gpu_direct_buff_sizes,
+                                         gpu_direct_stream_ptrs,
+                                         num_direct_buffers
+                                         )
+      cur_buf = 1
     gpu_direct_buf_idx = 0
 
   def CkArraySendWithDeviceDataFromPointers(self, int array_id, index not None, int ep,
@@ -499,7 +512,7 @@ class CharmLib(object):
 
     cdef int i = 0
     cdef int ndims = len(index)
-    # assert ndims == 1
+    global cur_buf
     for i in range(ndims): c_index[i] = index[i]
     msg0, dcopy = msg
     dcopy = None
@@ -510,15 +523,28 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
 
-    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
-                                 <long*>gpu_src_ptrs.data.as_voidptr,
-                                 <long*>gpu_src_sizes.data.as_voidptr,
-                                 gpu_direct_stream_ptrs,
-                                 num_bufs
-                                 )
+    if cur_buf <= 1:
+      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+                                   <long*>gpu_src_ptrs.data.as_voidptr,
+                                   <long*>gpu_src_sizes.data.as_voidptr,
+                                   gpu_direct_stream_ptrs,
+                                   num_bufs
+                                  )
+    else:
+      send_bufs[0] = <char*>msg0
+      send_buf_sizes[0] = <int>len(msg0)
+      CkChareExtSendWithDeviceData_multi(array_id, c_index, ndims, ep,
+                                         cur_buf, send_bufs, send_buf_sizes,
+                                         <long*>gpu_src_ptrs.data.as_voidptr,
+                                         <long*>gpu_src_sizes.data.as_voidptr,
+                                         gpu_direct_stream_ptrs,
+                                         num_bufs
+                                         )
+      cur_buf = 1
     gpu_direct_buf_idx = 0
 
-
+  def CkCudaEnabled(self):
+    return bool(CkCudaEnabled())
 
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):
     global cur_buf
@@ -860,13 +886,15 @@ class CharmLib(object):
       msg = emptyMsg
     else:
       direct_copy_hdr = []  # goes to header
-      args = list(msgArgs)
       global cur_buf
       global gpu_direct_buf_idx
       global gpu_direct_device_ptrs
       cur_buf = 1
       gpu_direct_buf_idx = 0
-      for i in range(len(args)):
+      # GPU-direct buffers will not be sent
+      args_to_send = list()
+      n_gpu_bufs = 0
+      for i in range(len(msgArgs)):
         arg = msgArgs[i]
         if CkCudaEnabled() and hasattr(arg, '__cuda_array_interface__'):
           if pack_gpu:
@@ -878,32 +906,33 @@ class CharmLib(object):
             gpu_direct_buff_sizes[gpu_direct_buf_idx] = arg.nbytes
             cuda_dev_info = True
             gpu_direct_buf_idx += 1
-          args[i] = None  # TODO: should this be done?
+          n_gpu_bufs += 1
           continue
         elif isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
           np_array = arg
           nbytes = np_array.nbytes
-          direct_copy_hdr.append((i, 2, (arg.shape, np_array.dtype.name), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 2, (arg.shape, np_array.dtype.name), nbytes))
           send_bufs[cur_buf] = <char*>np_array.data
         elif isinstance(arg, bytes):
           nbytes = len(arg)
-          direct_copy_hdr.append((i, 0, (), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 0, (), nbytes))
           send_bufs[cur_buf] = <char*>arg
         elif isinstance(arg, array.array):
           a = arg
           #nbytes = arg.buffer_info()[1] * arg.itemsize
           nbytes = len(a) * a.itemsize # NOTE that cython's array C interface doesn't expose itemsize attribute
-          direct_copy_hdr.append((i, 1, (a.typecode), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 1, (a.typecode), nbytes))
           send_bufs[cur_buf] = <char*>a.data.as_voidptr
         else:
+          args_to_send.append(arg)
           continue
-        args[i] = None  # will direct-copy this arg so remove from args list
+        args_to_send.append(None)
         send_buf_sizes[cur_buf] = <int>nbytes
         if PROFILING: dcopy_size += nbytes
         cur_buf += 1
       if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
       try:
-        msg = dumps((header, args), PICKLE_PROTOCOL)
+        msg = dumps((header, args_to_send), PICKLE_PROTOCOL)
       except:
         global cur_buf
         global gpu_direct_buf_idx
