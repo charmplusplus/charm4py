@@ -72,14 +72,25 @@ class _Channel(object):
         self.recv_seqno = (self.recv_seqno + 1) % CHAN_BUF_SIZE
 
         if post_buffers:
-            gpu_recv_bufs = ret[-1]
-            # ret = ret[:-1:1]
+            if isinstance(ret, tuple):
+                print(ret)
+                gpu_recv_bufs = ret[-1]
+                ret = ret[0:-1]
+                if len(ret) == 1:
+                    ret = ret[0]
+            else:
+                gpu_recv_bufs = ret
             assert len(post_buffers) == len(gpu_recv_bufs)
             recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
         elif post_buf_addresses != None:
-            gpu_recv_bufs = ret
-            # ret = ret[:-1:1]
+            if isinstance(ret, tuple):
+                gpu_recv_bufs = ret[-1]
+                ret = ret[0:-1]
+                if len(ret) == 1:
+                    ret = ret[0]
+            else:
+                gpu_recv_bufs = ret
             assert len(post_buf_addresses) == len(gpu_recv_bufs)
             assert post_buf_sizes
             recv_future = charm.getGPUDirectDataFromAddresses(post_buf_addresses, post_buf_sizes, gpu_recv_bufs, stream_ptrs)
