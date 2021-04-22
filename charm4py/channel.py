@@ -79,10 +79,11 @@ class _Channel(object):
                     ret = ret[0]
             else:
                 gpu_recv_bufs = ret
+
             assert len(post_buffers) == len(gpu_recv_bufs)
             recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
             recv_future.get()
-        elif post_buf_addresses != None:
+        elif post_buf_addresses is not None:
             if isinstance(ret, tuple):
                 gpu_recv_bufs = ret[-1]
                 ret = ret[0:-1]
