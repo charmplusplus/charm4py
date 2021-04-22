@@ -485,23 +485,15 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
 
-    if cur_buf <= 1:
-      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+      send_bufs[0] = <char*>msg0
+      send_buf_sizes[0] = <int>len(msg0)
+      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                   cur_buf, send_bufs, send_buf_sizes,
                                    gpu_direct_device_ptrs,
                                    gpu_direct_buff_sizes,
                                    gpu_direct_stream_ptrs,
                                    num_direct_buffers
-                                   )
-    else:
-      send_bufs[0] = <char*>msg0
-      send_buf_sizes[0] = <int>len(msg0)
-      CkChareExtSendWithDeviceData_multi(array_id, c_index, ndims, ep,
-                                         cur_buf, send_bufs, send_buf_sizes,
-                                         gpu_direct_device_ptrs,
-                                         gpu_direct_buff_sizes,
-                                         gpu_direct_stream_ptrs,
-                                         num_direct_buffers
-                                         )
+                                  )
       cur_buf = 1
     gpu_direct_buf_idx = 0
 
@@ -523,23 +515,15 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
 
-    if cur_buf <= 1:
-      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep, 1, msg0, len(msg0),
+      send_bufs[0] = <char*>msg0
+      send_buf_sizes[0] = <int>len(msg0)
+      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                   cur_buf, send_bufs, send_buf_sizes,
                                    <long*>gpu_src_ptrs.data.as_voidptr,
                                    <long*>gpu_src_sizes.data.as_voidptr,
                                    gpu_direct_stream_ptrs,
                                    num_bufs
                                   )
-    else:
-      send_bufs[0] = <char*>msg0
-      send_buf_sizes[0] = <int>len(msg0)
-      CkChareExtSendWithDeviceData_multi(array_id, c_index, ndims, ep,
-                                         cur_buf, send_bufs, send_buf_sizes,
-                                         <long*>gpu_src_ptrs.data.as_voidptr,
-                                         <long*>gpu_src_sizes.data.as_voidptr,
-                                         gpu_direct_stream_ptrs,
-                                         num_bufs
-                                         )
       cur_buf = 1
     gpu_direct_buf_idx = 0
 

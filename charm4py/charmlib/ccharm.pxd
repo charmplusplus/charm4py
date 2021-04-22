@@ -76,19 +76,12 @@ cdef extern from "charm.h":
     int CkCudaEnabled();
     int CUDAPointerOnDevice(const void *ptr);
     void CkChareExtSendWithDeviceData(int aid, int *idx, int ndims,
-                                  int epIdx, int num_bufs, char *msg,
-                                  int msgSize,
-                                  long *devBufPtrs,
-                                  long *devBufSizesInBytes,
-                                  long *streamPtrs, int numDevBufs
-                                  );
-    void CkChareExtSendWithDeviceData_multi(int aid, int *idx, int ndims,
-                                            int epIdx, int num_bufs, char **bufs,
-                                            int *buf_sizes,
-                                            long *devBufPtrs,
-                                            long *devBufSizesInBytes,
-                                            long *streamPtrs, int numDevBufs
-                                           );
+                                      int epIdx, int num_bufs, char **bufs,
+                                      int *buf_sizes,
+                                      long *devBufPtrs,
+                                      long *devBufSizesInBytes,
+                                      long *streamPtrs, int numDevBufs
+                                     );
 
 
     void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, long*, void *, int, char*, int));
