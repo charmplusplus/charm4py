@@ -14,7 +14,7 @@ class A(Chare):
         partner_channel = Channel(self, partner)
 
         device_data = cuda.device_array(self.msg_size, dtype='int8')
-        # if addr_optimization:
+
         d_addr = array.array('L', [0])
         d_size = array.array('L', [0])
 
