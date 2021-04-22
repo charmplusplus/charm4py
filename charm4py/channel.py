@@ -73,7 +73,6 @@ class _Channel(object):
 
         if post_buffers:
             if isinstance(ret, tuple):
-                print(ret)
                 gpu_recv_bufs = ret[-1]
                 ret = ret[0:-1]
                 if len(ret) == 1:
