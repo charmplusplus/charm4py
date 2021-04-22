@@ -357,7 +357,8 @@ class Charm(object):
         return header, args
 
     def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
-        return_fut = self.Future(len(post_buffers))
+        # this future will only be satisfied when all buffers have been received
+        return_fut = self.Future()
         post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
         post_buf_sizes = [getDeviceDataSizeInBytes(buf) for buf in post_buffers]
         if not stream_ptrs:
@@ -366,7 +367,8 @@ class Charm(object):
         return return_fut
 
     def getGPUDirectDataFromAddresses(self, post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs):
-        return_fut = self.Future(len(post_buf_ptrs))
+        # this future will only be satisfied when all buffers have been received
+        return_fut = self.Future()
         if not stream_ptrs:
             stream_ptrs = array.array('L', [0] * len(post_buf_ptrs))
         self.lib.getGPUDirectDataFromAddresses(post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
