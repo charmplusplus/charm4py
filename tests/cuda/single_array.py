@@ -16,7 +16,7 @@ class A(Chare):
         device_data = cuda.device_array(self.msg_size, dtype='int8')
 
         d_addr = array.array('L', [0])
-        d_size = array.array('L', [0])
+        d_size = array.array('i', [0])
 
         d_addr[0] = device_data.__cuda_array_interface__['data'][0]
         d_size[0] = device_data.nbytes
@@ -107,7 +107,7 @@ def main(args):
         charm.exit(0)
 
     peMap = Group(ArrMap)
-    chares = Array(A, 2, args=[8192], map=peMap)
+    chares = Array(A, 2, args=[1<<20], map=peMap)
     done_fut = Future()
     chares.run(done_fut, addr_optimization=False)
     done_fut.get()

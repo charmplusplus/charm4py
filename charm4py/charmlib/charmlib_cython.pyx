@@ -309,7 +309,7 @@ cdef c_type_table_typecodes = [None] * 13
 cdef int c_type_table_sizes[13]
 cdef int[SECTION_MAX_BFACTOR] section_children
 cdef long[NUM_DCOPY_BUFS] gpu_direct_device_ptrs
-cdef long[NUM_DCOPY_BUFS] gpu_direct_buff_sizes
+cdef int[NUM_DCOPY_BUFS] gpu_direct_buff_sizes
 cdef long[NUM_DCOPY_BUFS] gpu_direct_stream_ptrs
 
 cdef object charm
@@ -485,16 +485,16 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
 
-      send_bufs[0] = <char*>msg0
-      send_buf_sizes[0] = <int>len(msg0)
-      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
-                                   cur_buf, send_bufs, send_buf_sizes,
-                                   gpu_direct_device_ptrs,
-                                   gpu_direct_buff_sizes,
-                                   gpu_direct_stream_ptrs,
-                                   num_direct_buffers
-                                  )
-      cur_buf = 1
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 gpu_direct_device_ptrs,
+                                 gpu_direct_buff_sizes,
+                                 gpu_direct_stream_ptrs,
+                                 num_direct_buffers
+                                )
+    cur_buf = 1
     gpu_direct_buf_idx = 0
 
   def CkArraySendWithDeviceDataFromPointers(self, int array_id, index not None, int ep,
@@ -515,16 +515,16 @@ class CharmLib(object):
     else:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
 
-      send_bufs[0] = <char*>msg0
-      send_buf_sizes[0] = <int>len(msg0)
-      CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
-                                   cur_buf, send_bufs, send_buf_sizes,
-                                   <long*>gpu_src_ptrs.data.as_voidptr,
-                                   <long*>gpu_src_sizes.data.as_voidptr,
-                                   gpu_direct_stream_ptrs,
-                                   num_bufs
-                                  )
-      cur_buf = 1
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>gpu_src_ptrs.data.as_voidptr,
+                                 <int*>gpu_src_sizes.data.as_voidptr,
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
     gpu_direct_buf_idx = 0
 
   def CkCudaEnabled(self):
@@ -933,8 +933,8 @@ class CharmLib(object):
   def getGPUDirectData(self, list post_buf_data, list post_buf_sizes, array.array remote_bufs, list stream_ptrs, return_fut):
     cdef int num_buffers = len(post_buf_data)
     cdef int future_id = return_fut.fid
-    cdef array.array int_array_template = array.array('i', [])
     cdef array.array long_array_template = array.array('L', [])
+    cdef array.array int_array_template = array.array('i', [])
     cdef array.array recv_buf_sizes
     cdef array.array recv_buf_ptrs
     # pointers from the remote that we will be issuing Rgets for
@@ -1034,7 +1034,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     charm.handleGeneralError()
 
 cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
-                           long *devBufSizes, void *devBufs, int msgSize,
+                           int *devBufSizes, void *devBufs, int msgSize,
                            char *msg, int dcopy_start):
 
     cdef int idx = 0

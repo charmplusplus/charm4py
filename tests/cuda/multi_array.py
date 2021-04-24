@@ -17,7 +17,7 @@ class A(Chare):
         device_data2 = cuda.device_array(self.msg_size, dtype='int8')
         # if addr_optimization:
         d_addr = array.array('L', [0, 0])
-        d_size = array.array('L', [0, 0])
+        d_size = array.array('i', [0, 0])
 
         d_addr[0] = device_data.__cuda_array_interface__['data'][0]
         d_addr[1] = device_data2.__cuda_array_interface__['data'][0]
@@ -37,15 +37,17 @@ class A(Chare):
                 partner_channel.send(20, host_array, gpu_src_ptrs=d_addr,
                                      gpu_src_sizes=d_size
                                      )
+                partner_channel.recv()
             else:
                 partner_channel.send(20, host_array, device_data, device_data2)
         else:
             if addr_optimization:
-                f, g = partner_channel.recv(device_data, device_data2)
-            else:
                 f, g = partner_channel.recv(post_buf_addresses=d_addr,
-                                            post_buf_sizes=d_addr
+                                            post_buf_sizes=d_size
                                             )
+            else:
+                f, g = partner_channel.recv(device_data, device_data2)
+            partner_channel.send(1)
             h1 = device_data.copy_to_host()
             h2 = device_data2.copy_to_host()
 
@@ -71,7 +73,7 @@ def main(args):
         charm.exit(0)
 
     peMap = Group(ArrMap)
-    chares = Array(A, 2, args=[8192], map=peMap)
+    chares = Array(A, 2, args=[(1<<30)], map=peMap)
     done_fut = Future()
     chares.run(done_fut, addr_optimization=False)
     done_fut.get()

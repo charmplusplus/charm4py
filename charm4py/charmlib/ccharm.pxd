@@ -79,12 +79,12 @@ cdef extern from "charm.h":
                                       int epIdx, int num_bufs, char **bufs,
                                       int *buf_sizes,
                                       long *devBufPtrs,
-                                      long *devBufSizesInBytes,
+                                      int *devBufSizesInBytes,
                                       long *streamPtrs, int numDevBufs
                                      );
 
 
-    void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, long*, void *, int, char*, int));
+    void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*, int));
     void CkGetGPUDirectData(int numBuffers, void *recvBufPtrs, int *arrSizes,
                             void *remoteBufInfo, void *streamPtrs, int futureId);
 
