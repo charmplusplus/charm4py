@@ -21,6 +21,9 @@ class A(Chare):
         d_addr[0] = device_data.__cuda_array_interface__['data'][0]
         d_size[0] = device_data.nbytes
 
+        my_stream = cuda.stream()
+        stream_addr = array.array('L', [my_stream.handle.value])
+
         if self.thisIndex[0]:
             host_data = np.zeros(self.msg_size, dtype='int8')
             host_data.fill(5)
@@ -28,15 +31,18 @@ class A(Chare):
             if addr_optimization:
                 partner_channel.send(1, 2, "hello",
                                      np.ones(self.msg_size, dtype='int8'),
-                                     gpu_src_ptrs=d_addr, gpu_src_sizes=d_size
+                                     gpu_src_ptrs=d_addr, gpu_src_sizes=d_size,
+                                     stream_ptrs=stream_addr
                                      )
                 p_data = partner_channel.recv(post_buf_addresses=d_addr,
-                                              post_buf_sizes=d_size
+                                              post_buf_sizes=d_size,
+                                              stream_ptrs=stream_addr
                                               )
             else:
                 partner_channel.send(1, 2, "hello",
                                      device_data,
-                                     np.ones(self.msg_size, dtype='int8')
+                                     np.ones(self.msg_size, dtype='int8'),
+                                     stream_ptrs=stream_addr
                                      )
                 p_data = partner_channel.recv(device_data)
 
