@@ -463,7 +463,7 @@ class CharmLib(object):
       cur_buf = 1
 
   def CkArraySendWithDeviceData(self, int array_id, index not None, int ep,
-                                msg not None, list stream_ptrs):
+                                msg not None, stream_ptrs):
 
     global gpu_direct_buf_idx
     cdef int i = 0
@@ -479,10 +479,10 @@ class CharmLib(object):
     global gpu_direct_stream_ptrs
     global cur_buf
 
-    if stream_ptrs:
+    if stream_ptrs and isinstance(stream_ptrs, list):
       for i in range(num_direct_buffers):
         gpu_direct_stream_ptrs[i] = stream_ptrs[i]
-    else:
+    elif not stream_ptrs:
       memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
 
     send_bufs[0] = <char*>msg0
@@ -500,7 +500,7 @@ class CharmLib(object):
   def CkArraySendWithDeviceDataFromPointers(self, int array_id, index not None, int ep,
                                                 msg not None, array.array gpu_src_ptrs,
                                                 array.array gpu_src_sizes,
-                                                list stream_ptrs, int num_bufs):
+                                                stream_ptrs, int num_bufs):
 
     cdef int i = 0
     cdef int ndims = len(index)
@@ -509,7 +509,7 @@ class CharmLib(object):
     msg0, dcopy = msg
     dcopy = None
 
-    if stream_ptrs:
+    if stream_ptrs and isinstance(stream_ptrs, list):
       for i in range(num_bufs):
         gpu_direct_stream_ptrs[i] = stream_ptrs[i]
     else:
