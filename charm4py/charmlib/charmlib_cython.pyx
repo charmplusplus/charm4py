@@ -487,7 +487,7 @@ class CharmLib(object):
 
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
                                  cur_buf, send_bufs, send_buf_sizes,
                                  gpu_direct_device_ptrs,
                                  gpu_direct_buff_sizes,
@@ -517,7 +517,7 @@ class CharmLib(object):
 
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    CkChareExtSendWithDeviceData(array_id, c_index, ndims, ep,
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
                                  cur_buf, send_bufs, send_buf_sizes,
                                  <long*>gpu_src_ptrs.data.as_voidptr,
                                  <int*>gpu_src_sizes.data.as_voidptr,
@@ -787,7 +787,7 @@ class CharmLib(object):
     registerChareMsgRecvExtCallback(recvChareMsg)
     registerGroupMsgRecvExtCallback(recvGroupMsg)
     registerArrayMsgRecvExtCallback(recvArrayMsg)
-    registerArrayMsgGPUDirectRecvExtCallback(recvGPUDirectMsg)
+    registerArrayMsgGPUDirectRecvExtCallback(recvGPUDirectArrayMsg)
     registerArrayBcastRecvExtCallback(recvArrayBcast)
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
@@ -1033,9 +1033,9 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
   except:
     charm.handleGeneralError()
 
-cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
-                           int *devBufSizes, void *devBufs, int msgSize,
-                           char *msg, int dcopy_start):
+cdef void recvGPUDirectArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
+                                int *devBufSizes, void *devBufs, int msgSize,
+                                char *msg, int dcopy_start):
 
     cdef int idx = 0
     try:
@@ -1047,6 +1047,7 @@ cdef void recvGPUDirectMsg(int aid, int ndims, int *arrayIndex, int ep, int numD
         # Add the buffer's address to the list
         devBufInfo[idx] = <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx)
       recv_buffer.setMsg(msg, msgSize)
+      # TODO: Can this be the same for array and groups?
       charm.recvGPUDirectMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, devBufInfo, recv_buffer, dcopy_start)
 
     except:

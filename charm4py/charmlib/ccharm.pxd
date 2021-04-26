@@ -75,7 +75,7 @@ cdef extern from "charm.h":
     # TODO: Organize these to place them near their related functions
     int CkCudaEnabled();
     int CUDAPointerOnDevice(const void *ptr);
-    void CkChareExtSendWithDeviceData(int aid, int *idx, int ndims,
+    void CkArrayExtSendWithDeviceData(int aid, int *idx, int ndims,
                                       int epIdx, int num_bufs, char **bufs,
                                       int *buf_sizes,
                                       long *devBufPtrs,
