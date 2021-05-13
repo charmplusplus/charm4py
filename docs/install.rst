@@ -47,7 +47,7 @@ Prerequisites:
 
 To build the latest *stable* release, do::
 
-  $ pip3 install [--mpi] charm4py --no-binary charm4py
+  $ pip3 install [--install-option="--mpi"] charm4py --no-binary charm4py
 
 Or download the source distribution from PyPI, uncompress and run
 ``python3 setup.py install [--mpi]``.
