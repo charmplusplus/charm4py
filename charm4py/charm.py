@@ -133,7 +133,8 @@ class Charm(object):
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
         self.CkArraySendWithDeviceData = self.lib.CkArraySendWithDeviceData
-        self.CkArraySendWithDeviceDataFromPointers = self.lib.CkArraySendWithDeviceDataFromPointers
+        self.CkArraySendWithDeviceDataFromPointersArray = self.lib.CkArraySendWithDeviceDataFromPointersArray
+        self.CkArraySendWithDeviceDataFromPointersOther = self.lib.CkArraySendWithDeviceDataFromPointersOther
         self.CkCudaEnabled = self.lib.CkCudaEnabled
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
@@ -373,6 +374,28 @@ class Charm(object):
             stream_ptrs = array.array('L', [0] * len(post_buf_ptrs))
         self.lib.getGPUDirectDataFromAddresses(post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
         return return_fut
+
+    def CkArraySendWithDeviceDataFromPointers(self, array_id, index, ep,
+                                              msg, gpu_src_ptrs,
+                                              gpu_src_sizes,
+                                              stream_ptrs
+                                              ):
+        if isinstance(gpu_src_ptrs, array.array):
+            assert isinstance(gpu_src_sizes, array.array), \
+                "GPU source pointers and sizes must be of the same type."
+            self.CkArraySendWithDeviceDataFromPointersArray(array_id, index, ep,
+                                                            msg, gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+        else:
+            self.CkArraySendWithDeviceDataFromPointersOther(array_id, index, ep,
+                                                            msg, gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
 
     # deposit value of one of the futures that was created on this PE
     def _future_deposit_result(self, fid, result=None):

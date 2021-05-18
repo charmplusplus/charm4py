@@ -497,10 +497,10 @@ class CharmLib(object):
     cur_buf = 1
     gpu_direct_buf_idx = 0
 
-  def CkArraySendWithDeviceDataFromPointers(self, int array_id, index not None, int ep,
-                                                msg not None, array.array gpu_src_ptrs,
-                                                array.array gpu_src_sizes,
-                                                stream_ptrs, int num_bufs):
+  def CkArraySendWithDeviceDataFromPointersArray(self, int array_id, index not None, int ep,
+                                                 msg not None, array.array gpu_src_ptrs,
+                                                 array.array gpu_src_sizes,
+                                                 stream_ptrs, int num_bufs):
 
     cdef int i = 0
     cdef int ndims = len(index)
@@ -521,6 +521,38 @@ class CharmLib(object):
                                  cur_buf, send_bufs, send_buf_sizes,
                                  <long*>gpu_src_ptrs.data.as_voidptr,
                                  <int*>gpu_src_sizes.data.as_voidptr,
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkArraySendWithDeviceDataFromPointersOther(self, int array_id, index not None, int ep,
+                                                 msg not None, gpu_src_ptrs,
+                                                 gpu_src_sizes,
+                                                 stream_ptrs, int num_bufs
+                                                 ):
+    cdef int i = 0
+    cdef int ndims = len(index)
+    global cur_buf
+    for i in range(ndims): c_index[i] = index[i]
+    msg0, dcopy = msg
+    dcopy = None
+    cdef unsigned long[:] gpu_addresses = gpu_src_ptrs
+    cdef int[:] gpu_buffer_sizes = gpu_src_sizes
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>&gpu_addresses[0],
+                                 &gpu_buffer_sizes[0],
                                  gpu_direct_stream_ptrs,
                                  num_bufs
                                  )
