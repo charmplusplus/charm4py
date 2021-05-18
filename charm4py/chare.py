@@ -768,9 +768,10 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                     charm.CkArraySendWithDeviceDataFromPointers(aid, elemIdx, ep,
                                                                 msg, kwargs['gpu_src_ptrs'],
                                                                 kwargs['gpu_src_sizes'],
-                                                                stream_ptrs,
-                                                                len(kwargs['gpu_src_ptrs'])
-                                                    )
+                                                                stream_ptrs
+                                                                )
+
+
 
             else:
                 charm.CkArraySend(aid, elemIdx, ep, msg)
