@@ -133,8 +133,11 @@ class Charm(object):
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
         self.CkArraySendWithDeviceData = self.lib.CkArraySendWithDeviceData
+        self.CkGroupSendWithDeviceData = self.lib.CkGroupSendWithDeviceData
         self.CkArraySendWithDeviceDataFromPointersArray = self.lib.CkArraySendWithDeviceDataFromPointersArray
         self.CkArraySendWithDeviceDataFromPointersOther = self.lib.CkArraySendWithDeviceDataFromPointersOther
+        self.CkGroupSendWithDeviceDataFromPointersArray = self.lib.CkGroupSendWithDeviceDataFromPointersArray
+        self.CkGroupSendWithDeviceDataFromPointersOther = self.lib.CkGroupSendWithDeviceDataFromPointersOther
         self.CkCudaEnabled = self.lib.CkCudaEnabled
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
@@ -321,13 +324,19 @@ class Charm(object):
                 self.arrays[aid][index] = obj
                 em.run(obj, header, args)  # now call the user's array element __init__
 
-    def recvGPUDirectMsg(self, aid, index, ep,
-                         devBuf_ptrs, msg, dcopy_start
-                         ):
+    def recvGPUDirectArrayMsg(self, aid, index, ep,
+                              devBuf_ptrs, msg, dcopy_start
+                              ):
         obj = self.arrays[aid][index]
         header, args = self.unpackMsg(msg, dcopy_start, obj)
         args.append(devBuf_ptrs)
 
+        self.invokeEntryMethod(obj, ep, header, args)
+
+    def recvGPUDirectGroupMsg(self, gid, ep, devBuf_ptrs, msg, dcopy_start):
+        obj = self.groups[gid]
+        header, args = self.unpackMsg(msg, dcopy_start, obj)
+        args.append(devBuf_ptrs)
         self.invokeEntryMethod(obj, ep, header, args)
 
     def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
@@ -392,6 +401,26 @@ class Charm(object):
         else:
             self.CkArraySendWithDeviceDataFromPointersOther(array_id, index, ep,
                                                             msg, gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+
+    def CkGroupSendWithDeviceDataFromPointers(self, gid, elemIdx, ep,
+                                              msg, gpu_src_ptrs, gpu_src_sizes,
+                                              stream_ptrs):
+        if isinstance(gpu_src_ptrs, array.array):
+            assert isinstance(gpu_src_sizes, array.array), \
+                "GPU source pointers and sizes must be of the same type."
+            self.CkGroupSendWithDeviceDataFromPointersArray(gid, elemIdx, ep, msg,
+                                                            gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+        else:
+            self.CkGroupSendWithDeviceDataFromPointersOther(gid, elemIdx, ep, msg,
+                                                            gpu_src_ptrs,
                                                             gpu_src_sizes,
                                                             stream_ptrs,
                                                             len(gpu_src_ptrs)
