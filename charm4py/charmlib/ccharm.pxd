@@ -53,6 +53,7 @@ cdef extern from "charm.h":
     void registerReadOnlyRecvExtCallback(void (*cb)(int, char*));
     void registerChareMsgRecvExtCallback(void (*cb)(int, void*, int, int, char*, int));
     void registerGroupMsgRecvExtCallback(void (*cb)(int, int, int, char *, int));
+    void registerGroupMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int, int *, void *, int, char *, int));
     void registerArrayMsgRecvExtCallback(void (*cb)(int, int, int *, int, int, char *, int));
     void registerArrayBcastRecvExtCallback(void (*cb)(int, int, int, int, int *, int, int, char *, int));
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
@@ -82,6 +83,11 @@ cdef extern from "charm.h":
                                       int *devBufSizesInBytes,
                                       long *streamPtrs, int numDevBufs
                                      );
+    void CkGroupExtSendWithDeviceData(int gid, int pe, int epIdx, int num_bufs, char **bufs,
+                                      int *buf_sizes, long *devBufPtrs,
+                                      int *devBufSizesInBytes,
+                                      long *streamPtrs, int numDevBufs
+                                      );
 
 
     void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*, int));
