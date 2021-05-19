@@ -7,10 +7,14 @@ import array
 class A(Chare):
     def __init__(self, msg_size):
         self.msg_size = msg_size
+        if type(self.thisIndex) is tuple:
+            self.idx = int(self.thisIndex[0])
+        else:
+            self.idx = self.thisIndex
 
     @coro
     def run(self, done_future, addr_optimization=False):
-        partner = self.thisProxy[int(not self.thisIndex[0])]
+        partner = self.thisProxy[int(not self.idx)]
         partner_channel = Channel(self, partner)
 
         device_data = cuda.device_array(self.msg_size, dtype='int8')
@@ -28,7 +32,7 @@ class A(Chare):
         host_array = np.array(self.msg_size, dtype='int32')
         host_array.fill(42)
 
-        if self.thisIndex[0]:
+        if self.idx:
             h1 = np.ones(self.msg_size, dtype='int8')
             h2 = np.zeros(self.msg_size, dtype='int8')
             device_data.copy_to_device(h1)
@@ -74,6 +78,15 @@ def main(args):
 
     peMap = Group(ArrMap)
     chares = Array(A, 2, args=[(1<<30)], map=peMap)
+    done_fut = Future()
+    chares.run(done_fut, addr_optimization=False)
+    done_fut.get()
+
+    done_fut = Future()
+    chares.run(done_fut, addr_optimization=True)
+    done_fut.get()
+
+    chares = Group(A, args=[(1<<30)])
     done_fut = Future()
     chares.run(done_fut, addr_optimization=False)
     done_fut.get()

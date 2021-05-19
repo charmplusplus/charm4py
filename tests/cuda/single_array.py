@@ -7,10 +7,13 @@ import array
 class A(Chare):
     def __init__(self, msg_size):
         self.msg_size = msg_size
-
+        if type(self.thisIndex) is tuple:
+            self.idx = int(self.thisIndex[0])
+        else:
+            self.idx = self.thisIndex
     @coro
     def run(self, done_future, addr_optimization=False):
-        partner = self.thisProxy[int(not self.thisIndex[0])]
+        partner = self.thisProxy[int(not self.idx)]
         partner_channel = Channel(self, partner)
 
         device_data = cuda.device_array(self.msg_size, dtype='int8')
@@ -24,7 +27,7 @@ class A(Chare):
         my_stream = cuda.stream()
         stream_addr = array.array('L', [my_stream.handle.value])
 
-        if self.thisIndex[0]:
+        if self.idx:
             host_data = np.zeros(self.msg_size, dtype='int8')
             host_data.fill(5)
             device_data.copy_to_device(host_data)
@@ -114,6 +117,15 @@ def main(args):
 
     peMap = Group(ArrMap)
     chares = Array(A, 2, args=[1<<20], map=peMap)
+    done_fut = Future()
+    chares.run(done_fut, addr_optimization=False)
+    done_fut.get()
+
+    done_fut = Future()
+    chares.run(done_fut, addr_optimization=True)
+    done_fut.get()
+
+    chares = Group(A, args=[1<<20])
     done_fut = Future()
     chares.run(done_fut, addr_optimization=False)
     done_fut.get()
