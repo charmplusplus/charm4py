@@ -462,7 +462,7 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 argname = argnames[i]
                 # first look for argument in kwargs
                 # TODO: Should stream_ptrs be skipped?
-                if argname in {'stream_ptrs', 'gpu_src_ptrs', 'gpu_src_sizes'}:
+                if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
                     continue
                 if argname in kwargs:
                     args.append(kwargs[argname])
@@ -489,7 +489,7 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
                 destObj = charm.groups[gid]
             should_pack_gpu = True
-            if 'gpu_src_ptrs' in kwargs:
+            if 'src_ptrs' in kwargs:
                 should_pack_gpu = False
             msg = charm.packMsg(destObj, args, header, pack_gpu=should_pack_gpu)
             if msg[1] or not should_pack_gpu:
@@ -503,8 +503,8 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                                                     )
                 else:
                     charm.CkGroupSendWithDeviceDataFromPointers(gid, elemIdx, ep,
-                                                                msg, kwargs['gpu_src_ptrs'],
-                                                                kwargs['gpu_src_sizes'],
+                                                                msg, kwargs['src_ptrs'],
+                                                                kwargs['src_sizes'],
                                                                 stream_ptrs
                                                                 )
 
@@ -745,7 +745,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 argname = argnames[i]
                 # first look for argument in kwargs
                 # TODO: Should stream_ptrs be skipped?
-                if argname in {'stream_ptrs', 'gpu_src_ptrs', 'gpu_src_sizes'}:
+                if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
                     continue
                 if argname in kwargs and argname:
                     args.append(kwargs[argname])
@@ -775,7 +775,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 if elemIdx in array:
                     destObj = array[elemIdx]
             should_pack_gpu = True
-            if 'gpu_src_ptrs' in kwargs:
+            if 'src_ptrs' in kwargs:
                 should_pack_gpu = False
             msg = charm.packMsg(destObj, args, header, pack_gpu = should_pack_gpu)
             if msg[1] or not should_pack_gpu:
@@ -789,8 +789,8 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                                                     )
                 else:
                     charm.CkArraySendWithDeviceDataFromPointers(aid, elemIdx, ep,
-                                                                msg, kwargs['gpu_src_ptrs'],
-                                                                kwargs['gpu_src_sizes'],
+                                                                msg, kwargs['src_ptrs'],
+                                                                kwargs['src_sizes'],
                                                                 stream_ptrs
                                                                 )
 
