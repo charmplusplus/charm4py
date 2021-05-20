@@ -34,11 +34,11 @@ class A(Chare):
             if addr_optimization:
                 partner_channel.send(1, 2, "hello",
                                      np.ones(self.msg_size, dtype='int8'),
-                                     gpu_src_ptrs=d_addr, gpu_src_sizes=d_size,
+                                     src_ptrs=d_addr, src_sizes=d_size,
                                      stream_ptrs=stream_addr
                                      )
-                p_data = partner_channel.recv(post_buf_addresses=d_addr,
-                                              post_buf_sizes=d_size,
+                p_data = partner_channel.recv(post_addresses=d_addr,
+                                              post_sizes=d_size,
                                               stream_ptrs=stream_addr
                                               )
             else:
@@ -54,9 +54,9 @@ class A(Chare):
             assert np.array_equal(h_ary, host_data)
 
             if addr_optimization:
-                partner_channel.send(gpu_src_ptrs=d_addr, gpu_src_sizes=d_size)
-                partner_channel.recv(post_buf_addresses=d_addr,
-                                     post_buf_sizes=d_size
+                partner_channel.send(src_ptrs=d_addr, src_sizes=d_size)
+                partner_channel.recv(post_addresses=d_addr,
+                                     post_sizes=d_size
                                      )
             else:
                 partner_channel.send(device_data)
@@ -66,8 +66,8 @@ class A(Chare):
             assert np.array_equal(h_ary, host_data)
         else:
             if addr_optimization:
-                p_data = partner_channel.recv(post_buf_addresses=d_addr,
-                                              post_buf_sizes=d_size
+                p_data = partner_channel.recv(post_addresses=d_addr,
+                                              post_sizes=d_size
                                               )
             else:
                 p_data = partner_channel.recv(device_data)
@@ -83,17 +83,17 @@ class A(Chare):
             assert p_data == (1, 2, "hello")
 
             if addr_optimization:
-                partner_channel.send(2, 3, gpu_src_ptrs=d_addr,
-                                     gpu_src_sizes=d_size
+                partner_channel.send(2, 3, src_ptrs=d_addr,
+                                     src_sizes=d_size
                                      )
             else:
                 partner_channel.send(2, 3, device_data)
 
             if addr_optimization:
-                partner_channel.recv(post_buf_addresses=d_addr,
-                                     post_buf_sizes=d_size
+                partner_channel.recv(post_addresses=d_addr,
+                                     post_sizes=d_size
                                      )
-                partner_channel.send(gpu_src_ptrs=d_addr, gpu_src_sizes=d_size)
+                partner_channel.send(src_ptrs=d_addr, src_sizes=d_size)
             else:
                 partner_channel.recv(device_data)
                 partner_channel.send(device_data)

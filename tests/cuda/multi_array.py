@@ -38,16 +38,16 @@ class A(Chare):
             device_data.copy_to_device(h1)
             device_data2.copy_to_device(h2)
             if addr_optimization:
-                partner_channel.send(20, host_array, gpu_src_ptrs=d_addr,
-                                     gpu_src_sizes=d_size
+                partner_channel.send(20, host_array, src_ptrs=d_addr,
+                                     src_sizes=d_size
                                      )
                 partner_channel.recv()
             else:
                 partner_channel.send(20, host_array, device_data, device_data2)
         else:
             if addr_optimization:
-                f, g = partner_channel.recv(post_buf_addresses=d_addr,
-                                            post_buf_sizes=d_size
+                f, g = partner_channel.recv(post_addresses=d_addr,
+                                            post_sizes=d_size
                                             )
             else:
                 f, g = partner_channel.recv(device_data, device_data2)
