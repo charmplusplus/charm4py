@@ -58,9 +58,9 @@ class Ping(Chare):
 
         if self.gpu_direct and USE_ADDRESS_OPTIMIZATION:
             d_data_recv_addr = array.array('L', [0])
-            d_data_recv_size = array.array('L', [0])
+            d_data_recv_size = array.array('i', [0])
             d_data_send_addr = array.array('L', [0])
-            d_data_send_size = array.array('L', [0])
+            d_data_send_size = array.array('i', [0])
 
             d_data_recv_addr[0] = d_data_recv.__cuda_array_interface__['data'][0]
             d_data_recv_size[0] = d_data_recv.nbytes
@@ -85,9 +85,9 @@ class Ping(Chare):
                     charm.lib.CudaStreamSynchronize(stream_address)
                 else:
                     if USE_ADDRESS_OPTIMIZATION:
-                        partner_channel.send(gpu_src_ptrs = d_data_send_addr, gpu_src_sizes = d_data_send_size)
-                        partner_channel.recv(post_buf_addresses = d_data_recv_addr,
-                                             post_buf_sizes = d_data_recv_size
+                        partner_channel.send(src_ptrs = d_data_send_addr, src_sizes = d_data_send_size)
+                        partner_channel.recv(post_addresses = d_data_recv_addr,
+                                             post_sizes = d_data_recv_size
                                              )
                     else:
                         partner_channel.send(d_data_send)
@@ -103,10 +103,10 @@ class Ping(Chare):
                     partner_channel.send(h_data_send)
                 else:
                     if USE_ADDRESS_OPTIMIZATION:
-                        partner_channel.recv(post_buf_addresses = d_data_recv_addr,
-                                             post_buf_sizes = d_data_recv_size
+                        partner_channel.recv(post_addresses = d_data_recv_addr,
+                                             post_sizes = d_data_recv_size
                                              )
-                        partner_channel.send(gpu_src_ptrs = d_data_send_addr, gpu_src_sizes = d_data_send_size)
+                        partner_channel.send(src_ptrs = d_data_send_addr, src_sizes = d_data_send_size)
                     else:
                         partner_channel.recv(d_data_recv)
                         partner_channel.send(d_data_send)
