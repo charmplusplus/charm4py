@@ -3,8 +3,7 @@ import time
 import numpy as np
 
 class Ping(Chare):
-    def __init__(self, use_zerocopy, print_format):
-        self.zero_copy = use_zerocopy
+    def __init__(self, print_format):
         self.num_chares = charm.numPes()
         self.print_format = print_format
         self.am_low_chare = self.thisIndex == 0
@@ -30,18 +29,12 @@ class Ping(Chare):
 
         for _ in range(num_iters):
             if self.am_low_chare:
-                if not self.zero_copy:
-                    partner_channel.send(data)
-                    partner_channel.recv()
-                else:
-                    raise NotImplementedError("TODO: ZeroCopy")
+                partner_channel.send(data)
+                partner_channel.recv()
 
             else:
-                if not self.zero_copy:
-                    partner_channel.recv()
-                    partner_channel.send(data)
-                else:
-                    raise NotImplementedError("TODO: ZeroCopy")
+                partner_channel.recv()
+                partner_channel.send(data)
 
         tend = time.time()
 
@@ -66,7 +59,7 @@ class Ping(Chare):
                   )
 
 def main(args):
-    if len(args) < 7:
+    if len(args) < 6:
         print("Doesn't have the required input params. Usage:"
               "<min-msg-size> <max-msg-size> <low-iter> "
               "<high-iter> <print-format"
@@ -80,9 +73,8 @@ def main(args):
     low_iter = int(args[3])
     high_iter = int(args[4])
     print_format = int(args[5])
-    use_zerocopy = int(args[6])
 
-    pings = Group(Ping, args=[use_zerocopy, print_format])
+    pings = Group(Ping, args=[print_format])
     charm.awaitCreation(pings)
     msg_size = min_msg_size
 
