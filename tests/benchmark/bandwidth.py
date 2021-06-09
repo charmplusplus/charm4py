@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
 from charm4py import charm, Chare, Array, coro, Future, Channel, Group, ArrayMap
 import time
 import numpy as np
 import array
+from pypapi import papi_high
+from pypapi import events as papi_events
 
 LOW_ITER_THRESHOLD = 8192
 WARMUP_ITERS = 10
@@ -13,7 +16,13 @@ class Block(Chare):
         self.am_low_chare = self.thisIndex[0] == 0
 
         if self.am_low_chare:
-            print("Msg Size, Iterations, Bandwidth (MB/s)")
+            print("Chare,Msg Size, Iterations, Bandwidth (MB/s), L2 Miss Rate, L3 Miss Rate, L2 Misses, L2 Accesses, L3 Misses, L3 Accesses")
+        counters = [papi_events.PAPI_L2_TCM,
+                    papi_events.PAPI_L3_TCM,
+                    papi_events.PAPI_L2_TCA,
+                    papi_events.PAPI_L3_TCA
+                    ]
+        papi_high.start_counters(counters)
 
     @coro
     def do_iteration(self, message_size, windows, num_iters, done_future):
@@ -29,6 +38,8 @@ class Block(Chare):
 
         for idx in range(num_iters + WARMUP_ITERS):
             if idx == WARMUP_ITERS:
+                # if self.am_low_chare:
+                papi_high.read_counters()
                 tstart = time.time()
             if self.am_low_chare:
                 for _ in range(windows):
@@ -36,19 +47,24 @@ class Block(Chare):
                 partner_ack_channel.recv()
             else:
                 for _ in range(windows):
-                    partner_channel.recv()
+                    # The lifetime of this object has big impact on performance
+                    d = partner_channel.recv()
                 partner_ack_channel.send(1)
+
+        # if self.am_low_chare:
+        ctrs = papi_high.read_counters()
 
         tend = time.time()
         elapsed_time = tend - tstart
-        if self.am_low_chare:
-            self.display_iteration_data(elapsed_time, num_iters, windows, message_size)
+        # if self.am_low_chare:
+        self.display_iteration_data(elapsed_time, num_iters, windows, message_size, ctrs)
 
         self.reduce(done_future)
 
-    def display_iteration_data(self, elapsed_time, num_iters, windows, message_size):
+    def display_iteration_data(self, elapsed_time, num_iters, windows, message_size, papi_ctrs):
+        l2_tcm, l3_tcm, l2_tca, l3_tca = papi_ctrs
         data_sent = message_size / 1e6 * num_iters * windows;
-        print(f'{message_size},{num_iters},{data_sent/elapsed_time}')
+        print(f'{self.thisIndex[0]},{message_size},{num_iters},{data_sent/elapsed_time},{l2_tcm/l2_tca},{l3_tcm/l3_tca},{l2_tcm},{l2_tca},{l3_tcm},{l3_tca}')
 
 
 
