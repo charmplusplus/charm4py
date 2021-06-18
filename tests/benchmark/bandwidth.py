@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 from charm4py import charm, Chare, Array, coro, Future, Channel, Group, ArrayMap
 import time
 import numpy as np
 import array
 from pypapi import papi_high
 from pypapi import events as papi_events
+
 
 LOW_ITER_THRESHOLD = 8192
 WARMUP_ITERS = 10
@@ -38,7 +38,6 @@ class Block(Chare):
 
         for idx in range(num_iters + WARMUP_ITERS):
             if idx == WARMUP_ITERS:
-                # if self.am_low_chare:
                 papi_high.read_counters()
                 tstart = time.time()
             if self.am_low_chare:
@@ -63,8 +62,8 @@ class Block(Chare):
 
     def display_iteration_data(self, elapsed_time, num_iters, windows, message_size, papi_ctrs):
         l2_tcm, l3_tcm, l2_tca, l3_tca = papi_ctrs
-        data_sent = message_size / 1e6 * num_iters * windows;
-        print(f'{self.thisIndex[0]},{message_size},{num_iters},{data_sent/elapsed_time},{l2_tcm/l2_tca},{l3_tcm/l3_tca},{l2_tcm},{l2_tca},{l3_tcm},{l3_tca}')
+        data_sent = message_size / 1e6 * num_iters * windows
+        print(f'{self.thisIndex[0]},{message_size},{num_iters},{elapsed_time},{data_sent/elapsed_time},{l2_tcm/l2_tca},{l3_tcm/l3_tca},{l2_tcm},{l2_tca},{l3_tcm},{l3_tca}')
 
 
 
