@@ -3,6 +3,17 @@ import os
 import os.path
 
 
+def executable_is_python(args):
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+    for each in args:
+        if is_exe(each):
+            return each.endswith(".py")
+    # Either a python file is provided without execution permissions,
+    # or no executable was found and we let Python tell us
+    return True
+
+
 def nodelist_islocal(filename, regexp):
     if not os.path.exists(filename):
         # it is an error if filename doesn't exist, but I'll let charmrun print
@@ -53,7 +64,8 @@ def start(args=[]):
         args += ['-m', 'charm4py.interactive']
 
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
-    cmd.append(sys.executable)  # for example: /usr/bin/python3
+    if executable_is_python(args):
+        cmd.append(sys.executable)  # for example: /usr/bin/python3
     cmd.extend(args)
     try:
         return subprocess.call(cmd)
