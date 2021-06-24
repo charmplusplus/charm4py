@@ -461,6 +461,9 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             for i in range(num_args, argcount):
                 argname = argnames[i]
                 # first look for argument in kwargs
+                # TODO: Should stream_ptrs be skipped?
+                if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
+                    continue
                 if argname in kwargs:
                     args.append(kwargs[argname])
                 else:
@@ -485,8 +488,28 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             gid = proxy.gid
             if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
                 destObj = charm.groups[gid]
-            msg = charm.packMsg(destObj, args, header)
-            charm.CkGroupSend(gid, elemIdx, ep, msg)
+            should_pack_gpu = True
+            if 'src_ptrs' in kwargs:
+                should_pack_gpu = False
+            msg = charm.packMsg(destObj, args, header, pack_gpu=should_pack_gpu)
+            if msg[1] or not should_pack_gpu:
+                if 'stream_ptrs' in kwargs:
+                    stream_ptrs = kwargs['stream_ptrs']
+                else:
+                    stream_ptrs = None
+                if should_pack_gpu:
+                    charm.CkGroupSendWithDeviceData(gid, elemIdx, ep,
+                                                    msg, stream_ptrs
+                                                    )
+                else:
+                    charm.CkGroupSendWithDeviceDataFromPointers(gid, elemIdx, ep,
+                                                                msg, kwargs['src_ptrs'],
+                                                                kwargs['src_sizes'],
+                                                                stream_ptrs
+                                                                )
+
+            else:
+                charm.CkGroupSend(gid, elemIdx, ep, msg)
         else:
             root, sid = proxy.section
             header[b'sid'] = sid
@@ -721,7 +744,10 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             for i in range(num_args, argcount):
                 argname = argnames[i]
                 # first look for argument in kwargs
-                if argname in kwargs:
+                # TODO: Should stream_ptrs be skipped?
+                if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
+                    continue
+                if argname in kwargs and argname:
                     args.append(kwargs[argname])
                 else:
                     # if not there, see if there is a default value
@@ -741,15 +767,39 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             if elemIdx == ():
                 header[b'bcast'] = True
         if not proxy.issec or elemIdx != ():
+            # TODO: Check that this is channel proxy method?
             destObj = None
             aid = proxy.aid
             if Options.local_msg_optim and (len(args) > 0):
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            msg = charm.packMsg(destObj, args, header)
-            charm.CkArraySend(aid, elemIdx, ep, msg)
+            should_pack_gpu = True
+            if 'src_ptrs' in kwargs:
+                should_pack_gpu = False
+            msg = charm.packMsg(destObj, args, header, pack_gpu = should_pack_gpu)
+            if msg[1] or not should_pack_gpu:
+                if 'stream_ptrs' in kwargs:
+                    stream_ptrs = kwargs['stream_ptrs']
+                else:
+                    stream_ptrs = None
+                if should_pack_gpu:
+                    charm.CkArraySendWithDeviceData(aid, elemIdx, ep,
+                                                    msg, stream_ptrs
+                                                    )
+                else:
+                    charm.CkArraySendWithDeviceDataFromPointers(aid, elemIdx, ep,
+                                                                msg, kwargs['src_ptrs'],
+                                                                kwargs['src_sizes'],
+                                                                stream_ptrs
+                                                                )
+
+
+
+            else:
+                charm.CkArraySend(aid, elemIdx, ep, msg)
         else:
+            # TODO: Error if trying to send ZC data
             root, sid = proxy.section
             header[b'sid'] = sid
             if Options.local_msg_optim and root == charm._myPe:

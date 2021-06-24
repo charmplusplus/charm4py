@@ -1,5 +1,7 @@
 
 # libcharm wrapper for Cython
+cdef extern from "cuda_runtime.h":
+  ctypedef long cudaStream_t
 
 cdef extern from "charm.h":
 
@@ -51,6 +53,7 @@ cdef extern from "charm.h":
     void registerReadOnlyRecvExtCallback(void (*cb)(int, char*));
     void registerChareMsgRecvExtCallback(void (*cb)(int, void*, int, int, char*, int));
     void registerGroupMsgRecvExtCallback(void (*cb)(int, int, int, char *, int));
+    void registerGroupMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int, int *, void *, int, char *, int));
     void registerArrayMsgRecvExtCallback(void (*cb)(int, int, int *, int, int, char *, int));
     void registerArrayBcastRecvExtCallback(void (*cb)(int, int, int, int, int *, int, int, char *, int));
     void registerArrayElemLeaveExtCallback(int (*cb)(int, int, int *, char**, int));
@@ -70,8 +73,39 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+    # TODO: Organize these to place them near their related functions
+    int CkCudaEnabled();
+    int CUDAPointerOnDevice(const void *ptr);
+    void CkArrayExtSendWithDeviceData(int aid, int *idx, int ndims,
+                                      int epIdx, int num_bufs, char **bufs,
+                                      int *buf_sizes,
+                                      long *devBufPtrs,
+                                      int *devBufSizesInBytes,
+                                      long *streamPtrs, int numDevBufs
+                                     );
+    void CkGroupExtSendWithDeviceData(int gid, int pe, int epIdx, int num_bufs, char **bufs,
+                                      int *buf_sizes, long *devBufPtrs,
+                                      int *devBufSizesInBytes,
+                                      long *streamPtrs, int numDevBufs
+                                      );
+
+
+    void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*, int));
+    void CkGetGPUDirectData(int numBuffers, void *recvBufPtrs, int *arrSizes,
+                            void *remoteBufInfo, void *streamPtrs, int futureId);
+
+    int CkDeviceBufferSizeInBytes();
+
+    void registerDepositFutureWithIdFn(void (*cb)(void*, void*));
+
+    void CkCUDAHtoD(void *dest, void *src, int nbytes, cudaStream_t stream);
+    void CkCUDADtoH(void *dest, void *src, int nbytes, cudaStream_t stream);
+    void CkCUDAStreamSynchronize(cudaStream_t stream);
+
+
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
+
 

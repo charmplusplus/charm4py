@@ -1,6 +1,6 @@
 from ccharm cimport *
 from libc.stdlib cimport malloc, free
-from libc.string cimport memcpy
+from libc.string cimport memcpy, memset
 from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
 from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
@@ -30,7 +30,7 @@ ELSE:
   np = NumpyDummyModule()
 
 cdef object np_number = np.number
-
+cdef int CK_DEVICEBUFFER_SIZE_IN_BYTES = CkDeviceBufferSizeInBytes()
 
 # ------ global constants ------
 
@@ -285,19 +285,32 @@ cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
       PyTuple_SET_ITEM(arrIndex, i, d)
   return arrIndex
 
-
 cdef extern const char * const CmiCommitID
+
+# cdef class PyCkDeviceBuffer:
+#     cdef CkDeviceBuffer c_buff
+
+#     @staticmethod
+#     cdef PyCkDeviceBuffer from_ptr(CkDeviceBuffer buf):
+#         cdef PyCkDeviceBuffer newBuf = PyCkDeviceBuffer.__new__(PyCkDeviceBuffer)
+#         newBuf.c_buff = buf
+#         return newBuf
+
 
 # supports up to NUM_DCOPY_BUFS direct-copy entry method arguments
 cdef (char*)[NUM_DCOPY_BUFS] send_bufs  # ?TODO bounds checking is needed where this is used
 cdef int[NUM_DCOPY_BUFS] send_buf_sizes # ?TODO bounds checking is needed where this is used
 cdef int cur_buf = 1
+cdef int gpu_direct_buf_idx = 0
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
 cdef c_type_table_typecodes = [None] * 13
 cdef int c_type_table_sizes[13]
 cdef int[SECTION_MAX_BFACTOR] section_children
+cdef long[NUM_DCOPY_BUFS] gpu_direct_device_ptrs
+cdef int[NUM_DCOPY_BUFS] gpu_direct_buff_sizes
+cdef long[NUM_DCOPY_BUFS] gpu_direct_stream_ptrs
 
 cdef object charm
 cdef object charm_reducer_to_ctype
@@ -449,6 +462,193 @@ class CharmLib(object):
       CkGroupExtSend_multi(group_id, num_pes, section_children, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
 
+  def CkGroupSendWithDeviceData(self, int group_id, int index, int ep,
+                                msg not None, stream_ptrs):
+    global gpu_direct_buf_idx
+    cdef int i = 0
+    msg0, dcopy = msg
+    dcopy = None
+    cdef int num_direct_buffers = gpu_direct_buf_idx
+    # TODO: Message on assertion failure
+    assert num_direct_buffers <= NUM_DCOPY_BUFS
+    global gpu_direct_device_ptrs
+    global gpu_direct_stream_ptrs
+    global cur_buf
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_direct_buffers):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    elif not stream_ptrs:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkGroupExtSendWithDeviceData(group_id, index, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 gpu_direct_device_ptrs,
+                                 gpu_direct_buff_sizes,
+                                 gpu_direct_stream_ptrs,
+                                 num_direct_buffers
+                                )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkGroupSendWithDeviceDataFromPointersArray(self, int gid, int index, int ep,
+                                                 msg not None, array.array gpu_src_ptrs,
+                                                 array.array gpu_src_sizes, stream_ptrs,
+                                                 num_bufs):
+    cdef int i = 0
+    global cur_buf
+    msg0, dcopy = msg
+    dcopy = None
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkGroupExtSendWithDeviceData(gid, index, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>gpu_src_ptrs.data.as_voidptr,
+                                 <int*>gpu_src_sizes.data.as_voidptr,
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkGroupSendWithDeviceDataFromPointersOther(self, int gid, int index, int ep,
+                                                 msg not None, gpu_src_ptrs,
+                                                 gpu_src_sizes, stream_ptrs,
+                                                 num_bufs):
+    cdef int i = 0
+    global cur_buf
+    msg0, dcopy = msg
+    dcopy = None
+    cdef unsigned long[:] gpu_addresses = gpu_src_ptrs
+    cdef int[:] gpu_buffer_sizes = gpu_src_sizes
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkGroupExtSendWithDeviceData(gid, index, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>&gpu_addresses[0],
+                                 &gpu_buffer_sizes[0],
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkArraySendWithDeviceData(self, int array_id, index not None, int ep,
+                                msg not None, stream_ptrs):
+
+    global gpu_direct_buf_idx
+    cdef int i = 0
+    cdef int ndims = len(index)
+    # assert ndims == 1
+    for i in range(ndims): c_index[i] = index[i]
+    msg0, dcopy = msg
+    dcopy = None
+    cdef int num_direct_buffers = gpu_direct_buf_idx
+    # TODO: Message on assertion failure
+    assert num_direct_buffers <= NUM_DCOPY_BUFS
+    global gpu_direct_device_ptrs
+    global gpu_direct_stream_ptrs
+    global cur_buf
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_direct_buffers):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    elif not stream_ptrs:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 gpu_direct_device_ptrs,
+                                 gpu_direct_buff_sizes,
+                                 gpu_direct_stream_ptrs,
+                                 num_direct_buffers
+                                )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkArraySendWithDeviceDataFromPointersArray(self, int array_id, index not None, int ep,
+                                                 msg not None, array.array gpu_src_ptrs,
+                                                 array.array gpu_src_sizes,
+                                                 stream_ptrs, int num_bufs):
+
+    cdef int i = 0
+    cdef int ndims = len(index)
+    global cur_buf
+    for i in range(ndims): c_index[i] = index[i]
+    msg0, dcopy = msg
+    dcopy = None
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>gpu_src_ptrs.data.as_voidptr,
+                                 <int*>gpu_src_sizes.data.as_voidptr,
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkArraySendWithDeviceDataFromPointersOther(self, int array_id, index not None, int ep,
+                                                 msg not None, gpu_src_ptrs,
+                                                 gpu_src_sizes,
+                                                 stream_ptrs, int num_bufs
+                                                 ):
+    cdef int i = 0
+    cdef int ndims = len(index)
+    global cur_buf
+    for i in range(ndims): c_index[i] = index[i]
+    msg0, dcopy = msg
+    dcopy = None
+    cdef unsigned long[:] gpu_addresses = gpu_src_ptrs
+    cdef int[:] gpu_buffer_sizes = gpu_src_sizes
+
+    if stream_ptrs and isinstance(stream_ptrs, list):
+      for i in range(num_bufs):
+        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
+    else:
+      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_bufs)
+
+    send_bufs[0] = <char*>msg0
+    send_buf_sizes[0] = <int>len(msg0)
+    CkArrayExtSendWithDeviceData(array_id, c_index, ndims, ep,
+                                 cur_buf, send_bufs, send_buf_sizes,
+                                 <long*>&gpu_addresses[0],
+                                 &gpu_buffer_sizes[0],
+                                 gpu_direct_stream_ptrs,
+                                 num_bufs
+                                 )
+    cur_buf = 1
+    gpu_direct_buf_idx = 0
+
+  def CkCudaEnabled(self):
+    return bool(CkCudaEnabled())
+
   def CkArraySend(self, int array_id, index not None, int ep, msg not None):
     global cur_buf
     msg0, dcopy = msg
@@ -505,6 +705,9 @@ class CharmLib(object):
     cdef int chareIdx, startEpIdx
     CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
     return chareIdx, startEpIdx
+
+  def CUDAPointerOnDevice(self, long address):
+    return CUDAPointerOnDevice(<const void*>address)
 
   def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):
     global cur_buf
@@ -702,12 +905,15 @@ class CharmLib(object):
     registerReadOnlyRecvExtCallback(recvReadOnly)
     registerChareMsgRecvExtCallback(recvChareMsg)
     registerGroupMsgRecvExtCallback(recvGroupMsg)
+    registerGroupMsgGPUDirectRecvExtCallback(recvGPUDirectGroupMsg)
     registerArrayMsgRecvExtCallback(recvArrayMsg)
+    registerArrayMsgGPUDirectRecvExtCallback(recvGPUDirectArrayMsg)
     registerArrayBcastRecvExtCallback(recvArrayBcast)
     registerArrayMapProcNumExtCallback(arrayMapProcNum)
     registerArrayElemJoinExtCallback(arrayElemJoin)
     registerPyReductionExtCallback(pyReduction)
     registerCreateCallbackMsgExtCallback(createCallbackMsg)
+    registerDepositFutureWithIdFn(depositFutureWithId);
 
   def CkMyPe(self): return CkMyPeHook()
   def CkNumPes(self): return CkNumPesHook()
@@ -768,12 +974,13 @@ class CharmLib(object):
 
     return header, args
 
-  def packMsg(self, destObj, msgArgs not None, dict header):
+  def packMsg(self, destObj, msgArgs not None, dict header, pack_gpu=True):
     cdef int i = 0
     cdef int localTag
     cdef array.array a
     IF HAVE_NUMPY:
       cdef np.ndarray np_array
+    cuda_dev_info = None
     dcopy_size = 0
     if destObj is not None: # if dest obj is local
       localTag = destObj.__addLocal__((header, msgArgs))
@@ -783,44 +990,116 @@ class CharmLib(object):
       msg = emptyMsg
     else:
       direct_copy_hdr = []  # goes to header
-      args = list(msgArgs)
       global cur_buf
+      global gpu_direct_buf_idx
+      global gpu_direct_device_ptrs
       cur_buf = 1
-      for i in range(len(args)):
+      gpu_direct_buf_idx = 0
+      # GPU-direct buffers will not be sent
+      args_to_send = list()
+      n_gpu_bufs = 0
+      for i in range(len(msgArgs)):
         arg = msgArgs[i]
-        if isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
+        if CkCudaEnabled() and hasattr(arg, '__cuda_array_interface__'):
+          if pack_gpu:
+            # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
+            # assumption: we can get nbytes from the arg directly
+            # TODO: verify this assertion for other types
+            # gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg.__cuda_array_interface__['data'][0]
+            gpu_direct_device_ptrs[gpu_direct_buf_idx] = arg.__cuda_array_interface__['data'][0]
+            gpu_direct_buff_sizes[gpu_direct_buf_idx] = arg.nbytes
+            cuda_dev_info = True
+            gpu_direct_buf_idx += 1
+          n_gpu_bufs += 1
+          continue
+        elif isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
           np_array = arg
           nbytes = np_array.nbytes
-          direct_copy_hdr.append((i, 2, (arg.shape, np_array.dtype.name), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 2, (arg.shape, np_array.dtype.name), nbytes))
           send_bufs[cur_buf] = <char*>np_array.data
         elif isinstance(arg, bytes):
           nbytes = len(arg)
-          direct_copy_hdr.append((i, 0, (), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 0, (), nbytes))
           send_bufs[cur_buf] = <char*>arg
         elif isinstance(arg, array.array):
           a = arg
           #nbytes = arg.buffer_info()[1] * arg.itemsize
           nbytes = len(a) * a.itemsize # NOTE that cython's array C interface doesn't expose itemsize attribute
-          direct_copy_hdr.append((i, 1, (a.typecode), nbytes))
+          direct_copy_hdr.append((i-n_gpu_bufs, 1, (a.typecode), nbytes))
           send_bufs[cur_buf] = <char*>a.data.as_voidptr
         else:
+          args_to_send.append(arg)
           continue
-        args[i] = None  # will direct-copy this arg so remove from args list
+        args_to_send.append(None)
         send_buf_sizes[cur_buf] = <int>nbytes
         if PROFILING: dcopy_size += nbytes
         cur_buf += 1
       if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
       try:
-        msg = dumps((header, args), PICKLE_PROTOCOL)
+        msg = dumps((header, args_to_send), PICKLE_PROTOCOL)
       except:
         global cur_buf
+        global gpu_direct_buf_idx
         cur_buf = 1
+        gpu_direct_buf_idx = 0
         raise
     if PROFILING: charm.recordSend(len(msg) + dcopy_size)
-    return msg, None
+    return msg, cuda_dev_info
 
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
+
+
+  def getGPUDirectData(self, list post_buf_data, list post_buf_sizes, array.array remote_bufs, list stream_ptrs, return_fut):
+    cdef int num_buffers = len(post_buf_data)
+    cdef int future_id = return_fut.fid
+    cdef array.array long_array_template = array.array('L', [])
+    cdef array.array int_array_template = array.array('i', [])
+    cdef array.array recv_buf_sizes
+    cdef array.array recv_buf_ptrs
+    # pointers from the remote that we will be issuing Rgets for
+    # these are pointers to type CkDeviceBuffer
+    cdef array.array remote_buf_ptrs
+
+    recv_buf_sizes = array.clone(int_array_template, num_buffers, zero=False)
+    recv_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
+    stream_ptrs_forc = array.clone(long_array_template, num_buffers, zero=False)
+    remote_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
+
+    for idx in range(num_buffers):
+      recv_buf_ptrs[idx] = post_buf_data[idx]
+      recv_buf_sizes[idx] = post_buf_sizes[idx]
+      remote_buf_ptrs[idx] = remote_bufs[idx]
+      stream_ptrs_forc[idx] = stream_ptrs[idx]
+    # what do we do about the return future? Need to turn it into some callback.
+    CkGetGPUDirectData(num_buffers, <void*>recv_buf_ptrs.data.as_voidptr,
+                       <int*>recv_buf_sizes.data.as_voidptr,
+                       <void*>remote_buf_ptrs.data.as_voidptr,
+                       <void*>stream_ptrs_forc.data.as_voidptr,
+                       future_id
+                       )
+
+  def getGPUDirectDataFromAddresses(self, array.array post_buf_ptrs, array.array post_buf_sizes, array.array remote_bufs, array.array stream_ptrs, return_fut):
+    cdef int num_buffers = len(post_buf_ptrs)
+    cdef int future_id = return_fut.fid
+    # pointers from the remote that we will be issuing Rgets for
+    # these are pointers to type CkDeviceBuffer
+    CkGetGPUDirectData(num_buffers, <void*>post_buf_ptrs.data.as_voidptr,
+                       <int*>post_buf_sizes.data.as_voidptr,
+                       <void*>remote_bufs.data.as_voidptr,
+                       <void*>stream_ptrs.data.as_voidptr,
+                       future_id
+                       )
+  def CudaHtoD(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
+      CkCUDAHtoD(<void*>destAddr, <void*>srcAddr,<int>nbytes, 0);
+
+  def CudaDtoH(self, long destAddr, long srcAddr, int nbytes, long streamAddr):
+    CkCUDADtoH(<void*>destAddr, <void*>srcAddr,<int>int(nbytes), 0);
+
+  def CudaStreamSynchronize(self, long streamAddr):
+    CkCUDAStreamSynchronize(0)
+
+
 
 
 # first callback from Charm++ shared library
@@ -864,6 +1143,24 @@ cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start)
   except:
     charm.handleGeneralError()
 
+cdef void recvGPUDirectGroupMsg(int gid, int ep, int numDevBuffs,
+                                int *devBufSizes, void *devBufs, int msgSize,
+                                char *msg, int dcopy_start
+                                ):
+  try:
+    if PROFILING:
+      charm._precvtime = time.time()
+      charm.recordReceive(msgSize)
+    devBufInfo = array.array('L', [0] * numDevBuffs)
+    for idx in range(numDevBuffs):
+      # Add the buffer's address to the list
+      devBufInfo[idx] = <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx)
+    recv_buffer.setMsg(msg, msgSize)
+    charm.recvGPUDirectGroupMsg(gid, ep, devBufInfo, recv_buffer, dcopy_start)
+  except:
+    charm.handleGeneralError()
+
+
 cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start):
   try:
     if PROFILING:
@@ -873,6 +1170,26 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     charm.recvArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, recv_buffer, dcopy_start)
   except:
     charm.handleGeneralError()
+
+cdef void recvGPUDirectArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
+                                int *devBufSizes, void *devBufs, int msgSize,
+                                char *msg, int dcopy_start):
+
+    cdef int idx = 0
+    try:
+      if PROFILING:
+        charm._precvtime = time.time()
+        charm.recordReceive(msgSize)
+      devBufInfo = array.array('L', [0] * numDevBuffs)
+      for idx in range(numDevBuffs):
+        # Add the buffer's address to the list
+        devBufInfo[idx] = <long>devBufs+(CK_DEVICEBUFFER_SIZE_IN_BYTES*idx)
+      recv_buffer.setMsg(msg, msgSize)
+      # TODO: Can this be the same for array and groups?
+      charm.recvGPUDirectArrayMsg(aid, array_index_to_tuple(ndims, arrayIndex), ep, devBufInfo, recv_buffer, dcopy_start)
+
+    except:
+      charm.handleGeneralError()
 
 cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
   cdef int i = 0
@@ -930,6 +1247,11 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
                        emptyMsg, len(emptyMsg))
   except:
     charm.handleGeneralError()
+
+cdef void depositFutureWithId(void *param, void *msg):
+  cdef int futureId = <int> param
+  charm._future_deposit_result(futureId)
+
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
                             char **returnBuffers, int *returnBufferSizes):
@@ -1056,3 +1378,4 @@ cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
     charm.triggerCallable(<int>userParam)
   except:
     charm.handleGeneralError()
+

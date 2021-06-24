@@ -28,6 +28,8 @@ from .threads import Future, LocalFuture
 from . import reduction
 from . import wait
 import array
+import numpy as np
+import greenlet
 try:
     import numpy
 except ImportError:
@@ -40,6 +42,14 @@ except ImportError:
 def SECTION_ALL(obj):
     return 0
 
+def getDeviceDataInfo(devArray):
+    return devArray.__cuda_array_interface__['data']
+
+def getDeviceDataAddress(devArray):
+    return getDeviceDataInfo(devArray)[0]
+
+def getDeviceDataSizeInBytes(devArray):
+    return devArray.nbytes
 
 class Options(object):
 
@@ -106,11 +116,13 @@ class Charm(object):
         self.options.interactive.verbose = 1
         self.options.interactive.broadcast_imports = True
 
+        '''
         if 'OMPI_COMM_WORLD_SIZE' in os.environ:
             # this is needed for OpenMPI, see:
             # https://svn.open-mpi.org/trac/ompi/wiki/Linkers
             import ctypes
             self.__libmpi__ = ctypes.CDLL('libmpi.so', mode=ctypes.RTLD_GLOBAL)
+        '''
         self.lib = load_charm_library(self)
         self.ReducerType = self.lib.ReducerType
         self.CkContributeToChare = self.lib.CkContributeToChare
@@ -120,6 +132,13 @@ class Charm(object):
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
+        self.CkArraySendWithDeviceData = self.lib.CkArraySendWithDeviceData
+        self.CkGroupSendWithDeviceData = self.lib.CkGroupSendWithDeviceData
+        self.CkArraySendWithDeviceDataFromPointersArray = self.lib.CkArraySendWithDeviceDataFromPointersArray
+        self.CkArraySendWithDeviceDataFromPointersOther = self.lib.CkArraySendWithDeviceDataFromPointersOther
+        self.CkGroupSendWithDeviceDataFromPointersArray = self.lib.CkGroupSendWithDeviceDataFromPointersArray
+        self.CkGroupSendWithDeviceDataFromPointersOther = self.lib.CkGroupSendWithDeviceDataFromPointersOther
+        self.CkCudaEnabled = self.lib.CkCudaEnabled
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
@@ -305,6 +324,21 @@ class Charm(object):
                 self.arrays[aid][index] = obj
                 em.run(obj, header, args)  # now call the user's array element __init__
 
+    def recvGPUDirectArrayMsg(self, aid, index, ep,
+                              devBuf_ptrs, msg, dcopy_start
+                              ):
+        obj = self.arrays[aid][index]
+        header, args = self.unpackMsg(msg, dcopy_start, obj)
+        args.append(devBuf_ptrs)
+
+        self.invokeEntryMethod(obj, ep, header, args)
+
+    def recvGPUDirectGroupMsg(self, gid, ep, devBuf_ptrs, msg, dcopy_start):
+        obj = self.groups[gid]
+        header, args = self.unpackMsg(msg, dcopy_start, obj)
+        args.append(devBuf_ptrs)
+        self.invokeEntryMethod(obj, ep, header, args)
+
     def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
         header, args = self.unpackMsg(msg, dcopy_start, None)
         array = self.arrays[aid]
@@ -331,6 +365,70 @@ class Charm(object):
                     args[-1] = reducer.postprocess(args[-1])
 
         return header, args
+
+    def getGPUDirectData(self, post_buffers, remote_bufs, stream_ptrs):
+        # this future will only be satisfied when all buffers have been received
+        return_fut = self.Future()
+        post_buf_data = [getDeviceDataAddress(buf) for buf in post_buffers]
+        post_buf_sizes = [getDeviceDataSizeInBytes(buf) for buf in post_buffers]
+        if not stream_ptrs:
+            stream_ptrs = [0] * len(post_buffers)
+        self.lib.getGPUDirectData(post_buf_data, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
+        return return_fut
+
+    def getGPUDirectDataFromAddresses(self, post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs):
+        # this future will only be satisfied when all buffers have been received
+        return_fut = self.Future()
+        if not stream_ptrs:
+            stream_ptrs = array.array('L', [0] * len(post_buf_ptrs))
+        self.lib.getGPUDirectDataFromAddresses(post_buf_ptrs, post_buf_sizes, remote_bufs, stream_ptrs, return_fut)
+        return return_fut
+
+    def CkArraySendWithDeviceDataFromPointers(self, array_id, index, ep,
+                                              msg, gpu_src_ptrs,
+                                              gpu_src_sizes,
+                                              stream_ptrs
+                                              ):
+        if isinstance(gpu_src_ptrs, array.array):
+            assert isinstance(gpu_src_sizes, array.array), \
+                "GPU source pointers and sizes must be of the same type."
+            self.CkArraySendWithDeviceDataFromPointersArray(array_id, index, ep,
+                                                            msg, gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+        else:
+            self.CkArraySendWithDeviceDataFromPointersOther(array_id, index, ep,
+                                                            msg, gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+
+    def CkGroupSendWithDeviceDataFromPointers(self, gid, elemIdx, ep,
+                                              msg, gpu_src_ptrs, gpu_src_sizes,
+                                              stream_ptrs):
+        if isinstance(gpu_src_ptrs, array.array):
+            assert isinstance(gpu_src_sizes, array.array), \
+                "GPU source pointers and sizes must be of the same type."
+            self.CkGroupSendWithDeviceDataFromPointersArray(gid, elemIdx, ep, msg,
+                                                            gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+        else:
+            self.CkGroupSendWithDeviceDataFromPointersOther(gid, elemIdx, ep, msg,
+                                                            gpu_src_ptrs,
+                                                            gpu_src_sizes,
+                                                            stream_ptrs,
+                                                            len(gpu_src_ptrs)
+                                                            )
+
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        self.threadMgr.depositFuture(fid, result)
 
     def packMsg(self, destObj, msgArgs, header):
         """Prepares a message for sending, given arguments to an entry method invocation.
@@ -815,6 +913,7 @@ class Charm(object):
     def iwait(self, objs):
         n = len(objs)
         f = LocalFuture()
+
         for obj in objs:
             if obj.ready():
                 n -= 1
@@ -825,6 +924,43 @@ class Charm(object):
             obj = self.threadMgr.pauseThread()
             n -= 1
             yield obj
+
+    def iwait_map(self, func, objs):
+        n = len(objs)
+        f = LocalFuture()
+        remaining_grs = [n]
+
+        def map_func(remaining, obj):
+            gr = greenlet.getcurrent()
+            gr.notify = gr.parent.notify
+            gr.obj = gr.parent.obj
+            gr.fu = 1
+            func(obj)
+            remaining[0] -= 1
+
+        def gr_func():
+            return map_func(remaining_grs, obj)
+
+        for obj in objs:
+            if obj.ready():
+                new_gr = greenlet.greenlet(gr_func)
+                n -= 1
+                obj = new_gr.switch()
+                while obj:
+                    new_gr = greenlet.greenlet(gr_func)
+                    n -= 1
+                    obj = new_gr.switch()
+            else:
+                obj.waitReady(f)
+        while n > 0:
+            obj = self.threadMgr.pauseThread()
+            while obj:
+                new_gr = greenlet.greenlet(gr_func)
+                n -= 1
+                obj = new_gr.switch()
+   
+        while remaining_grs[0]:
+            self.threadMgr.pauseThread()
 
     def wait(self, objs):
         for o in self.iwait(objs):
@@ -1155,7 +1291,6 @@ def rebuildNumpyArray(data, shape, dt):
     a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
     a.shape = shape
     return a.copy()
-
 
 charm = Charm()
 readonlies = __ReadOnlies()
