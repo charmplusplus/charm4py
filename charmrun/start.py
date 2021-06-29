@@ -14,11 +14,16 @@ def executable_is_python(args):
     """
     def is_exe(fpath):
         return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    def is_pyfile(fpath):
+        return os.path.isfile(fpath) and fpath.endswith(".py")
     for each in args:
         if is_exe(each):
-            return each.endswith(".py")
-    # Either a python file is provided without execution permissions,
-    # or no executable was found and we let Python tell us
+            return is_pyfile(each)
+        # Python file, but execution bit is not set.
+        if is_pyfile(each):
+            return True
+    # No executable was found, but we'll let Python tell us
     return True
 
 
