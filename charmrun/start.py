@@ -3,6 +3,29 @@ import os
 import os.path
 
 
+def executable_is_python(args):
+    """
+    Determines whether the first executable passed to args is a
+    Python file. Other valid examples include analysis tools
+    such as Perf that will run the actual Python program.
+
+    Note: Returns true if no executable was found or if an executable
+    was found and that executable is a Python file.
+    """
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    def is_pyfile(fpath):
+        return os.path.isfile(fpath) and fpath.endswith(".py")
+    for each in args:
+        if is_pyfile(each):
+            return True
+        if is_exe(each):
+            return False
+    # No executable was found, but we'll let Python tell us
+    return True
+
+
 def nodelist_islocal(filename, regexp):
     if not os.path.exists(filename):
         # it is an error if filename doesn't exist, but I'll let charmrun print
@@ -53,7 +76,11 @@ def start(args=[]):
         args += ['-m', 'charm4py.interactive']
 
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
-    cmd.append(sys.executable)  # for example: /usr/bin/python3
+    if executable_is_python(args):
+        # Note: sys.executable is the absolute path to the Python interpreter
+        # We only want to invoke the interpreter if the execution target is a
+        # Python file
+        cmd.append(sys.executable)  # for example: /usr/bin/python3
     cmd.extend(args)
     try:
         return subprocess.call(cmd)
