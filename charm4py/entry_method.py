@@ -9,6 +9,8 @@ class EntryMethodOptions:
         self.value = 0
     def set_option(self, val_identifier):
         self.value |= val_identifier
+    def unset_option(self, val_identifier):
+        raise NotImplementedError("Options are currently permanent")
     def get(self):
         return self.value
 
