@@ -87,17 +87,19 @@ class Worker(Chare):
         self.num_workers = num_workers
         self.epochs = epochs
         self.lb_epochs = lb_epochs
-
-    # Partitioning MNIST dataset
-    def partition_dataset(self):
+        self.agg_time = 0
+        self.time_cnt = 0
+        self.agg_time_all = 0
         if isinstance(self.thisIndex, tuple):
             # is chare array element (assume 1D chare array)
             assert len(self.thisIndex) == 1
-            myrank = self.thisIndex[0]
+            self.myrank = self.thisIndex[0]
         else:
             # is group element
-            myrank = self.thisIndex
+            self.myrank = self.thisIndex
 
+    # Partitioning MNIST dataset
+    def partition_dataset(self):
         dataset = datasets.MNIST('./data', train=True, download=True,
                                  transform=transforms.Compose([
                                      transforms.ToTensor(),
@@ -107,7 +109,7 @@ class Worker(Chare):
         bsz = int(128 / float(size))  # my batch size
         partition_sizes = [1.0 / size for _ in range(size)]
         partition = DataPartitioner(dataset, partition_sizes)
-        partition = partition.use(myrank)
+        partition = partition.use(self.myrank)
         train_set = torch.utils.data.DataLoader(partition,
                                                 batch_size=bsz,
                                                 shuffle=True)
@@ -140,10 +142,15 @@ class Worker(Chare):
                 self.optimizer.step()
             print(f'Chare {self.thisIndex[0]:4d} | PE {charm.myPe():4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
             self.epoch += 1
-            if self.epoch % self.lb_epochs == 0:
+            if (self.lb_epochs > 0) && (self.epoch % self.lb_epochs == 0):
                 # Start load balancing
                 self.AtSync()
                 return
+
+        print(f'Chare {self.thisIndex[0]:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}')
+        self.agg_time_all = self.allreduce(self.agg_time, Reducer.sum).get()
+        if self.myrank == 0:
+            print(f'Chare {self.thisIndex[0]:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}')
         self.contribute(None, None, self.done_future)
 
     # Gradient averaging
@@ -154,7 +161,10 @@ class Worker(Chare):
             reshaped_data = param.grad.data.reshape(-1)
 
             # Blocking allreduce
+            start_time = time.time()
             agg_data = self.allreduce(reshaped_data, Reducer.sum).get()
+            self.agg_time += time.time() - start_time
+            self.time_cnt += 1
 
             # Restore original shape of gradient data
             param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
@@ -170,7 +180,7 @@ def main(args):
     # Create chare array and start training
     num_workers = charm.numPes()
     epochs = 6
-    lb_epochs = 3
+    lb_epochs = 0
     workers = Array(Worker, num_workers, args=[num_workers, epochs, lb_epochs], useAtSync=True)
     t0 = time.time()
     done = charm.createFuture()

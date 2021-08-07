@@ -78,6 +78,9 @@ class Worker(object):
     def __init__(self, num_workers, epochs):
         self.num_workers = num_workers
         self.epochs = epochs
+        self.agg_time = 0.0
+        self.time_cnt = 0
+        self.agg_time_all = 0.0
 
     # Partitioning MNIST dataset
     def partition_dataset(self):
@@ -119,6 +122,15 @@ class Worker(object):
             print(f'Rank {rank:4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
             self.epoch += 1
 
+        print(f'Rank {rank:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}')
+        agg_time_arr = np.array([self.agg_time])
+        agg_time_all_arr = np.array([0.0])
+        comm.Allreduce(agg_time_arr, agg_time_all_arr, op=MPI.SUM)
+        self.agg_time_all = agg_time_all_arr[0]
+        if rank == 0:
+            print(f'Rank {rank:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}')
+
+
     # Gradient averaging
     def average_gradients(self, model):
         for param in model.parameters():
@@ -128,7 +140,10 @@ class Worker(object):
             recv_data = np.copy(send_data)
 
             # Blocking allreduce
+            start_time = time.time()
             comm.Allreduce(send_data, recv_data, op=MPI.SUM)
+            self.agg_time += time.time() - start_time
+            self.time_cnt += 1
 
             # Restore original shape of gradient data
             param.grad.data = torch.from_numpy(recv_data)
