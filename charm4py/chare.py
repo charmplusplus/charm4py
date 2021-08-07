@@ -713,7 +713,19 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
             assert _slice.start is not None and _slice.stop is not None, 'Must specify start and stop indexes for array slicing'
         return charm.split(proxy, 1, slicing=idx)[0]
 
+class EntryMethodOptions:
+    def __init__(self):
+        self.value = 0
+    def set_option(self, val_identifier):
+        self.value |= val_identifier
+    def get(self):
+        return self.value
+
 def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
+    msg_opts = EntryMethodOptions()
+    def set_opts(options):
+        nonlocal msg_opts
+        msg_opts = options
     def proxy_entry_method(proxy, *args, **kwargs):
         num_args = len(args)
         if num_args < argcount and len(kwargs) > 0:
@@ -748,7 +760,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 if elemIdx in array:
                     destObj = array[elemIdx]
             msg = charm.packMsg(destObj, args, header)
-            charm.CkArraySend(aid, elemIdx, ep, msg)
+            charm.CkArraySend(aid, elemIdx, ep, msg, msg_opts.get())
         else:
             root, sid = proxy.section
             header[b'sid'] = sid
@@ -758,6 +770,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
+    proxy_entry_method.set_opts = set_opts
     return proxy_entry_method
 
 def array_ckNew_gen(C, epIdx):
@@ -871,6 +884,8 @@ class Array(object):
                 f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
                 f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
+            if m._msg_opts is not None:
+                f.set_opts(m._msg_opts)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
