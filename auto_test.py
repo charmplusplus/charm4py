@@ -46,7 +46,7 @@ except:
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-interfaces = ['ctypes', 'cffi', 'cython']
+interfaces = ['cython']
 
 with open('test_config.json', 'r') as infile:
     tests = json.load(infile)
