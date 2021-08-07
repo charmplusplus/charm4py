@@ -311,6 +311,8 @@ cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
 
+class EntryMethodOptions(object):
+  EXPEDITED = 0x4
 
 class CharmLib(object):
 
@@ -322,6 +324,7 @@ class CharmLib(object):
     self.chareNames = []
     self.init()
     self.ReducerType = CkReductionTypesExt_Wrapper()
+    self.em_options = EntryMethodOptions()
     #print(charm_reducers.sum_long, charm_reducers.product_ushort, charm_reducers.max_char, charm_reducers.max_float, charm_reducers.min_char)
     #print(ReducerType.sum_long, ReducerType.product_ushort, ReducerType.max_char, ReducerType.max_float, ReducerType.min_char)
 
@@ -449,18 +452,18 @@ class CharmLib(object):
       CkGroupExtSend_multi(group_id, num_pes, section_children, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
 
-  def CkArraySend(self, int array_id, index not None, int ep, msg not None):
+  def CkArraySend(self, int array_id, index not None, int ep, msg not None, int opts):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(index)
     cdef int i = 0
     for i in range(ndims): c_index[i] = index[i]
     if cur_buf <= 1:
-      CkArrayExtSend(array_id, c_index, ndims, ep, msg0, len(msg0))
+      CkArrayExtSend(array_id, c_index, ndims, ep, msg0, len(msg0), opts)
     else:
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
-      CkArrayExtSend_multi(array_id, c_index, ndims, ep, cur_buf, send_bufs, send_buf_sizes)
+      CkArrayExtSend_multi(array_id, c_index, ndims, ep, cur_buf, send_bufs, send_buf_sizes, opts)
       cur_buf = 1
 
   def sendToSection(self, int gid, list children):
@@ -930,7 +933,7 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
   try:
     index = array_index_to_tuple(ndims, arrayIndex)
     CkArrayExtSend(aid, arrayIndex, ndims, charm.arrays[aid][index].thisProxy.resumeFromSync.ep,
-                       emptyMsg, len(emptyMsg))
+                       emptyMsg, len(emptyMsg), 0)
   except:
     charm.handleGeneralError()
 
