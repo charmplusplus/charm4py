@@ -452,7 +452,7 @@ class CharmLib(object):
       CkGroupExtSend_multi(group_id, num_pes, section_children, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
 
-  def CkArraySend(self, int array_id, index not None, int ep, msg not None, int opts):
+  def CkArraySend(self, int array_id, index not None, int ep, msg not None, int opts=0):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(index)

@@ -58,12 +58,15 @@ class Options(object):
         if len(old_options.intersection(set(dir(self.__class__)))) != 0:
             raise Charm4PyError('Options API has changed. Use charm.options instead')
 
-
 class Charm4PyError(Exception):
     def __init__(self, msg):
         super(Charm4PyError, self).__init__(msg)
         self.message = msg
 
+class EntryMethodAttributes:
+    def __init__(self,
+                 expedited):
+        CK_EXPEDITED = expedited
 
 # Acts as the Charm runtime at the Python level (there is one instance of this class
 # per process)

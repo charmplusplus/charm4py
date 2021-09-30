@@ -248,7 +248,7 @@ class Chare(object):
         else:
             from .channel import _Channel
             local_port = len(self.__channels__)
-            ch = _Channel(local_port, remote_proxy, False)
+            ch = _Channel(local_port, remote_proxy, False, None)
             self.__channels__.append(ch)
             self.__pendingChannels__.append(ch)
             ch.remote_port = remote_port
@@ -723,7 +723,7 @@ class EntryMethodOptions:
 
 def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     msg_opts = EntryMethodOptions()
-    def set_opts(options):
+    def set_options(options):
         nonlocal msg_opts
         msg_opts = options
     def proxy_entry_method(proxy, *args, **kwargs):
@@ -770,7 +770,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
-    proxy_entry_method.set_opts = set_opts
+    proxy_entry_method.set_options = set_options
     return proxy_entry_method
 
 def array_ckNew_gen(C, epIdx):
@@ -885,7 +885,7 @@ class Array(object):
             else:
                 f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             if m._msg_opts is not None:
-                f.set_opts(m._msg_opts)
+                f.set_options(m._msg_opts)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
