@@ -1,0 +1,39 @@
+# This is a basic workflow that is manually triggered
+
+name: Manual workflow
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      name:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Person to greet'
+        # Default value if no value is explicitly provided
+        default: 'World'
+        # Input has to be provided for the workflow to run
+        required: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: build-charm4py
+      run: |
+        git fetch --unshallow # Need full repo for 'git describe' used by setup.py
+        pip3 install setuptools cython cffi greenlet numpy
+        git clone https://github.com/UIUC-PPL/charm charm_src/charm
+        export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+        export CHARM_BUILD_PROCESSES=2
+        export CHARM4PY_BUILD_CFFI=1
+        python3 setup.py build_ext --inplace
+    - name: test-charm4py
+      run: |
+        export PYTHONPATH="$PWD"
+        export CHARM4PY_TEST_NUM_PROCESSES=2
+        python3 auto_test.py
