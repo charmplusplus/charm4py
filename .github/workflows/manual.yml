@@ -40,7 +40,7 @@ jobs:
         pwd
         cd core
         make -j2
-        export LD_LIBRARY_PATH=$(pwd):LD_LIBRARY_PATH
+        export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
         pwd
         echo "ls charmrun"
@@ -49,7 +49,8 @@ jobs:
         echo ""
         echo ""
         ls -la charmrun
-        ./charmrun/charmrun $(which python3) task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
+        python3 charmrun/start.py task-bench/charm4py/task_bench.py
+        python3 charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
         
 # python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
 #     - name: test-charm4py
