@@ -31,7 +31,7 @@ jobs:
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
-        python3 setup.py build_ext --inplace
+        python3 setup.py install --inplace
         export PYTHONPATH="$PWD"
     - name: build-task-bench
       run: |
