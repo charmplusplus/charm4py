@@ -40,7 +40,7 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):LD_LIBRARY_PATH
         cd ../charm4py
-        bash test.sh
+        python3 task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
 #     - name: test-charm4py
 #       run: |
 #         export PYTHONPATH="$PWD"
