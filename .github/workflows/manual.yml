@@ -37,12 +37,17 @@ jobs:
       run: |
         git clone https://github.com/slm960323/task-bench.git
         cd task-bench
+        pwd
         cd core
         make -j2
         export LD_LIBRARY_PATH=$(pwd):LD_LIBRARY_PATH
-        cd ../charm4py
-        python3 task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
-        python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
+        cd ../../
+        pwd
+        ls 
+        ls charmrun
+        charmrum/charmrun /usr/bin/python3 task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
+        
+# python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
 #     - name: test-charm4py
 #       run: |
 #         export PYTHONPATH="$PWD"
