@@ -1,6 +1,6 @@
 # This is a basic workflow that is manually triggered
 
-name: Manual workflow
+name: 4 PE
 
 # Controls when the action will run. Workflow runs when manually triggered using the UI
 # or API.
@@ -35,5 +35,5 @@ jobs:
     - name: test-charm4py
       run: |
         export PYTHONPATH="$PWD"
-        export CHARM4PY_TEST_NUM_PROCESSES=2
+        export CHARM4PY_TEST_NUM_PROCESSES=4
         python3 auto_test.py
