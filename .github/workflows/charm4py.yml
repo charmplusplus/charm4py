@@ -1,11 +1,11 @@
 name: Charm4py
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - master
   pull_request:
-  workflow_dispatch:
   schedule:
       - cron: '5 0 * * *'  # Runs at 00:05 UTC every day.
 
