@@ -31,7 +31,7 @@ jobs:
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
-        python3 setup.py install
+        python3 setup.py build_ext --inplace
         export PYTHONPATH="$PWD"
     - name: build-task-bench
       run: |
@@ -49,8 +49,8 @@ jobs:
         echo ""
         echo ""
         ls -la charmrun
-        python3 charmrun/start.py task-bench/charm4py/task_bench.py
-        python3 charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
+        ./charmrun/charmrun python3 tests/entry_methods/array_element_proxy.py
+# python3 charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
         
 # python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
 #     - name: test-charm4py
