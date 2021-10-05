@@ -46,7 +46,9 @@ jobs:
         echo "ls charmrun"
         ls 
         echo "ls charmrun"
-        ls charmrun
+        echo ""
+        echo ""
+        ls -la charmrun
         python3 -m charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
         
 # python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
