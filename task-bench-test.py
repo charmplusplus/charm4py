@@ -62,7 +62,8 @@ for version, py in sorted(python_implementations):
 print(python)
 cmd = ['charmrun/charmrun', ]
 cmd += [python]
-cmd += ["task-bench/charm4py/task_bench.py"]
+cmd += ["tests/entry_methods/group_element_proxy.py"]
+# cmd += ["task-bench/charm4py/task_bench.py"]
 cmd += ['+p' + str(num_processes), '+libcharm_interface', 'cython']
 
 print(cmd)
