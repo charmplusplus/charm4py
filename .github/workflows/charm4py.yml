@@ -26,6 +26,13 @@ jobs:
         python3 setup.py build_ext --inplace
     - name: test-charm4py
       run: |
+        git clone https://github.com/slm960323/task-bench.git
+        cd task-bench
+        pwd
+        cd core
+        make -j2
+        export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
+        cd ../../
         export PYTHONPATH="$PWD"
         export CHARM4PY_TEST_NUM_PROCESSES=2
         python3 auto_test.py
