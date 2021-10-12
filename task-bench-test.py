@@ -64,6 +64,7 @@ cmd = ['charmrun/charmrun', ]
 cmd += [python]
 cmd += ["tests/entry_methods/group_element_proxy.py"]
 # cmd += ["task-bench/charm4py/task_bench.py"]
+cmd += ["++local"]
 cmd += ['+p' + str(num_processes), '+libcharm_interface', 'cython']
 
 print(cmd)
