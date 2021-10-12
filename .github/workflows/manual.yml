@@ -42,14 +42,7 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        pwd
-        echo "ls charmrun"
-        ls 
-        echo "ls charmrun"
-        echo ""
-        echo ""
-        ls -la charmrun
-        ./charmrun/charmrun python3 tests/entry_methods/array_element_proxy.py
+        python3 task-bench-test.py
 # python3 charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
         
 # python3 -m charmrun.start task_bench.py -steps 4 -width $((2 ** i)) -type stencil_1d
