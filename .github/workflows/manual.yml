@@ -42,6 +42,10 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
+        echo ""
+        pwd
+        ls -la
+        echo "Running the test script"
         python3 task-bench-test.py
 # python3 charmrun/start.py task-bench/charm4py/task_bench.py ++local +p4 -steps 4 -width $((2 ** i)) -type stencil_1d
         
