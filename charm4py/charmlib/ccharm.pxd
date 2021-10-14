@@ -70,6 +70,10 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+    int CkTraceRegisterUserEvent(char *EventDesc, int eventID);
+    void CkTraceBeginUserBracketEvent(int eventID);
+    void CkTraceEndUserBracketEvent(int eventID);
+
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,

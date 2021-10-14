@@ -860,6 +860,20 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
+  def traceRegisterUserEvent(self, str EventDesc, int eventNum=-1):
+    cdef bytes py_bytes = EventDesc.encode()
+    Py_INCREF(py_bytes)
+    # This memory needs to be managed somehow, I think
+    cdef char* c_string = py_bytes
+    cdef int eventID = CkTraceRegisterUserEvent(c_string, eventNum)
+    return eventID
+
+  def traceBeginUserBracketEvent(self, int EventID):
+    CkTraceBeginUserBracketEvent(EventID)
+
+  def traceEndUserBracketEvent(self, int EventID):
+    CkTraceEndUserBracketEvent(EventID)
+
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
