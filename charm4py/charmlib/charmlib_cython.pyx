@@ -826,7 +826,10 @@ class CharmLib(object):
         if isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
           np_array = arg
           nbytes = np_array.nbytes
-          direct_copy_hdr.append((i, 2, (arg.shape, np_array.dtype.name), nbytes))
+          if arg.dtype.isbuiltin:
+            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.char), nbytes))
+          else:
+            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.name), nbytes))
           send_bufs[cur_buf] = <char*>np_array.data
         elif isinstance(arg, bytes):
           nbytes = len(arg)

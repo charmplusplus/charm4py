@@ -173,6 +173,9 @@
         "path": "tests/futures/test_futures.py"
     },
     {
+        "path": "tests/futures/test_different_coroutines.py"
+    },
+    {
         "path": "tests/futures/multi_futures.py"
     },
     {
@@ -283,6 +286,10 @@
         "path": "examples/simple/reduction.py"
     },
     {
+        "path": "examples/simple/hello_world.py"
+    },
+    {
+        "prefix": "tests/exec.sh",
         "path": "examples/simple/hello_world.py"
     },
     {

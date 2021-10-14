@@ -15,22 +15,14 @@ if len(sys.argv) == 2 and sys.argv[1] == '-version_check':
 
 
 def searchForPython(python_implementations):
-    py2_exec, py3_exec = None, None
-    py2_exec = shutil.which('python2')
-    if py2_exec is None:
+    py3_exec = None
+    py3_exec = shutil.which('python3')
+    if py3_exec is None:
         exec_str = shutil.which('python')
         if exec_str is not None:
             version = subprocess.call([exec_str, 'auto_test.py', '-version_check'])
-            if version < 3:
-                py2_exec = exec_str
-            else:
+            if version >= 3:
                 py3_exec = exec_str
-    if py2_exec is None:
-        print("WARNING: Python 2 executable not found for auto_test. If desired, set manually")
-    else:
-        python_implementations.add((2, py2_exec))
-    if py3_exec is None:
-        py3_exec = shutil.which('python3')
     if py3_exec is None:
         print("WARNING: Python 3 executable not found for auto_test. If desired, set manually")
     else:
@@ -54,12 +46,7 @@ except:
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-# interfaces = ['ctypes', 'cffi', 'cython']
-# for the moment we want to disable ctypes
-interfaces = ['cffi', 'cython']
-supported_py_versions = {'ctypes': {2, 3},
-                         'cffi'  : {2, 3},
-                         'cython': {3}}
+interfaces = ['ctypes', 'cffi', 'cython']
 
 with open('test_config.json', 'r') as infile:
     tests = json.load(infile)
@@ -76,14 +63,14 @@ for test in tests:
     for interface in interfaces:
         durations[interface][test['path']] = []
         for version, python in sorted(python_implementations):
-            if version not in supported_py_versions[interface]:
-                continue
             if version < test.get('requires_py_version', -1):
                 continue
             additionalArgs = []
             if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
                 additionalArgs.append('++quiet')
             cmd = ['charmrun/charmrun']
+            if test.get('prefix'):
+                cmd += [test['prefix']]
             if not test.get('interactive', False):
                 cmd += [python] + [test['path']]
             else:

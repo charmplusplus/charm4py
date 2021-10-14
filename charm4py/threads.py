@@ -41,6 +41,7 @@ class Future(object):
         """
         if not self.gotvalues:
             self.blocked = True
+            self.gr = getcurrent()
             self.values = threadMgr.pauseThread()
 
         if self.error is not None:

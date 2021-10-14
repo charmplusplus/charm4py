@@ -380,7 +380,10 @@ class Charm(object):
                         # memoryview, Python throws error: "memoryview: underlying buffer is not
                         # C-contiguous", which seems to be a CPython error (not cffi related)
                         nbytes = arg.nbytes
-                        direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.name), nbytes))
+                        if arg.dtype.isbuiltin:
+                            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.char), nbytes))
+                        else:
+                            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.name), nbytes))
                     else:
                         continue
                     args[i] = None  # will direct-copy this arg so remove from args list
