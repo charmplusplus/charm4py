@@ -1,7 +1,7 @@
 [
     {
         "force_min_processes": 4,
-        "path": "task-bench/charm4py/task_bench.py"
+        "path": "task-bench/charm4py/task_bench.py",
         "args": "-type stencil_1d"
     },
     {
