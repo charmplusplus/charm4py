@@ -140,6 +140,11 @@ def build_libcharm(charm_src_dir, build_dir):
                         cmd = './build charm4py netlrts-linux-arm8 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
                 else:
                     cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+            elif arch == "ppc64le":
+                if build_mpi:
+                    cmd = './build charm4py mpi-linux-ppc64le -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+                else:
+                    cmd = './build charm4py netlrts-linux-ppc64le tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
             else:
                 if build_mpi:
                     cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
