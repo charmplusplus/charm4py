@@ -1,9 +1,5 @@
 [
     {
-        "force_min_processes": 2,
-        "path": "tests/benchmark/pingpong.py"
-    },
-    {
         "force_min_processes": 4,
         "path": "task-bench/charm4py/task_bench.py",
         "args": "-type stencil_1d"
@@ -11,6 +7,10 @@
     {
         "force_min_processes": 2,
         "path": "tests/basics/test.py"
+    },
+    {
+        "force_min_processes": 2,
+        "path": "tests/basics/pingpoing_with_nparray.py"
     },
     {
         "force_min_processes": 4,
