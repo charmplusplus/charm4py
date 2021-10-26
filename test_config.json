@@ -6,7 +6,9 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/interactive/test1.in"
+        "path": "tests/interactive/test1.in",
+        "interactive": true,
+        "requires_py_version": 3
     },
     {
         "force_min_processes": 4,
