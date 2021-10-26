@@ -46,7 +46,7 @@ def main(args):
     plain_time = []
     pings = Array(Ping, 2)
     charm.awaitCreation(pings)
-    for l in range(23):
+    for l in range(15):
         length = 2**l
         print("Array length = {}".format(length))
 
