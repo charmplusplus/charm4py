@@ -89,6 +89,7 @@ class Job(object):
 class PoolScheduler(Chare):
 
     def __init__(self):
+        super().__init__()
         self.workers = None
         self.idle_workers = set(range(1, charm.numPes()))
         self.num_workers = len(self.idle_workers)
