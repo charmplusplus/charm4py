@@ -97,7 +97,7 @@ class Charm(object):
         self.options = Options()
         self.options.profiling = False
         self.options.pickle_protocol = -1  # -1 selects the highest protocol number
-        self.options.local_msg_optim = True
+        self.options.local_msg_optim = False
         self.options.local_msg_buf_size = 50
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
