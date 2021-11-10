@@ -62,6 +62,7 @@ jobs:
       run: |
         cd charm_src/charm
         git checkout charm4py_expanse
+        awk '{if(NR==867) print $0}' CMakeLists.txt
         ./build charm4py ucx-linux-x86_64 openpmix -g -j4 --with-production
     - name: build-charm4py
       run: |
@@ -69,7 +70,6 @@ jobs:
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
-        python3 -m pip install --user -e .
         python3 setup.py build_ext --inplace
     - name: test-charm4py
       run: |
