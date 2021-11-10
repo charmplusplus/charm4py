@@ -27,6 +27,8 @@ jobs:
     - name: build-ucx
       run: |
         pwd
+        cd charm_src/charm
+        pwd
         git clone --recursive --depth 1 --shallow-submodules --branch v1.9.0 https://github.com/openucx/ucx.git
         cd ucx
         ./autogen.sh
@@ -35,6 +37,9 @@ jobs:
         sudo make install
     - name: build-openpmix
       run: |
+        pwd
+        cd charm_src/charm
+        pwd
         wget https://github.com/openpmix/openpmix/releases/download/v3.1.5/pmix-3.1.5.tar.gz
         tar -xf pmix-3.1.5.tar.gz
         cd pmix-3.1.5
@@ -44,6 +49,9 @@ jobs:
     # OpenMPI is needed to launch Charm++ programs with the UCX backend
     - name: build-ompi
       run: |
+        pwd
+        cd charm_src/charm
+        pwd
         wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
         tar -xf openmpi-4.0.5.tar.gz
         cd openmpi-4.0.5
