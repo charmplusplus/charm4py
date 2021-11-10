@@ -74,7 +74,7 @@ jobs:
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
-        export LD_LIBRARY_PATH=/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+        export LD_LIBRARY_PATH=/usr/lib:/usr/local/lib:/usr/local/lib/openmpi:$LD_LIBRARY_PATH
         python3 setup.py build_ext --inplace
     - name: test-charm4py
       run: |
