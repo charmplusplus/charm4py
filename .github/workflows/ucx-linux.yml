@@ -62,6 +62,9 @@ jobs:
       run: |
         cd charm_src/charm
         git checkout charm4py_expanse
+        awk 'NR==867 {$0="  target_link_libraries(charm ck converse memory-default threads-default ldb-rand \"-Llib/ -lpmi -lucp -lucm -luct -standalone -whole-archive -c++stl -shared\")"} { print }' CMakeLists.txt > tmp_CMakeLists.txt
+        cp tmp_CMakeLists.txt CMakeLists.txt
+        rm tmp_CMakeLists.txt
         awk '{if(NR==867) print $0}' CMakeLists.txt
         ./build charm4py ucx-linux-x86_64 openpmix -g -j4 --with-production
     - name: build-charm4py
