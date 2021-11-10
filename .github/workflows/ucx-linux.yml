@@ -35,17 +35,6 @@ jobs:
         ./contrib/configure-release --disable-numa --without-java
         make -j4
         sudo make install
-    - name: build-openpmix
-      run: |
-        pwd
-        cd charm_src/charm
-        pwd
-        wget https://github.com/openpmix/openpmix/releases/download/v3.1.5/pmix-3.1.5.tar.gz
-        tar -xf pmix-3.1.5.tar.gz
-        cd pmix-3.1.5
-        ./configure
-        make -j4
-        sudo make install
     # OpenMPI is needed to launch Charm++ programs with the UCX backend
     - name: build-ompi
       run: |
@@ -66,7 +55,7 @@ jobs:
         cp tmp_CMakeLists.txt CMakeLists.txt
         rm tmp_CMakeLists.txt
         awk '{if(NR==867) print $0}' CMakeLists.txt
-        ./build charm4py ucx-linux-x86_64 openpmix -g -j4 --with-production
+        ./build charm4py ucx-linux-x86_64 -g -j4 --with-production
     - name: build-charm4py
       run: |
         pip3 install setuptools cython cffi greenlet numpy
