@@ -44,7 +44,7 @@ jobs:
         wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
         tar -xf openmpi-4.0.5.tar.gz
         cd openmpi-4.0.5
-        ./configure --enable-mca-no-build=btl-uct --with-pmix=/usr/local
+        ./configure --enable-mca-no-build=btl-uct
         make -j4
         sudo make install
     - name: compile-charm++
