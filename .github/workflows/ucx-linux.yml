@@ -1,0 +1,75 @@
+name: ucx-Charm4py
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: install-prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install libevent-dev libhwloc-dev
+    - name: prepare-charm++
+      run: |
+        git fetch --unshallow
+        git clone https://github.com/UIUC-PPL/charm charm_src/charm
+        cd charm_src/charm
+        ls -la
+        pwd
+    - name: build-ucx
+      run: |
+        pwd
+        git clone --recursive --depth 1 --shallow-submodules --branch v1.9.0 https://github.com/openucx/ucx.git
+        cd ucx
+        ./autogen.sh
+        ./contrib/configure-release --disable-numa --without-java
+        make -j4
+        sudo make install
+    - name: build-openpmix
+      run: |
+        wget https://github.com/openpmix/openpmix/releases/download/v3.1.5/pmix-3.1.5.tar.gz
+        tar -xf pmix-3.1.5.tar.gz
+        cd pmix-3.1.5
+        ./configure
+        make -j4
+        sudo make install
+    # OpenMPI is needed to launch Charm++ programs with the UCX backend
+    - name: build-ompi
+      run: |
+        wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
+        tar -xf openmpi-4.0.5.tar.gz
+        cd openmpi-4.0.5
+        ./configure --enable-mca-no-build=btl-uct --with-pmix=/usr/local
+        make -j4
+        sudo make install
+    - name: compile-charm++
+      run: |
+        cd charm_src/charm
+        ./build charm4py ucx-linux-x86_64 openpmix -g -j4 --with-production
+    - name: build-charm4py
+      run: |
+        pip3 install setuptools cython cffi greenlet numpy
+        export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+        export CHARM_BUILD_PROCESSES=2
+        export CHARM4PY_BUILD_CFFI=1
+        python3 setup.py build_ext --inplace
+    - name: test-charm4py
+      run: |
+        git clone https://github.com/slm960323/task-bench.git
+        cd task-bench
+        pwd
+        cd core
+        make -j2
+        export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
+        cd ../../
+        export PYTHONPATH="$PWD"
+        export CHARM4PY_TEST_NUM_PROCESSES=2
+        python3 auto_test.py
