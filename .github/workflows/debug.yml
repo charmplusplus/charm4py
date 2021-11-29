@@ -18,6 +18,7 @@ jobs:
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
         python3 setup.py build_ext --inplace
+        export PYTHONPATH="$PWD"
         export CHARM4PY_TEST_NUM_PROCESSES=2
         pwd
         echo $HOME
