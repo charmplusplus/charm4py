@@ -18,8 +18,6 @@ jobs:
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
         python3 setup.py build_ext --inplace
-    - name: test-charm4py
-      run: |
         export CHARM4PY_TEST_NUM_PROCESSES=2
         pwd
         ls
