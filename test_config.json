@@ -9,10 +9,6 @@
         "path": "tests/basics/test.py"
     },
     {
-        "force_min_processes": 1,
-        "path": "tests/basics/same_pe_test.py"
-    },
-    {
         "force_min_processes": 2,
         "path": "tests/basics/pingpoing_with_nparray.py"
     },
