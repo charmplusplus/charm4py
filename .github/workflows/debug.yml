@@ -20,7 +20,8 @@ jobs:
         python3 setup.py build_ext --inplace
         export CHARM4PY_TEST_NUM_PROCESSES=2
         pwd
-        ls
+        echo $HOME
+        python3 -c "import sys;print(sys.path)"
         cd tests/basics
         python3 test.py
         python3 pingpoing_with_nparray.py
