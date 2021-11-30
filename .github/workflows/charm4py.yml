@@ -34,9 +34,15 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
+        python3 -c "import sys;print(sys.path)"
+        export PYTHONPATH="$PWD"
         export CHARM4PY_TEST_NUM_PROCESSES=2
+        python3 -c "import sys;print(sys.path)"
         python3 auto_test.py
     - name: run-known-bugs
       run: |
+        python3 -c "import sys;print(sys.path)"
+        export PYTHONPATH="$PWD"
+        python3 -c "import sys;print(sys.path)"
         cd tests/basics
         python3 same_pe_test.py
