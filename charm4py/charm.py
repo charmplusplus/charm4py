@@ -30,6 +30,7 @@ from . import wait
 import array
 import numpy as np
 import greenlet
+sys.setdlopenflags(os.RTLD_NOW | os.RTLD_GLOBAL)
 try:
     import numpy
 except ImportError:
@@ -43,7 +44,7 @@ def SECTION_ALL(obj):
     return 0
 
 def getDeviceDataInfo(devArray):
-    return devArray.__cuda_array_interface__['data']
+    return devArray.__array_interface__['data']
 
 def getDeviceDataAddress(devArray):
     return getDeviceDataInfo(devArray)[0]
@@ -138,7 +139,7 @@ class Charm(object):
         self.CkArraySendWithDeviceDataFromPointersOther = self.lib.CkArraySendWithDeviceDataFromPointersOther
         self.CkGroupSendWithDeviceDataFromPointersArray = self.lib.CkGroupSendWithDeviceDataFromPointersArray
         self.CkGroupSendWithDeviceDataFromPointersOther = self.lib.CkGroupSendWithDeviceDataFromPointersOther
-        self.CkCudaEnabled = self.lib.CkCudaEnabled
+        # self.CkCudaEnabled = self.lib.CkCudaEnabled
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False

@@ -1,7 +1,5 @@
 
 # libcharm wrapper for Cython
-cdef extern from "cuda_runtime.h":
-  ctypedef long cudaStream_t
 
 cdef extern from "charm.h":
 
@@ -74,33 +72,34 @@ cdef extern from "charm.h":
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
     # TODO: Organize these to place them near their related functions
-    int CkCudaEnabled();
-    int CUDAPointerOnDevice(const void *ptr);
-    void CkArrayExtSendWithDeviceData(int aid, int *idx, int ndims,
-                                      int epIdx, int num_bufs, char **bufs,
-                                      int *buf_sizes,
-                                      long *devBufPtrs,
-                                      int *devBufSizesInBytes,
-                                      long *streamPtrs, int numDevBufs
-                                     );
-    void CkGroupExtSendWithDeviceData(int gid, int pe, int epIdx, int num_bufs, char **bufs,
-                                      int *buf_sizes, long *devBufPtrs,
-                                      int *devBufSizesInBytes,
-                                      long *streamPtrs, int numDevBufs
-                                      );
+    void CkArrayExtSendWithZCData(int aid, int *idx, int ndims,
+                                  int epIdx, int num_bufs, char **bufs,
+                                  int *buf_sizes,
+                                  long *zcBufPtrs,
+                                  int *zcBufSizesInBytes,
+                                  int numZCBufs
+                                  )
+
+    # void CkArrayExtSendWithDeviceData(int aid, int *idx, int ndims,
+    #                                   int epIdx, int num_bufs, char **bufs,
+    #                                   int *buf_sizes,
+    #                                   long *devBufPtrs,
+    #                                   int *devBufSizesInBytes,
+    #                                   long *streamPtrs, int numDevBufs
+    #                                  );
+    # void CkGroupExtSendWithDeviceData(int gid, int pe, int epIdx, int num_bufs, char **bufs,
+                                      # int *buf_sizes, long *devBufPtrs,
+                                      # int *devBufSizesInBytes,
+                                      # long *streamPtrs, int numDevBufs
+                                      # );
 
 
-    void registerArrayMsgGPUDirectRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*, int));
-    void CkGetGPUDirectData(int numBuffers, void *recvBufPtrs, int *arrSizes,
-                            void *remoteBufInfo, void *streamPtrs, int futureId);
-
-    int CkDeviceBufferSizeInBytes();
+    void registerArrayMsgZCRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*,int));
+    void CkGetZCData(int numBuffers, void *recvBufPtrs, int *arrSizes,
+                     void *remoteBufInfos, int futureId);
+    int CkZCBufferSizeInBytes();
 
     void registerDepositFutureWithIdFn(void (*cb)(void*, void*));
-
-    void CkCUDAHtoD(void *dest, void *src, int nbytes, cudaStream_t stream);
-    void CkCUDADtoH(void *dest, void *src, int nbytes, cudaStream_t stream);
-    void CkCUDAStreamSynchronize(cudaStream_t stream);
 
 
 
