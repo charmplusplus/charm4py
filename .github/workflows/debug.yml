@@ -22,4 +22,5 @@ jobs:
         export CHARM4PY_TEST_NUM_PROCESSES=2
         pwd
         echo $HOME
-        git status
+        cd tests/basics 
+        python3 -m charmrun.start +p2 pingpoing_with_nparray.py | tee .udp-cffi-pingpong.log
