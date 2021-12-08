@@ -22,8 +22,4 @@ jobs:
         export CHARM4PY_TEST_NUM_PROCESSES=2
         pwd
         echo $HOME
-        python3 -c "import sys;print(sys.path)"
-        cd tests/basics
-        python3 test.py
-        python3 pingpoing_with_nparray.py
-        python3 -m charmrun.start +p2 pingpoing_with_nparray.py
+        git status
