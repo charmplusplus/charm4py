@@ -18,7 +18,7 @@ jobs:
         export CHARM_BUILD_PROCESSES=2
         python3 setup.py build_ext --inplace
         export CHARM4PY_TEST_NUM_PROCESSES=2
-    - name: run-performance-comparsion
+    - name: run-performance-comparsion-cython
       run: |
         export PYTHONPATH="$PWD"
         git status
@@ -28,6 +28,15 @@ jobs:
         git remote set-url origin https://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@github.com/slm960323/charm4py.git
         git status
         python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py | tee .tmp/udp-cython-pingpong.log
+    - name: run-performance-comparsion-cffi
+      run: |
+        pip3 install cffi
+        export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+        export CHARM_BUILD_PROCESSES=2
+        export CHARM4PY_BUILD_CFFI=1
+        python3 setup.py build_ext --inplace --force
+        export PYTHONPATH="$PWD"
+        python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py | tee .tmp/udp-cffi-pingpong.log
         git add -A
-        git commit -m "add .tmp/udp-cython-pingpong.log"
+        git commit -m "add .tmp/udp-cython-pingpong.log and .tmp/udp-cffi-pingpong.log"
         git push origin nightly-test 
