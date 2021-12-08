@@ -18,9 +18,17 @@ jobs:
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
         python3 setup.py build_ext --inplace
-        export PYTHONPATH="$PWD"
         export CHARM4PY_TEST_NUM_PROCESSES=2
-        pwd
-        echo $HOME
-        cd tests/basics 
-        python3 -m charmrun.start +p2 pingpoing_with_nparray.py | tee .udp-cffi-pingpong.log
+    - name: run-performance-comparsion
+      run: |
+        export PYTHONPATH="$PWD"
+        git status
+        git checkout -t origin/nightly-test
+        git config --global user.email "simengl2@illinois.edu"
+        git config --global user.name "Simeng Liu"
+        git remote set-url origin https://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@github.com/slm960323/charm4py.git
+        git status
+        python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py | tee .tmp/udp-cffi-pingpong.log
+        git add .tmp/udp-cffi-pingpong.log
+        git commit -m "add .tmp/udp-cffi-pingpong.log"
+        git push origin nightly-test 
