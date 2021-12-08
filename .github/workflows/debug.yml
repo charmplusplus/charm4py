@@ -28,6 +28,6 @@ jobs:
         git remote set-url origin https://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@github.com/slm960323/charm4py.git
         git status
         python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py | tee .tmp/udp-cython-pingpong.log
-        git add .tmp/udp-cffi-pingpong.log
+        git add .tmp/udp-cython-pingpong.log
         git commit -m "add .tmp/udp-cython-pingpong.log"
         git push origin nightly-test 
