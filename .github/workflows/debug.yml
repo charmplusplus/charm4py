@@ -33,7 +33,7 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; &> tmp/udp-cython-task-bench.log
+        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; &> .tmp/udp-cython-task-bench.log
     - name: run-performance-comparsion-cffi
       run: |
         git status 
