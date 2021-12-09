@@ -21,6 +21,11 @@ jobs:
     - name: run-performance-comparsion-cython
       run: |
         export PYTHONPATH="$PWD"
+        git checkout -t origin/nightly-test
+        git config --global user.email "simengl2@illinois.edu"
+        git config --global user.name "Simeng Liu"
+        git remote set-url origin https://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@github.com/slm960323/charm4py.git
+        git status
         git clone https://github.com/slm960323/task-bench.git
         cd task-bench
         pwd
@@ -28,7 +33,7 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done | tee .tmp/udp-cython-task-bench.log
+        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done | tee tmp/udp-cython-task-bench.log
     - name: run-performance-comparsion-cffi
       run: |
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
