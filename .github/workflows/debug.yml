@@ -42,6 +42,9 @@ jobs:
         export CHARM4PY_BUILD_CFFI=1
         python3 setup.py build_ext --inplace --force
         export PYTHONPATH="$PWD"
+        cd task-bench/core
+        export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
+        cd ../../
         for i in {6..13}; do for j in {1..5}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; done; &> .tmp/udp-cffi-task-bench.log
         cd .tmp
         git add -A
