@@ -12,33 +12,21 @@ jobs:
     - name: build-charm4py
       run: |
         git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-        pip3 install setuptools cython greenlet numpy pandas seaborn
+        pip3 install setuptools cython cffi greenlet numpy
         git clone https://github.com/UIUC-PPL/charm charm_src/charm
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         python3 setup.py build_ext --inplace
-        export CHARM4PY_TEST_NUM_PROCESSES=2
+        export PYTHONPATH="$PWD"
     - name: run-performance-comparsion-cython
       run: |
         export PYTHONPATH="$PWD"
-        git status
-        git checkout -t origin/nightly-test
-        git config --global user.email "simengl2@illinois.edu"
-        git config --global user.name "Simeng Liu"
-        git remote set-url origin https://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@github.com/slm960323/charm4py.git
-        git status
-        for i in {1..5}; do python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py ; done | tee .tmp/udp-cython-pingpong.log
-    - name: run-performance-comparsion-cffi
-      run: |
-        pip3 install cffi
-        export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-        export CHARM_BUILD_PROCESSES=2
-        export CHARM4PY_BUILD_CFFI=1
-        python3 setup.py build_ext --inplace --force
-        export PYTHONPATH="$PWD"
-        for i in {1..5}; do python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py ; done | tee .tmp/udp-cffi-pingpong.log
-        cd .tmp
-        python3 compare_pingpong.py
-        git add -A
-        git commit -m "add .tmp/udp-cython-pingpong.log and .tmp/udp-cffi-pingpong.log"
-        git push origin nightly-test 
+        git clone https://github.com/slm960323/task-bench.git
+        cd task-bench
+        pwd
+        cd core
+        make -j2
+        export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
+        cd ../../
+        python3 task-bench/charm4py/task_bench.py
+        
