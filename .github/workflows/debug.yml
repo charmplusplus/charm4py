@@ -33,15 +33,16 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done | tee tmp/udp-cython-task-bench.log
+        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; &> tmp/udp-cython-task-bench.log
     - name: run-performance-comparsion-cffi
       run: |
+        git status 
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
         export CHARM4PY_BUILD_CFFI=1
         python3 setup.py build_ext --inplace --force
         export PYTHONPATH="$PWD"
-        for i in {6..13}; do for j in {1..5}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; done | tee .tmp/udp-cffi-task-bench.log
+        for i in {6..13}; do for j in {1..5}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done; done; &> .tmp/udp-cffi-task-bench.log
         cd .tmp
         git add -A
         git commit -m "add .tmp/udp-cython-pingpong.log and .tmp/udp-cffi-pingpong.log"
