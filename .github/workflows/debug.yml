@@ -12,7 +12,7 @@ jobs:
     - name: build-charm4py
       run: |
         git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-        pip3 install setuptools cython greenlet numpy
+        pip3 install setuptools cython greenlet numpy pandas seaborn
         git clone https://github.com/UIUC-PPL/charm charm_src/charm
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2
@@ -37,6 +37,8 @@ jobs:
         python3 setup.py build_ext --inplace --force
         export PYTHONPATH="$PWD"
         for i in {1..5}; do python3 -m charmrun.start +p2 tests/basics/pingpoing_with_nparray.py ; done | tee .tmp/udp-cffi-pingpong.log
+        cd .tmp
+        python3 compare_pingpong.py
         git add -A
         git commit -m "add .tmp/udp-cython-pingpong.log and .tmp/udp-cffi-pingpong.log"
         git push origin nightly-test 
