@@ -28,7 +28,7 @@ jobs:
         make -j2
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        for i in {6..13}; do for j in {1..5}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter 1024 ; done; done | tee .tmp/udp-cython-task-bench.log
+        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done | tee .tmp/udp-cython-task-bench.log
     - name: run-performance-comparsion-cffi
       run: |
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
