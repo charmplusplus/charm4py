@@ -45,9 +45,9 @@ jobs:
         cd task-bench/core
         export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
         cd ../../
-        for i in {6..13}; do for j in {1..5}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done >> tee .tmp/udp-cffi-task-bench.log ; done
+        for i in {6..13}; do python3 -m charmrun.start +p2 task-bench/charm4py/task_bench.py -steps 4 -width 4 -type stencil_1d -kernel compute_bound -iter $((2 ** i)) ; done >> .tmp/udp-cffi-task-bench.log
         cd .tmp
         git add -A
-        git commit -m "add .tmp/udp-cython-pingpong.log and .tmp/udp-cffi-pingpong.log"
+        git commit -m "add task-bench logs"
         git push origin nightly-test
         
