@@ -1,7 +1,6 @@
-from charm4py import charm, Chare, Group, Array, Future, coro, Channel, Reducer
+from charm4py import charm, Chare, Array, Future, coro, Channel
 import time
 import numpy as np
-from math import sqrt
 
 try:
     from numba import njit
@@ -95,18 +94,19 @@ class SubMatrix(Chare):
 def main(args):
     if len(args) < 3:
         print(f"USAGE: {args[0]} matrix_dim chare_dim")
+        print("matrix_dim and chare_dim must be perfect squares "
+              "where matrix_dim is divisible by chare_dim"
+              )
         charm.exit(1)
     matrix_dim = int(args[1])
     chare_dim = int(args[2])
 
-    if matrix_dim ** 2 % chare_dim:
+    if matrix_dim % chare_dim:
         print("ERROR: Matrix dim must evenly divide chare dim.")
         charm.exit(1)
 
     # size of each chare's sub-matrix
-    subdim_size = matrix_dim / (chare_dim)
-    assert subdim_size % 1 == 0
-    subdim_size = int(subdim_size)
+    subdim_size = matrix_dim // chare_dim
     print(f"Size of each chare's sub-array: {8*(subdim_size**2)/(1024**2)}MiB")
 
     init_done = Future()
