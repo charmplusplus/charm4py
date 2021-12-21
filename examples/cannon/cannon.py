@@ -86,17 +86,10 @@ class SubMatrix(Chare):
 
         if left_shift:
             send_ch.send(self.sub_a)
-            if self.zerocopy:
-                recv_ch.recv(self.recv_a)
-            else:
-                self.recv_a = recv_ch.recv()
+            self.recv_a = recv_ch.recv()
         if up_shift:
             send_ch.send(self.sub_b)
-            if self.zerocopy:
-                recv_ch.recv(self.recv_b)
-            else:
-                self.recv_b = recv_ch.recv()
-
+            self.recv_b = recv_ch.recv()
 
 
 def main(args):
