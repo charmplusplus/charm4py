@@ -41,6 +41,16 @@ def SECTION_ALL(obj):
     return 0
 
 
+def register(C):
+    if ArrayMap in C.mro():
+        charm.register(C, (GROUP,))  # register ArrayMap only as Group
+    elif Chare in C.mro():
+        charm.register(C)
+    else:
+        raise Charm4PyError("Class", C, "is not a Chare (can't register)")
+    return C
+
+
 class Options(object):
 
     def __str__(self):
@@ -439,6 +449,7 @@ class Charm(object):
         self._myPe   = self.lib.CkMyPe()
         self._numPes = self.lib.CkNumPes()
 
+        print("classes = ", self.register_order)
         # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
         # policy that ensures that messages reach Charm++ in a timely fashion
         if os.name == 'nt':
@@ -472,6 +483,7 @@ class Charm(object):
             self.registerInCharm(C)
 
     def registerAs(self, C, charm_type_id):
+        from .sections import SectionManager
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, 'More than one entry point has been specified'
             self.mainchareRegistered = True
