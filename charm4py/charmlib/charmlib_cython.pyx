@@ -5,6 +5,7 @@ from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
 from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
+from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 
@@ -249,6 +250,9 @@ cdef class ReceiveMsgBuffer:
   def __len__(self):
     return self.shape[0]
 
+  cdef char* getMsg(self):
+    return self.msg
+
   def __getbuffer__(self, Py_buffer *buffer, int flags):
     buffer.buf = self.msg
     buffer.format = 'b'
@@ -267,6 +271,71 @@ cdef class ReceiveMsgBuffer:
 
 #  cdef inline bytes tobytes(self):  # this copies msg into a bytes object
 #    return <bytes>self.msg[0:self.shape[0]]
+
+cdef class DirectCopyBufferProvider:
+
+  cdef Py_ssize_t shape[1]
+  cdef Py_ssize_t strides[1]
+  cdef char *msg
+  cdef int total_offset
+  cdef int begin_offset
+  cdef int _next_advance
+
+  def __cinit__(self, int begin_offset):
+    self.strides[0] = 1
+    self.shape[0] = 0
+    self.msg = NULL
+    self.total_offset = 0
+    self.begin_offset = begin_offset
+    self._next_advance = 0
+
+  cdef inline void setMsg(self, char *_msg, int _msgSize):
+    self.msg = _msg
+    self.shape[0] = _msgSize
+    self.advance(self.begin_offset)
+
+  cdef inline void setSize(self, int size):
+    self.shape[0] = size
+
+  cdef inline void advance(self, int offset):
+    self.total_offset += offset
+    self.msg += offset
+
+  def __iter__(self):
+    return self
+  def __next__(self):
+    if self.begin_offset == 0:
+      raise StopIteration
+    #note: assumes self.msg is pointing at the size of a dcopy object
+    self.advance(self._next_advance)
+    self._next_advance = 0
+    cdef int offset = (<int*>self.msg)[0]
+    if self.total_offset < self.shape[0]:
+      # TODO: comment this
+      self.advance(4)
+      self._next_advance = offset
+      return self
+    else:
+      raise StopIteration
+
+  def __len__(self):
+    return self.shape[0]
+
+  def __getbuffer__(self, Py_buffer *buffer, int flags):
+    buffer.buf = self.msg
+    buffer.format = 'b'
+    buffer.internal = NULL
+    buffer.itemsize = sizeof(char)
+    buffer.len = self.shape[0] - self.total_offset
+    buffer.ndim = 1
+    buffer.obj = self
+    buffer.readonly = 1
+    buffer.shape = self.shape
+    buffer.strides = self.strides
+    buffer.suboffsets = NULL                # for pointer arrays only
+
+  def __releasebuffer__(self, Py_buffer *buffer):
+    pass
 
 
 cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
@@ -729,6 +798,20 @@ class CharmLib(object):
     CmiGetPesOnPhysicalNode(node, &pelist, &numpes)
     return [pelist[i] for i in range(numpes)]
 
+  def unpackMsg_OOBPickle(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
+
+    cdef DirectCopyBufferProvider d_copy_iter = DirectCopyBufferProvider(dcopy_start)
+    d_copy_iter.setMsg(msg.getMsg(), len(msg))
+    # PyObject_GetBuffer(sendBuf, <Py_buffer*>&d_copy_iter, 0)
+
+    header, args = loads(msg, buffers = d_copy_iter)
+    if b"custom_reducer" in header:
+      reducer = getattr(charm.reducers, header[b"custom_reducer"])
+      # reduction result won't always be in position 0, but will always be last
+      # (e.g. if reduction target is a future, the reduction result will be 2nd argument)
+      if reducer.hasPostprocess: args[-1] = reducer.postprocess(args[-1])
+    return header, args
+
   def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0
     cdef int buf_size
@@ -767,6 +850,43 @@ class CharmLib(object):
         if reducer.hasPostprocess: args[-1] = reducer.postprocess(args[-1])
 
     return header, args
+
+  def packMsg_OOBPickle(self, destObj, msgArgs not None, dict header):
+    cdef int i = 0
+    cdef int localTag
+    cdef array.array a
+    cdef char[:] b_buf
+    cdef int total_size = 0
+    cdef char* ptr = NULL
+    global sendBuf
+    IF HAVE_NUMPY:
+      cdef np.ndarray np_array
+    dcopy_size = 0
+    direct_copy_hdr = []  # goes to header
+    args = list(msgArgs)
+    global cur_buf
+    cur_buf = 1
+    msg = dumps((header, msgArgs), protocol=5, buffer_callback=direct_copy_hdr.append)
+    for i in range(len(direct_copy_hdr)):
+      b_buf = direct_copy_hdr[i].raw()
+      send_bufs[i] = <char*>&b_buf[0]
+      send_buf_sizes[i] = <int> len(b_buf)
+      total_size += len(b_buf)
+      # 4 for the integer length
+      total_size += 4
+      cur_buf += 1
+    total_size += len(msg)
+    ptr = <char*> PyMem_Malloc(total_size)
+    cdef int total_copy = len(msg)
+    memcpy(ptr, <char*>msg, len(msg))
+    global dcopy_start
+    dcopy_start = total_copy
+    for i in range(len(direct_copy_hdr)):
+      memcpy(ptr+total_copy, send_buf_sizes+i, sizeof(int))
+      total_copy += sizeof(int)
+      memcpy(ptr+total_copy, <void*>send_bufs[i], send_buf_sizes[i])
+      total_copy += send_buf_sizes[i]
+    return msg, None
 
   def packMsg(self, destObj, msgArgs not None, dict header):
     cdef int i = 0
