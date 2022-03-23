@@ -10,6 +10,15 @@
         "path": "tests/entry_methods/array_element_proxy.py"
     },
     {
+        "force_min_processes": 1,
+        "path": "tests/local_msg.py"
+    },
+    {
+        "force_min_processes": 4,
+        "path": "task-bench/charm4py/task_bench.py",
+        "args": "-steps 4 -width 8 -type stencil_1d"
+    },
+    {
         "force_min_processes": 4,
         "path": "tests/entry_methods/group_element_proxy.py"
     },
