@@ -11,8 +11,6 @@ from distutils.errors import DistutilsSetupError
 from distutils import log
 import distutils
 
-import Cython.Compiler.Options
-Cython.Compiler.Options.annotate = True
 
 build_mpi = False
 

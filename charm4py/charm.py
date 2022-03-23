@@ -47,7 +47,7 @@ def register(C):
     elif Chare in C.mro():
         charm.register(C)
     else:
-        raise Charm4PyError("Class", C, "is not a Chare (can't register)")
+        raise Charm4PyError("Class " + str(C) + " is not a Chare (can't register)")
     return C
 
 
@@ -449,7 +449,6 @@ class Charm(object):
         self._myPe   = self.lib.CkMyPe()
         self._numPes = self.lib.CkNumPes()
 
-        print("classes = ", self.register_order)
         # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
         # policy that ensures that messages reach Charm++ in a timely fashion
         if os.name == 'nt':
