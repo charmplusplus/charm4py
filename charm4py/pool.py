@@ -3,6 +3,8 @@ from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
 from copy import deepcopy
+from concurrent.futures import Executor
+from asyncio import wait_for
 import sys
 
 
@@ -465,3 +467,23 @@ class Pool(object):
 
     def submit_async(self, iterable, chunksize=1, ncores=-1, multi_future=False):
         return self.map_async(None, iterable, chunksize, ncores, multi_future)
+
+
+class PoolExecutor(Executor):
+
+    def __init__(self, pool_scheduler):
+        self.pool = Pool(pool_scheduler)
+
+    def submit(self, fn, /, *args, **kwargs):
+        return self.pool.map_async(fn, *args, **kwargs)        
+
+    def map(self, func, *iterables, timeout=None, chunksize=1):
+        return wait_for(self.pool.map(func, zip(*iterables), chunksize=chunksize), timeout=timeout)
+
+    def shutdown(wait=True, *, cancel_futures=False):
+        # Cancelling futures isn't implemented so 
+        # cancel_futures currently does nothing
+        if wait:
+            wait_for(self.pool.pool_scheduler.schedule)
+        else:
+            self.pool.pool_scheduler.schedule()

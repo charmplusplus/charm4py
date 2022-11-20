@@ -1,5 +1,7 @@
 from greenlet import getcurrent
-
+from concurrent.futures import Future as CFuture
+from concurrent.futures import CancelledError, TimeoutError
+from asyncio import wait_for 
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -23,7 +25,7 @@ class NotThreadedError(Exception):
 # See commit 25e2935 if need to resurrect code where proxies were included when
 # futures were pickled.
 
-class Future(object):
+class Future(CFuture):
 
     def __init__(self, fid, gr, src, num_vals):
         self.fid = fid  # unique future ID within the process that created it
@@ -93,6 +95,35 @@ class Future(object):
     def __setstate__(self, state):
         self.fid, self.src = state
 
+    def cancel(self):
+        # Cancelling not currently implemented
+        return False
+
+    def cancelled(self):
+        return False
+
+    def running(self):
+        return not self.blocked and not self.ready()
+    
+    def done(self):
+        return self.ready()
+
+    def result(timeout=None):
+        return wait_for(self.get(), timeout=timeout)   
+
+    def exception(timeout=None):
+        try:
+            wait_for(self.get(), timeout=timeout)
+        except (TimeoutError, CancelledError) as e:
+            raise e
+        except Exception as e:
+            if self.error is None:
+                raise e
+
+        return self.error
+
+    def add_done_callback(fn):
+        raise NotImplementedError
 
 class CollectiveFuture(Future):
 
