@@ -488,6 +488,7 @@ class PoolExecutor(Executor):
     def shutdown(wait=True, *, cancel_futures=False):
         # Cancelling futures isn't implemented so 
         # cancel_futures currently does nothing
+        self.is_shutdown = True
         if wait:
             wait_for(self.pool.pool_scheduler.schedule())
         else:
