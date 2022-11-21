@@ -29,7 +29,8 @@ class Future(CFuture):
     def __init__(self, fid, gr, src, num_vals):
         self.fid = fid  # unique future ID within the process that created it
         self.gr = gr  # greenlet that created the future
-        self.src = src  # PE where the future was created (not used for collective futures)
+        # PE where the future was created (not used for collective futures)
+        self.src = src
         self.nvals = num_vals  # number of values that the future expects to receive
         self.values = []  # values of the future
         self.blocked = False  # flag to check if creator thread is blocked on the future
@@ -80,7 +81,8 @@ class Future(CFuture):
 
     def resume(self, threadMgr):
         if self.blocked == 2:
-            # someone is waiting for future to become ready, signal by sending myself
+            # someone is waiting for future to become ready, signal by sending
+            # myself
             self.blocked = False
             threadMgr.resumeThread(self.gr, self)
         elif self.blocked:
@@ -98,16 +100,16 @@ class Future(CFuture):
         if self.running() or self.done():
             return False
         else:
-            threadMgr.cancelFuture(self)            
+            threadMgr.cancelFuture(self)
             return True
 
     def cancelled(self):
-        return not self.fid in threadMgr.futures
+        return self.fid not in threadMgr.futures
 
     def running(self):
         # Not certain if this is correct
-        return self.blocked != False and not self.done()
-    
+        return self.blocked and not self.done()
+
     def done(self):
         return self.ready() or self.cancelled or (self.error is not None)
 
@@ -131,6 +133,7 @@ class Future(CFuture):
 
     def add_done_callback(fn):
         raise NotImplementedError
+
 
 class CollectiveFuture(Future):
 
@@ -185,12 +188,16 @@ class EntryMethodThreadManager(object):
 
     def objMigrating(self, obj):
         if obj._numthreads > 0:
-            raise Charm4PyError('Migration of chares with active threads is not currently supported')
+            raise Charm4PyError(
+                'Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):
-        raise NotThreadedError("Method '" + charm.last_em_exec.C.__name__ + "." +
-                               charm.last_em_exec.name +
-                               "' must be a couroutine to be able to suspend (decorate it with @coro)")
+        raise NotThreadedError(
+            "Method '" +
+            charm.last_em_exec.C.__name__ +
+            "." +
+            charm.last_em_exec.name +
+            "' must be a couroutine to be able to suspend (decorate it with @coro)")
 
     def pauseThread(self):
         """ Called by an entry method thread to wait for something.
@@ -245,7 +252,8 @@ class EntryMethodThreadManager(object):
         # get a unique local Future ID
         global FIDMAXVAL
         futures = self.futures
-        assert len(futures) < FIDMAXVAL, 'Too many pending futures, cannot create more'
+        assert len(
+            futures) < FIDMAXVAL, 'Too many pending futures, cannot create more'
         fid = (self.lastfid % FIDMAXVAL) + 1
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
@@ -269,8 +277,9 @@ class EntryMethodThreadManager(object):
         try:
             f = futures[fid]
         except KeyError:
-            raise Charm4PyError('No pending future with fid=' + str(fid) + '. A common reason is '
-                                'sending to a future that already received its value(s)')
+            raise Charm4PyError(
+                'No pending future with fid=' + str(fid) + '. A common reason is '
+                'sending to a future that already received its value(s)')
         if f.deposit(result):
             del futures[fid]
             # resume if a thread is blocked on the future
