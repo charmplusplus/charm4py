@@ -36,6 +36,7 @@ class Future(CFuture):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
+        self.cancelled = False
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -103,12 +104,13 @@ class Future(CFuture):
             return True
 
     def cancelled(self):
-        return self.values == [None] * f.nvals
+        # What if function actually returns this?
+        #return self.values == [None] * f.nvals
+        return self.cancelled
 
     def running(self):
-        # Not certain how to check if the future is currently running.
-        return not self.done()
-        #return not self.blocked and not self.ready()
+        # Not certain if this is correct
+        return self.blocked != False and not self.done()
     
     def done(self):
         return self.ready()
@@ -291,6 +293,7 @@ class EntryMethodThreadManager(object):
         del self.futures[fid]
         f.gotvalues = True
         f.values = [None] * f.nvals
+        f.cancelled = True
         f.resume(self)
 
     # TODO: method to cancel collective future. the main issue with this is

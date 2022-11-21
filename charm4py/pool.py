@@ -475,10 +475,15 @@ class PoolExecutor(Executor):
         self.pool = Pool(pool_scheduler_chare)
         self.is_shutdown = False
 
-    def submit(self, fn, /, *args, **kwargs):
+    # map_async can't handle **kwargs at present
+    def submit(self, fn, /, *args, **kwargs)#, chunksize=1, ncores=-1, multi_future=False):
         if self.is_shutdown:
             raise RuntimeError("charm4py.pool.PoolExecutor object has been shut down")
-        return self.pool.Task(fn, *args, **kwargs, awaitable=True, ret=True)        
+        if kwargs is not None and len(kwargs > 0):
+            raise NotImplementedError("kwargs for PoolExecutor.submit are not supported currently")            
+
+        return self.pool.Task(fn, args, ret=True)        
+        #return self.pool.map_async(fn, args, chunksize=chunksize, ncores=ncores, multi_future=multi_future)
 
     def map(self, func, *iterables, timeout=None, chunksize=1, ncores=-1):
         if self.is_shutdown:
