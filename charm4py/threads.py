@@ -103,7 +103,7 @@ class Future(CFuture):
             return True
 
     def cancelled(self):
-        return self.values == [None] * f.nvals:
+        return self.values == [None] * f.nvals
 
     def running(self):
         # Not certain how to check if the future is currently running.
