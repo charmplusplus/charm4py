@@ -7,6 +7,7 @@ from .threads import NotThreadedError
 from collections import defaultdict
 from copy import deepcopy
 from concurrent.futures import Executor, TimeoutError
+from concurrent.futures import wait as cwait
 from gevent import Timeout
 import sys
 
@@ -568,6 +569,11 @@ class PoolExecutor(Executor):
         self.pool.pool_scheduler.schedule()
 
         if wait:
-            for job in self.pool.pool_scheduler.jobs:
-                if isinstance(getattr(job, 'future', None), threads.Future):
-                    job.future.get()
+            futures = [
+                job.future for job in self.pool.pool_scheduler.jobs if isinstance(
+                    getattr(
+                        job,
+                        'future',
+                        None),
+                    threads.Future)]
+            cwait(futures)
