@@ -132,7 +132,7 @@ class Future(CFuture):
 
         return self.error
 
-    def add_done_callback(fn):
+    def add_done_callback(self, fn):
         raise NotImplementedError
 
 
