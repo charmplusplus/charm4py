@@ -558,7 +558,4 @@ class PoolExecutor(Executor):
                 "Cancelling futures on shutdown not currently supported")
 
         self.is_shutdown = True
-        if wait:
-            self.pool.pool_scheduler.schedule()
-        else:
-            self.pool.pool_scheduler.schedule()
+        self.pool.pool_scheduler.schedule()
