@@ -1,7 +1,6 @@
 from greenlet import getcurrent
 from concurrent.futures import Future as CFuture
 from concurrent.futures import CancelledError, TimeoutError
-from asyncio import wait_for 
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -36,7 +35,6 @@ class Future(CFuture):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
-        self.cancelled = False
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -104,23 +102,25 @@ class Future(CFuture):
             return True
 
     def cancelled(self):
-        # What if function actually returns this?
-        #return self.values == [None] * f.nvals
-        return self.cancelled
+        return not self.fid in threadMgr.futures
 
     def running(self):
         # Not certain if this is correct
         return self.blocked != False and not self.done()
     
     def done(self):
-        return self.ready()
+        return self.ready() or self.cancelled or (self.error is not None)
 
-    def result(timeout=None):
-        return wait_for(self.get(), timeout=timeout)   
+    def result(self, timeout=None):
+        if timeout is not None:
+            print("Ignoring timeout. Timeout currently unsupported.")
+        return self.get()
 
-    def exception(timeout=None):
+    def exception(self, timeout=None):
+        if timeout is not None:
+            print("Ignoring timeout. Timeout currently unsupported.")
         try:
-            wait_for(self.get(), timeout=timeout)
+            self.get()
         except (TimeoutError, CancelledError) as e:
             raise e
         except Exception as e:
@@ -293,7 +293,6 @@ class EntryMethodThreadManager(object):
         del self.futures[fid]
         f.gotvalues = True
         f.values = [None] * f.nvals
-        f.cancelled = True
         f.resume(self)
 
     # TODO: method to cancel collective future. the main issue with this is

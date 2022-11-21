@@ -4,7 +4,6 @@ from .threads import NotThreadedError
 from collections import defaultdict
 from copy import deepcopy
 from concurrent.futures import Executor
-from asyncio import wait_for
 import sys
 
 
@@ -468,6 +467,21 @@ class Pool(object):
     def submit_async(self, iterable, chunksize=1, ncores=-1, multi_future=False):
         return self.map_async(None, iterable, chunksize, ncores, multi_future)
 
+from dataclasses import dataclass
+from typing import Callable
+from frozendict import frozendict
+
+@dataclass
+class _WrappedFunction:
+
+    fn: Callable
+    #def __call__(self, args_iter, kwargs_dict):
+    #    return self.fn(*args_iter, **kwargs_dict)
+
+    def __call__(self, args_kwargs):
+        in_args = args_kwargs[0]
+        in_kwargs = args_kwargs[1]
+        return self.fn(*in_args, **in_kwargs)
 
 class PoolExecutor(Executor):
 
@@ -475,20 +489,26 @@ class PoolExecutor(Executor):
         self.pool = Pool(pool_scheduler_chare)
         self.is_shutdown = False
 
-    # map_async can't handle **kwargs at present
-    def submit(self, fn, /, *args, **kwargs)#, chunksize=1, ncores=-1, multi_future=False):
+    def submit(self, fn, /, *args, **kwargs):
         if self.is_shutdown:
             raise RuntimeError("charm4py.pool.PoolExecutor object has been shut down")
-        if kwargs is not None and len(kwargs > 0):
-            raise NotImplementedError("kwargs for PoolExecutor.submit are not supported currently")            
 
-        return self.pool.Task(fn, args, ret=True)        
-        #return self.pool.map_async(fn, args, chunksize=chunksize, ncores=ncores, multi_future=multi_future)
+        if kwargs is None or len(kwargs) == 0:
+            return self.pool.Task(fn, args, ret=True) 
+            #args_iter = tuple(tuple([arg for arg in args]),)
+            #return self.pool.map_async(fn, tuple([0]))
+        else:
+            # Task doesn't support kwargs so this sneaks them in with a tuple
+            iterable_arg = tuple([tuple([args, frozendict(kwargs)])])
+            return self.pool.Task(_WrappedFunction(fn), iterable_arg, ret=True)        
+            #return self.pool.map_async(_WrappedFunction(fn), ((args,), frozendict(kwargs),))
 
     def map(self, func, *iterables, timeout=None, chunksize=1, ncores=-1):
+        if timeout is not None:
+            print("Ignoring timeout. Timeout currently unsupported.")
         if self.is_shutdown:
             raise RuntimeError("charm4py.pool.PoolExecutor object has been shut down")
-        return wait_for(self.pool.map(func, zip(*iterables), chunksize=chunksize, ncores=ncores), timeout=timeout)
+        return self.pool.map(func, zip(*iterables), chunksize=chunksize, ncores=ncores)
 
     def shutdown(wait=True, *, cancel_futures=False):
         if cancel_futures == True:
@@ -496,6 +516,6 @@ class PoolExecutor(Executor):
     
         self.is_shutdown = True
         if wait:
-            wait_for(self.pool.pool_scheduler.schedule())
+            self.pool.pool_scheduler.schedule()
         else:
             self.pool.pool_scheduler.schedule()
