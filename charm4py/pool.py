@@ -553,9 +553,18 @@ class PoolExecutor(Executor):
                              chunksize=chunksize, ncores=ncores)
 
     def shutdown(self, wait=True, *, cancel_futures=False):
-        if cancel_futures:
-            raise NotImplementedError(
-                "Cancelling futures on shutdown not currently supported")
 
+        # Prevent more jobs from being submitted
         self.is_shutdown = True
+
+        if cancel_futures:
+            for job in self.pool.pool_scheduler.jobs:
+                if isinstance(getattr(job, 'future', None), threads.Future):
+                    job.future.cancel()
+
         self.pool.pool_scheduler.schedule()
+
+        if wait:
+            for job in self.pool.pool_scheduler.jobs:
+                if isinstance(getattr(job, 'future', None), threads.Future):
+                    job.future.get()

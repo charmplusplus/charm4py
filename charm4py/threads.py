@@ -116,13 +116,14 @@ class Future(CFuture):
     def result(self, timeout=None):
         if timeout is not None:
             print("Ignoring timeout. Timeout currently unsupported.")
+        if self.cancelled():
+            raise CancelledError
+
         return self.get()
 
     def exception(self, timeout=None):
-        if timeout is not None:
-            print("Ignoring timeout. Timeout currently unsupported.")
         try:
-            self.get()
+            self.result(timeout=timeout)
         except (TimeoutError, CancelledError) as e:
             raise e
         except Exception as e:
