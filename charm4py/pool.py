@@ -6,7 +6,8 @@ from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
 from copy import deepcopy
-from concurrent.futures import Executor
+from concurrent.futures import Executor, TimeoutError
+from gevent import Timeout
 import sys
 
 
@@ -544,13 +545,15 @@ class PoolExecutor(Executor):
             return self.pool.Task(_WrappedFunction(fn), iterable_arg, ret=True)
 
     def map(self, func, *iterables, timeout=None, chunksize=1, ncores=-1):
-        if timeout is not None:
-            print("Ignoring timeout. Timeout currently unsupported.")
         if self.is_shutdown:
             raise RuntimeError(
                 "charm4py.pool.PoolExecutor object has been shut down")
-        return self.pool.map(func, zip(*iterables),
-                             chunksize=chunksize, ncores=ncores)
+
+        with Timeout(timeout, TimeoutError) as timeout:
+            result = self.pool.map(func, zip(*iterables),
+                                   chunksize=chunksize, ncores=ncores)
+
+        return result
 
     def shutdown(self, wait=True, *, cancel_futures=False):
 

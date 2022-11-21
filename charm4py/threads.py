@@ -1,6 +1,7 @@
 from greenlet import getcurrent
 from concurrent.futures import Future as CFuture
 from concurrent.futures import CancelledError, TimeoutError
+from gevent import Timeout
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -114,12 +115,11 @@ class Future(CFuture):
         return self.ready() or self.cancelled or (self.error is not None)
 
     def result(self, timeout=None):
-        if timeout is not None:
-            print("Ignoring timeout. Timeout currently unsupported.")
         if self.cancelled():
             raise CancelledError
-
-        return self.get()
+        with Timeout(timeout, TimeoutError):
+            result = self.get()
+        return result
 
     def exception(self, timeout=None):
         try:
