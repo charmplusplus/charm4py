@@ -471,8 +471,8 @@ class Pool(object):
 
 class PoolExecutor(Executor):
 
-    def __init__(self, pool_scheduler):
-        self.pool = Pool(pool_scheduler)
+    def __init__(self, pool_scheduler_chare):
+        self.pool = Pool(pool_scheduler_chare)
         self.is_shutdown = False
 
     def submit(self, fn, /, *args, **kwargs):
@@ -486,8 +486,9 @@ class PoolExecutor(Executor):
         return wait_for(self.pool.map(func, zip(*iterables), chunksize=chunksize, ncores=ncores), timeout=timeout)
 
     def shutdown(wait=True, *, cancel_futures=False):
-        # Cancelling futures isn't implemented so 
-        # cancel_futures currently does nothing
+        if cancel_futures == True:
+            raise NotImplementedError("Cancelling futures on shutdown not currently supported")
+    
         self.is_shutdown = True
         if wait:
             wait_for(self.pool.pool_scheduler.schedule())

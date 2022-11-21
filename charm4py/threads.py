@@ -96,14 +96,19 @@ class Future(CFuture):
         self.fid, self.src = state
 
     def cancel(self):
-        # Cancelling not currently implemented
-        return False
+        if self.running() or self.done():
+            return False
+        else:
+            threadMgr.cancelFuture(self)            
+            return True
 
     def cancelled(self):
-        return False
+        return self.values == [None] * f.nvals:
 
     def running(self):
-        return not self.blocked and not self.ready()
+        # Not certain how to check if the future is currently running.
+        return not self.done()
+        #return not self.blocked and not self.ready()
     
     def done(self):
         return self.ready()
