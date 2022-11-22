@@ -141,12 +141,12 @@ class Future(CFuture):
 
     def done(self):
         print(
-            self.ready(),
-            self.cancelled(),
-            isinstance(
+            "Ready:", self.ready(),
+            "Cancelled:", self.cancelled(),
+            "Failed:", isinstance(
                 self.error,
                 Exception),
-            self.running())
+            "Running:", self.running())
         return self.ready() or self.cancelled() or isinstance(self.error, Exception)
 
     def result(self, timeout=None):
@@ -174,16 +174,16 @@ class Future(CFuture):
             print(e, file=stderr)
 
     def add_done_callback(self, callback):
+        self.callbacks.append(callback)
+        # Status may have changed while appending. Run
+        # any remaining callbacks
         if self.done():
-            self._run_callback(callback)
-        else:
-            self.callbacks.append(callback)
-            # Status changed while appending. Run
-            # any remaining callbacks
-            if self.done():
-                while len(self.callbacks) > 0:
+            while len(self.callbacks) > 0:
+                try:
                     callback = self.callback.pop()
                     self._run_callback(callback)
+                except IndexError as e:
+                    break
 
     def set_running_or_notify_cancel(self):
         if self.cancelled():
