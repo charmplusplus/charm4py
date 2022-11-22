@@ -1,7 +1,10 @@
 from greenlet import getcurrent
 from concurrent.futures import Future as CFuture
-from concurrent.futures import CancelledError, TimeoutError
+from concurrent.futures import CancelledError, TimeoutError, InvalidStateError
 from gevent import Timeout
+from sys import stderr
+from dataclasses import dataclass
+from typing import Union
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -25,34 +28,46 @@ class NotThreadedError(Exception):
 # See commit 25e2935 if need to resurrect code where proxies were included when
 # futures were pickled.
 
+@dataclass()
 class Future(CFuture):
 
+    fid: int  # unique future ID within the process that created it
+    gr: object  # greenlet that created the future
+    # PE where the future was created (not used for collective futures)
+    src: int
+    nvals: int  # number of values that the future expects to receive
+    values: list  # values of the future
+    callbacks: list  # list of callback functions
+    # flag to check if creator thread is blocked on the future
+    blocked: Union[bool, int] = False
+    gotvalues: bool = False  # flag to check if expected number of values have been received
+    # if the future receives an Exception, it is set here
+    error: Union[None, Exception] = None
+    is_cancelled: bool = False  # flag to check if the future is cancelled
+    is_running: bool = False  # flag to check if the future is currently running
+
     def __init__(self, fid, gr, src, num_vals):
-        self.fid = fid  # unique future ID within the process that created it
-        self.gr = gr  # greenlet that created the future
-        # PE where the future was created (not used for collective futures)
+        self.fid = fid
+        self.gr = gr
         self.src = src
-        self.nvals = num_vals  # number of values that the future expects to receive
-        self.values = []  # values of the future
-        self.blocked = False  # flag to check if creator thread is blocked on the future
-        self.gotvalues = False  # flag to check if expected number of values have been received
-        self.error = None  # if the future receives an Exception, it is set here
+        self.nvals = num_vals
+        self.values = []
+        self.callbacks = []
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
             future. If the values are already available then they are returned immediately.
         """
+
         if not self.gotvalues:
             self.blocked = True
             self.gr = getcurrent()
             self.values = threadMgr.pauseThread()
 
-        if self.error is not None:
+        if isinstance(self.error, Exception):
             raise self.error
 
-        if self.nvals == 1:
-            return self.values[0]
-        return self.values
+        return self.values[0] if self.nvals == 1 else self.values
 
     def ready(self):
         return self.gotvalues
@@ -72,13 +87,23 @@ class Future(CFuture):
 
     def deposit(self, result):
         """ Deposit a value for this future. """
+        if self.done():
+            raise InvalidStateError()
+
+        retval = False
         self.values.append(result)
         if isinstance(result, Exception):
             self.error = result
         if len(self.values) == self.nvals:
             self.gotvalues = True
-            return True
-        return False
+            retval = True
+            self.is_running = False
+
+            while len(self.callbacks) > 0:
+                callback = self.callback.pop()
+                self._run_callback(callback)
+
+        return retval
 
     def resume(self, threadMgr):
         if self.blocked == 2:
@@ -101,22 +126,32 @@ class Future(CFuture):
         if self.running() or self.done():
             return False
         else:
+            self.is_cancelled = True
             threadMgr.cancelFuture(self)
+            while len(self.callbacks) > 0:
+                callback = self.callback.pop()
+                self._run_callback(callback)
             return True
 
     def cancelled(self):
-        return self.fid not in threadMgr.futures
+        return self.is_cancelled
 
     def running(self):
-        # Not certain if this is correct
-        return self.blocked and not self.done()
+        return self.is_running
 
     def done(self):
-        return self.ready() or self.cancelled or (self.error is not None)
+        print(
+            self.ready(),
+            self.cancelled(),
+            isinstance(
+                self.error,
+                Exception),
+            self.running())
+        return self.ready() or self.cancelled() or isinstance(self.error, Exception)
 
     def result(self, timeout=None):
         if self.cancelled():
-            raise CancelledError
+            raise CancelledError()
         with Timeout(timeout, TimeoutError):
             result = self.get()
         return result
@@ -124,16 +159,55 @@ class Future(CFuture):
     def exception(self, timeout=None):
         try:
             self.result(timeout=timeout)
-        except (TimeoutError, CancelledError) as e:
-            raise e
         except Exception as e:
-            if self.error is None:
+            if isinstance(
+                    e, TimeoutError) or isinstance(
+                    e, CancelledError) or e != self.error:
                 raise e
 
         return self.error
 
-    def add_done_callback(self, fn):
-        raise NotImplementedError
+    def _run_callback(self, callback):
+        try:
+            callback(self)
+        except Exception as e:
+            print(e, file=stderr)
+
+    def add_done_callback(self, callback):
+        if self.done():
+            self._run_callback(callback)
+        else:
+            self.callbacks.append(callback)
+            # Status changed while appending. Run
+            # any remaining callbacks
+            if self.done():
+                while len(self.callbacks) > 0:
+                    callback = self.callback.pop()
+                    self._run_callback(callback)
+
+    def set_running_or_notify_cancel(self):
+        if self.cancelled():
+            retval = False
+        elif self.done():
+            raise InvalidStateError()
+        else:
+            retval = True
+            self.is_running = True
+
+        # self.waitReady(None)
+        # self.resume(threadMgr)
+        # threadMgr.start()
+
+        return retval
+
+    # The following methods aren't used here, but concurrent.futures says unit
+    # tests may use them
+
+    def set_result(self, result):
+        self.deposit(result)
+
+    def set_exception(self, exception):
+        self.deposit(exception)
 
 
 class CollectiveFuture(Future):
