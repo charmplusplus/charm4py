@@ -1,5 +1,5 @@
 from greenlet import getcurrent
-from concurrent.futures import Future as CFuture
+from concurrent.futures import Future as ConcurrentFuture
 from concurrent.futures import CancelledError, TimeoutError, InvalidStateError
 from gevent import Timeout
 from sys import stderr
@@ -29,7 +29,7 @@ class NotThreadedError(Exception):
 # futures were pickled.
 
 @dataclass()
-class Future(CFuture):
+class Future(ConcurrentFuture):
 
     fid: int  # unique future ID within the process that created it
     gr: object  # greenlet that created the future
@@ -98,10 +98,7 @@ class Future(CFuture):
             self.gotvalues = True
             retval = True
             self.is_running = False
-
-            while len(self.callbacks) > 0:
-                callback = self.callback.pop()
-                self._run_callback(callback)
+            self._run_callbacks()
 
         return retval
 
@@ -128,9 +125,7 @@ class Future(CFuture):
         else:
             self.is_cancelled = True
             threadMgr.cancelFuture(self)
-            while len(self.callbacks) > 0:
-                callback = self.callback.pop()
-                self._run_callback(callback)
+            self._run_callbacks()
             return True
 
     def cancelled(self):
@@ -173,17 +168,20 @@ class Future(CFuture):
         except Exception as e:
             print(e, file=stderr)
 
+    def _run_callbacks(self):
+        while len(self.callbacks) > 0:
+            try:
+                callback = self.callbacks.pop()
+                self._run_callback(callback)
+            except IndexError:
+                break
+
     def add_done_callback(self, callback):
         self.callbacks.append(callback)
         # Status may have changed while appending. Run
         # any remaining callbacks
         if self.done():
-            while len(self.callbacks) > 0:
-                try:
-                    callback = self.callback.pop()
-                    self._run_callback(callback)
-                except IndexError as e:
-                    break
+            self._run_callbacks()
 
     def set_running_or_notify_cancel(self):
         if self.cancelled():
@@ -191,11 +189,13 @@ class Future(CFuture):
         elif self.done():
             raise InvalidStateError()
         else:
-            retval = True
             self.is_running = True
+            retval = True
 
+        # How to force this future to start running asynchronously?
         # self.waitReady(None)
-        # self.resume(threadMgr)
+        self.blocked = True
+        self.resume(threadMgr)
         # threadMgr.start()
 
         return retval
@@ -353,7 +353,8 @@ class EntryMethodThreadManager(object):
             f = futures[fid]
         except KeyError:
             raise Charm4PyError(
-                'No pending future with fid=' + str(fid) + '. A common reason is '
+                'No pending future with fid=' +
+                str(fid) + '. A common reason is '
                 'sending to a future that already received its value(s)')
         if f.deposit(result):
             del futures[fid]
