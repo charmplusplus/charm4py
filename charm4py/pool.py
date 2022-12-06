@@ -527,6 +527,15 @@ class _WrappedFunction:
         return self.fn(*in_args, **in_kwargs)
 
 
+@dataclass
+class _StarmappedFunction:
+
+    fn: Callable
+
+    def __call__(self, args_iterable):
+        return self.fn(*args_iterable)
+
+
 class PoolExecutor(Executor):
 
     def __init__(self, pool_scheduler_chare):
@@ -551,7 +560,7 @@ class PoolExecutor(Executor):
                 "charm4py.pool.PoolExecutor object has been shut down")
 
         with Timeout(timeout, TimeoutError) as timeout:
-            result = self.pool.map(func, zip(*iterables),
+            result = self.pool.map(_StarmappedFunction(func), list(zip(*iterables)),
                                    chunksize=chunksize, ncores=ncores)
 
         return result
