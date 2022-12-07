@@ -165,6 +165,7 @@ class PoolScheduler(Chare):
             job.remote = self.workers.runTask_star_th
         else:
             job.remote = self.workers.runTask_star
+        #future.set_running_or_notify_cancel()
         self.schedule()
 
     def start(self, func, tasks, result, ncores, chunksize):
@@ -218,6 +219,7 @@ class PoolScheduler(Chare):
         job = self.job_next
         prev = self
         while job is not None:
+            #job.future.set_running_or_notify_cancel()
             if len(self.idle_workers) == 0:
                 return
             while True:
@@ -482,6 +484,7 @@ class Pool(object):
             f = Future()
         # unpack the arguments for sending to allow benefiting from direct copy
         #print(f)
+        #f.set_running_or_notify_cancel()
         self.pool_scheduler.startSingleTask(func, f, *args)
         return f
 
@@ -556,13 +559,16 @@ class PoolExecutor(Executor):
                 "charm4py.pool.PoolExecutor object has been shut down")
 
         if kwargs is None or len(kwargs) == 0:
-            return self.pool.Task(fn, args, ret=True)
+            future = self.pool.Task(fn, args, ret=True)
             #return self.pool.map_async(_StarmappedFunction(fn), (args,),
             #                       chunksize=1, ncores=-1)
         else:
             # Task doesn't support kwargs so this sneaks them in with a tuple
             iterable_arg = tuple([tuple([args, frozendict(kwargs)])])
-            return self.pool.Task(_WrappedFunction(fn), iterable_arg, ret=True)
+            future = self.pool.Task(_WrappedFunction(fn), iterable_arg, ret=True)
+
+        future.set_running_or_notify_cancel()
+        return future
 
     def map(self, func, *iterables, timeout=None, chunksize=1, ncores=-1):
         if self.is_shutdown:
@@ -586,7 +592,7 @@ class PoolExecutor(Executor):
                     job.future.cancel()
 
         # Is this necessary?
-        self.pool.pool_scheduler.schedule()
+        #self.pool.pool_scheduler.schedule()
 
         if wait:
             for job in self.pool.pool_scheduler.jobs:

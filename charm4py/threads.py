@@ -106,7 +106,6 @@ class Future(ConcurrentFuture):
 
     def deposit(self, result):
         """ Deposit a value for this future. """
-
         retval = False
         with self._condition:
             if self._state in {CANCELLED, CANCELLED_AND_NOTIFIED, FINISHED}:
@@ -283,11 +282,23 @@ class Future(ConcurrentFuture):
         """
 
         # How to force this future to start running asynchronously?
+        # Can't really control which greenlet executes next so
+        # a greenlet might complete before it is marked to run.
+        # Need to make Concurrent.wait() work here.
+        #if self._state == FINISHED:
+        #    return True
         retval = super().set_running_or_notify_cancel()
         if retval:
             #self.waitReady(None)
+            # Pause this thread (and allow other threads to execute)
+            threadMgr.pauseThread()
+            #self.blocked = True
+            # Resume this thread
             #self.resume(threadMgr)
-            threadMgr.start()
+            #threadMgr.start()
+            #self.gr = getcurrent()
+            #threadMgr.resumeThread(self.gr, self)
+            #threadMgr.resumeThread(threadMgr.main_gr, self)
 
         return retval
 
