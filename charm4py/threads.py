@@ -1,10 +1,12 @@
 from greenlet import getcurrent
 from concurrent.futures import Future as ConcurrentFuture
 from concurrent.futures import CancelledError, TimeoutError, InvalidStateError
+from concurrent.futures._base import CANCELLED, FINISHED, CANCELLED_AND_NOTIFIED
 from gevent import Timeout
 from sys import stderr
 from dataclasses import dataclass
 from typing import Union
+from collections.abc import Iterable
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -28,31 +30,34 @@ class NotThreadedError(Exception):
 # See commit 25e2935 if need to resurrect code where proxies were included when
 # futures were pickled.
 
-@dataclass()
+#@dataclass()
 class Future(ConcurrentFuture):
 
-    fid: int  # unique future ID within the process that created it
-    gr: object  # greenlet that created the future
+    #fid: int  # unique future ID within the process that created it
+    #gr: object  # greenlet that created the future
     # PE where the future was created (not used for collective futures)
-    src: int
-    nvals: int  # number of values that the future expects to receive
-    values: list  # values of the future
-    callbacks: list  # list of callback functions
+    #src: int
+    #nvals: int  # number of values that the future expects to receive
+    #values: list  # values of the future
     # flag to check if creator thread is blocked on the future
-    blocked: Union[bool, int] = False
-    gotvalues: bool = False  # flag to check if expected number of values have been received
+    #blocked: Union[bool, int] = False
+    #gotvalues: bool = False  # flag to check if expected number of values have been received
     # if the future receives an Exception, it is set here
-    error: Union[None, Exception] = None
-    is_cancelled: bool = False  # flag to check if the future is cancelled
-    is_running: bool = False  # flag to check if the future is currently running
+    #error: Union[None, Exception] = None
+    #callbacks: list  # list of callback functions
+    #is_cancelled: bool = False  # flag to check if the future is cancelled
+    #is_running: bool = False  # flag to check if the future is currently running
 
     def __init__(self, fid, gr, src, num_vals):
+        super().__init__()
         self.fid = fid
         self.gr = gr
         self.src = src
         self.nvals = num_vals
-        self.values = []
-        self.callbacks = []
+        #self.values = []
+        self._result = []
+        self.blocked = False
+        #self.callbacks = []
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -60,17 +65,31 @@ class Future(ConcurrentFuture):
         """
 
         if not self.gotvalues:
+            print("NOT AVAILABLE")
             self.blocked = True
             self.gr = getcurrent()
-            self.values = threadMgr.pauseThread()
+            self._result = threadMgr.pauseThread()
+        else:
+            print("AVAILABLE")
 
-        if isinstance(self.error, Exception):
-            raise self.error
+        if isinstance(self._exception, Exception):
+            raise self._exception
 
         return self.values[0] if self.nvals == 1 else self.values
 
+    # self.ready() == self.gotvalues == (self._state == FINISHED)?
+    # Why do we need three ways to say the same thing?
+    # ready() is only true if all values have been received. 
     def ready(self):
         return self.gotvalues
+
+    @property
+    def values(self):
+        return self._result
+
+    @property
+    def gotvalues(self):
+        return len(self.values) == self.nvals
 
     def waitReady(self, f):
         self.blocked = 2
@@ -87,18 +106,48 @@ class Future(ConcurrentFuture):
 
     def deposit(self, result):
         """ Deposit a value for this future. """
-        if self.done():
-            raise InvalidStateError()
 
         retval = False
-        self.values.append(result)
-        if isinstance(result, Exception):
-            self.error = result
-        if len(self.values) == self.nvals:
-            self.gotvalues = True
-            retval = True
-            self.is_running = False
-            self._run_callbacks()
+        with self._condition:
+            if self._state in {CANCELLED, CANCELLED_AND_NOTIFIED, FINISHED}:
+                raise InvalidStateError('{}: {!r}'.format(self._state, self))
+
+            self.values.append(result)
+
+            # Should it be finished after receiving a single exception
+            # or should it wait for all of them?
+            if isinstance(result, Exception):
+                self._exception = exception
+                #self._state = FINISHED
+                #for waiter in self._waiters:
+                #    waiter.add_exception(self)
+                #self._condition.notify_all()
+                #self._invoke_callbacks()
+
+            if self.gotvalues:
+                self._state = FINISHED
+                #if isinstance(self._exception, Exception)
+                #    for waiter in self._waiters:
+                #        waiter.add_exception(self)
+                # add_exception and add_result seem to
+                # do the same thing so we shouldn't
+                # need to call them separately
+                for waiter in self._waiters:
+                    waiter.add_result(self)
+                self._condition.notify_all()
+                self._invoke_callbacks()
+                retval = True
+
+        #retval = False
+        #self.values.append(result)
+        #if isinstance(result, Exception):
+        #    self._exception = result
+        #if len(self.values) == self.nvals:
+        #    self._state = FINISHED
+            #self.gotvalues = True
+            #retval = True
+            #self.is_running = False
+            #self._run_callbacks()
 
         return retval
 
@@ -119,7 +168,40 @@ class Future(ConcurrentFuture):
     def __setstate__(self, state):
         self.fid, self.src = state
 
+    #@property
+    #def _result():
+    #   return self.values 
+
     def cancel(self):
+        retval = super().cancel()
+        if retval:
+            threadMgr.cancelFuture(self)
+        return retval
+        '''
+        """Cancel the future if possible.
+
+        Returns True if the future was cancelled, False otherwise. A future
+        cannot be cancelled if it is running or has already completed.
+        """
+        with self._condition:
+            if self._state in [RUNNING, FINISHED]:
+                return False
+
+            if self._state in [CANCELLED, CANCELLED_AND_NOTIFIED]:
+                return True
+
+            self._state = CANCELLED
+            threadMgr.cancelFuture(self)
+            self._condition.notify_all()
+
+        self._invoke_callbacks()
+        return True
+        '''
+
+    """
+    def cancel(self):
+        #retval = super().cancel()
+        
         if self.running() or self.done():
             return False
         else:
@@ -127,7 +209,8 @@ class Future(ConcurrentFuture):
             threadMgr.cancelFuture(self)
             self._run_callbacks()
             return True
-
+    """
+    """
     def cancelled(self):
         return self.is_cancelled
 
@@ -143,7 +226,9 @@ class Future(ConcurrentFuture):
                 Exception),
             "Running:", self.running())
         return self.ready() or self.cancelled() or isinstance(self.error, Exception)
+    """
 
+    """
     def result(self, timeout=None):
         if self.cancelled():
             raise CancelledError()
@@ -161,7 +246,9 @@ class Future(ConcurrentFuture):
                 raise e
 
         return self.error
+    """
 
+    """
     def _run_callback(self, callback):
         try:
             callback(self)
@@ -182,8 +269,10 @@ class Future(ConcurrentFuture):
         # any remaining callbacks
         if self.done():
             self._run_callbacks()
+    """
 
     def set_running_or_notify_cancel(self):
+        """
         if self.cancelled():
             retval = False
         elif self.done():
@@ -191,24 +280,52 @@ class Future(ConcurrentFuture):
         else:
             self.is_running = True
             retval = True
+        """
 
         # How to force this future to start running asynchronously?
-        # self.waitReady(None)
-        self.blocked = True
-        self.resume(threadMgr)
-        # threadMgr.start()
+        retval = super().set_running_or_notify_cancel()
+        if retval:
+            #self.waitReady(None)
+            #self.resume(threadMgr)
+            threadMgr.start()
 
         return retval
 
     # The following methods aren't used here, but concurrent.futures says unit
     # tests may use them
 
+    # Add this logic (and the exception logic) to deposit
+    '''
     def set_result(self, result):
-        self.deposit(result)
+        """Sets the return value of work associated with the future.
+        Should only be used by Executor implementations and unit tests.
+        """
+        with self._condition:
+            if self._state in {CANCELLED, CANCELLED_AND_NOTIFIED, FINISHED}:
+                raise InvalidStateError('{}: {!r}'.format(self._state, self))
+            self._result = result
+            self._state = FINISHED
+            for waiter in self._waiters:
+                waiter.add_result(self)
+            self._condition.notify_all()
+        self._invoke_callbacks()
+    '''
+
+    # concurrent.futures assumes the future only needs to wait for a single
+    # result, but the charm4py future can wait on multiple deposits
+    def set_result(self, result):
+        if isinstance(result, Iterable):
+            assert len(result) == self.nvals
+            for entry in result:
+                self.deposit(entry)
+        else:
+            assert self.nvals == 1
+            self.deposit(result)
+        #super().set_result(exception)
 
     def set_exception(self, exception):
         self.deposit(exception)
-
+        #super().set_exception(exception)
 
 class CollectiveFuture(Future):
 
@@ -376,8 +493,8 @@ class EntryMethodThreadManager(object):
     def cancelFuture(self, f):
         fid = f.fid
         del self.futures[fid]
-        f.gotvalues = True
-        f.values = [None] * f.nvals
+        #f.gotvalues = True
+        f._result = [None] * f.nvals
         f.resume(self)
 
     # TODO: method to cancel collective future. the main issue with this is

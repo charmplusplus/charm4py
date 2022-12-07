@@ -101,6 +101,7 @@ class Job(object):
 class PoolScheduler(Chare):
 
     def __init__(self):
+        super().__init__()
         self.workers = None
         self.idle_workers = set(range(1, charm.numPes()))
         self.num_workers = len(self.idle_workers)
@@ -158,6 +159,7 @@ class PoolScheduler(Chare):
         job = Job(self.job_id_pool.pop(), func,
                   (args,), future, self.num_workers, 1)
         job.single_task = True
+
         self.__addJob__(job)
         if job.threaded:
             job.remote = self.workers.runTask_star_th
@@ -211,6 +213,8 @@ class PoolScheduler(Chare):
         self.schedule()
 
     def schedule(self):
+        from time import time
+        print("SCHEDULED at time", time())
         job = self.job_next
         prev = self
         while job is not None:
@@ -218,24 +222,27 @@ class PoolScheduler(Chare):
                 return
             while True:
                 if not job.failed:
-                    task = job.getTask()
-                    if task is None:
-                        break
-                    worker_id = self.idle_workers.pop()
-                    # print('Sending task to worker', worker_id)
+                    if True:#job.future.set_running_or_notify_cancel():
+                        task = job.getTask()
+                        if task is None:
+                            break
+                        worker_id = self.idle_workers.pop()
+                        # print('Sending task to worker', worker_id)
 
-                    if job.func is not None:
-                        func = None
-                        if job.id not in self.worker_knows[worker_id]:
-                            func = job.func
-                            job.workers.append(worker_id)
-                            self.worker_knows[worker_id].add(job.id)
+                        if job.func is not None:
+                            func = None
+                            if job.id not in self.worker_knows[worker_id]:
+                                func = job.func
+                                job.workers.append(worker_id)
+                                self.worker_knows[worker_id].add(job.id)
+                        else:
+                            func = task.func
+                        # NOTE: this is a non-standard way of using proxies, but is
+                        # faster and allows the scheduler to reuse the same proxy
+                        self.workers.elemIdx = worker_id
+                        job.remote(func, task.data, task.result_dest, job.id)
                     else:
-                        func = task.func
-                    # NOTE: this is a non-standard way of using proxies, but is
-                    # faster and allows the scheduler to reuse the same proxy
-                    self.workers.elemIdx = worker_id
-                    job.remote(func, task.data, task.result_dest, job.id)
+                        break
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -474,6 +481,7 @@ class Pool(object):
         if ret or awaitable:
             f = Future()
         # unpack the arguments for sending to allow benefiting from direct copy
+        #print(f)
         self.pool_scheduler.startSingleTask(func, f, *args)
         return f
 
@@ -549,6 +557,8 @@ class PoolExecutor(Executor):
 
         if kwargs is None or len(kwargs) == 0:
             return self.pool.Task(fn, args, ret=True)
+            #return self.pool.map_async(_StarmappedFunction(fn), (args,),
+            #                       chunksize=1, ncores=-1)
         else:
             # Task doesn't support kwargs so this sneaks them in with a tuple
             iterable_arg = tuple([tuple([args, frozendict(kwargs)])])
@@ -576,7 +586,7 @@ class PoolExecutor(Executor):
                     job.future.cancel()
 
         # Is this necessary?
-        # self.pool.pool_scheduler.schedule()
+        self.pool.pool_scheduler.schedule()
 
         if wait:
             for job in self.pool.pool_scheduler.jobs:
