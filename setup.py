@@ -280,7 +280,7 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
-                              extra_link_args=extra_link_args,
+                              extra_link_args=extra_link_args, language='c++',
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
         try:

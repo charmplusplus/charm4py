@@ -45,61 +45,6 @@ cdef enum:
 
 # ----- reduction data structures ------
 
-ctypedef struct CkReductionTypesExt:
-  int nop
-  int sum_char
-  int sum_short
-  int sum_int
-  int sum_long
-  int sum_long_long
-  int sum_uchar
-  int sum_ushort
-  int sum_uint
-  int sum_ulong
-  int sum_ulong_long
-  int sum_float
-  int sum_double
-  int product_char
-  int product_short
-  int product_int
-  int product_long
-  int product_long_long
-  int product_uchar
-  int product_ushort
-  int product_uint
-  int product_ulong
-  int product_ulong_long
-  int product_float
-  int product_double
-  int max_char
-  int max_short
-  int max_int
-  int max_long
-  int max_long_long
-  int max_uchar
-  int max_ushort
-  int max_uint
-  int max_ulong
-  int max_ulong_long
-  int max_float
-  int max_double
-  int min_char
-  int min_short
-  int min_int
-  int min_long
-  int min_long_long
-  int min_uchar
-  int min_ushort
-  int min_uint
-  int min_ulong
-  int min_ulong_long
-  int min_float
-  int min_double
-  int logical_and_bool
-  int logical_or_bool
-  int logical_xor_bool
-  int external_py
-
 cdef extern CkReductionTypesExt charm_reducers
 
 class CkReductionTypesExt_Wrapper:
@@ -1230,8 +1175,8 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
     charm.handleGeneralError()
 
 cdef void depositFutureWithId(void *param, void *msg):
-  cdef int futureId = <int> param
-  charm._future_deposit_result(futureId)
+  cdef unsigned long long futureId = <unsigned long long> param
+  charm._future_deposit_result(<int>futureId)
 
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
@@ -1355,8 +1300,9 @@ cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer)
     charm.handleGeneralError()
 
 cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
+  cdef unsigned long long _userParam = <unsigned long long> userParam
   try:
-    charm.triggerCallable(<int>userParam)
+    charm.triggerCallable(<int>_userParam)
   except:
     charm.handleGeneralError()
 
