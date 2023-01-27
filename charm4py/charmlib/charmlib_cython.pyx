@@ -3,10 +3,12 @@ from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
-from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
+from cpython.buffer  cimport PyObject_GetBuffer, PyObject_CheckBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
+from libcpp.vector cimport vector
+from libcpp.pair cimport pair
 
 from ..charm import Charm4PyError
 from .. import reduction as red
@@ -214,7 +216,30 @@ cdef class ReceiveMsgBuffer:
 #    return <bytes>self.msg[0:self.shape[0]]
 
 
-cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
+cdef class ZCMessageManager:
+  cdef vector[pair[const char*, int]] messages
+
+  def __init__(self):
+    self.messages.reserve(5)
+
+  cdef size(self):
+    return self.messages.size()
+  cdef add_to_message(self, Py_buffer *buf):
+    cdef const char *msg_base = <const char*> buf[0].buf
+    cdef int size = buf[0].len
+
+    cdef pair[const char*, int] data = (msg_base, size)
+    self.messages.push_back(data)
+
+  cdef data(self):
+    return <char*> self.messages.data()
+
+  cdef clear(self):
+    self.messages.clear()
+
+cdef ZCMessageManager ZCManager = ZCMessageManager()
+
+cdef inline object array_index_to_tuple(int ndims, const int *arrayIndex):
   cdef int i = 0
   # TODO: not sure if there is cleaner way to make cython generate similar code
   arrIndex = PyTuple_New(ndims)
@@ -249,6 +274,7 @@ cdef int cur_buf = 1
 cdef int gpu_direct_buf_idx = 0
 cdef int[MAX_INDEX_LEN] c_index
 cdef Py_buffer send_buffer
+cdef Py_buffer arg_buffer
 cdef ReceiveMsgBuffer recv_buffer = ReceiveMsgBuffer()
 cdef c_type_table_typecodes = [None] * 13
 cdef int c_type_table_sizes[13]
@@ -498,35 +524,25 @@ class CharmLib(object):
                                 msg not None, stream_ptrs):
 
     global gpu_direct_buf_idx
+    global cur_buf
     cdef int i = 0
     cdef int ndims = len(index)
     # assert ndims == 1
     for i in range(ndims): c_index[i] = index[i]
     msg0, dcopy = msg
     dcopy = None
-    cdef int num_direct_buffers = gpu_direct_buf_idx
+    cdef int num_direct_buffers = ZCManager.size()
     # TODO: Message on assertion failure
-    assert num_direct_buffers <= NUM_DCOPY_BUFS
-    global gpu_direct_device_ptrs
-    global gpu_direct_stream_ptrs
-    global cur_buf
-
-    if stream_ptrs and isinstance(stream_ptrs, list):
-      for i in range(num_direct_buffers):
-        gpu_direct_stream_ptrs[i] = stream_ptrs[i]
-    elif not stream_ptrs:
-      memset(gpu_direct_stream_ptrs, 0, sizeof(long) * num_direct_buffers)
 
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
     CkArrayExtSendWithZCData(array_id, c_index, ndims, ep,
-                                 cur_buf, send_bufs, send_buf_sizes,
-                                 gpu_direct_device_ptrs,
-                                 gpu_direct_buff_sizes,
-                                 num_direct_buffers
+                             cur_buf, send_bufs, send_buf_sizes,
+                             <void*>(ZCManager.messages.data()),
+                             num_direct_buffers
                                 )
+    ZCManager.clear()
     cur_buf = 1
-    gpu_direct_buf_idx = 0
 
   def CkArraySendWithDeviceDataFromPointersArray(self, int array_id, index not None, int ep,
                                                  msg not None, array.array gpu_src_ptrs,
@@ -548,12 +564,12 @@ class CharmLib(object):
 
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    CkArrayExtSendWithZCData(array_id, c_index, ndims, ep,
-                                 cur_buf, send_bufs, send_buf_sizes,
-                                 <long*>gpu_src_ptrs.data.as_voidptr,
-                                 <int*>gpu_src_sizes.data.as_voidptr,
-                                 num_bufs
-                                 )
+    # CkArrayExtSendWithZCData(array_id, c_index, ndims, ep,
+    #                              cur_buf, send_bufs, send_buf_sizes,
+    #                              <long*>gpu_src_ptrs.data.as_voidptr,
+    #                              <int*>gpu_src_sizes.data.as_voidptr,
+    #                              num_bufs
+    #                              )
     cur_buf = 1
     gpu_direct_buf_idx = 0
 
@@ -579,12 +595,12 @@ class CharmLib(object):
 
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    CkArrayExtSendWithZCData(array_id, c_index, ndims, ep,
-                                 cur_buf, send_bufs, send_buf_sizes,
-                                 <long*>&gpu_addresses[0],
-                                 &gpu_buffer_sizes[0],
-                                 num_bufs
-                                 )
+    # CkArrayExtSendWithZCData(array_id, c_index, ndims, ep,
+    #                              cur_buf, send_bufs, send_buf_sizes,
+    #                              <long*>&gpu_addresses[0],
+    #                              &gpu_buffer_sizes[0],
+    #                              num_bufs
+    #                              )
     cur_buf = 1
     gpu_direct_buf_idx = 0
 
@@ -939,7 +955,9 @@ class CharmLib(object):
       n_gpu_bufs = 0
       for i in range(len(msgArgs)):
         arg = msgArgs[i]
-        if hasattr(arg, '__array_interface__'):
+        if PyObject_CheckBuffer(arg):
+          PyObject_GetBuffer(arg, &send_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
+          ZCManager.add_to_message(&send_buffer)
           if pack_gpu:
             # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
             # assumption: we can get nbytes from the arg directly
@@ -1098,7 +1116,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
     charm.handleGeneralError()
 
 cdef void recvGPUDirectArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
-                                int *devBufSizes, void *devBufs, int msgSize,
+                                size_t *devBufSizes, void *devBufs, int msgSize,
                                 char *msg, int dcopy_start):
 
     cdef int idx = 0

@@ -75,8 +75,7 @@ cdef extern from "charm.h":
     void CkArrayExtSendWithZCData(int aid, int *idx, int ndims,
                                   int epIdx, int num_bufs, char **bufs,
                                   int *buf_sizes,
-                                  long *zcBufPtrs,
-                                  int *zcBufSizesInBytes,
+                                  void *zcBufPtrs,
                                   int numZCBufs
                                   )
 
@@ -148,7 +147,7 @@ cdef extern from "charm.h":
       int logical_xor_bool
       int external_py
 
-    void registerArrayMsgZCRecvExtCallback(void (*cb)(int, int, int*, int, int, int*, void *, int, char*,int));
+    void registerArrayMsgZCRecvExtCallback(void (*cb)(int, int, int*, int, int, size_t*, void *, int, char*,int));
     void CkGetZCData(int numBuffers, void *recvBufPtrs, int *arrSizes,
                      void *remoteBufInfos, int futureId);
     int CkZCBufferSizeInBytes();
