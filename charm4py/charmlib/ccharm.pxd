@@ -3,6 +3,11 @@
 
 cdef extern from "charm.h":
 
+    cdef cppclass CkGroupID:
+      int idx;
+    cdef cppclass CkChareID:
+      int onPE;
+      void *objPtr;
     void StartCharmExt(int argc, char **argv);
     int CkMyPeHook();
     int CkNumPesHook();
@@ -20,6 +25,7 @@ cdef extern from "charm.h":
     void CmiGetPesOnPhysicalNode(int node, int **pelist, int *num);
     int CmiGetFirstPeOnPhysicalNode(int node);
     int CmiPhysicalRank(int pe);
+    void CkSendMsg(int entryIndex, void *msg, const CkChareID *chare, int opts);
 
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
     void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
@@ -154,10 +160,59 @@ cdef extern from "charm.h":
 
     void registerDepositFutureWithIdFn(void (*cb)(void*, void*));
 
-
+cdef extern from "charm++.h":
+  cdef cppclass CkEntryOptions:
+    pass
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
 
+cdef extern from "ckarrayindex.h":
+  cdef cppclass CkArrayID:
+    CkGroupID _gid;
+    CkArrayID(CkGroupID g);
 
+  cdef cppclass CkArrayIndex:
+    CkArrayIndex();
+    CkArrayIndex(int ndims, int dims[]);
+
+cdef extern from "ckarray.h":
+  cdef cppclass CProxyElement_ArrayBase:
+    @staticmethod
+    void ckSendWrapper(CkArrayID _aid, CkArrayIndex _idx, void *m, int ep, int opts);
+  void CkBroadcastMsgArray(int entryIndex, void* msg, CkArrayID aID, int opts);
+
+cdef extern from "pup.h" namespace "PUP":
+  cdef cppclass toMem:
+    toMem();
+    toMem(void *Nbuf, const unsigned int purpose);
+    void operator|[T](T &a)
+    void operator()(void *bytes, int size)
+
+  cdef cppclass fromMem:
+    fromMem();
+    fromMem(void *Nbuf, const unsigned int purpose);
+    void operator|[T](T &a)
+    void operator()(void *bytes, int size)
+
+  cdef cppclass sizer:
+    sizer();
+    sizer(const unsigned int purpose);
+    void operator|[T](T &a)
+    void operator()(void *bytes, int size)
+    size_t size();
+
+cdef extern from "ckmarshall.h":
+  cdef cppclass CkMarshallMsg:
+    char *msgBuf;
+  CkMarshallMsg *CkAllocateMarshallMsg(int size, const CkEntryOptions *opts);
+
+cdef extern from "cklocation.h":
+  cdef cppclass CkArrayMessage:
+    void array_setIfNotThere(unsigned int)
+
+cdef extern from "envelope.h":
+  cdef cppclass envelope:
+    void setMsgType(const unsigned char m);
+  envelope *UsrToEnv(const void *const msg);

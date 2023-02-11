@@ -1,4 +1,4 @@
-from ccharm cimport *
+from . ccharm cimport *
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uintptr_t
@@ -30,6 +30,10 @@ ELSE:
     class ndarray: pass
     class number: pass
   np = NumpyDummyModule()
+
+cdef enum MSG_TYPE:
+  CHANNEL_MSG = 0,
+  OTHER_MSG
 
 cdef object np_number = np.number
 cdef int CK_DEVICEBUFFER_SIZE_IN_BYTES = CkZCBufferSizeInBytes()
@@ -170,6 +174,9 @@ cdef class ReceiveMsgBuffer:
 
   cdef inline int isLocal(self):
     return self.msg[0] == 'L' and self.msg[1] == ':'
+
+  cdef inline int isChannelMsg(self):
+    return self.msg[0] == <int>'C'
 
   cdef inline int getLocalTag(self):
     return (<int*>(&self.msg[2]))[0]
@@ -399,7 +406,7 @@ class CharmLib(object):
     msg0, dcopy = msg
     objPtr = <void*>(<uintptr_t>chare_id[1])
     if cur_buf <= 1:
-      CkChareExtSend(<int>chare_id[0], objPtr, ep, msg0, len(msg0))
+      _CkChareSend(<int>chare_id[0], objPtr, ep, msg0, len(msg0))
     else:
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
@@ -611,12 +618,24 @@ class CharmLib(object):
     cdef int i = 0
     for i in range(ndims): c_index[i] = index[i]
     if cur_buf <= 1:
-      CkArrayExtSend(array_id, c_index, ndims, ep, msg0, len(msg0))
+      _CkArraySend(array_id, c_index, ndims, ep, msg0, len(msg0))
+      # CkArrayExtSend(array_id, c_index, ndims, ep, msg0, len(msg0))
     else:
       send_bufs[0]      = <char*>msg0
       send_buf_sizes[0] = <int>len(msg0)
       CkArrayExtSend_multi(array_id, c_index, ndims, ep, cur_buf, send_bufs, send_buf_sizes)
       cur_buf = 1
+
+  def CkArraySendFastChannel(self, int aid, int index, int ep, unsigned long long msg):
+    cdef CkGroupID gId;
+    cdef char *_msg = <char*> msg
+    cdef CkArrayMessage *impl_amsg = <CkArrayMessage*> msg
+    cdef int ndims = 1
+    gId.idx = aid
+    impl_amsg.array_setIfNotThere(0)
+    cdef CkArrayIndex arrIndex = CkArrayIndex(ndims, &index)
+
+    CProxyElement_ArrayBase.ckSendWrapper(CkArrayID(gId), arrIndex, impl_amsg, ep, 0)
 
   def sendToSection(self, int gid, list children):
     cdef int i = 0
@@ -890,6 +909,12 @@ class CharmLib(object):
     CmiGetPesOnPhysicalNode(node, &pelist, &numpes)
     return [pelist[i] for i in range(numpes)]
 
+  def unpackMsgGeneral(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
+    if msg.isChannelMsg():
+      return {}, unpackMsgChannelOptimized(msg, dcopy_start)
+    else:
+      return self.unpackMsg(msg, dcopy_start, dest_obj)
+
   def unpackMsg(self, ReceiveMsgBuffer msg not None, int dcopy_start, dest_obj):
     cdef int i = 0
     cdef int buf_size
@@ -929,6 +954,8 @@ class CharmLib(object):
 
     return header, args
 
+  def packMsgChannelOptim(self, epidx, channel_no, seq_no, send):
+    return packMsgChannelOptimized(epidx, channel_no, seq_no, send)
   def packMsg(self, destObj, msgArgs not None, dict header, pack_gpu=True):
     cdef int i = 0
     cdef int localTag
@@ -1002,6 +1029,7 @@ class CharmLib(object):
         raise
     if PROFILING: charm.recordSend(len(msg) + dcopy_size)
     return msg, cuda_dev_info
+
 
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
@@ -1232,7 +1260,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
       header = {}
       ctype = charm_reducer_to_ctype[reducerType]
       item_size = c_type_table_sizes[ctype]
-      numElems = dataSize / item_size
+      numElems = dataSize // item_size
       if fid > 0:
         pyData.append(fid)
       if numElems == 1:
@@ -1323,4 +1351,107 @@ cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
     charm.triggerCallable(<int>_userParam)
   except:
     charm.handleGeneralError()
+
+cdef void _CkArraySend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize):
+  cdef int d = 0
+  cdef sizer pup_sizer = sizer()
+
+  pup_sizer | msgSize
+  pup_sizer | epIdx
+  pup_sizer | d
+  pup_sizer(msg, msgSize)
+
+  cdef int marshall_msg_size = pup_sizer.size()
+  cdef CkMarshallMsg *impl_msg = CkAllocateMarshallMsg(marshall_msg_size, NULL)
+  cdef toMem *implP = new toMem(impl_msg.msgBuf, 0)
+  cdef CkArrayMessage *impl_amsg = <CkArrayMessage*> impl_msg
+  cdef CkGroupID gId;
+  gId.idx = aid
+  impl_amsg.array_setIfNotThere(0)
+  cdef CkArrayIndex arrIndex = CkArrayIndex(ndims, idx)
+
+  implP[0]| msgSize
+  implP[0]| epIdx
+  implP[0]| d
+  implP[0](msg, msgSize)
+
+  if ndims > 0:
+    CProxyElement_ArrayBase.ckSendWrapper(CkArrayID(gId), arrIndex, impl_amsg, epIdx, 0)
+  else:
+    CkBroadcastMsgArray(epIdx, impl_amsg, CkArrayID(gId), 0)
+
+  del implP
+
+cdef void _CkChareSend(int onPE, void *objPtr, int epIdx, char *msg, int msgSize):
+  cdef sizer pup_sizer = sizer()
+
+  cdef int d = 0
+
+  pup_sizer | msgSize
+  pup_sizer | epIdx
+  pup_sizer | d
+  pup_sizer(msg, msgSize)
+
+  cdef int marshall_msg_size = pup_sizer.size()
+  cdef CkMarshallMsg *impl_msg = CkAllocateMarshallMsg(marshall_msg_size, NULL)
+  cdef toMem *implP = new toMem(impl_msg.msgBuf, 0)
+
+  implP[0]| msgSize
+  implP[0]| epIdx
+  implP[0]| d
+  implP[0](msg, msgSize)
+
+  cdef CkChareID chareID;
+  chareID.onPE = onPE
+  chareID.objPtr = objPtr;
+
+  CkSendMsg(epIdx, impl_msg, &chareID, 0)
+
+# First byte of msg is 'C', next 4 bytes are channel num, next 4 bytes are channel seq number, next 4 bytes is size, next is the message itself
+cdef unpackMsgChannelOptimized(ReceiveMsgBuffer msg, int dcopy_start):
+  cdef char type = 0;
+  cdef int channel_num = 0;
+  cdef int seq_no = 0;
+  cdef int size = 0;
+
+  cdef fromMem *implP = new fromMem(msg.msg, msg.shape[0])
+  implP[0]|type
+  implP[0]|channel_num
+  implP[0]|seq_no
+  implP[0]|size
+
+  msg.advance(1+4+4+4)
+  msg.setSize(size)
+  arr = np.frombuffer(msg, dtype=np.float64)
+
+  return (channel_num, seq_no, arr)
+
+cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_no, send):
+  cdef sizer pup_sizer = sizer()
+  cdef char identifier = 'C'
+  cdef Py_buffer s_buffer
+  PyObject_GetBuffer(send, &s_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
+  cdef int buf_size = s_buffer.len
+  pup_sizer | ep
+  pup_sizer | identifier
+  pup_sizer | channel_no
+  pup_sizer | seq_no
+  pup_sizer | buf_size
+  pup_sizer(<char*>s_buffer.buf, buf_size)
+
+  cdef int marshall_msg_size = pup_sizer.size()
+
+  cdef CkMarshallMsg *impl_msg = CkAllocateMarshallMsg(marshall_msg_size, NULL)
+  cdef toMem *implP = new toMem(impl_msg.msgBuf, 0)
+
+  implP[0] | ep
+  implP[0] |identifier
+  implP[0] | channel_no
+  implP[0] | seq_no
+  implP[0] | buf_size
+  implP[0](<char*>s_buffer.buf, buf_size)
+
+  del implP
+
+  return <unsigned long long> impl_msg
 

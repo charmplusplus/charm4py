@@ -148,7 +148,9 @@ class Charm(object):
         if self.lib.name == 'cython':
             # replace these methods with the fast Cython versions
             self.packMsg = self.lib.packMsg
-            self.unpackMsg = self.lib.unpackMsg
+            self.unpackMsg = self.lib.unpackMsgGeneral
+            self.packMsgChannelOptim = self.lib.packMsgChannelOptim
+            self.CkArraySendFastChannel = self.lib.CkArraySendFastChannel
         self.interactive = False
         self.last_exception_timestamp = time.time()
         # store chare types defined after program start and other objects created

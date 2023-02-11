@@ -758,6 +758,11 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
+        if 'ischannel' in kwargs:
+            msg = charm.packMsgChannelOptim(ep, args[0], args[0], args[-1])
+            aid = proxy.aid
+            charm.CkArraySendFastChannel(aid, elemIdx[0], ep, msg)
+            return 
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.Future()
             if elemIdx == ():
