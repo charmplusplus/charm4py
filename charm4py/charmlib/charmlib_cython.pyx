@@ -1409,35 +1409,71 @@ cdef void _CkChareSend(int onPE, void *objPtr, int epIdx, char *msg, int msgSize
 
 # First byte of msg is 'C', next 4 bytes are channel num, next 4 bytes are channel seq number, next 4 bytes is size, next is the message itself
 cdef unpackMsgChannelOptimized(ReceiveMsgBuffer msg, int dcopy_start):
-  cdef char type = 0;
-  cdef int channel_num = 0;
-  cdef int seq_no = 0;
-  cdef int size = 0;
+  cdef char type = 0
+  cdef int channel_num = 0
+  cdef int seq_no = 0
+  cdef int nbufs = 0
+  cdef int current_size = 0
 
   cdef fromMem *implP = new fromMem(msg.msg, msg.shape[0])
   implP[0]|type
   implP[0]|channel_num
   implP[0]|seq_no
-  implP[0]|size
+  implP[0]|nbufs
 
   msg.advance(1+4+4+4)
-  msg.setSize(size)
-  arr = np.frombuffer(msg, dtype=np.float64)
+
+  arr = None
+  if nbufs > 1:
+    arr = list()
+    for b in range(nbufs):
+      implP[0]|current_size
+      implP[0].advance(current_size)
+      msg.advance(4)
+      msg.setSize(current_size)
+      this_arr = np.frombuffer(msg, dtype=np.float64)
+      msg.advance(current_size)
+      arr.append(this_arr.copy())
+  else:
+      implP[0]|current_size
+      implP[0].advance(current_size)
+      msg.advance(4)
+      msg.setSize(current_size)
+      arr = np.frombuffer(msg, dtype=np.float64).copy()
+
+  del implP
 
   return (channel_num, seq_no, arr)
 
-cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_no, send):
+cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_no, bufs):
+  global send_bufs
+  global send_buf_sizes
+
   cdef sizer pup_sizer = sizer()
   cdef char identifier = 'C'
   cdef Py_buffer s_buffer
-  PyObject_GetBuffer(send, &s_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
-  cdef int buf_size = s_buffer.len
+  cdef int nbufs = len(bufs)
+  cdef int ndim = 0
+  cdef int idx = 0
+  cdef int buf_size = 0
+
   pup_sizer | ep
   pup_sizer | identifier
   pup_sizer | channel_no
   pup_sizer | seq_no
-  pup_sizer | buf_size
-  pup_sizer(<char*>s_buffer.buf, buf_size)
+  pup_sizer | nbufs
+
+  for b in bufs:
+    PyObject_GetBuffer(b, &s_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
+    buf_size = s_buffer.len
+    pup_sizer | buf_size
+    pup_sizer(<char*>s_buffer.buf, buf_size)
+
+    send_bufs[idx] = <char*>s_buffer.buf
+    send_buf_sizes[idx] = buf_size
+    idx += 1
+
+  idx = 0
 
   cdef int marshall_msg_size = pup_sizer.size()
 
@@ -1448,8 +1484,11 @@ cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_
   implP[0] |identifier
   implP[0] | channel_no
   implP[0] | seq_no
-  implP[0] | buf_size
-  implP[0](<char*>s_buffer.buf, buf_size)
+  implP[0] | nbufs
+
+  for i in range(len(bufs)):
+    implP[0] | send_buf_sizes[i]
+    implP[0](<char*>send_bufs[i], send_buf_sizes[i])
 
   del implP
 

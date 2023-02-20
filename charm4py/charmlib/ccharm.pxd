@@ -193,8 +193,9 @@ cdef extern from "pup.h" namespace "PUP":
   cdef cppclass fromMem:
     fromMem();
     fromMem(void *Nbuf, const unsigned int purpose);
-    void operator|[T](T &a)
-    void operator()(void *bytes, int size)
+    void operator|[T](T &a);
+    void operator()(void *bytes, int size);
+    void advance(size_t offset);
 
   cdef cppclass sizer:
     sizer();
