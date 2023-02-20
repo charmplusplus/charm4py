@@ -59,7 +59,7 @@ class _Channel(object):
             self.established_fut = LocalFuture()
             self.established_fut.get()
             self.setEstablished()
-        self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg, ischannel=True, **kwargs)
+        self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg, __ischannel=True, **kwargs)
         self.send_seqno = (self.send_seqno + 1) % CHAN_BUF_SIZE
 
     def recv(self, *post_buffers, post_addresses = None, post_sizes = None, stream_ptrs = None):

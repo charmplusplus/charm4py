@@ -737,7 +737,7 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
         return charm.split(proxy, 1, slicing=idx)[0]
 
 def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
-    def proxy_entry_method(proxy, *args, **kwargs):
+    def proxy_entry_method(proxy, *args, __ischannel = False, **kwargs):
         num_args = len(args)
         if num_args < argcount and len(kwargs) > 0:
             args = list(args)
@@ -745,8 +745,8 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 argname = argnames[i]
                 # first look for argument in kwargs
                 # TODO: Should stream_ptrs be skipped?
-                if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
-                    continue
+                # if argname in {'stream_ptrs', 'src_ptrs', 'src_sizes'}:
+                    # continue
                 if argname in kwargs and argname:
                     args.append(kwargs[argname])
                 else:
@@ -758,8 +758,8 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
         header = {}
         blockFuture = None
         elemIdx = proxy.elemIdx
-        if 'ischannel' in kwargs:
-            msg = charm.packMsgChannelOptim(ep, args[0], args[0], args[-1])
+        if __ischannel:
+            msg = charm.packMsgChannelOptim(ep, args[0], args[1], args[2::])
             aid = proxy.aid
             charm.CkArraySendFastChannel(aid, elemIdx[0], ep, msg)
             return 
