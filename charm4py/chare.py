@@ -253,18 +253,18 @@ class Chare(object):
             self.__pendingChannels__.append(ch)
             ch.remote_port = remote_port
 
-    def _channelRecv__(self, port, seqno, *msg):  # entry method
+    def _channelRecv__(self, port, seqno, ZCM, *msg):  # entry method
         ch = self.__channels__[port]
         if len(msg) == 1:
             msg = msg[0]
         ready_fut = ch.wait_ready
         if ready_fut is not None and seqno == ch.recv_seqno:
-            ch.data[seqno] = msg
+            ch.data[seqno] = (ZCM, msg)
             ch.wait_ready = None
             # signal that channel is ready to receive
             ready_fut.send(ch)
         elif ch.recv_fut is not None and seqno == ch.recv_seqno:
-            ch.recv_fut.send(msg)
+            ch.recv_fut.send((ZCM, msg))
         else:
             assert seqno not in ch.data, 'Channel buffer is full'
             ch.data[seqno] = msg
@@ -762,7 +762,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             msg = charm.packMsgChannelOptim(ep, args[0], args[1], args[2::])
             aid = proxy.aid
             charm.CkArraySendFastChannel(aid, elemIdx[0], ep, msg)
-            return 
+            return
         if 'ret' in kwargs and kwargs['ret']:
             header[b'block'] = blockFuture = charm.Future()
             if elemIdx == ():

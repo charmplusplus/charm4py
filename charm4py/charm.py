@@ -139,6 +139,7 @@ class Charm(object):
         self.CkArraySendWithDeviceDataFromPointersOther = self.lib.CkArraySendWithDeviceDataFromPointersOther
         self.CkGroupSendWithDeviceDataFromPointersArray = self.lib.CkGroupSendWithDeviceDataFromPointersArray
         self.CkGroupSendWithDeviceDataFromPointersOther = self.lib.CkGroupSendWithDeviceDataFromPointersOther
+        self.CkNcpyBuffer = self.lib.NcpyBuffer
         # self.CkCudaEnabled = self.lib.CkCudaEnabled
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)

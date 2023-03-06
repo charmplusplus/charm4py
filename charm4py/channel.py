@@ -62,7 +62,7 @@ class _Channel(object):
         self.remote._channelRecv__(self.remote_port, self.send_seqno, *msg, __ischannel=True, **kwargs)
         self.send_seqno = (self.send_seqno + 1) % CHAN_BUF_SIZE
 
-    def recv(self, *post_buffers, post_addresses = None, post_sizes = None, stream_ptrs = None):
+    def recv(self, *post_buffers):
         if self.recv_seqno in self.data:
             ret = self.data.pop(self.recv_seqno)
         else:
@@ -70,36 +70,14 @@ class _Channel(object):
             ret = self.recv_fut.get()
             self.recv_fut = None
         self.recv_seqno = (self.recv_seqno + 1) % CHAN_BUF_SIZE
+        msg = ret
 
         if post_buffers:
-            if isinstance(ret, tuple):
-                gpu_recv_bufs = ret[-1]
-                ret = ret[0:-1]
-                if len(ret) == 1:
-                    ret = ret[0]
-            else:
-                gpu_recv_bufs = ret
-
+            ZCM, msg = ret
             assert len(post_buffers) == len(gpu_recv_bufs)
-
-            recv_future = charm.getGPUDirectData(post_buffers, gpu_recv_bufs, stream_ptrs)
+            recv_future = charm.getGPUDirectData(post_buffers, ZCM, None)
             recv_future.get()
-        elif post_addresses is not None:
-            if isinstance(ret, tuple):
-                gpu_recv_bufs = ret[-1]
-                ret = ret[0:-1]
-                if len(ret) == 1:
-                    ret = ret[0]
-            else:
-                gpu_recv_bufs = ret
-
-            assert len(post_addresses) == len(gpu_recv_bufs)
-            assert post_sizes
-            recv_future = charm.getGPUDirectDataFromAddresses(post_addresses, post_sizes, gpu_recv_bufs, stream_ptrs)
-            recv_future.get()
-
-
-        return ret
+        return msg
 
 
 
