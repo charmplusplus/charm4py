@@ -74,7 +74,7 @@ class _Channel(object):
 
         if post_buffers:
             ZCM, msg = ret
-            recv_future = charm.getGPUDirectData(post_buffers, ZCM, None)
+            charm.getGPUDirectData(post_buffers, ZCM)
             recv_future.get()
         return msg
 
