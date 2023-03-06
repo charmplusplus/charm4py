@@ -909,7 +909,7 @@ class CharmLib(object):
     registerDepositFutureWithIdFn(depositFutureWithId);
 
   def CkMyPe(self): return CkMyPeHook()
-  def kNumPes(self): return CkNumPesHook()
+  def CkNumPes(self): return CkNumPesHook()
   def CkExit(self, int exitCode): return realCkExit(exitCode)
   def CkPrintf(self, bytes msg): CmiPrintf("%s", msg)
   def CkAbort(self, str msg): return CmiAbort("%s", <bytes>msg.encode())
