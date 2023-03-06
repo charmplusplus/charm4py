@@ -177,7 +177,8 @@ cdef class ReceiveMsgBuffer:
 
   cdef inline int isChannelMsg(self):
     return self.msg[0] == <int>'C'
-
+  cdef inline int isZChannelMsg(self):
+    return self.msg[0] == <int>'Z'
   cdef inline int getLocalTag(self):
     return (<int*>(&self.msg[2]))[0]
 
@@ -222,24 +223,40 @@ cdef class ReceiveMsgBuffer:
 #  cdef inline bytes tobytes(self):  # this copies msg into a bytes object
 #    return <bytes>self.msg[0:self.shape[0]]
 
+cdef class NcpyBuffer:
+  cdef CkNcpyBuffer buf
+
+  def __cinit__(self):
+    buf = CkNcpyBuffer()
+
+  def __init__(self, buf):
+    cdef Py_buffer _pybuf
+
+    PyObject_GetBuffer(buf,  &_pybuf, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
+    self.buf = CkNcpyBuffer(_pybuf.buf, _pybuf.len, 0, 0)
+
+  @classmethod
+  def fromCkNcpyBuffer(cls, ckncpybuf):
+    b = NcpyBuffer.__cinit__()
+    b.buf = ckncpybuf
+    return b
 
 cdef class ZCMessageManager:
-  cdef vector[pair[const char*, int]] messages
+  cdef vector[CkNcpyBuffer] messages
 
   def __init__(self):
     self.messages.reserve(5)
 
   cdef size(self):
     return self.messages.size()
-  cdef add_to_message(self, Py_buffer *buf):
-    cdef const char *msg_base = <const char*> buf[0].buf
-    cdef int size = buf[0].len
-
-    cdef pair[const char*, int] data = (msg_base, size)
-    self.messages.push_back(data)
+  cdef add_to_message(self, CkNcpyBuffer buf):
+    self.messages.push_back(buf)
 
   cdef data(self):
     return <char*> self.messages.data()
+
+  cdef CkNcpyBuffer* get(self, int idx):
+    return &self.messages[idx]
 
   cdef clear(self):
     self.messages.clear()
@@ -890,7 +907,7 @@ class CharmLib(object):
     registerDepositFutureWithIdFn(depositFutureWithId);
 
   def CkMyPe(self): return CkMyPeHook()
-  def CkNumPes(self): return CkNumPesHook()
+  def kNumPes(self): return CkNumPesHook()
   def CkExit(self, int exitCode): return realCkExit(exitCode)
   def CkPrintf(self, bytes msg): CmiPrintf("%s", msg)
   def CkAbort(self, str msg): return CmiAbort("%s", <bytes>msg.encode())
@@ -984,7 +1001,7 @@ class CharmLib(object):
         arg = msgArgs[i]
         if PyObject_CheckBuffer(arg):
           PyObject_GetBuffer(arg, &send_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
-          ZCManager.add_to_message(&send_buffer)
+          # ZCManager.add_to_message(&send_buffer)
           if pack_gpu:
             # we want to take the args that implement the cuda array interface and make them into ckdevicebuffers
             # assumption: we can get nbytes from the arg directly
@@ -1035,44 +1052,18 @@ class CharmLib(object):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
 
-  def getGPUDirectData(self, list post_buf_data, list post_buf_sizes, array.array remote_bufs, list stream_ptrs, return_fut):
-    cdef int num_buffers = len(post_buf_data)
+  def getGPUDirectData(self, dest_bufs, ZCMessageManager SrcBufs, return_fut):
+    assert len(dest_bufs) == SrcBufs.size()
+    cdef int num_buffers = SrcBufs.size()
     cdef int future_id = return_fut.fid
-    cdef array.array long_array_template = array.array('L', [])
-    cdef array.array int_array_template = array.array('i', [])
-    cdef array.array recv_buf_sizes
-    cdef array.array recv_buf_ptrs
-    # pointers from the remote that we will be issuing Rgets for
-    # these are pointers to type CkDeviceBuffer
-    cdef array.array remote_buf_ptrs
-
-    recv_buf_sizes = array.clone(int_array_template, num_buffers, zero=False)
-    recv_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
-    remote_buf_ptrs = array.clone(long_array_template, num_buffers, zero=False)
+    cdef CkNcpyBuffer *curbuf
+    cdef NcpyBuffer curncbuf = None
 
     for idx in range(num_buffers):
-      recv_buf_ptrs[idx] = post_buf_data[idx]
-      recv_buf_sizes[idx] = post_buf_sizes[idx]
-      remote_buf_ptrs[idx] = remote_bufs[idx]
-    # what do we do about the return future? Need to turn it into some callback.
-    CkGetZCData(num_buffers, <void*>recv_buf_ptrs.data.as_voidptr,
-                <int*>recv_buf_sizes.data.as_voidptr,
-                <void*>remote_buf_ptrs.data.as_voidptr,
-                future_id
-                       )
-
-  def getGPUDirectDataFromAddresses(self, array.array post_buf_ptrs, array.array post_buf_sizes, array.array remote_bufs, array.array stream_ptrs, return_fut):
-    cdef int num_buffers = len(post_buf_ptrs)
-    cdef int future_id = return_fut.fid
-    # pointers from the remote that we will be issuing Rgets for
-    # these are pointers to type CkDeviceBuffer
-    CkGetZCData(num_buffers, <void*>post_buf_ptrs.data.as_voidptr,
-                <int*>post_buf_sizes.data.as_voidptr,
-                <void*>remote_bufs.data.as_voidptr,
-                future_id
-                )
-
-
+      curncbuf = dest_bufs[idx]
+      curbuf = &curncbuf.buf
+      curbuf.cb = CkCallback(depositFutureWithId, <void*> future_id)
+      curbuf.get(SrcBufs.get(idx)[0])
 
 # first callback from Charm++ shared library
 cdef void registerMainModule():
@@ -1414,36 +1405,56 @@ cdef unpackMsgChannelOptimized(ReceiveMsgBuffer msg, int dcopy_start):
   cdef int seq_no = 0
   cdef int nbufs = 0
   cdef int current_size = 0
+  cdef size_t areZC = 0
+  cdef size_t mask = 1
+  cdef int isZC = 0
+  cdef CkNcpyBuffer NCBuf
+  cdef ZCMessageManager ZCM = ZCMessageManager()
 
   cdef fromMem *implP = new fromMem(msg.msg, msg.shape[0])
   implP[0]|type
   implP[0]|channel_num
   implP[0]|seq_no
   implP[0]|nbufs
+  implP[0]|areZC
 
-  msg.advance(1+4+4+4)
+  msg.advance(1+4+4+4+8)
+
+  hasZC = False
 
   arr = None
   if nbufs > 1:
     arr = list()
     for b in range(nbufs):
-      implP[0]|current_size
-      implP[0].advance(current_size)
-      msg.advance(4)
-      msg.setSize(current_size)
-      this_arr = np.frombuffer(msg, dtype=np.float64)
-      msg.advance(current_size)
-      arr.append(this_arr.copy())
+      isZC = isZC & (mask << b)
+      if isZC:
+        hasZC = True
+        pass
+      else:
+        implP[0]|current_size
+        implP[0].advance(current_size)
+        msg.advance(4)
+        msg.setSize(current_size)
+        this_arr = np.frombuffer(msg, dtype=np.float64)
+        msg.advance(current_size)
+        arr.append(this_arr.copy())
   else:
-      implP[0]|current_size
-      implP[0].advance(current_size)
-      msg.advance(4)
-      msg.setSize(current_size)
-      arr = np.frombuffer(msg, dtype=np.float64).copy()
+      isZC = areZC & mask
+
+      if isZC:
+        hasZC = True
+        implP[0] | NCBuf
+        ZCM.add_to_message(NCBuf)
+      else:
+        implP[0]|current_size
+        implP[0].advance(current_size)
+        msg.advance(4)
+        msg.setSize(current_size)
+        arr = np.frombuffer(msg, dtype=np.float64).copy()
 
   del implP
 
-  return (channel_num, seq_no, arr)
+  return (channel_num, seq_no, ZCM, arr)
 
 cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_no, bufs):
   global send_bufs
@@ -1456,21 +1467,36 @@ cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_
   cdef int ndim = 0
   cdef int idx = 0
   cdef int buf_size = 0
+  cdef size_t areZC = 0
+  cdef size_t mask = 1
+  cdef NcpyBuffer B = None
+
+  if nbufs > 64:
+    print("WARNING: More than the maximum suppported buffers sent in one message")
 
   pup_sizer | ep
   pup_sizer | identifier
   pup_sizer | channel_no
   pup_sizer | seq_no
   pup_sizer | nbufs
+  pup_sizer | areZC
 
   for b in bufs:
-    PyObject_GetBuffer(b, &s_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
-    buf_size = s_buffer.len
-    pup_sizer | buf_size
-    pup_sizer(<char*>s_buffer.buf, buf_size)
+    if PyObject_CheckBuffer(b):
+      PyObject_GetBuffer(b, &s_buffer, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
+      buf_size = s_buffer.len
+      pup_sizer(<char*>s_buffer.buf, buf_size)
+      send_bufs[idx] = <char*>s_buffer.buf
+      send_buf_sizes[idx] = buf_size
+      # Only need to include size for non-ZC bufs because ZC bufs include that information
+      pup_sizer | buf_size
+    elif type(b) == NcpyBuffer:
+      # We have to do this so Cython knows the object type
+      B = b
+      pup_sizer | B.buf
+      # set this bit to indicate this is a ZC buf
+      areZC = areZC | (mask << idx)
 
-    send_bufs[idx] = <char*>s_buffer.buf
-    send_buf_sizes[idx] = buf_size
     idx += 1
 
   idx = 0
@@ -1485,10 +1511,15 @@ cdef unsigned long long packMsgChannelOptimized(int ep, int channel_no, int seq_
   implP[0] | channel_no
   implP[0] | seq_no
   implP[0] | nbufs
+  implP[0] | areZC
 
   for i in range(len(bufs)):
-    implP[0] | send_buf_sizes[i]
-    implP[0](<char*>send_bufs[i], send_buf_sizes[i])
+    if areZC & (mask << i):
+      B = bufs[i]
+      implP[0] | B.buf
+    else:
+      implP[0] | send_buf_sizes[i]
+      implP[0](<char*>send_bufs[i], send_buf_sizes[i])
 
   del implP
 

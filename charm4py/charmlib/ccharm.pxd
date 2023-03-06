@@ -189,6 +189,8 @@ cdef extern from "pup.h" namespace "PUP":
     toMem(void *Nbuf, const unsigned int purpose);
     void operator|[T](T &a)
     void operator()(void *bytes, int size)
+  cdef cppclass er:
+    pass
 
   cdef cppclass fromMem:
     fromMem();
@@ -217,3 +219,23 @@ cdef extern from "envelope.h":
   cdef cppclass envelope:
     void setMsgType(const unsigned char m);
   envelope *UsrToEnv(const void *const msg);
+
+cdef extern from "ckrdma.h":
+  int CK_BUFFER_REG
+  int CK_BUFFER_DEREG
+  cdef cppclass CkNcpyStatus:
+    pass
+
+  cdef cppclass CkNcpyBuffer:
+    CkCallback cb;
+    CkNcpyBuffer();
+    CkNcpyBuffer(const void *ptr, size_t cnt, unsigned short int regMode,  unsigned short int deregMode);
+    void pup(er& p);
+    CkNcpyStatus get(CkNcpyBuffer &source);
+    CkNcpyStatus put(CkNcpyBuffer &destination);
+
+cdef extern from "ckcallback.h":
+  cdef cppclass CkCallback:
+    CkCallback();
+    CkCallback(void(*Fn)(void *Msg));
+    CkCallback(void (*Fn) (void *param, void *Msg), void *param);
