@@ -331,6 +331,7 @@ class CharmLib(object):
     self.init()
     self.ReducerType = CkReductionTypesExt_Wrapper()
     self.NcpyBuffer = NcpyBuffer
+    self.ZCMessageManager = ZCMessageManager
     #print(charm_reducers.sum_long, charm_reducers.product_ushort, charm_reducers.max_char, charm_reducers.max_float, charm_reducers.min_char)
     #print(ReducerType.sum_long, ReducerType.product_ushort, ReducerType.max_char, ReducerType.max_float, ReducerType.min_char)
 
