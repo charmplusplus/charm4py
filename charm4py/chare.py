@@ -15,6 +15,9 @@ CHARM_TYPES = (MAINCHARE, GROUP, ARRAY)
  CONTRIBUTOR_TYPE_GROUP,
  CONTRIBUTOR_TYPE_NODEGROUP) = range(3)
 
+def noproxy(fn):
+    fn.noproxy = True
+    return fn
 
 class Chare(object):
 
@@ -369,6 +372,8 @@ class Mainchare(object):
         proxyClassName = cls.__name__ + 'Proxy'
         M = dict()  # proxy methods
         for m in charm.classEntryMethods[MAINCHARE][cls]:
+            if hasattr(m, 'noproxy'):
+                continue
             if m.epIdx == -1:
                 raise Charm4PyError('Unregistered entry method')
             if m.name == '__init__':
@@ -862,6 +867,8 @@ class Array(object):
         M = dict()  # proxy methods
         entryMethods = charm.classEntryMethods[ARRAY][cls]
         for m in entryMethods:
+            if hasattr(m, 'noproxy'):
+                continue
             if m.epIdx == -1:
                 raise Charm4PyError('Unregistered entry method')
             if m.name in {'__init__', 'migrated'}:
