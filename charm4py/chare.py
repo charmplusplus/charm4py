@@ -38,7 +38,7 @@ class Chare(object):
         # or pickling. _local is a fixed size array that implements a mem pool, where msgs
         # can be in non-consecutive positions, and the indexes of free slots are stored
         # as a linked list inside _local, with _local_free_head being the index of the
-        # first free slot, _local[_local_free_head] is the index of next free slot and so on
+        # first free slot, _local[_local_free_head] is the index of next free slot and so on 
         self._local = [i for i in range(1, Options.local_msg_buf_size + 1)]
         self._local[-1] = None
         self._local_free_head = 0

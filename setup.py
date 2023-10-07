@@ -11,6 +11,8 @@ from distutils.errors import DistutilsSetupError
 from distutils import log
 import distutils
 
+import Cython.Compiler.Options
+Cython.Compiler.Options.annotate = True
 
 build_mpi = False
 
@@ -281,6 +283,15 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
 
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
+                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                              libraries=["charm"],
+                              extra_compile_args=['-g0', '-O3'],
+                              extra_link_args=extra_link_args,
+                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+        
+        extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
+                              sources=['charm4py/c_object_store.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
