@@ -1,4 +1,5 @@
 from . import wait
+from charm4py import ray
 import sys
 from greenlet import getcurrent
 from collections import defaultdict
@@ -573,6 +574,9 @@ def group_proxy_contribute(proxy, contributeInfo):
 def groupsecproxy_contribute(proxy, contributeInfo):
     charm.CkContributeToSection(contributeInfo, proxy.section[1], proxy.section[0])
 
+def group_proxy_localbranch(proxy):
+    return charm.groups[proxy.gid]
+
 class Group(object):
 
     type_id = GROUP
@@ -631,6 +635,7 @@ class Group(object):
         M['__eq__'] = group_proxy__eq__
         M['__hash__'] = group_proxy__hash__
         M['ckNew'] = group_ckNew_gen(cls, entryMethods[0].epIdx)
+        M['ckLocalBranch'] = group_proxy_localbranch
         M['__getsecproxy__'] = group_getsecproxy
         if not sectionProxy:
             M['ckContribute'] = group_proxy_contribute  # function called when target proxy is Group
@@ -747,6 +752,10 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
+            blockFuture = ray.Future()
+            args = list(args)
+            args.append(blockFuture)
+            args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkArraySend(aid, elemIdx, ep, msg)
         else:

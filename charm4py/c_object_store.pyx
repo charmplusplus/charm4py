@@ -3,10 +3,13 @@
 
 from cpython.ref cimport Py_INCREF, Py_DECREF
 from cython.operator cimport dereference as deref
+from cython.operator cimport preincrement as inc
+from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
+
 import numpy as np
 cimport numpy as np
 cimport cython
-from charm4py import myPe, numPes
+
 from copy import deepcopy
 
 cdef extern from "numpy/arrayobject.h":
@@ -25,6 +28,56 @@ cdef extern from "numpy/arrayobject.h":
 
     np.ndarray PyArray_SimpleNewFromData(int, np.npy_intp*, int, void*)
 
+
+cdef class MessageBuffer:
+    def __init__(self):
+        pass
+
+    def __cinit__(self):
+        self.dependecies = DependencyMap()
+
+    cpdef void insert(self, object obj_ids, object msg):
+        cdef int ndeps = len(obj_ids)
+
+        cdef MessageDependency* dep = <MessageDependency*> PyMem_Malloc(
+            sizeof(MessageDependency)
+        )
+        Py_INCREF(msg)
+        deref(dep).first = <void*> msg
+        deref(dep).second = ndeps
+        cdef DependencyMapIterator it
+        cdef DependencyList* dep_list
+
+        cdef ObjectId obj_id
+        for i in range(ndeps):
+            obj_id = <ObjectId> obj_ids[i]
+            it = self.dependecies.find(obj_id)
+            if it == self.dependecies.end():
+                self.dependecies[obj_id] = DependencyList()
+            dep_list = &(self.dependecies[obj_id])
+            deref(dep_list).push_back(dep)
+
+    cpdef object check(self, ObjectId obj_id):
+        cdef DependencyList* dep_list
+        cdef DependencyMapIterator it = self.dependecies.find(obj_id)
+        cdef DependencyListIterator dep_list_it
+        cdef object completed = []
+        if it != self.dependecies.end():
+            dep_list = &(self.dependecies[obj_id])
+            dep_list_it = deref(dep_list).begin()
+            while dep_list_it != deref(dep_list).end():
+                deref(deref(dep_list_it)).second -= 1
+                if deref(deref(dep_list_it)).second == 0:
+                    # this element dependencies are satisfied
+                    # send it to scheduling
+                    completed.append(<object> deref(deref(dep_list_it)).first)
+                    # remove from buffer
+                    PyMem_Free(deref(dep_list_it))
+                    deref(dep_list).erase(dep_list_it)
+                inc(dep_list_it)
+        return completed
+
+
 cdef class CObjectStore:
     def __init__(self, proxy):
         self.proxy = proxy
@@ -36,19 +89,20 @@ cdef class CObjectStore:
         self.obj_req_buffer = ObjectPEMap()
         self.loc_req_buffer = ObjectPEMap()
 
-    cdef object lookup_object(self, ObjectId obj_id):
+    cpdef object lookup_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         if it == self.object_map.end():
             return None
         return <object> deref(it).second
 
-    cpdef void insert_object(self, ObjectId obj_id, object obj):
-        #FIXME make a copy of obj before adding it to the map
+    cdef void insert_object(self, ObjectId obj_id, object obj):
+        #FIXME is this copy always required?
+        # newly created objects are immutable anyway
         obj_copy = deepcopy(obj)
         Py_INCREF(obj_copy)
         self.object_map[obj_id] = <void*> obj_copy
 
-    cpdef void delete_object(self, ObjectId obj_id):
+    cdef void delete_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         cdef object obj
         if it != self.object_map.end():
@@ -72,10 +126,13 @@ cdef class CObjectStore:
         self.replica_choice += 1
         return pe
 
-    cdef int lookup_location(self, ObjectId obj_id):
+    cpdef int lookup_location(self, ObjectId obj_id):
+        from charm4py import charm
         cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
         if it != self.location_map.end():
             return self.choose_pe(deref(it).second)
+        cdef int npes = charm.numPes()
+        self.proxy[obj_id % npes].request_location(obj_id)
         return -1
 
     cdef void check_loc_requests_buffer(self, ObjectId obj_id):
@@ -114,6 +171,7 @@ cdef class CObjectStore:
             self.check_loc_requests_buffer(obj_id)
 
     cpdef void request_location(self, ObjectId obj_id, int requesting_pe):
+        # this function is intended to be called on home pes of the object id
         cdef int pe = self.lookup_location(obj_id)
         if pe == -1:
             self.buffer_loc_request(obj_id, requesting_pe)
@@ -141,12 +199,13 @@ cdef class CObjectStore:
 
     @cython.cdivision(True)
     cpdef void create_object(self, ObjectId obj_id, object obj):
+        from charm4py import charm
         #insert to local object map
         self.insert_object(obj_id, obj)
 
         #send a message to GCS to add entry
-        cdef int npes = numPes()
-        self.proxy[obj_id % npes].update_location(obj_id, myPe())
+        cdef int npes = charm.numPes()
+        self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
 
         # check requests buffer
         self.check_obj_requests_buffer(obj_id)

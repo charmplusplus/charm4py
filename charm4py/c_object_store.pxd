@@ -3,6 +3,7 @@
 
 from libcpp.list cimport list
 from libcpp.vector cimport vector
+from libcpp.pair cimport pair
 from libcpp.unordered_map cimport unordered_map
 from libc.stdint cimport uint64_t
 
@@ -14,6 +15,20 @@ ctypedef unordered_map[ObjectId, void*] ObjectMap
 ctypedef unordered_map[ObjectId, void*].iterator ObjectMapIterator
 ctypedef unordered_map[ObjectId, vector[int]] ObjectPEMap
 ctypedef unordered_map[ObjectId, vector[int]].iterator ObjectPEMapIterator
+
+ctypedef pair[void*, int] MessageDependency
+ctypedef list[MessageDependency*] DependencyList
+ctypedef list[MessageDependency*].iterator DependencyListIterator
+ctypedef unordered_map[ObjectId, DependencyList] DependencyMap
+ctypedef unordered_map[ObjectId, DependencyList].iterator DependencyMapIterator
+
+
+cdef class MessageBuffer:
+    cdef DependencyMap dependecies
+
+    cpdef void insert(self, object obj_ids, object msg)
+    cpdef object check(self, ObjectId obj_id)
+
 
 cdef class CObjectStore:
     cdef uint64_t replica_choice
@@ -28,10 +43,10 @@ cdef class CObjectStore:
     cdef void check_obj_requests_buffer(self, ObjectId obj_id)
     cdef void check_loc_requests_buffer(self, ObjectId obj_id)
 
-    cdef object lookup_object(self, ObjectId obj_id)
-    cdef int lookup_location(self, ObjectId obj_id)
-    cpdef void insert_object(self, ObjectId obj_id, object obj)
-    cpdef void delete_object(self, ObjectId obj_id)
+    cpdef object lookup_object(self, ObjectId obj_id)
+    cpdef int lookup_location(self, ObjectId obj_id)
+    cdef void insert_object(self, ObjectId obj_id, object obj)
+    cdef void delete_object(self, ObjectId obj_id)
 
     cdef int choose_pe(self, vector[int] &node_list)
 
