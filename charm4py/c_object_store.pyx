@@ -5,6 +5,7 @@ from cpython.ref cimport Py_INCREF, Py_DECREF
 from cython.operator cimport dereference as deref
 from cython.operator cimport preincrement as inc
 from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
+from libc.stdio cimport printf
 
 import numpy as np
 cimport numpy as np
@@ -38,7 +39,6 @@ cdef class MessageBuffer:
 
     cpdef void insert(self, object obj_ids, object msg):
         cdef int ndeps = len(obj_ids)
-
         cdef MessageDependency* dep = <MessageDependency*> PyMem_Malloc(
             sizeof(MessageDependency)
         )
@@ -66,15 +66,16 @@ cdef class MessageBuffer:
             dep_list = &(self.dependecies[obj_id])
             dep_list_it = deref(dep_list).begin()
             while dep_list_it != deref(dep_list).end():
-                deref(deref(dep_list_it)).second -= 1
+                deref(dep_list_it)[0].second -= 1
                 if deref(deref(dep_list_it)).second == 0:
                     # this element dependencies are satisfied
                     # send it to scheduling
                     completed.append(<object> deref(deref(dep_list_it)).first)
                     # remove from buffer
                     PyMem_Free(deref(dep_list_it))
-                    deref(dep_list).erase(dep_list_it)
-                inc(dep_list_it)
+                    dep_list_it = deref(dep_list).erase(dep_list_it)
+                else:
+                    inc(dep_list_it)
         return completed
 
 
@@ -96,11 +97,10 @@ cdef class CObjectStore:
         return <object> deref(it).second
 
     cdef void insert_object(self, ObjectId obj_id, object obj):
-        #FIXME is this copy always required?
-        # newly created objects are immutable anyway
-        obj_copy = deepcopy(obj)
-        Py_INCREF(obj_copy)
-        self.object_map[obj_id] = <void*> obj_copy
+        #FIXME when is a copy required here?
+        #obj_copy = deepcopy(obj)
+        Py_INCREF(obj)
+        self.object_map[obj_id] = <void*> obj
 
     cdef void delete_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
@@ -126,6 +126,7 @@ cdef class CObjectStore:
         self.replica_choice += 1
         return pe
 
+    @cython.cdivision(True)
     cpdef int lookup_location(self, ObjectId obj_id):
         from charm4py import charm
         cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
@@ -170,7 +171,7 @@ cdef class CObjectStore:
         if new_entry:
             self.check_loc_requests_buffer(obj_id)
 
-    cpdef void request_location(self, ObjectId obj_id, int requesting_pe):
+    cpdef void request_location_object(self, ObjectId obj_id, int requesting_pe):
         # this function is intended to be called on home pes of the object id
         cdef int pe = self.lookup_location(obj_id)
         if pe == -1:
@@ -178,6 +179,14 @@ cdef class CObjectStore:
         else:
             self.proxy[pe].request_object(obj_id, requesting_pe)
             self.location_map[obj_id].push_back(requesting_pe)
+
+    cpdef void request_location(self, ObjectId obj_id, int requesting_pe):
+        # this function is intended to be called on home pes of the object id
+        cdef int pe = self.lookup_location(obj_id)
+        if pe == -1:
+            self.buffer_loc_request(obj_id, requesting_pe)
+        else:
+            self.proxy[requesting_pe].update_location(obj_id, pe)
 
     cpdef void receive_remote_object(self, ObjectId obj_id, object obj):
         self.insert_object(obj_id, obj)

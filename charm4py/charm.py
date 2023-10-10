@@ -183,10 +183,11 @@ class Charm(object):
     def check_receive_buffer(self, obj_id):
         completed = self.receive_buffer.check(obj_id)
         for args in completed:
-            for i, arg in enumerate(args[-1]):
+            args = list(args)
+            for i, arg in enumerate(args[-1][:-1]):
                 if isinstance(arg, ray.Future):
-                    obj = arg.lookup_object()
-                    args[i] = obj
+                    dep_obj = arg.lookup_object()
+                    args[-1][i] = dep_obj
             self.invokeEntryMethod(*args, ret_fut=True)
 
     def handleGeneralError(self):
@@ -328,6 +329,7 @@ class Charm(object):
                         args[i] = dep_obj
                     else:
                         dep_ids.append(arg.id)
+                        arg.request_object()
             if len(dep_ids) > 0:
                 charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
             else:

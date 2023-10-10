@@ -41,24 +41,24 @@ class EntryMethod(object):
         # set last entry method executed (note that 'last_em_exec' won't
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
-        #try:
-        if ret_fut:
-            fut = args[-1]
-            args = args[:-1]
-        ret = getattr(obj, self.name)(*args)
-        if ret != None:
-            fut.create_object(ret)
-        #except SystemExit:
-        #    exit_code = sys.exc_info()[1].code
-        #    if exit_code is None:
-        #        exit_code = 0
-        #    if not isinstance(exit_code, int):
-        #        print(exit_code)
-        #        exit_code = 1
-        #    charm.exit(exit_code)
-        #except Exception as e:
-        #    charm.process_em_exc(e, obj, header)
-        #    return
+        try:
+            if ret_fut:
+                fut = args[-1]
+                args = args[:-1]
+            ret = getattr(obj, self.name)(*args)
+            if ret != None:
+                fut.create_object(ret)
+        except SystemExit:
+            exit_code = sys.exc_info()[1].code
+            if exit_code is None:
+                exit_code = 0
+            if not isinstance(exit_code, int):
+                print(exit_code)
+                exit_code = 1
+            charm.exit(exit_code)
+        except Exception as e:
+            charm.process_em_exc(e, obj, header)
+            return
         if b'block' in header:
             blockFuture = header[b'block']
             if b'bcast' in header:

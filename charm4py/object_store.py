@@ -30,6 +30,9 @@ class ObjectStore(Chare):
     def request_location(self, obj_id, requesting_pe):
         self._object_store.request_location(obj_id, requesting_pe)
 
+    def request_location_object(self, obj_id, requesting_pe):
+        self._object_store.request_location_object(obj_id, requesting_pe)
+
     def bulk_request_object(self, obj_id, requesting_pes):
         self._object_store.bulk_request_object(obj_id, requesting_pes)
 

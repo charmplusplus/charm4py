@@ -17,8 +17,9 @@ def main(args):
     # create 3 instances of MyChare, distributed among cores by the runtime
     arr = Array(MyChare, 3)
 
-    c = arr[0].add(1, 2)
-    d = arr[1].add(c, 3)
+    c = arr[1].add(1, 2)
+    d = arr[2].add(c, 3)
+    e = arr[2].add(4, 5)
 
     #sleep(5)
     #exit()

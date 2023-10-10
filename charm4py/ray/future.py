@@ -25,3 +25,8 @@ class Future(object):
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.id, obj)
+
+    def request_object(self):
+        from ..charm import charm
+        obj_store = get_object_store()
+        obj_store[self.id % charm.numPes()].request_location_object(self.id, charm.myPe())

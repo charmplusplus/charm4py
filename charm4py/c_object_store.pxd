@@ -51,6 +51,7 @@ cdef class CObjectStore:
     cdef int choose_pe(self, vector[int] &node_list)
 
     cpdef void update_location(self, ObjectId obj_id, int pe)
+    cpdef void request_location_object(self, ObjectId obj_id, int requesting_pe)
     cpdef void request_location(self, ObjectId obj_id, int requesting_pe)
     cpdef void receive_remote_object(self, ObjectId obj_id, object obj)
     cpdef void request_object(self, ObjectId obj_id, int requesting_pe)
