@@ -1,3 +1,4 @@
+counter = 0
 
 def init():
     from charm4py import charm, Group, ObjectStore
@@ -12,7 +13,28 @@ def get_object_store():
     return object_store
 
 
+def get_ray_class(subclass):
+    from charm4py import Chare, register, charm
+    @register
+    class RayChare(Chare):
+        @staticmethod
+        def remote(*a):
+            global counter
+            chare = Chare(subclass, args=a, onPE=counter % charm.numPes())
+            counter += 1
+            return chare
+    return RayChare
+
+
 def remote(*args, **kwargs):
-    if len(args) == 1 and len(kwargs) == 0:
+    from charm4py import Chare, register
+    
+    if len(args) == 1 and len(kwargs) == 0:        
         # decorating without any arguments
-        pass
+        subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
+        register(subclass)
+        rayclass = get_ray_class(subclass)
+        rayclass.__name__ = args[0].__name__
+        return rayclass
+    else:
+        raise NotImplementedError("Arguments not implemented yet")

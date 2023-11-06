@@ -173,6 +173,10 @@ class Charm(object):
         # chares created on this PE
         self.activeChares = set()
 
+    
+    def print_dbg(self, *args, **kwargs):
+        print("PE", self.myPe(), ":", *args, **kwargs)
+    
     def get_new_future(self):
         self.future_id += 1
         return (self._myPe << 10) + self.future_id - 1

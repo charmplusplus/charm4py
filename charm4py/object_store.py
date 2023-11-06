@@ -33,11 +33,11 @@ class ObjectStore(Chare):
     def request_location_object(self, obj_id, requesting_pe):
         self._object_store.request_location_object(obj_id, requesting_pe)
 
-    def bulk_request_object(self, obj_id, requesting_pes):
-        self._object_store.bulk_request_object(obj_id, requesting_pes)
+    def bulk_send_object(self, obj_id, requesting_pes):
+        self._object_store.bulk_send_object(obj_id, requesting_pes)
 
-    def bulk_request_location(self, obj_id, requesting_pes):
-        self._object_store.bulk_request_location(obj_id, requesting_pes)
+    def bulk_send_location(self, obj_id, requesting_pes):
+        self._object_store.bulk_send_location(obj_id, requesting_pes)
 
     def create_object(self, obj_id, obj):
         self._object_store.create_object(obj_id, obj)

@@ -1,10 +1,10 @@
 from charm4py import charm, Chare, Array, ray
 from time import sleep
 
-class MyChare(Chare):
-
-    def __init__(self):
-        print('Hello from MyChare instance in processor', charm.myPe(), 'index', self.thisIndex)
+@ray.remote
+class Compute(object):
+    def __init__(self, arg):
+        print('Hello from MyChare instance in processor', charm.myPe(), 'index', self.thisIndex, arg)
 
     def add(self, a, b):
         sleep(2)
@@ -15,13 +15,14 @@ class MyChare(Chare):
 def main(args):
     ray.init()
     # create 3 instances of MyChare, distributed among cores by the runtime
-    arr = Array(MyChare, 3)
+    arr = [Compute.remote(i) for i in range(4)]
 
-    c = arr[1].add(1, 2)
-    d = arr[2].add(c, 3)
-    e = arr[2].add(4, 5)
+    c = arr[0].add(1, 2) # fut id 0
+    d = arr[1].add(3, c) # fut id 1
+    e = arr[2].add(2, d)
+    f = arr[3].add(c, 4)
 
-    #sleep(5)
+    #sleep(10)
     #exit()
 
 

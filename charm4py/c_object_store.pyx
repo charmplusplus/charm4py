@@ -89,8 +89,11 @@ cdef class CObjectStore:
         self.location_map = ObjectPEMap()
         self.obj_req_buffer = ObjectPEMap()
         self.loc_req_buffer = ObjectPEMap()
+        self.obj_loc_req_buffer = ObjectPEMap()
 
     cpdef object lookup_object(self, ObjectId obj_id):
+        #from charm4py import charm
+        #charm.print_dbg("Lookup on", obj_id)
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         if it == self.object_map.end():
             return None
@@ -120,47 +123,64 @@ cdef class CObjectStore:
             self.loc_req_buffer[obj_id] = vector[int]()
         self.loc_req_buffer[obj_id].push_back(requesting_pe)
 
+    cdef void buffer_obj_loc_request(self, ObjectId obj_id, int requesting_pe):
+        if self.obj_loc_req_buffer.find(obj_id) == self.obj_loc_req_buffer.end():
+            self.obj_loc_req_buffer[obj_id] = vector[int]()
+        self.obj_loc_req_buffer[obj_id].push_back(requesting_pe)
+
     @cython.cdivision(True)
     cdef int choose_pe(self, vector[int] &node_list):
+        # replica choice should be per entry
         cdef int pe = node_list[self.replica_choice % node_list.size()]
         self.replica_choice += 1
         return pe
 
     @cython.cdivision(True)
-    cpdef int lookup_location(self, ObjectId obj_id):
+    cpdef int lookup_location(self, ObjectId obj_id, bint fetch=True):
         from charm4py import charm
         cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
         if it != self.location_map.end():
             return self.choose_pe(deref(it).second)
-        cdef int npes = charm.numPes()
-        self.proxy[obj_id % npes].request_location(obj_id)
+        cdef int npes
+        if fetch:
+            npes = charm.numPes()
+            self.proxy[obj_id % npes].request_location(obj_id, charm.myPe())
         return -1
 
     cdef void check_loc_requests_buffer(self, ObjectId obj_id):
         cdef ObjectPEMapIterator it = self.loc_req_buffer.find(obj_id)
-        cdef int pe
-        cdef np.npy_intp size
-        cdef np.ndarray[int, ndim=1] req_pes
-        if it != self.loc_req_buffer.end():
-            size = deref(it).second.size()
-            pe = self.lookup_location(obj_id)
-            req_pes = PyArray_SimpleNewFromData(
-                1, &size, NPY_INT, &(deref(it).second[0]))
-            self.proxy[pe].bulk_request_location(obj_id, req_pes)
-            self.loc_req_buffer.erase(obj_id)
+        if it == self.loc_req_buffer.end():
+            return
+        cdef vector[int] vec = deref(it).second
+        cdef np.npy_intp size = vec.size()
+        cdef int pe = self.lookup_location(obj_id, fetch=False)
+        cdef int[::1] arr = <int [:vec.size()]> vec.data()
+        cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
+        self.proxy[pe].bulk_request_location(obj_id, req_pes)
+        self.loc_req_buffer.erase(obj_id)
+
+    cdef void check_obj_loc_requests_buffer(self, ObjectId obj_id):
+        cdef ObjectPEMapIterator it = self.obj_loc_req_buffer.find(obj_id)
+        if it == self.obj_loc_req_buffer.end():
+            return
+        cdef vector[int] vec = deref(it).second
+        cdef np.npy_intp size = vec.size()
+        cdef int pe = self.lookup_location(obj_id, fetch=False)
+        cdef int[::1] arr = <int [:vec.size()]> vec.data()
+        cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
+        self.proxy[pe].bulk_send_object(obj_id, req_pes)
+        self.loc_req_buffer.erase(obj_id)
 
     cdef void check_obj_requests_buffer(self, ObjectId obj_id):
         cdef ObjectPEMapIterator it = self.obj_req_buffer.find(obj_id)
-        cdef int pe
-        cdef np.npy_intp size
-        cdef np.ndarray[int, ndim=1] req_pes
-        if it != self.obj_req_buffer.end():
-            size = deref(it).second.size()
-            pe = self.lookup_location(obj_id)
-            req_pes = PyArray_SimpleNewFromData(
-                1, &size, NPY_INT, &(deref(it).second[0]))
-            self.proxy[pe].bulk_request_object(obj_id, req_pes)
-            self.obj_req_buffer.erase(obj_id)
+        if it == self.obj_req_buffer.end():
+            return
+        cdef vector[int] vec = deref(it).second
+        cdef np.npy_intp size = vec.size()
+        cdef int[::1] arr = <int [:vec.size()]> vec.data()
+        cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
+        self.bulk_send_object(obj_id, req_pes)
+        self.obj_req_buffer.erase(obj_id)
 
     cpdef void update_location(self, ObjectId obj_id, int pe):
         cdef bint new_entry = False
@@ -170,12 +190,13 @@ cdef class CObjectStore:
         self.location_map[obj_id].push_back(pe)
         if new_entry:
             self.check_loc_requests_buffer(obj_id)
+            self.check_obj_loc_requests_buffer(obj_id)
 
     cpdef void request_location_object(self, ObjectId obj_id, int requesting_pe):
         # this function is intended to be called on home pes of the object id
-        cdef int pe = self.lookup_location(obj_id)
+        cdef int pe = self.lookup_location(obj_id, fetch=False)
         if pe == -1:
-            self.buffer_loc_request(obj_id, requesting_pe)
+            self.buffer_obj_loc_request(obj_id, requesting_pe)
         else:
             self.proxy[pe].request_object(obj_id, requesting_pe)
             self.location_map[obj_id].push_back(requesting_pe)
@@ -202,9 +223,10 @@ cdef class CObjectStore:
     @cython.boundscheck(False)
     @cython.wraparound(False)
     @cython.cdivision(True)
-    cpdef void bulk_request_object(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes):
+    cpdef void bulk_send_object(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes):
+        cdef object obj = self.lookup_object(obj_id)
         for i in range(requesting_pes.shape[0]):
-            self.request_object(obj_id, requesting_pes[i])
+            self.proxy[requesting_pes[i]].receive_remote_object(obj_id, obj)
 
     @cython.cdivision(True)
     cpdef void create_object(self, ObjectId obj_id, object obj):

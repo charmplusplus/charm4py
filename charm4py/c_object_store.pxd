@@ -36,15 +36,18 @@ cdef class CObjectStore:
     cdef ObjectPEMap location_map
     cdef ObjectPEMap obj_req_buffer
     cdef ObjectPEMap loc_req_buffer
+    cdef ObjectPEMap obj_loc_req_buffer
     cdef object proxy
 
     cdef void buffer_obj_request(self, ObjectId obj_id, int requesting_pe)
     cdef void buffer_loc_request(self, ObjectId obj_id, int requesting_pe)
+    cdef void buffer_obj_loc_request(self, ObjectId obj_id, int requesting_pe)
     cdef void check_obj_requests_buffer(self, ObjectId obj_id)
     cdef void check_loc_requests_buffer(self, ObjectId obj_id)
+    cdef void check_obj_loc_requests_buffer(self, ObjectId obj_id)
 
     cpdef object lookup_object(self, ObjectId obj_id)
-    cpdef int lookup_location(self, ObjectId obj_id)
+    cpdef int lookup_location(self, ObjectId obj_id, bint fetch=*)
     cdef void insert_object(self, ObjectId obj_id, object obj)
     cdef void delete_object(self, ObjectId obj_id)
 
@@ -55,5 +58,5 @@ cdef class CObjectStore:
     cpdef void request_location(self, ObjectId obj_id, int requesting_pe)
     cpdef void receive_remote_object(self, ObjectId obj_id, object obj)
     cpdef void request_object(self, ObjectId obj_id, int requesting_pe)
-    cpdef void bulk_request_object(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes)
+    cpdef void bulk_send_object(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes)
     cpdef void create_object(self, ObjectId obj_id, object obj)
