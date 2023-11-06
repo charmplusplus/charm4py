@@ -21,6 +21,7 @@ def main(args):
     d = arr[1].add(3, c) # fut id 1
     e = arr[2].add(2, d)
     f = arr[3].add(c, 4)
+    print(ray.get([c, d, e, f]))
 
     #sleep(10)
     #exit()

@@ -1,3 +1,4 @@
+
 counter = 0
 
 def init():
@@ -38,3 +39,12 @@ def remote(*args, **kwargs):
         return rayclass
     else:
         raise NotImplementedError("Arguments not implemented yet")
+    
+
+def get(arg):
+    from charm4py import charm
+    from .future import Future
+    if isinstance(arg, Future):
+        return charm.get_future_value(arg)
+    elif isinstance(arg, list):
+        return [charm.get_future_value(f) for f in arg]

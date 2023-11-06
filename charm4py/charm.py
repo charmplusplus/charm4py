@@ -158,6 +158,7 @@ class Charm(object):
         self.send_buffer = MessageBuffer()
         self.receive_buffer = MessageBuffer()
         self.future_id = 0
+        self.future_wait_buffer = {}
         #print(self.future_mask)
 
     def __init_profiling__(self):
@@ -180,6 +181,22 @@ class Charm(object):
     def get_new_future(self):
         self.future_id += 1
         return (self._myPe << 10) + self.future_id - 1
+    
+    @entry_method.coro
+    def get_future_value(self, fut):
+        obj = fut.lookup_object()
+        if obj == None:
+            local_f = LocalFuture()
+            self.future_wait_buffer[fut.id] = local_f
+            fut.request_object()
+            return local_f.get()
+        else:
+            return obj
+        
+    def check_futures_buffer(self, obj_id, obj):
+        if obj_id in self.future_wait_buffer:
+            local_f = self.future_wait_buffer.pop(obj_id)
+            local_f.send(obj)
 
     def check_send_buffer(self, obj_id):
         completed = self.send_buffer.check(obj_id)

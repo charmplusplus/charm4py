@@ -35,6 +35,7 @@ class ObjectStore(Chare):
         """
         self._object_store.receive_remote_object(obj_id, obj)
         charm.check_receive_buffer(obj_id)
+        charm.check_futures_buffer(obj_id, obj)
 
     def request_object(self, obj_id, requesting_pe):
         """ If obj_id is found in the local object map, then send it back to the
