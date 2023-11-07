@@ -83,7 +83,6 @@ class ConvNet(nn.Module):
             if g is not None:
                 p.grad = torch.from_numpy(g)
 
-
 @ray.remote
 class ParameterServer(object):
     def __init__(self, lr):

@@ -59,3 +59,9 @@ def wait(futs, num_returns=1, timeout=None, fetch_local=True):
     ready = charm.getany_future_value(futs, num_returns)
     not_ready = list(set(futs) - set(ready))
     return ready, not_ready
+
+def put(obj):
+    from .future import Future
+    fut = Future()
+    fut.create_object(obj)
+    return fut
