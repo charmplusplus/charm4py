@@ -122,6 +122,20 @@ class LocalFuture(object):
         return threadMgr.pauseThread()
 
 
+class LocalMultiFuture(LocalFuture):
+    def __init__(self, num_vals):
+        LocalFuture.__init__(self)
+        self.num_vals = num_vals
+        self.result = []
+
+    def send(self, result=None):
+        self.num_vals -= 1
+        if result:
+            self.result.append(result)
+        if self.num_vals == 0:
+            threadMgr.resumeThread(self.gr, self.result)
+
+
 class EntryMethodThreadManager(object):
 
     def __init__(self, _charm):

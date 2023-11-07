@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from filelock import FileLock
 import numpy as np
+import time
 
 from charm4py import ray, charm
 
@@ -123,8 +124,9 @@ class DataWorker(object):
 
 def main(args):
     ray.init()
-        
-    iterations = 200
+    
+    start = time.time()
+    iterations = 201
     num_workers = 2
     ps = ParameterServer.remote(1e-2)
     workers = [DataWorker.remote() for i in range(num_workers)]
@@ -145,6 +147,7 @@ def main(args):
             accuracy = evaluate(model, test_loader)
             print("Iter {}: \taccuracy is {:.1f}".format(i, accuracy))
 
+    print("Execution time = {:.2f} s".format(time.time() - start))
     print("Final accuracy is {:.1f}.".format(accuracy))
     # Clean up Ray resources and processes before the next example.
     #ray.shutdown()

@@ -24,7 +24,7 @@ from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
 from . import entry_method
 from . import threads
-from .threads import Future, LocalFuture
+from .threads import Future, LocalFuture, LocalMultiFuture
 from . import reduction
 from . import wait
 from charm4py.c_object_store import MessageBuffer
@@ -158,7 +158,8 @@ class Charm(object):
         self.send_buffer = MessageBuffer()
         self.receive_buffer = MessageBuffer()
         self.future_id = 0
-        self.future_wait_buffer = {}
+        # TODO: maybe implement this buffer in c++
+        self.future_get_buffer = {}
         #print(self.future_mask)
 
     def __init_profiling__(self):
@@ -180,23 +181,49 @@ class Charm(object):
     
     def get_new_future(self):
         self.future_id += 1
+        # FIXME how many bits should PE take?
         return (self._myPe << 10) + self.future_id - 1
     
     @entry_method.coro
     def get_future_value(self, fut):
+        #self.print_dbg("Getting data for object", fut.id)
         obj = fut.lookup_object()
         if obj == None:
             local_f = LocalFuture()
-            self.future_wait_buffer[fut.id] = local_f
+            self.future_get_buffer[fut.id] = (local_f, fut)
             fut.request_object()
-            return local_f.get()
+            local_f.get()
+            return fut.lookup_object()
         else:
             return obj
         
-    def check_futures_buffer(self, obj_id, obj):
-        if obj_id in self.future_wait_buffer:
-            local_f = self.future_wait_buffer.pop(obj_id)
-            local_f.send(obj)
+    @entry_method.coro
+    def getany_future_value(self, futs, num_returns):
+        ready_count = 0
+        ready_list = []
+        not_local = []
+        for f in futs:
+            if f.is_local():
+                ready_count += 1
+                ready_list.append(f)
+            else:
+                f.request_object()
+                not_local.append(f)
+        if ready_count >= num_returns:
+            return ready_list[:ready_count]
+        else:
+            local_f = LocalMultiFuture(num_returns - ready_count)
+            for f in not_local:
+                self.future_get_buffer[f.id] = (local_f, f)
+            result = local_f.get()
+            for f in not_local:
+                self.future_get_buffer.pop(f.id, None)
+            return ready_list + result
+        
+    def check_futures_buffer(self, obj_id):
+        if obj_id in self.future_get_buffer:
+            local_f, fut = self.future_get_buffer.pop(obj_id)
+            local_f.send(fut)
 
     def check_send_buffer(self, obj_id):
         completed = self.send_buffer.check(obj_id)

@@ -102,6 +102,8 @@ cdef class CObjectStore:
     cdef void insert_object(self, ObjectId obj_id, object obj):
         #FIXME when is a copy required here?
         #obj_copy = deepcopy(obj)
+        if self.object_map.find(obj_id) != self.object_map.end():
+            return
         Py_INCREF(obj)
         self.object_map[obj_id] = <void*> obj
 
@@ -151,6 +153,7 @@ cdef class CObjectStore:
         cdef ObjectPEMapIterator it = self.loc_req_buffer.find(obj_id)
         if it == self.loc_req_buffer.end():
             return
+        # TODO is this creating a copy of the vector?
         cdef vector[int] vec = deref(it).second
         cdef np.npy_intp size = vec.size()
         cdef int pe = self.lookup_location(obj_id, fetch=False)

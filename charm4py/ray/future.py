@@ -1,9 +1,12 @@
 from .api import get_object_store
 
 class Future(object):
-    def __init__(self):
+    def __init__(self, id=None):
         from ..charm import charm
-        self.id = charm.get_new_future()
+        if id != None:
+            self.id = id
+        else:
+            self.id = charm.get_new_future()
         # this flag is set when the remote object is requested to avoid
         # multiple requests for the same object
         self._requested = False

@@ -48,3 +48,14 @@ def get(arg):
         return charm.get_future_value(arg)
     elif isinstance(arg, list):
         return [charm.get_future_value(f) for f in arg]
+
+
+def wait(futs, num_returns=1, timeout=None, fetch_local=True):
+    # return when atleast num_returns futures have their data in the
+    # local store. Similar to waitany
+    if timeout != None or not fetch_local:
+        raise NotImplementedError("timeout and fetch_local not implemented yet")
+    from charm4py import charm
+    ready = charm.getany_future_value(futs, num_returns)
+    not_ready = list(set(futs) - set(ready))
+    return ready, not_ready
