@@ -122,19 +122,20 @@ class DataWorker(object):
         return self.model.get_gradients()
 
 
-def main(args):
+def sync_train(args):
     ray.init()
     
-    start = time.time()
     iterations = 201
-    num_workers = 2
-    ps = ParameterServer.remote(1e-2)
-    workers = [DataWorker.remote() for i in range(num_workers)]
+    num_workers = 4
 
     model = ConvNet()
     test_loader = get_data_loader()[1]
-
     print("Running synchronous parameter server training.")
+
+    start = time.time()
+    ps = ParameterServer.remote(1e-2)
+    workers = [DataWorker.remote() for i in range(num_workers)]
+
     current_weights = ps.get_weights()
     for i in range(iterations):
         gradients = [worker.compute_gradients(current_weights) for worker in workers]
@@ -152,4 +153,40 @@ def main(args):
     # Clean up Ray resources and processes before the next example.
     #ray.shutdown()
 
-charm.start(main)
+def async_train(args):
+    ray.init()
+        
+    model = ConvNet()
+    test_loader = get_data_loader()[1]
+    iterations = 201
+    num_workers = 4
+    
+    print("Running asynchronous parameter server training.")
+    start = time.time()
+    ps = ParameterServer.remote(1e-2)
+    workers = [DataWorker.remote() for i in range(num_workers)]
+
+    current_weights = ps.get_weights()
+    gradients = {}
+    for worker in workers:
+        gradients[worker.compute_gradients(current_weights)] = worker
+
+    for i in range(iterations * num_workers):
+        ready_gradient_list, _ = ray.wait(list(gradients))
+        ready_gradient_id = ready_gradient_list[0]
+        worker = gradients.pop(ready_gradient_id)
+
+        # Compute and apply gradients.
+        current_weights = ps.apply_gradients(*[ready_gradient_id])
+        gradients[worker.compute_gradients(current_weights)] = worker
+
+        if i % 10 == 0:
+            # Evaluate the current model after every 10 updates.
+            model.set_weights(ray.get(current_weights))
+            accuracy = evaluate(model, test_loader)
+            print("Iter {}: \taccuracy is {:.1f}".format(i, accuracy))
+
+    print("Execution time = {:.2f} s".format(time.time() - start))
+    print("Final accuracy is {:.1f}.".format(accuracy))
+
+charm.start(async_train)
