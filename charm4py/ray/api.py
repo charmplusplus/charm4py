@@ -63,6 +63,6 @@ def wait(futs, num_returns=1, timeout=None, fetch_local=True):
 def put(obj):
     from ..threads import Future
     from ..charm import charm
-    fut = charm.threadMgr.createFuture()
+    fut = charm.threadMgr.createFuture(store=True)
     fut.create_object(obj)
     return fut

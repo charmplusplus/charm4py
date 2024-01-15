@@ -25,7 +25,7 @@ class NotThreadedError(Exception):
 
 class Future(object):
 
-    def __init__(self, fid, gr, src, num_vals):
+    def __init__(self, fid, gr, src, num_vals, store=False):
         self.fid = fid  # unique future ID within the process that created it
         self.gr = gr  # greenlet that created the future
         self.src = src  # PE where the future was created (not used for collective futures)
@@ -35,23 +35,28 @@ class Future(object):
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
         self.store_id = (self.src << 16) + self.fid
+        self.store = store
         self._requested = False
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
             future. If the values are already available then they are returned immediately.
         """
-        if not self.gotvalues:
-            self.blocked = True
-            self.gr = getcurrent()
-            self.values = threadMgr.pauseThread()
+        from .charm import charm
+        if self.store:
+            return charm.get_future_value(self)
+        else:
+            if not self.gotvalues:
+                self.blocked = True
+                self.gr = getcurrent()
+                self.values = threadMgr.pauseThread()
 
-        if self.error is not None:
-            raise self.error
+            if self.error is not None:
+                raise self.error
 
-        if self.nvals == 1:
-            return self.values[0]
-        return self.values
+            if self.nvals == 1:
+                return self.values[0]
+            return self.values
 
     def ready(self):
         return self.gotvalues
@@ -61,7 +66,10 @@ class Future(object):
 
     def send(self, result=None):
         """ Send a value to this future. """
-        charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
+        if self.store:
+            self.create_object(result)
+        else:
+            charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
 
     def __call__(self, result=None):
         self.send(result)
@@ -120,10 +128,10 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        return (self.fid, self.src)
+        return (self.fid, self.src, self.store)
 
     def __setstate__(self, state):
-        self.fid, self.src = state
+        self.fid, self.src, self.store = state
         self.store_id = (self.src << 16) + self.fid
         self._requested = False
 
@@ -247,7 +255,7 @@ class EntryMethodThreadManager(object):
         if len(ems) > 0:
             ems[-1].startMeasuringTime()
 
-    def createFuture(self, num_vals=1):
+    def createFuture(self, num_vals=1, store=False):
         """ Creates a new Future object by obtaining a unique (local) future ID. """
         gr = getcurrent()
         if gr == self.main_gr:
@@ -260,7 +268,7 @@ class EntryMethodThreadManager(object):
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
         self.lastfid = fid
-        f = Future(fid, gr, charm._myPe, num_vals)
+        f = Future(fid, gr, charm._myPe, num_vals, store=store)
         futures[fid] = f
         return f
 
