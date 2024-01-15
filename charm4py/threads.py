@@ -1,5 +1,5 @@
 from greenlet import getcurrent
-
+from .ray.api import get_object_store
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -34,6 +34,8 @@ class Future(object):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
+        self.store_id = (self.src << 16) + self.fid
+        self._requested = False
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -87,11 +89,43 @@ class Future(object):
             # someone is waiting on the future, signal by sending the values
             threadMgr.resumeThread(self.gr, self.values)
 
+    def lookup_location(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        return local_obj_store.lookup_location(self.store_id)
+    
+    def lookup_object(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        return local_obj_store.lookup_object(self.store_id)
+    
+    def is_local(self):
+        return self.lookup_object() != None
+    
+    def create_object(self, obj):
+        from .charm import charm
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        local_obj_store.create_object(self.store_id, obj)
+
+    def request_object(self):
+        if self._requested:
+            return
+        from .charm import charm
+        obj_store = get_object_store()
+        obj_store[self.store_id % charm.numPes()].request_location_object(
+            self.store_id, charm.myPe())
+        self._requested = True
+
     def __getstate__(self):
         return (self.fid, self.src)
 
     def __setstate__(self, state):
         self.fid, self.src = state
+        self.store_id = (self.src << 16) + self.fid
+        self._requested = False
 
 
 class CollectiveFuture(Future):

@@ -752,7 +752,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            blockFuture = ray.Future()
+            blockFuture = charm.threadMgr.createFuture()
             args = list(args)
             args.append(blockFuture)
             args = tuple(args)

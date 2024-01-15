@@ -43,7 +43,7 @@ def remote(*args, **kwargs):
 
 def get(arg):
     from charm4py import charm
-    from .future import Future
+    from ..threads import Future
     if isinstance(arg, Future):
         return charm.get_future_value(arg)
     elif isinstance(arg, list):
@@ -61,7 +61,8 @@ def wait(futs, num_returns=1, timeout=None, fetch_local=True):
     return ready, not_ready
 
 def put(obj):
-    from .future import Future
-    fut = Future()
+    from ..threads import Future
+    from ..charm import charm
+    fut = charm.threadMgr.createFuture()
     fut.create_object(obj)
     return fut

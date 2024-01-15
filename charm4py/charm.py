@@ -179,18 +179,13 @@ class Charm(object):
     def print_dbg(self, *args, **kwargs):
         print("PE", self.myPe(), ":", *args, **kwargs)
     
-    def get_new_future(self):
-        self.future_id += 1
-        # FIXME how many bits should PE take?
-        return (self._myPe << 10) + self.future_id - 1
-    
     @entry_method.coro
     def get_future_value(self, fut):
         #self.print_dbg("Getting data for object", fut.id)
         obj = fut.lookup_object()
         if obj == None:
             local_f = LocalFuture()
-            self.future_get_buffer[fut.id] = (local_f, fut)
+            self.future_get_buffer[fut.store_id] = (local_f, fut)
             fut.request_object()
             local_f.get()
             return fut.lookup_object()
@@ -214,10 +209,10 @@ class Charm(object):
         else:
             local_f = LocalMultiFuture(num_returns - ready_count)
             for f in not_local:
-                self.future_get_buffer[f.id] = (local_f, f)
+                self.future_get_buffer[f.store_id] = (local_f, f)
             result = local_f.get()
             for f in not_local:
-                self.future_get_buffer.pop(f.id, None)
+                self.future_get_buffer.pop(f.store_id, None)
             return ready_list + result
         
     def check_futures_buffer(self, obj_id):
@@ -233,7 +228,7 @@ class Charm(object):
         for args in completed:
             args = list(args)
             for i, arg in enumerate(args[-1][:-1]):
-                if isinstance(arg, ray.Future):
+                if isinstance(arg, Future):
                     dep_obj = arg.lookup_object()
                     args[-1][i] = dep_obj
             self.invokeEntryMethod(*args, ret_fut=True)
@@ -371,12 +366,12 @@ class Charm(object):
             header, args = self.unpackMsg(msg, dcopy_start, obj)
             dep_ids = []
             for i, arg in enumerate(args[:-1]):
-                if isinstance(arg, ray.Future):
+                if isinstance(arg, Future):
                     dep_obj = arg.lookup_object()
                     if dep_obj != None:
                         args[i] = dep_obj
                     else:
-                        dep_ids.append(arg.id)
+                        dep_ids.append(arg.store_id)
                         arg.request_object()
             if len(dep_ids) > 0:
                 charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
