@@ -441,7 +441,7 @@ class Pool(object):
         return f
 
     def map(self, func, iterable, chunksize=1, ncores=-1):
-        result = Future()
+        result = Future(store=True)
         # TODO shouldn't send task objects to a central place. what if they are large?
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result.get()
@@ -452,9 +452,9 @@ class Pool(object):
             # the sync case won't return until all the tasks have finished)
             iterable = deepcopy(iterable)
         if multi_future:
-            result = [Future() for _ in range(len(iterable))]
+            result = [Future(store=True) for _ in range(len(iterable))]
         else:
-            result = Future()
+            result = Future(store=True)
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result
 
