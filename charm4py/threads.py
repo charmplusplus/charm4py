@@ -258,7 +258,7 @@ class EntryMethodThreadManager(object):
     def createFuture(self, num_vals=1, store=False):
         """ Creates a new Future object by obtaining a unique (local) future ID. """
         gr = getcurrent()
-        if gr == self.main_gr:
+        if not store and gr == self.main_gr:
             self.throwNotThreadedError()
         # get a unique local Future ID
         global FIDMAXVAL

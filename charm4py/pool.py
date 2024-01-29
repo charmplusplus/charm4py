@@ -210,7 +210,10 @@ class PoolScheduler(Chare):
                         func = task.func
                     # NOTE: this is a non-standard way of using proxies, but is
                     # faster and allows the scheduler to reuse the same proxy
-                    self.workers.elemIdx = worker_id
+                    if not isinstance(worker_id, tuple):
+                        self.workers.elemIdx = (worker_id,)
+                    else:
+                        self.workers.elemIdx = worker_id
                     job.remote(func, task.data, task.result_dest, job.id)
 
                 if len(job.tasks) == 0:

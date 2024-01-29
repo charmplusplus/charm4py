@@ -454,6 +454,7 @@ class CharmLib(object):
     msg0, dcopy = msg
     cdef int ndims = len(index)
     cdef int i = 0
+    #print(type(index[i]))
     for i in range(ndims): c_index[i] = index[i]
     if cur_buf <= 1:
       CkArrayExtSend(array_id, c_index, ndims, ep, msg0, len(msg0))

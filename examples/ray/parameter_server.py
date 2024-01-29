@@ -123,7 +123,7 @@ class DataWorker(object):
 
 def sync_train(args):
     ray.init()
-    
+
     iterations = 201
     num_workers = 4
 
@@ -154,12 +154,12 @@ def sync_train(args):
 
 def async_train(args):
     ray.init()
-        
+
     model = ConvNet()
     test_loader = get_data_loader()[1]
     iterations = 201
     num_workers = 4
-    
+
     print("Running asynchronous parameter server training.")
     start = time.time()
     ps = ParameterServer.remote(1e-2)
@@ -187,5 +187,6 @@ def async_train(args):
 
     print("Execution time = {:.2f} s".format(time.time() - start))
     print("Final accuracy is {:.1f}.".format(accuracy))
+    exit()
 
 charm.start(async_train)
