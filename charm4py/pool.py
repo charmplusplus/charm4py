@@ -1,4 +1,4 @@
-from . import charm, Chare, Group, coro_ext, threads, Future
+from . import charm, Chare, Group, Array, coro_ext, threads, Future, register
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
@@ -106,7 +106,7 @@ class PoolScheduler(Chare):
             print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
                   'Warning: charm.pool is experimental (API and performance '
                   'is subject to change)')
-            self.workers = Group(Worker, args=[self.thisProxy])
+            self.workers = Array(Worker, charm.numPes(), args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
             oldSize = len(self.jobs)
@@ -296,6 +296,7 @@ class PoolScheduler(Chare):
         self.schedule()
 
 
+@register
 class Worker(Chare):
 
     def __init__(self, scheduler):

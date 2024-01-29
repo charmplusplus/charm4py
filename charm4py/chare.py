@@ -486,6 +486,10 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             gid = proxy.gid
             if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
                 destObj = charm.groups[gid]
+            #blockFuture = charm.createFuture(store=True)
+            #args = list(args)
+            #args.append(blockFuture)
+            #args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkGroupSend(gid, elemIdx, ep, msg)
         else:
@@ -528,10 +532,6 @@ def update_globals_proxy_method_gen(ep):
             gid = proxy.gid
             if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
                 destObj = charm.groups[gid]
-            blockFuture = charm.createFuture(store=True)
-            args = list(args)
-            args.append(blockFuture)
-            args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkGroupSend(gid, elemIdx, ep, msg)
         else:

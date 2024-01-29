@@ -333,19 +333,19 @@ class Charm(object):
         if gid in self.groups:
             obj = self.groups[gid]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
-            dep_ids = []
-            for i, arg in enumerate(args[:-1]):
-                if isinstance(arg, Future):
-                    dep_obj = arg.lookup_object()
-                    if dep_obj != None:
-                        args[i] = dep_obj
-                    else:
-                        dep_ids.append(arg.store_id)
-                        arg.request_object()
-            if len(dep_ids) > 0:
-                charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
-            else:
-                self.invokeEntryMethod(obj, ep, header, args, ret_fut=True)        
+            #dep_ids = []
+            #for i, arg in enumerate(args[:-1]):
+            #    if isinstance(arg, Future):
+            #        dep_obj = arg.lookup_object()
+            #        if dep_obj != None:
+            #            args[i] = dep_obj
+            #        else:
+            #            dep_ids.append(arg.store_id)
+            #            arg.request_object()
+            #if len(dep_ids) > 0:
+            #    charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
+            #else:
+            self.invokeEntryMethod(obj, ep, header, args, ret_fut=False)        
         else:
             em = self.entryMethods[ep]
             header, args = self.unpackMsg(msg, dcopy_start, None)
