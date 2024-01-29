@@ -21,6 +21,8 @@ def main(args):
     d = arr[1].add(3, c) # fut id 1
     e = arr[2].add(2, d)
     f = arr[3].add(c, 4)
+
+    print(c.get())
     
     not_ready = [c, d, e, f]
     while len(not_ready) > 0:
