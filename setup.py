@@ -13,9 +13,43 @@ import distutils
 
 
 build_mpi = False
-
 system = platform.system()
 machine = platform.machine()
+
+
+def get_build_machine(machine):
+    if machine.startswith('arm'):
+        import re
+        regexp = re.compile("arm(\d+).*")
+        m = regexp.match(machine)
+        if m:
+            version = int(m.group(1))
+            if version < 8:
+                return 'arm7'
+            else:
+                return 'arm8'
+    return machine
+
+
+def get_build_os(os):
+    return os.lower()
+
+
+def get_build_network_type(build_mpi):
+    return 'netlrts' if not build_mpi else 'mpi'
+
+
+def get_build_triple(machine, os, build_mpi):
+    return (get_build_machine(machine),
+            get_build_os(os),
+            get_build_network_type(build_mpi)
+            )
+
+
+machine = get_build_machine(machine)
+system = get_build_os(system)
+
+
 libcharm_filename2 = None
 if system == 'Windows' or system.lower().startswith('cygwin'):
     libcharm_filename = 'charm.dll'
@@ -120,13 +154,9 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
 
-        target_layer = 'netlrts'
-        if build_mpi:
-            target_layer = 'mpi'
+        target_machine, os_target, target_layer = get_build_triple(machine, system, build_mpi)
 
-        os_target = system.lower()
-
-        build_triple = f'{target_layer}-{os_target}-{machine}'
+        build_triple = f'{target_layer}-{os_target}-{target_machine}'
         cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
         print(cmd)
 
