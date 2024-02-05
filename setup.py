@@ -18,16 +18,8 @@ machine = platform.machine()
 
 
 def get_build_machine(machine):
-    if machine.startswith('arm'):
-        import re
-        regexp = re.compile("arm(\d+).*")
-        m = regexp.match(machine)
-        if m:
-            version = int(m.group(1))
-            if version < 8:
-                return 'arm7'
-            else:
-                return 'arm8'
+    if machine == 'arm64' or machine == 'aarch64':
+        return 'arm8'
     return machine
 
 
