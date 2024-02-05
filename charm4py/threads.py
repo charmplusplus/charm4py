@@ -114,6 +114,7 @@ class Future(object):
     
     def create_object(self, obj):
         from .charm import charm
+        #print("Created object", self.store_id)
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.store_id, obj)

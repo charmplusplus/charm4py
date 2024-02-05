@@ -224,6 +224,7 @@ class Charm(object):
         completed = self.send_buffer.check(obj_id)
 
     def check_receive_buffer(self, obj_id):
+        #print("Received result for", obj_id, "on pe", self._myPe)
         completed = self.receive_buffer.check(obj_id)
         for args in completed:
             args = list(args)
@@ -386,6 +387,7 @@ class Charm(object):
                         dep_ids.append(arg.store_id)
                         arg.request_object()
             if len(dep_ids) > 0:
+                #print("Buffering call for obj", obj)
                 charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
             else:
                 self.invokeEntryMethod(obj, ep, header, args, ret_fut=True)

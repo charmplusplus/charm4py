@@ -1,3 +1,5 @@
+import types
+from copy import deepcopy
 
 counter = 0
 
@@ -26,17 +28,26 @@ def get_ray_class(subclass):
             return chare
     return RayChare
 
+def get_ray_task(func):
+    from charm4py import charm
+    def task(*args):
+        return charm.pool.map_async(func, [args], chunksize=1, multi_future=True)[0]
+    return task
 
 def remote(*args, **kwargs):
-    from charm4py import Chare, register
+    from charm4py import charm, Chare, register
     
-    if len(args) == 1 and len(kwargs) == 0:        
-        # decorating without any arguments
-        subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
-        register(subclass)
-        rayclass = get_ray_class(subclass)
-        rayclass.__name__ = args[0].__name__
-        return rayclass
+    if len(args) == 1 and len(kwargs) == 0:
+        if isinstance(args[0], types.FunctionType):
+            args[0].remote = get_ray_task(args[0])
+            return args[0]
+        else:       
+            # decorating without any arguments
+            subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
+            register(subclass)
+            rayclass = get_ray_class(subclass)
+            rayclass.__name__ = args[0].__name__
+            return rayclass
     else:
         raise NotImplementedError("Arguments not implemented yet")
     

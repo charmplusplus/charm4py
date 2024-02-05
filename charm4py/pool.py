@@ -214,7 +214,10 @@ class PoolScheduler(Chare):
                         self.workers.elemIdx = (worker_id,)
                     else:
                         self.workers.elemIdx = worker_id
-                    job.remote(func, task.data, task.result_dest, job.id)
+                    if isinstance(task.data, tuple):
+                        job.remote(func, [task.result_dest], job.id, *task.data)
+                    else:
+                        job.remote(func, [task.result_dest], job.id, task.data)
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -233,7 +236,7 @@ class PoolScheduler(Chare):
                 job = prev.job_next
 
     def taskFinished(self, worker_id, job_id, result=None):
-        # print('Job finished')
+        #print('Job finished')
         job = self.jobs[job_id]
         if job.failed:
             return self.taskError(worker_id, job_id, job.exception)
@@ -313,24 +316,27 @@ class Worker(Chare):
     def runTaskSingleFunc_th(self, func, args, result_destination, job_id):
         self.runTaskSingleFunc(func, args, result_destination, job_id)
 
-    def runTaskSingleFunc(self, func, args, result_destination, job_id):
+    def runTaskSingleFunc(self, func, result_destination, job_id, *args):
         if func is not None:
             self.funcs[job_id] = func
         else:
             func = self.funcs[job_id]
-        self.runTask(func, args, result_destination, job_id)
+        self.runTask(func, result_destination, job_id, *args)
 
     @coro_ext(event_notify=True)
     def runTask_th(self, func, args, result_destination, job_id):
         self.runTask(func, args, result_destination, job_id)
 
-    def runTask(self, func, args, result_destination, job_id):
+    def runTask(self, func, result_destination, job_id, *args):
+        result_destination = result_destination[0]
         try:
-            result = func(args)
+            result = func(*args)
             if isinstance(result_destination, int):
+                #print("CHECK INT")
                 self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
             else:
                 # assume result_destination is a future
+                #print("CHECK")
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
