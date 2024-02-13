@@ -31,27 +31,27 @@ def get_build_network_type(build_mpi):
     return 'netlrts' if not build_mpi else 'mpi'
 
 
-def get_build_triple(machine, os, build_mpi):
+def get_build_triple(build_mpi):
     return (get_build_machine(),
             get_build_os(),
             get_build_network_type(build_mpi)
             )
 
 
-machine = get_build_machine(machine)
-system = get_build_os(system)
+machine = get_build_machine()
+system = get_build_os()
 
 
 libcharm_filename2 = None
-if system == 'Windows' or system.lower().startswith('cygwin'):
+if system == 'windows' or system.startswith('cygwin'):
     libcharm_filename = 'charm.dll'
     libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
-elif system == 'Darwin':
+elif system == 'darwin':
     os.environ['ARCHFLAGS'] = f'-arch {machine}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
-else:
+else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
 
@@ -128,7 +128,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
     if not charm_built(charm_src_dir):
 
-        if system == 'Windows' or system.lower().startswith('cygwin'):
+        if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
                                       ' Please download a Charm4py binary wheel (64-bit Python required)')
 
@@ -146,7 +146,7 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
 
-        target_machine, os_target, target_layer = get_build_triple(machine, system, build_mpi)
+        target_machine, os_target, target_layer = get_build_triple(build_mpi)
 
         build_triple = f'{target_layer}-{os_target}-{target_machine}'
         cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
@@ -159,7 +159,7 @@ def build_libcharm(charm_src_dir, build_dir):
         if rc != 0:
             raise DistutilsSetupError('An error occured while building charm library')
 
-        if system == 'Darwin':
+        if system == 'darwin':
             old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.so')
             new_file_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
             shutil.move(old_file_path, new_file_path)
@@ -276,7 +276,7 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
 
         extra_link_args = []
         if os.name != 'nt':
-            if system == 'Darwin':
+            if system == 'darwin':
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
