@@ -13,17 +13,17 @@ import distutils
 
 
 build_mpi = False
-system = platform.system()
-machine = platform.machine()
 
 
-def get_build_machine(machine):
+def get_build_machine():
+    machine = platform.machine()
     if machine == 'arm64' or machine == 'aarch64':
         return 'arm8'
     return machine
 
 
-def get_build_os(os):
+def get_build_os():
+    os = platform.system()
     return os.lower()
 
 
@@ -32,8 +32,8 @@ def get_build_network_type(build_mpi):
 
 
 def get_build_triple(machine, os, build_mpi):
-    return (get_build_machine(machine),
-            get_build_os(os),
+    return (get_build_machine(),
+            get_build_os(),
             get_build_network_type(build_mpi)
             )
 
