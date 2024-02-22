@@ -70,7 +70,7 @@ class Scheduler(Chare):
         job.addResult(task_id, result)
         if job.isDone():
             self.jobs.pop(job.id)
-            # job is done, send the result back to whoever submitted the job
+            # job is done, send the result back to whomever submitted the job
             job.callback(job.results)  # callback is a callable
         self.schedule()
 

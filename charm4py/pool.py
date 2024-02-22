@@ -1,8 +1,14 @@
+from dataclasses import dataclass
+from frozendict import frozendict
+from typing import Callable
 from . import charm, Chare, Group, coro_ext, threads, Future
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
 from copy import deepcopy
+from concurrent.futures import Executor, TimeoutError
+#from concurrent.futures import wait as cf_wait
+from gevent import Timeout
 import sys
 
 
@@ -55,22 +61,28 @@ class Job(object):
             if result is None or isinstance(result, threads.Future):
                 self.results = [None] * len(tasks)
                 self.future = result
-                self.tasks = [Chunk(tasks[i:i+chunksize], i) for i in range(0, len(tasks), chunksize)]
+                self.tasks = [Chunk(tasks[i:i + chunksize], i)
+                              for i in range(0, len(tasks), chunksize)]
             else:
-                self.tasks = [Chunk(tasks[i:i+chunksize], result[i:i+chunksize]) for i in range(0, len(tasks), chunksize)]
+                self.tasks = [Chunk(tasks[i:i + chunksize], result[i:i + chunksize])
+                              for i in range(0, len(tasks), chunksize)]
         else:
             if result is None or isinstance(result, threads.Future):
                 self.results = [None] * len(tasks)
                 self.future = result
                 if func is not None:
-                    self.tasks = [Task(args, i) for i, args in enumerate(tasks)]
+                    self.tasks = [Task(args, i)
+                                  for i, args in enumerate(tasks)]
                 else:
-                    self.tasks = [Task(args, i, func) for i, (func, args) in enumerate(tasks)]
+                    self.tasks = [Task(args, i, func)
+                                  for i, (func, args) in enumerate(tasks)]
             else:
                 if func is not None:
-                    self.tasks = [Task(args, result[i]) for i, args in enumerate(tasks)]
+                    self.tasks = [Task(args, result[i])
+                                  for i, args in enumerate(tasks)]
                 else:
-                    self.tasks = [Task(args, result[i], func) for i, (func, args) in enumerate(tasks)]
+                    self.tasks = [Task(args, result[i], func)
+                                  for i, (func, args) in enumerate(tasks)]
         # print('Created job with', len(self.tasks), 'tasks')
         self.tasks_pending = len(self.tasks)
 
@@ -89,6 +101,7 @@ class Job(object):
 class PoolScheduler(Chare):
 
     def __init__(self):
+        super().__init__()
         self.workers = None
         self.idle_workers = set(range(1, charm.numPes()))
         self.num_workers = len(self.idle_workers)
@@ -103,9 +116,12 @@ class PoolScheduler(Chare):
         if self.workers is None:
             assert self.num_workers > 0, 'Run with more than 1 PE to use charm.pool'
             # first time running a job, create Group of workers
-            print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
-                  'Warning: charm.pool is experimental (API and performance '
-                  'is subject to change)')
+            print(
+                'Initializing charm.pool with',
+                self.num_workers,
+                'worker PEs. '
+                'Warning: charm.pool is experimental (API and performance '
+                'is subject to change)')
             self.workers = Group(Worker, args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
@@ -117,10 +133,12 @@ class PoolScheduler(Chare):
         if charm.interactive:
             try:
                 if func is not None:
-                    self.workers.check(func.__module__, func.__name__, awaitable=True).get()
+                    self.workers.check(
+                        func.__module__, func.__name__, awaitable=True).get()
                 else:
                     for func_, args in tasks:
-                        self.workers.check(func_.__module__, func_.__name__, awaitable=True).get()
+                        self.workers.check(
+                            func_.__module__, func_.__name__, awaitable=True).get()
             except Exception as e:
                 if result is None:
                     raise e
@@ -138,13 +156,16 @@ class PoolScheduler(Chare):
 
     def startSingleTask(self, func, future, *args):
         self.__start__(func, None, None)
-        job = Job(self.job_id_pool.pop(), func, (args,), future, self.num_workers, 1)
+        job = Job(self.job_id_pool.pop(), func,
+                  (args,), future, self.num_workers, 1)
         job.single_task = True
+
         self.__addJob__(job)
         if job.threaded:
             job.remote = self.workers.runTask_star_th
         else:
             job.remote = self.workers.runTask_star
+        #future.set_running_or_notify_cancel()
         self.schedule()
 
     def start(self, func, tasks, result, ncores, chunksize):
@@ -158,7 +179,13 @@ class PoolScheduler(Chare):
 
         self.__start__(func, tasks, result)
 
-        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize)
+        job = Job(
+            self.job_id_pool.pop(),
+            func,
+            tasks,
+            result,
+            ncores,
+            chunksize)
         self.__addJob__(job)
 
         if job.chunked:
@@ -187,31 +214,37 @@ class PoolScheduler(Chare):
         self.schedule()
 
     def schedule(self):
+        from time import time
+        print("SCHEDULED at time", time())
         job = self.job_next
         prev = self
         while job is not None:
+            #job.future.set_running_or_notify_cancel()
             if len(self.idle_workers) == 0:
                 return
             while True:
                 if not job.failed:
-                    task = job.getTask()
-                    if task is None:
-                        break
-                    worker_id = self.idle_workers.pop()
-                    # print('Sending task to worker', worker_id)
+                    if True:#job.future.set_running_or_notify_cancel():
+                        task = job.getTask()
+                        if task is None:
+                            break
+                        worker_id = self.idle_workers.pop()
+                        # print('Sending task to worker', worker_id)
 
-                    if job.func is not None:
-                        func = None
-                        if job.id not in self.worker_knows[worker_id]:
-                            func = job.func
-                            job.workers.append(worker_id)
-                            self.worker_knows[worker_id].add(job.id)
+                        if job.func is not None:
+                            func = None
+                            if job.id not in self.worker_knows[worker_id]:
+                                func = job.func
+                                job.workers.append(worker_id)
+                                self.worker_knows[worker_id].add(job.id)
+                        else:
+                            func = task.func
+                        # NOTE: this is a non-standard way of using proxies, but is
+                        # faster and allows the scheduler to reuse the same proxy
+                        self.workers.elemIdx = worker_id
+                        job.remote(func, task.data, task.result_dest, job.id)
                     else:
-                        func = task.func
-                    # NOTE: this is a non-standard way of using proxies, but is
-                    # faster and allows the scheduler to reuse the same proxy
-                    self.workers.elemIdx = worker_id
-                    job.remote(func, task.data, task.result_dest, job.id)
+                        break
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -238,7 +271,7 @@ class PoolScheduler(Chare):
             if job.chunked:
                 i, results = result
                 n = len(results)
-                job.results[i:i+n] = results
+                job.results[i:i + n] = results
             else:
                 i, _result = result
                 job.results[i] = _result
@@ -271,7 +304,8 @@ class PoolScheduler(Chare):
         job.exception = exception
         self.idle_workers.add(worker_id)
         # marking as failed will allow the scheduler to delete it from the linked list
-        # NOTE that we will only delete from the 'jobs' list once all the pending tasks are done
+        # NOTE that we will only delete from the 'jobs' list once all the
+        # pending tasks are done
         job.failed = True
         if not hasattr(job, 'future'):
             if job.chunked:
@@ -300,7 +334,8 @@ class Worker(Chare):
 
     def __init__(self, scheduler):
         self.scheduler = scheduler
-        assert len(self.scheduler.elemIdx) > 0  # make sure points to the element, not collection
+        # make sure points to the element, not collection
+        assert len(self.scheduler.elemIdx) > 0
         self.__addThreadEventSubscriber__(scheduler, self.thisIndex)
         # TODO: when to purge entries from this dict?
         self.funcs = {}  # job ID -> function used by this job ID
@@ -324,14 +359,18 @@ class Worker(Chare):
         try:
             result = func(args)
             if isinstance(result_destination, int):
-                self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
+                self.scheduler.taskFinished(
+                    self.thisIndex, job_id, (result_destination, result))
             else:
                 # assume result_destination is a future
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
             if isinstance(e, NotThreadedError):
-                e = Charm4PyError('Function ' + str(func) + ' must be decorated with @coro to be able to suspend')
+                e = Charm4PyError(
+                    'Function ' +
+                    str(func) +
+                    ' must be decorated with @coro to be able to suspend')
             charm.prepareExceptionForSend(e)
             self.scheduler.taskError(self.thisIndex, job_id, e)
             if not isinstance(result_destination, int):
@@ -345,14 +384,18 @@ class Worker(Chare):
         try:
             result = func(*args)
             if isinstance(result_destination, int):
-                self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
+                self.scheduler.taskFinished(
+                    self.thisIndex, job_id, (result_destination, result))
             else:
                 # assume result_destination is a future
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
             if isinstance(e, NotThreadedError):
-                e = Charm4PyError('Function ' + str(func) + ' must be decorated with @coro to be able to suspend')
+                e = Charm4PyError(
+                    'Function ' +
+                    str(func) +
+                    ' must be decorated with @coro to be able to suspend')
             charm.prepareExceptionForSend(e)
             self.scheduler.taskError(self.thisIndex, job_id, e)
             if not isinstance(result_destination, int):
@@ -390,7 +433,8 @@ class Worker(Chare):
 
     def send_chunk_results(self, results, result_destination, job_id):
         if isinstance(result_destination, int):
-            self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, results))
+            self.scheduler.taskFinished(
+                self.thisIndex, job_id, (result_destination, results))
         else:
             # assume result_destination is a list of futures
             # TODO: should send all results together to PE where future was created,
@@ -401,7 +445,8 @@ class Worker(Chare):
 
     def send_chunk_exc(self, e, result_destination, job_id):
         if isinstance(e, NotThreadedError):
-            e = Charm4PyError('Function not decorated with @coro tried to suspend')
+            e = Charm4PyError(
+                'Function not decorated with @coro tried to suspend')
         charm.prepareExceptionForSend(e)
         self.scheduler.taskError(self.thisIndex, job_id, e)
         if not isinstance(result_destination, int):
@@ -410,7 +455,8 @@ class Worker(Chare):
 
     def check(self, func_module, func_name):
         if charm.options.remote_exec is not True:
-            raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
+            raise Charm4PyError(
+                'Remote code execution is disabled. Set charm.options.remote_exec to True')
         eval(func_name, sys.modules[func_module].__dict__)
 
 
@@ -437,16 +483,25 @@ class Pool(object):
         if ret or awaitable:
             f = Future()
         # unpack the arguments for sending to allow benefiting from direct copy
+        #print(f)
+        #f.set_running_or_notify_cancel()
         self.pool_scheduler.startSingleTask(func, f, *args)
         return f
 
     def map(self, func, iterable, chunksize=1, ncores=-1):
         result = Future()
-        # TODO shouldn't send task objects to a central place. what if they are large?
+        # TODO shouldn't send task objects to a central place. what if they are
+        # large?
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result.get()
 
-    def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False):
+    def map_async(
+            self,
+            func,
+            iterable,
+            chunksize=1,
+            ncores=-1,
+            multi_future=False):
         if self.mype == 0:
             # see deepcopy comment above (only need this for async case since
             # the sync case won't return until all the tasks have finished)
@@ -463,5 +518,93 @@ class Pool(object):
     def submit(self, iterable, chunksize=1, ncores=-1):
         return self.map(None, iterable, chunksize, ncores)
 
-    def submit_async(self, iterable, chunksize=1, ncores=-1, multi_future=False):
+    def submit_async(
+            self,
+            iterable,
+            chunksize=1,
+            ncores=-1,
+            multi_future=False):
         return self.map_async(None, iterable, chunksize, ncores, multi_future)
+
+
+@dataclass
+class _WrappedFunction:
+
+    fn: Callable
+
+    def __call__(self, args_kwargs):
+        in_args = args_kwargs[0]
+        in_kwargs = args_kwargs[1]
+        return self.fn(*in_args, **in_kwargs)
+
+
+@dataclass
+class _StarmappedFunction:
+
+    fn: Callable
+
+    def __call__(self, args_iterable):
+        return self.fn(*args_iterable)
+
+
+class PoolExecutor(Executor):
+
+    def __init__(self, pool_scheduler_chare):
+        self.pool = Pool(pool_scheduler_chare)
+        self.is_shutdown = False
+
+    def submit(self, fn, /, *args, **kwargs):
+        if self.is_shutdown:
+            raise RuntimeError(
+                "charm4py.pool.PoolExecutor object has been shut down")
+
+        if kwargs is None or len(kwargs) == 0:
+            future = self.pool.Task(fn, args, ret=True)
+            #return self.pool.map_async(_StarmappedFunction(fn), (args,),
+            #                       chunksize=1, ncores=-1)
+        else:
+            # Task doesn't support kwargs so this sneaks them in with a tuple
+            iterable_arg = tuple([tuple([args, frozendict(kwargs)])])
+            future = self.pool.Task(_WrappedFunction(fn), iterable_arg, ret=True)
+
+        future.set_running_or_notify_cancel()
+        return future
+
+    def map(self, func, *iterables, timeout=None, chunksize=1, ncores=-1):
+        if self.is_shutdown:
+            raise RuntimeError(
+                "charm4py.pool.PoolExecutor object has been shut down")
+
+        with Timeout(timeout, TimeoutError) as timeout:
+            result = self.pool.map(_StarmappedFunction(func), list(zip(*iterables)),
+                                   chunksize=chunksize, ncores=ncores)
+
+        return result
+
+    def shutdown(self, wait=True, *, cancel_futures=False):
+
+        # Prevent more jobs from being submitted
+        self.is_shutdown = True
+
+        if cancel_futures:
+            for job in self.pool.pool_scheduler.jobs:
+                if isinstance(getattr(job, 'future', None), threads.Future):
+                    job.future.cancel()
+
+        # Is this necessary?
+        #self.pool.pool_scheduler.schedule()
+
+        if wait:
+            for job in self.pool.pool_scheduler.jobs:
+                if isinstance(getattr(job, 'future', None), threads.Future):
+                    job.future.get()
+            """
+            futures = [
+                job.future for job in self.pool.pool_scheduler.jobs if isinstance(
+                    getattr(
+                        job,
+                        'future',
+                        None),
+                    threads.Future)]
+            cf_wait(futures)
+            """
