@@ -3,6 +3,7 @@ if sys.version_info < (2, 7, 0):
     raise RuntimeError('Charm4py requires Python 2.7 or higher')
 import atexit
 import os
+import warnings
 try:
     import greenlet
 except ImportError:
@@ -33,7 +34,8 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
 
     def checkCharmStarted():
         if not charm.started:
-            print('Program is exiting but charm was not started: charm.start() was not '
-                  'called or error happened before start')
+            warnings.warn(
+                'Program is exiting but charm was not started: charm.start() was not '
+                'called or error happened before start')
 
     atexit.register(checkCharmStarted)
