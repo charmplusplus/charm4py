@@ -37,6 +37,7 @@ def get_ray_task(func):
 def remote(*args, **kwargs):
     from charm4py import charm, Chare, register
     
+    num_returns = kwargs.pop("num_returns", 1)
     if len(args) == 1 and len(kwargs) == 0:
         if isinstance(args[0], types.FunctionType):
             args[0].remote = get_ray_task(args[0])
