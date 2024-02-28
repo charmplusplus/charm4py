@@ -12,10 +12,6 @@ from torchvision import datasets, transforms
 from charm4py import charm, ray
 
 
-# The number of sets of random hyperparameters to try.
-num_evaluations = 100
-
-
 # A function for generating random hyperparameters.
 def generate_hyperparameters():
     return {
@@ -113,6 +109,9 @@ def evaluate_hyperparameters(config):
 def main(args):
     ray.init()
 
+    # The number of sets of random hyperparameters to try.
+    num_evaluations = int(args[1])
+
     # Keep track of the best hyperparameters and the best accuracy.
     best_hyperparameters = None
     best_accuracy = 0
@@ -139,36 +138,37 @@ def main(args):
 
         hyperparameters = hyperparameters_mapping[result_id]
         accuracy = ray.get(result_id)
-        print(
-            """We achieve accuracy {:.3}% with
-            learning_rate: {:.2}
-            batch_size: {}
-            momentum: {:.2}
-        """.format(
-                100 * accuracy,
-                hyperparameters["learning_rate"],
-                hyperparameters["batch_size"],
-                hyperparameters["momentum"],
-            )
-        )
+        #print(
+        #    """We achieve accuracy {:.3}% with
+        #    learning_rate: {:.2}
+        #    batch_size: {}
+        #    momentum: {:.2}
+        #""".format(
+        #        100 * accuracy,
+        #        hyperparameters["learning_rate"],
+        #        hyperparameters["batch_size"],
+        #        hyperparameters["momentum"],
+        #    )
+        #)
         if accuracy > best_accuracy:
             best_hyperparameters = hyperparameters
             best_accuracy = accuracy
 
         # Record the best performing set of hyperparameters.
-        print(
-            """Best accuracy over {} trials was {:.3} with
-            learning_rate: {:.2}
-            batch_size: {}
-            momentum: {:.2}
-            """.format(
-                num_evaluations - len(remaining_ids),
-                100 * best_accuracy,
-                best_hyperparameters["learning_rate"],
-                best_hyperparameters["batch_size"],
-                best_hyperparameters["momentum"],
+        if len(remaining_ids) == 0:
+            print(
+                """Best accuracy over {} trials was {:.3} with
+                learning_rate: {:.2}
+                batch_size: {}
+                momentum: {:.2}
+                """.format(
+                    num_evaluations - len(remaining_ids),
+                    100 * best_accuracy,
+                    best_hyperparameters["learning_rate"],
+                    best_hyperparameters["batch_size"],
+                    best_hyperparameters["momentum"],
+                )
             )
-        )
 
     exit()
 

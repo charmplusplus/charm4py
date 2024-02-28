@@ -1,9 +1,13 @@
-from charm4py import charm, Chare, Array, ray
+from charm4py import charm, coro, Chare, Array, ray
 from time import sleep
+
 
 @ray.remote
 def add_task(a, b):
     sleep(2)
+    if a != -1:
+        res = add_task.remote(-1, a)
+        res = ray.get(res)
     print("ADD TASK", a, b)
     return a + b
 
@@ -31,7 +35,7 @@ def main(args):
     #g = charm.pool.map_async(add_task, [(e,f)], chunksize=1, multi_future=True)[0]
 
     #print("g = ", g.get())
-    
+
     not_ready = [c, d, e, f, g]
     while len(not_ready) > 0:
         ready, not_ready = ray.wait(not_ready)

@@ -31,6 +31,7 @@ def get_ray_class(subclass):
 def get_ray_task(func):
     from charm4py import charm
     def task(*args):
+        func._ck_coro = True
         return charm.pool.map_async(func, [args], chunksize=1, multi_future=True)[0]
     return task
 

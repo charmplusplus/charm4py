@@ -214,6 +214,7 @@ class PoolScheduler(Chare):
                         self.workers.elemIdx = (worker_id,)
                     else:
                         self.workers.elemIdx = worker_id
+                                
                     if isinstance(task.data, tuple):
                         job.remote(func, [task.result_dest], job.id, *task.data)
                     else:
@@ -313,8 +314,8 @@ class Worker(Chare):
         self.funcs = {}  # job ID -> function used by this job ID
 
     @coro_ext(event_notify=True)
-    def runTaskSingleFunc_th(self, func, args, result_destination, job_id):
-        self.runTaskSingleFunc(func, args, result_destination, job_id)
+    def runTaskSingleFunc_th(self, func, result_destination, job_id, *args):
+        self.runTaskSingleFunc(func, result_destination, job_id, *args)
 
     def runTaskSingleFunc(self, func, result_destination, job_id, *args):
         if func is not None:

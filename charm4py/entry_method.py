@@ -42,6 +42,7 @@ class EntryMethod(object):
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
         try:
+            #print(args)
             if ret_fut:
                 fut = args[-1]
                 args = args[:-1]
@@ -91,12 +92,12 @@ class EntryMethod(object):
         if exception is not None:
             raise exception
 
-    def _run_th(self, obj, header, args):
+    def _run_th(self, obj, header, args, ret_fut=False):
         gr = greenlet(self._run)
         gr.obj = obj
         gr.notify = self.thread_notify
         obj._numthreads += 1
-        gr.switch(obj, header, args)
+        gr.switch(obj, header, args, ret_fut=ret_fut)
         if gr.dead:
             obj._numthreads -= 1
 
