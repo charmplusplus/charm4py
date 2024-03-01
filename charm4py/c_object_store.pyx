@@ -237,7 +237,7 @@ cdef class CObjectStore:
         #insert to local object map
         self.insert_object(obj_id, obj)
 
-        #send a message to GCS to add entry
+        #send a message to home to add entry
         cdef int npes = charm.numPes()
         self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
 

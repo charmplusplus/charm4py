@@ -15,6 +15,8 @@ else:
     from io import StringIO
 import inspect
 import time
+import atexit
+import cProfile
 import gc
 from collections import defaultdict
 import traceback
@@ -161,6 +163,11 @@ class Charm(object):
         # TODO: maybe implement this buffer in c++
         self.future_get_buffer = {}
         #print(self.future_mask)
+        self.pr = cProfile.Profile()
+        self.pr.enable()
+
+    def stop_profiling(self):
+        self.pr.dump_stats("prof%i.prof" % self._myPe)
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
@@ -1121,6 +1128,10 @@ class CharmRemote(Chare):
 
     def __init__(self):
         charm.thisProxy = self.thisProxy
+
+    def stop_profiling(self):
+        charm.stop_profiling()
+        self.exit()
 
     def exit(self, exit_code=0):
         charm.exit(exit_code)
