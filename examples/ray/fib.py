@@ -36,6 +36,7 @@ def main(args):
     t0 = time.time()
     result = fib.remote(n)
     print('Result is', ray.get(result), 'elapsed=', round(time.time() - t0, 3))
-    charm.thisProxy.stop_profiling()
+    #charm.thisProxy.stop_profiling()
+    exit()
 
 charm.start(main)

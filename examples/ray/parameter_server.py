@@ -125,7 +125,7 @@ def sync_train(args):
     ray.init()
 
     iterations = 201
-    num_workers = 4
+    num_workers = 64
 
     model = ConvNet()
     test_loader = get_data_loader()[1]
@@ -149,6 +149,7 @@ def sync_train(args):
 
     print("Execution time = {:.2f} s".format(time.time() - start))
     print("Final accuracy is {:.1f}.".format(accuracy))
+    exit()
     # Clean up Ray resources and processes before the next example.
     #ray.shutdown()
 
@@ -189,4 +190,4 @@ def async_train(args):
     print("Final accuracy is {:.1f}.".format(accuracy))
     exit()
 
-charm.start(async_train)
+charm.start(sync_train)

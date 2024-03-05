@@ -27,6 +27,9 @@ class ObjectStore(Chare):
         """
         self._object_store.update_location(obj_id, pe)
         charm.check_send_buffer(obj_id)
+
+    def insert_object_small(self, obj_id, obj):
+        self._object_store.insert_object_small(obj_id, obj)
     
     def receive_remote_object(self, obj_id, obj):
         """ Add object to local object map

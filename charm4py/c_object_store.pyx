@@ -7,11 +7,14 @@ from cython.operator cimport preincrement as inc
 from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
 from libc.stdio cimport printf
 
+import sys
 import numpy as np
 cimport numpy as np
 cimport cython
 
 from copy import deepcopy
+
+cdef int OBJ_SIZE_THRESHOLD = 1024
 
 cdef extern from "numpy/arrayobject.h":
     cdef void  import_array()
@@ -107,6 +110,18 @@ cdef class CObjectStore:
         Py_INCREF(obj)
         self.object_map[obj_id] = <void*> obj
 
+    cpdef void insert_object_small(self, ObjectId obj_id, object obj):
+        from charm4py import charm
+        #FIXME when is a copy required here?
+        #obj_copy = deepcopy(obj)
+        if self.object_map.find(obj_id) != self.object_map.end():
+            return
+        Py_INCREF(obj)
+        self.object_map[obj_id] = <void*> obj
+        self.location_map[obj_id].push_back(<int> charm.myPe())
+        self.check_loc_requests_buffer(obj_id)
+        self.check_obj_loc_requests_buffer(obj_id)
+
     cdef void delete_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         cdef object obj
@@ -197,6 +212,10 @@ cdef class CObjectStore:
 
     cpdef void request_location_object(self, ObjectId obj_id, int requesting_pe):
         # this function is intended to be called on home pes of the object id
+        cdef object obj = self.lookup_object(obj_id)
+        if obj != None:
+            self.proxy[requesting_pe].receive_remote_object(obj_id, obj)
+            return
         cdef int pe = self.lookup_location(obj_id, fetch=False)
         if pe == -1:
             self.buffer_obj_loc_request(obj_id, requesting_pe)
@@ -234,12 +253,20 @@ cdef class CObjectStore:
     @cython.cdivision(True)
     cpdef void create_object(self, ObjectId obj_id, object obj):
         from charm4py import charm
-        #insert to local object map
-        self.insert_object(obj_id, obj)
-
-        #send a message to home to add entry
         cdef int npes = charm.numPes()
-        self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
+
+        # add logic to check size of obj
+        cdef int size = sys.getsizeof(obj)
+        if size < OBJ_SIZE_THRESHOLD:
+            # in this case keep the object data on home
+            self.proxy[obj_id % npes].insert_object_small(obj_id, obj)
+        else:
+            #insert to local object map
+            self.insert_object(obj_id, obj)
+
+            #send a message to home to add entry
+            self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
 
         # check requests buffer
-        self.check_obj_requests_buffer(obj_id)
+        # FIXME this is probably unnecessary
+        #self.check_obj_requests_buffer(obj_id)
