@@ -4,7 +4,7 @@ from .ray.api import get_object_store
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
 # this is unsigned short, hence this limit
-FIDMAXVAL = 65535
+FIDMAXVAL = 65535*8
 
 
 class NotThreadedError(Exception):
@@ -34,7 +34,7 @@ class Future(object):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
-        self.store_id = (self.src << 16) + self.fid
+        self.store_id = (self.src << 32) + self.fid
         self.store = store
         self._requested = False
 
@@ -133,7 +133,7 @@ class Future(object):
 
     def __setstate__(self, state):
         self.fid, self.src, self.store = state
-        self.store_id = (self.src << 16) + self.fid
+        self.store_id = (self.src << 32) + self.fid
         self._requested = False
 
 
