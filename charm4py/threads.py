@@ -34,9 +34,11 @@ class Future(object):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
-        self.store_id = (self.src << 16) + self.fid
+        self.store_id = (self.src << 32) + self.fid
         self.store = store
         self._requested = False
+        self.num_borrowers = 0
+        self._parent = None
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -109,6 +111,11 @@ class Future(object):
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
     
+    def delete_object(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
+    
     def is_local(self):
         return self.lookup_object() != None
     
@@ -129,12 +136,28 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        return (self.fid, self.src, self.store)
+        # keep track of who this future is being sent to
+        self.num_borrowers += 1
+        print("FID", self.store_id, ":", self.num_borrowers)
+        return (self.fid, self.src, self.store, charm.myPe())
 
     def __setstate__(self, state):
-        self.fid, self.src, self.store = state
-        self.store_id = (self.src << 16) + self.fid
+        self.fid, self.src, self.store, self._parent = state
+        self.store_id = (self.src << 32) + self.fid
         self._requested = False
+        self.num_borrowers = 0
+        #charm.thisProxy[self._parent].register_future_borrower(self.fid, charm.myPe())
+
+    def __del__(self):
+        if self.store:
+            if self._parent == None and self.num_borrowers == 0:
+                # This is the owner, delete the object from the object store
+                print("Deleting owner", self.store_id)
+                self.delete_object()
+            else:
+                # this is a borrower, notify its owner of the deletion
+                print("Deleting", self.store_id)
+                charm.thisProxy[self._parent].notify_future_deletion(self.fid)
 
 
 class CollectiveFuture(Future):

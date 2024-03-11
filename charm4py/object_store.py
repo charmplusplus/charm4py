@@ -6,6 +6,17 @@ class ObjectStore(Chare):
     def __init__(self):
         self._object_store = CObjectStore(self.thisProxy)
 
+    def delete_remote_objects(self, obj_id):
+        """Delete this object from the object store
+        This function is called on the home pe
+        """
+        self._object_store.delete_remote_objects(obj_id)
+
+    def delete_object(self, obj_id):
+        """Delete this object from the local object store
+        """
+        self._object_store.delete_object(obj_id)
+
     def lookup_object(self, obj_id):
         """ Lookup object in local object map
         """

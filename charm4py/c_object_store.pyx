@@ -122,6 +122,16 @@ cdef class CObjectStore:
         self.check_loc_requests_buffer(obj_id)
         self.check_obj_loc_requests_buffer(obj_id)
 
+    cpdef void delete_remote_objects(self, ObjectId obj_id):
+        cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
+        if it == self.location_map.end():
+            return
+        cdef int* pe_arr = deref(it).second.data()
+        cdef int size = deref(it).second.size()
+        cdef int i
+        for i in range(size):
+            self.proxy[pe_arr[i]].delete_object(obj_id)
+
     cdef void delete_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         cdef object obj

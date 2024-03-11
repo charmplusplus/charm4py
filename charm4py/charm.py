@@ -18,6 +18,7 @@ import time
 import atexit
 import cProfile
 import gc
+import ctypes
 from collections import defaultdict
 import traceback
 from . import chare
@@ -1181,6 +1182,17 @@ class CharmRemote(Chare):
     # deposit value of one of the futures that was created on this PE
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
+
+    def notify_future_deletion(self, fid):
+        print("Delete:", charm.threadMgr.futures[fid].num_borrowers)
+        charm.threadMgr.futures[fid].num_borrowers -= 1
+        if charm.threadMgr.futures[fid].num_borrowers == 0:
+            # check if threadMgr.futures has the only reference to fid
+            # if yes, remove it
+            fut = charm.threadMgr.futures[fid]
+            refcount = ctypes.c_long.from_address(id(fut)).value
+            if refcount == 1:
+                charm.threadMgr.futures.pop(fid)
 
     def propagateException(self, error):
         if time.time() - charm.last_exception_timestamp >= 1.0:
