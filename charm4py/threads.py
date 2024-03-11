@@ -4,7 +4,10 @@ from .ray.api import get_object_store
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
 # this is unsigned short, hence this limit
-FIDMAXVAL = 65535
+# FIXME: This could fail according to the above warning, 
+# but we need large number of futures for the ray
+# programming model. 
+FIDMAXVAL = 4294967295
 
 
 class NotThreadedError(Exception):
