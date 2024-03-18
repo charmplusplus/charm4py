@@ -1,5 +1,5 @@
 from greenlet import getcurrent
-
+from .ray.api import get_object_store
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -25,7 +25,7 @@ class NotThreadedError(Exception):
 
 class Future(object):
 
-    def __init__(self, fid, gr, src, num_vals):
+    def __init__(self, fid, gr, src, num_vals, store=False):
         self.fid = fid  # unique future ID within the process that created it
         self.gr = gr  # greenlet that created the future
         self.src = src  # PE where the future was created (not used for collective futures)
@@ -34,22 +34,29 @@ class Future(object):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
+        self.store_id = (self.src << 16) + self.fid
+        self.store = store
+        self._requested = False
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
             future. If the values are already available then they are returned immediately.
         """
-        if not self.gotvalues:
-            self.blocked = True
-            self.gr = getcurrent()
-            self.values = threadMgr.pauseThread()
+        from .charm import charm
+        if self.store:
+            return charm.get_future_value(self)
+        else:
+            if not self.gotvalues:
+                self.blocked = True
+                self.gr = getcurrent()
+                self.values = threadMgr.pauseThread()
 
-        if self.error is not None:
-            raise self.error
+            if self.error is not None:
+                raise self.error
 
-        if self.nvals == 1:
-            return self.values[0]
-        return self.values
+            if self.nvals == 1:
+                return self.values[0]
+            return self.values
 
     def ready(self):
         return self.gotvalues
@@ -59,7 +66,10 @@ class Future(object):
 
     def send(self, result=None):
         """ Send a value to this future. """
-        charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
+        if self.store:
+            self.create_object(result)
+        else:
+            charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
 
     def __call__(self, result=None):
         self.send(result)
@@ -87,11 +97,44 @@ class Future(object):
             # someone is waiting on the future, signal by sending the values
             threadMgr.resumeThread(self.gr, self.values)
 
+    def lookup_location(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        return local_obj_store.lookup_location(self.store_id)
+    
+    def lookup_object(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        return local_obj_store.lookup_object(self.store_id)
+    
+    def is_local(self):
+        return self.lookup_object() != None
+    
+    def create_object(self, obj):
+        from .charm import charm
+        #print("Created object", self.store_id)
+        obj_store = get_object_store()
+        local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
+        local_obj_store.create_object(self.store_id, obj)
+
+    def request_object(self):
+        if self._requested:
+            return
+        from .charm import charm
+        obj_store = get_object_store()
+        obj_store[self.store_id % charm.numPes()].request_location_object(
+            self.store_id, charm.myPe())
+        self._requested = True
+
     def __getstate__(self):
-        return (self.fid, self.src)
+        return (self.fid, self.src, self.store)
 
     def __setstate__(self, state):
-        self.fid, self.src = state
+        self.fid, self.src, self.store = state
+        self.store_id = (self.src << 16) + self.fid
+        self._requested = False
 
 
 class CollectiveFuture(Future):
@@ -120,6 +163,20 @@ class LocalFuture(object):
 
     def get(self):
         return threadMgr.pauseThread()
+
+
+class LocalMultiFuture(LocalFuture):
+    def __init__(self, num_vals):
+        LocalFuture.__init__(self)
+        self.num_vals = num_vals
+        self.result = []
+
+    def send(self, result=None):
+        self.num_vals -= 1
+        if result:
+            self.result.append(result)
+        if self.num_vals == 0:
+            threadMgr.resumeThread(self.gr, self.result)
 
 
 class EntryMethodThreadManager(object):
@@ -199,10 +256,10 @@ class EntryMethodThreadManager(object):
         if len(ems) > 0:
             ems[-1].startMeasuringTime()
 
-    def createFuture(self, num_vals=1):
+    def createFuture(self, num_vals=1, store=False):
         """ Creates a new Future object by obtaining a unique (local) future ID. """
         gr = getcurrent()
-        if gr == self.main_gr:
+        if not store and gr == self.main_gr:
             self.throwNotThreadedError()
         # get a unique local Future ID
         global FIDMAXVAL
@@ -212,7 +269,7 @@ class EntryMethodThreadManager(object):
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
         self.lastfid = fid
-        f = Future(fid, gr, charm._myPe, num_vals)
+        f = Future(fid, gr, charm._myPe, num_vals, store=store)
         futures[fid] = f
         return f
 

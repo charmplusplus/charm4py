@@ -1,4 +1,4 @@
-from . import charm, Chare, Group, coro_ext, threads, Future
+from . import charm, Chare, Group, Array, coro_ext, threads, Future, register
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict
@@ -106,7 +106,7 @@ class PoolScheduler(Chare):
             print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
                   'Warning: charm.pool is experimental (API and performance '
                   'is subject to change)')
-            self.workers = Group(Worker, args=[self.thisProxy])
+            self.workers = Array(Worker, charm.numPes(), args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
             oldSize = len(self.jobs)
@@ -210,8 +210,15 @@ class PoolScheduler(Chare):
                         func = task.func
                     # NOTE: this is a non-standard way of using proxies, but is
                     # faster and allows the scheduler to reuse the same proxy
-                    self.workers.elemIdx = worker_id
-                    job.remote(func, task.data, task.result_dest, job.id)
+                    if not isinstance(worker_id, tuple):
+                        self.workers.elemIdx = (worker_id,)
+                    else:
+                        self.workers.elemIdx = worker_id
+                                
+                    if isinstance(task.data, tuple):
+                        job.remote(func, [task.result_dest], job.id, *task.data)
+                    else:
+                        job.remote(func, [task.result_dest], job.id, task.data)
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -230,7 +237,7 @@ class PoolScheduler(Chare):
                 job = prev.job_next
 
     def taskFinished(self, worker_id, job_id, result=None):
-        # print('Job finished')
+        #print('Job finished')
         job = self.jobs[job_id]
         if job.failed:
             return self.taskError(worker_id, job_id, job.exception)
@@ -296,6 +303,7 @@ class PoolScheduler(Chare):
         self.schedule()
 
 
+@register
 class Worker(Chare):
 
     def __init__(self, scheduler):
@@ -306,27 +314,30 @@ class Worker(Chare):
         self.funcs = {}  # job ID -> function used by this job ID
 
     @coro_ext(event_notify=True)
-    def runTaskSingleFunc_th(self, func, args, result_destination, job_id):
-        self.runTaskSingleFunc(func, args, result_destination, job_id)
+    def runTaskSingleFunc_th(self, func, result_destination, job_id, *args):
+        self.runTaskSingleFunc(func, result_destination, job_id, *args)
 
-    def runTaskSingleFunc(self, func, args, result_destination, job_id):
+    def runTaskSingleFunc(self, func, result_destination, job_id, *args):
         if func is not None:
             self.funcs[job_id] = func
         else:
             func = self.funcs[job_id]
-        self.runTask(func, args, result_destination, job_id)
+        self.runTask(func, result_destination, job_id, *args)
 
     @coro_ext(event_notify=True)
     def runTask_th(self, func, args, result_destination, job_id):
         self.runTask(func, args, result_destination, job_id)
 
-    def runTask(self, func, args, result_destination, job_id):
+    def runTask(self, func, result_destination, job_id, *args):
+        result_destination = result_destination[0]
         try:
-            result = func(args)
+            result = func(*args)
             if isinstance(result_destination, int):
+                #print("CHECK INT")
                 self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
             else:
                 # assume result_destination is a future
+                #print("CHECK")
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
@@ -441,7 +452,7 @@ class Pool(object):
         return f
 
     def map(self, func, iterable, chunksize=1, ncores=-1):
-        result = Future()
+        result = Future(store=True)
         # TODO shouldn't send task objects to a central place. what if they are large?
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result.get()
@@ -452,9 +463,9 @@ class Pool(object):
             # the sync case won't return until all the tasks have finished)
             iterable = deepcopy(iterable)
         if multi_future:
-            result = [Future() for _ in range(len(iterable))]
+            result = [Future(store=True) for _ in range(len(iterable))]
         else:
-            result = Future()
+            result = Future(store=True)
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result
 

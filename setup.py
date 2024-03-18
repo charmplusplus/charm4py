@@ -11,21 +11,50 @@ from distutils.errors import DistutilsSetupError
 from distutils import log
 import distutils
 
+import Cython.Compiler.Options
+Cython.Compiler.Options.annotate = True
 
 build_mpi = False
 enable_tracing = False
 
-system = platform.system()
+
+def get_build_machine():
+    machine = platform.machine()
+    if machine == 'arm64' or machine == 'aarch64':
+        return 'arm8'
+    return machine
+
+
+def get_build_os():
+    os = platform.system()
+    return os.lower()
+
+
+def get_build_network_type(build_mpi):
+    return 'netlrts' if not build_mpi else 'mpi'
+
+
+def get_build_triple(build_mpi):
+    return (get_build_machine(),
+            get_build_os(),
+            get_build_network_type(build_mpi)
+            )
+
+
+machine = get_build_machine()
+system = get_build_os()
+
+
 libcharm_filename2 = None
-if system == 'Windows' or system.lower().startswith('cygwin'):
+if system == 'windows' or system.startswith('cygwin'):
     libcharm_filename = 'charm.dll'
     libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
-elif system == 'Darwin':
-    os.environ['ARCHFLAGS'] = '-arch x86_64'
+elif system == 'darwin':
+    os.environ['ARCHFLAGS'] = f'-arch {machine}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
-else:
+else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
 
@@ -105,7 +134,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
     if not charm_built(charm_src_dir):
 
-        if system == 'Windows' or system.lower().startswith('cygwin'):
+        if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
                                       ' Please download a Charm4py binary wheel (64-bit Python required)')
 
@@ -123,36 +152,12 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
 
-        if enable_tracing:
-         extra_build_opts += " --enable-tracing "
+        target_machine, os_target, target_layer = get_build_triple(build_mpi)
 
-        if system == 'Darwin':
-            if build_mpi:
-                cmd = './build charm4py mpi-darwin-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-        else:
-            try:
-                arch = os.uname()[4]
-            except:
-                arch = None
-            if arch is not None and arch.startswith('arm'):
-                import re
-                regexp = re.compile("armv(\d+).*")
-                m = regexp.match(arch)
-                if m:
-                    version = int(m.group(1))
-                    if version < 8:
-                        cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                    else:
-                        cmd = './build charm4py netlrts-linux-arm8 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                if build_mpi:
-                    cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+        build_triple = f'{target_layer}-{os_target}-{target_machine}'
+        cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
+        print(cmd)
+
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -160,7 +165,7 @@ def build_libcharm(charm_src_dir, build_dir):
         if rc != 0:
             raise DistutilsSetupError('An error occured while building charm library')
 
-        if system == 'Darwin':
+        if system == 'darwin':
             old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.so')
             new_file_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
             shutil.move(old_file_path, new_file_path)
@@ -294,13 +299,22 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
 
         extra_link_args = []
         if os.name != 'nt':
-            if system == 'Darwin':
+            if system == 'darwin':
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
+                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                              libraries=["charm"],
+                              extra_compile_args=['-g0', '-O3'],
+                              extra_link_args=extra_link_args,
+                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+        
+        extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
+                              sources=['charm4py/c_object_store.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
@@ -343,7 +357,7 @@ setuptools.setup(
             'charmrun = charmrun.start:start',
         ],
     },
-    install_requires=['numpy>=1.10.0', 'greenlet'],
+    install_requires=['numpy>=1.10.0', 'greenlet', 'cython<3'],
     #python_requires='>=2.7, ~=3.4',
     classifiers=[
         'Intended Audience :: Developers',
