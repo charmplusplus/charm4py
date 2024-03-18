@@ -22,7 +22,7 @@ except:
         pass
 
 if os.environ.get('CHARM_NOLOAD', '0') == '0':
-    from .charm import register, charm, readonlies, Options
+    from .charm import charm, readonlies, Options
     Reducer = charm.reducers
     Future = charm.createFuture
 
@@ -30,7 +30,6 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
 
     from .chare import Chare, Group, Array, ArrayMap
     from .channel import Channel
-    from .object_store import ObjectStore
 
     def checkCharmStarted():
         if not charm.started:

@@ -9,7 +9,7 @@ class Test(Chare):
 
     def doallfalse(self, f1, f2, f3, array=False):
         if array:
-            data = np.zeros(ARRAY_SIZE, dtype=bool)
+            data = np.zeros(ARRAY_SIZE, dtype=np.bool)
         else:
             data = False
         self.reduce(f1, data, Reducer.logical_and)
@@ -18,7 +18,7 @@ class Test(Chare):
 
     def doalltrue(self, f1, f2, f3, array=False):
         if array:
-            data = np.ones(ARRAY_SIZE, dtype=bool)
+            data = np.ones(ARRAY_SIZE, dtype=np.bool)
         else:
             data = True
         self.reduce(f1, data, Reducer.logical_and)
@@ -43,9 +43,9 @@ def main(args):
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doallfalse(f1, f2, f3, array=True)
-    np.testing.assert_array_equal(f1.get(), np.zeros(ARRAY_SIZE, dtype=bool))
-    np.testing.assert_array_equal(f2.get(), np.zeros(ARRAY_SIZE, dtype=bool))
-    np.testing.assert_array_equal(f3.get(), np.zeros(ARRAY_SIZE, dtype=bool))
+    np.testing.assert_array_equal(f1.get(), np.zeros(ARRAY_SIZE, dtype=np.bool))
+    np.testing.assert_array_equal(f2.get(), np.zeros(ARRAY_SIZE, dtype=np.bool))
+    np.testing.assert_array_equal(f3.get(), np.zeros(ARRAY_SIZE, dtype=np.bool))
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doalltrue(f1, f2, f3, array=False)
@@ -55,9 +55,9 @@ def main(args):
 
     f1, f2, f3 = Future(), Future(), Future()
     g.doalltrue(f1, f2, f3, array=True)
-    np.testing.assert_array_equal(f1.get(), np.ones(ARRAY_SIZE, dtype=bool))
-    np.testing.assert_array_equal(f2.get(), np.ones(ARRAY_SIZE, dtype=bool))
-    np.testing.assert_array_equal(f3.get(), np.zeros(ARRAY_SIZE, dtype=bool))
+    np.testing.assert_array_equal(f1.get(), np.ones(ARRAY_SIZE, dtype=np.bool))
+    np.testing.assert_array_equal(f2.get(), np.ones(ARRAY_SIZE, dtype=np.bool))
+    np.testing.assert_array_equal(f3.get(), np.zeros(ARRAY_SIZE, dtype=np.bool))
 
     f1, f2, f3 = Future(), Future(), Future()
     g.test1(f1, f2, f3)

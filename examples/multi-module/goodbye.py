@@ -1,10 +1,9 @@
-from charm4py import register, charm, Chare
+from charm4py import charm, Chare
 
 # this will be set by Main chare
 mainProxy = None
 
 
-@register
 class Goodbye(Chare):
 
     def SayGoodbye(self):

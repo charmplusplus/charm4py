@@ -36,19 +36,13 @@ class EntryMethod(object):
             if isinstance(self.when_cond, wait.ChareStateMsgCond):
                 self.when_cond_func = self.when_cond.cond_func
 
-    def _run(self, obj, header, args, ret_fut=False):
+    def _run(self, obj, header, args):
         """ run entry method of the given object in the current thread """
         # set last entry method executed (note that 'last_em_exec' won't
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
         try:
-            #print(args)
-            if ret_fut:
-                fut = args[-1]
-                args = args[:-1]
             ret = getattr(obj, self.name)(*args)
-            if ret != None:
-                fut.create_object(ret)
         except SystemExit:
             exit_code = sys.exc_info()[1].code
             if exit_code is None:
@@ -92,12 +86,12 @@ class EntryMethod(object):
         if exception is not None:
             raise exception
 
-    def _run_th(self, obj, header, args, ret_fut=False):
+    def _run_th(self, obj, header, args):
         gr = greenlet(self._run)
         gr.obj = obj
         gr.notify = self.thread_notify
         obj._numthreads += 1
-        gr.switch(obj, header, args, ret_fut=ret_fut)
+        gr.switch(obj, header, args)
         if gr.dead:
             obj._numthreads -= 1
 
