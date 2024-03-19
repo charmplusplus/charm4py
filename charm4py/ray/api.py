@@ -2,12 +2,14 @@ import types
 from copy import deepcopy
 
 counter = 0
+ray_initialized = False
 
 def init():
     from charm4py import charm, Group, ObjectStore
-    global object_store
+    global object_store, ray_initialized
+    ray_initialized = True
     object_store = Group(ObjectStore)
-    charm.thisProxy.updateGlobals({'object_store' : object_store},
+    charm.thisProxy.updateGlobals({'object_store' : object_store, 'ray_initialized' : True},
                                   awaitable=True, module_name='charm4py.ray.api').get()
 
 

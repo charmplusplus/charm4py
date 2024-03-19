@@ -756,10 +756,11 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
-            blockFuture = charm.createFuture(store=True)
-            args = list(args)
-            args.append(blockFuture)
-            args = tuple(args)
+            if ray.api.ray_initialized:
+                blockFuture = charm.createFuture(store=True)
+                args = list(args)
+                args.append(blockFuture)
+                args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkArraySend(aid, elemIdx, ep, msg)
         else:
