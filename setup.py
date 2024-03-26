@@ -51,6 +51,7 @@ elif system == 'darwin':
     os.environ['ARCHFLAGS'] = f'-arch {machine}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
+    os.environ['CPPFLAGS'] = f'-Wno-error=implicit-function-declaration'
 else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
