@@ -224,8 +224,7 @@ cdef class ReceiveMsgBuffer:
     self.msg = NULL
 
   cdef inline int isLocal(self):
-    return self.msg[0] == 'L' and self.msg[1] == ':'
-
+    return self.msg[0] == b'L' and self.msg[1] == b':'
   cdef inline int getLocalTag(self):
     return (<int*>(&self.msg[2]))[0]
 
