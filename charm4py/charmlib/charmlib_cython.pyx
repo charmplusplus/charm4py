@@ -1,4 +1,6 @@
-from ccharm cimport *
+# cython: language_level=3
+
+from charm4py.charmlib.ccharm cimport *
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uintptr_t
