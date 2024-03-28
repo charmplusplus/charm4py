@@ -325,7 +325,7 @@ setuptools.setup(
             'charmrun = charmrun.start:start',
         ],
     },
-    install_requires=['numpy>=1.10.0', 'greenlet', 'cython<3'],
+    install_requires=['numpy>=1.10.0', 'greenlet'],
     #python_requires='>=2.7, ~=3.4',
     classifiers=[
         'Intended Audience :: Developers',
