@@ -971,7 +971,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
       header = {}
       ctype = charm_reducer_to_ctype[reducerType]
       item_size = c_type_table_sizes[ctype]
-      numElems = dataSize / item_size
+      numElems = dataSize // item_size # force integer division for cython + python3
       if fid > 0:
         pyData.append(fid)
       if numElems == 1:
