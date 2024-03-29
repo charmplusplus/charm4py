@@ -261,10 +261,15 @@ class custom_build_ext(build_ext, object):
 extensions = []
 py_impl = platform.python_implementation()
 
+log.info("Check PyPy")
 if py_impl == 'PyPy':
     os.environ['CHARM4PY_BUILD_CFFI'] = '1'
-elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+
+# elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+else:
+    log.info("Check sys version info")
     if sys.version_info[0] >= 3:
+        log.info("Defining cython args")
         # compile C-extension module (from cython)
         from Cython.Build import cythonize
         my_include_dirs = []
@@ -282,6 +287,14 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+        
+        cobject_extra_args = []
+        log.info("Extra object args for object store")
+        if os.name != 'nt':
+            if system == 'darwin':
+                cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
+            else:
+                cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
 
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
@@ -298,7 +311,7 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
-                              extra_link_args=extra_link_args,
+                              extra_link_args=cobject_extra_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
         try:
