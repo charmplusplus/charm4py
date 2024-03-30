@@ -74,6 +74,7 @@ cdef class MessageBuffer:
                     # this element dependencies are satisfied
                     # send it to scheduling
                     completed.append(<object> deref(deref(dep_list_it)).first)
+                    Py_DECREF(<object> deref(deref(dep_list_it)).first)
                     # remove from buffer
                     PyMem_Free(deref(dep_list_it))
                     dep_list_it = deref(dep_list).erase(dep_list_it)
@@ -132,7 +133,7 @@ cdef class CObjectStore:
         for i in range(size):
             self.proxy[pe_arr[i]].delete_object(obj_id)
 
-    cdef void delete_object(self, ObjectId obj_id):
+    cpdef void delete_object(self, ObjectId obj_id):
         cdef ObjectMapIterator it = self.object_map.find(obj_id)
         cdef object obj
         if it != self.object_map.end():

@@ -386,7 +386,8 @@ class Charm(object):
             obj = self.arrays[aid][index]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
             dep_ids = []
-            if ray.api.ray_initialized:
+            is_ray = 'is_ray' in header and header['is_ray']
+            if is_ray:
                 for i, arg in enumerate(args[:-1]):
                     if isinstance(arg, Future):
                         dep_obj = arg.lookup_object()
@@ -398,7 +399,7 @@ class Charm(object):
             if len(dep_ids) > 0:
                 charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
             else:
-                self.invokeEntryMethod(obj, ep, header, args, ret_fut=ray.api.ray_initialized)
+                self.invokeEntryMethod(obj, ep, header, args, ret_fut=is_ray)
         else:
             em = self.entryMethods[ep]
             assert em.name == '__init__', 'Specified array entry method not constructor'
@@ -1183,16 +1184,21 @@ class CharmRemote(Chare):
     def _future_deposit_result(self, fid, result=None):
         charm.threadMgr.depositFuture(fid, result)
 
-    def notify_future_deletion(self, fid):
-        print("Delete:", charm.threadMgr.futures[fid].num_borrowers)
-        charm.threadMgr.futures[fid].num_borrowers -= 1
-        if charm.threadMgr.futures[fid].num_borrowers == 0:
+    def notify_future_deletion(self, store_id, depth):
+        #print("Delete", store_id, ":", charm.threadMgr.borrowed_futures[store_id].num_borrowers)
+        charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers -= 1
+        if charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers == 0:
             # check if threadMgr.futures has the only reference to fid
             # if yes, remove it
-            fut = charm.threadMgr.futures[fid]
+            fut = charm.threadMgr.borrowed_futures[(store_id, depth)]
             refcount = ctypes.c_long.from_address(id(fut)).value
-            if refcount == 1:
-                charm.threadMgr.futures.pop(fid)
+            #refcount = sys.getrefcount(fut)
+            #print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
+            if (fut.parent == None and refcount == 3) or (fut.parent != None and refcount == 2):
+                #print("Real deletion of", store_id, "from", charm.myPe())
+                if fut.parent == None:
+                    charm.threadMgr.futures.pop(fut.fid)
+                charm.threadMgr.borrowed_futures.pop((store_id, depth))
 
     def propagateException(self, error):
         if time.time() - charm.last_exception_timestamp >= 1.0:

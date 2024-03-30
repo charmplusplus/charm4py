@@ -51,7 +51,7 @@ cdef class CObjectStore:
     cdef void insert_object(self, ObjectId obj_id, object obj)
     cpdef void insert_object_small(self, ObjectId obj_id, object obj)
     cpdef void delete_remote_objects(self, ObjectId obj_id)
-    cdef void delete_object(self, ObjectId obj_id)
+    cpdef void delete_object(self, ObjectId obj_id)
 
     cdef int choose_pe(self, vector[int] &node_list)
 
