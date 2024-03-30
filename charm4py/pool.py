@@ -451,21 +451,21 @@ class Pool(object):
         self.pool_scheduler.startSingleTask(func, f, *args)
         return f
 
-    def map(self, func, iterable, chunksize=1, ncores=-1):
-        result = Future(store=ray.api.ray_initialized)
+    def map(self, func, iterable, chunksize=1, ncores=-1, is_ray=False):
+        result = Future(store=is_ray)
         # TODO shouldn't send task objects to a central place. what if they are large?
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result.get()
 
-    def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False):
+    def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False, is_ray=False):
         if self.mype == 0:
             # see deepcopy comment above (only need this for async case since
             # the sync case won't return until all the tasks have finished)
             iterable = deepcopy(iterable)
         if multi_future:
-            result = [Future(store=ray.api.ray_initialized) for _ in range(len(iterable))]
+            result = [Future(store=is_ray) for _ in range(len(iterable))]
         else:
-            result = Future(store=ray.api.ray_initialized)
+            result = Future(store=is_ray)
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
         return result
 

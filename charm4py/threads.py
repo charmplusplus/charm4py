@@ -1,5 +1,6 @@
 from greenlet import getcurrent
 from .ray.api import get_object_store
+import traceback
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -40,6 +41,10 @@ class Future(object):
         self.store_id = (self.src << 32) + self.fid
         self.store = store
         self._requested = False
+        self.num_borrowers = 0
+        self.parent = None
+        self.borrow_depth = 0
+        #charm.threadMgr.borrowed_futures[(self.store_id, 0)] = self
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -112,6 +117,11 @@ class Future(object):
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
     
+    def delete_object(self):
+        from .charm import charm
+        obj_store = get_object_store()
+        obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
+    
     def is_local(self):
         return self.lookup_object() != None
     
@@ -132,12 +142,30 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        return (self.fid, self.src, self.store)
+        # keep track of who this future is being sent to
+        self.num_borrowers += 1
+        #if self.store:
+        #    print("Serializing", self.store_id, ":", self.num_borrowers, "on", charm.myPe())
+        charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
+        return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe())
 
     def __setstate__(self, state):
-        self.fid, self.src, self.store = state
+        self.fid, self.src, self.store, self.borrow_depth, self.parent = state
+        self.borrow_depth += 1
         self.store_id = (self.src << 32) + self.fid
         self._requested = False
+        self.num_borrowers = 0
+
+    def __del__(self):
+        if self.store:
+            if self.parent == None and self.num_borrowers == 0:
+                # This is the owner, delete the object from the object store
+                #print("Deleting owner", self.store_id)
+                self.delete_object()
+            else:
+                # this is a borrower, notify its parent of the deletion
+                #print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
+                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.borrow_depth - 1)
 
 
 class CollectiveFuture(Future):
@@ -192,6 +220,7 @@ class EntryMethodThreadManager(object):
         self.options = charm.options
         self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
+        self.borrowed_futures = {}
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
 
     def start(self):

@@ -2,14 +2,12 @@ import types
 from copy import deepcopy
 
 counter = 0
-ray_initialized = False
 
 def init():
     from charm4py import charm, Group, ObjectStore
-    global object_store, ray_initialized
-    ray_initialized = True
+    global object_store
     object_store = Group(ObjectStore)
-    charm.thisProxy.updateGlobals({'object_store' : object_store, 'ray_initialized' : True},
+    charm.thisProxy.updateGlobals({'object_store' : object_store,},
                                   awaitable=True, module_name='charm4py.ray.api').get()
 
 
@@ -34,7 +32,7 @@ def get_ray_task(func):
     from charm4py import charm
     def task(*args):
         func._ck_coro = True
-        return charm.pool.map_async(func, [args], chunksize=1, multi_future=True)[0]
+        return charm.pool.map_async(func, [args], chunksize=1, multi_future=True, is_ray=True)[0]
     return task
 
 def remote(*args, **kwargs):
@@ -48,6 +46,7 @@ def remote(*args, **kwargs):
         else:       
             # decorating without any arguments
             subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
+            subclass.is_ray = True
             register(subclass)
             rayclass = get_ray_class(subclass)
             rayclass.__name__ = args[0].__name__
