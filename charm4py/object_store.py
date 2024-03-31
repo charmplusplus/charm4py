@@ -68,7 +68,6 @@ class ObjectStore(Chare):
         the location of obj_id and add the requesting PE to the local location map. Else
         buffer the request
         """
-        #print("Requesting obj", obj_id)
         self._object_store.request_location_object(obj_id, requesting_pe)
 
     def bulk_send_object(self, obj_id, requesting_pes):

@@ -160,15 +160,8 @@ class Charm(object):
 
         self.send_buffer = MessageBuffer()
         self.receive_buffer = MessageBuffer()
-        self.future_id = 0
         # TODO: maybe implement this buffer in c++
         self.future_get_buffer = {}
-        #print(self.future_mask)
-        self.pr = cProfile.Profile()
-        self.pr.enable()
-
-    def stop_profiling(self):
-        self.pr.dump_stats("prof%i.prof" % self._myPe)
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
@@ -342,18 +335,6 @@ class Charm(object):
         if gid in self.groups:
             obj = self.groups[gid]
             header, args = self.unpackMsg(msg, dcopy_start, obj)
-            #dep_ids = []
-            #for i, arg in enumerate(args[:-1]):
-            #    if isinstance(arg, Future):
-            #        dep_obj = arg.lookup_object()
-            #        if dep_obj != None:
-            #            args[i] = dep_obj
-            #        else:
-            #            dep_ids.append(arg.store_id)
-            #            arg.request_object()
-            #if len(dep_ids) > 0:
-            #    charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
-            #else:
             self.invokeEntryMethod(obj, ep, header, args, ret_fut=False)        
         else:
             em = self.entryMethods[ep]
@@ -1131,10 +1112,6 @@ class CharmRemote(Chare):
     def __init__(self):
         charm.thisProxy = self.thisProxy
 
-    def stop_profiling(self):
-        charm.stop_profiling()
-        self.exit()
-
     def exit(self, exit_code=0):
         charm.exit(exit_code)
 
@@ -1185,14 +1162,12 @@ class CharmRemote(Chare):
         charm.threadMgr.depositFuture(fid, result)
 
     def notify_future_deletion(self, store_id, depth):
-        #print("Delete", store_id, ":", charm.threadMgr.borrowed_futures[store_id].num_borrowers)
         charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers -= 1
         if charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers == 0:
             # check if threadMgr.futures has the only reference to fid
             # if yes, remove it
             fut = charm.threadMgr.borrowed_futures[(store_id, depth)]
             refcount = ctypes.c_long.from_address(id(fut)).value
-            #refcount = sys.getrefcount(fut)
             #print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
             if (fut.parent == None and refcount == 3) or (fut.parent != None and refcount == 2):
                 #print("Real deletion of", store_id, "from", charm.myPe())

@@ -39,7 +39,7 @@ class Chare(object):
         # or pickling. _local is a fixed size array that implements a mem pool, where msgs
         # can be in non-consecutive positions, and the indexes of free slots are stored
         # as a linked list inside _local, with _local_free_head being the index of the
-        # first free slot, _local[_local_free_head] is the index of next free slot and so on 
+        # first free slot, _local[_local_free_head] is the index of next free slot and so on
         self._local = [i for i in range(1, Options.local_msg_buf_size + 1)]
         self._local[-1] = None
         self._local_free_head = 0
@@ -486,10 +486,6 @@ def group_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
             gid = proxy.gid
             if Options.local_msg_optim and (elemIdx == charm._myPe) and (len(args) > 0):
                 destObj = charm.groups[gid]
-            #blockFuture = charm.createFuture(store=True)
-            #args = list(args)
-            #args.append(blockFuture)
-            #args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkGroupSend(gid, elemIdx, ep, msg)
         else:
@@ -759,7 +755,6 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults, is_ray):  # decorat
                     destObj = array[elemIdx]
             if is_ray:
                 blockFuture = charm.createFuture(store=True)
-                #print("Created future from task call:", blockFuture.store_id)
                 args = list(args)
                 args.append(blockFuture)
                 args = tuple(args)
@@ -885,7 +880,7 @@ class Array(object):
                 continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
-                f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
+                f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults, hasattr(cls, 'is_ray')))
             else:
                 f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults, hasattr(cls, 'is_ray'))
             f.__qualname__ = proxyClassName + '.' + m.name

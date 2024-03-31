@@ -237,7 +237,6 @@ class PoolScheduler(Chare):
                 job = prev.job_next
 
     def taskFinished(self, worker_id, job_id, result=None):
-        #print('Job finished')
         job = self.jobs[job_id]
         if job.failed:
             return self.taskError(worker_id, job_id, job.exception)
@@ -333,11 +332,9 @@ class Worker(Chare):
         try:
             result = func(*args)
             if isinstance(result_destination, int):
-                #print("CHECK INT")
                 self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
             else:
                 # assume result_destination is a future
-                #print("CHECK")
                 result_destination.send(result)
                 self.scheduler.taskFinished(self.thisIndex, job_id)
         except Exception as e:
@@ -349,10 +346,11 @@ class Worker(Chare):
                 result_destination.send(e)
 
     @coro_ext(event_notify=True)
-    def runTask_star_th(self, func, args, result_destination, job_id):
-        self.runTask_star(func, args, result_destination, job_id)
+    def runTask_star_th(self, func, result_destination, job_id, *args):
+        self.runTask_star(self, func, result_destination, job_id, *args)
 
-    def runTask_star(self, func, args, result_destination, job_id):
+    def runTask_star(self, func, result_destination, job_id, *args):
+        result_destination = result_destination[0]
         try:
             result = func(*args)
             if isinstance(result_destination, int):
@@ -370,31 +368,34 @@ class Worker(Chare):
                 result_destination.send(e)
 
     @coro_ext(event_notify=True)
-    def runChunkSingleFunc_th(self, func, chunk, result_destination, job_id):
-        self.runChunkSingleFunc(func, chunk, result_destination, job_id)
+    def runChunkSingleFunc_th(self, func, result_destination, job_id, *chunk):
+        self.runChunkSingleFunc(func, result_destination, job_id, *chunk)
 
-    def runChunkSingleFunc(self, func, chunk, result_destination, job_id):
+    def runChunkSingleFunc(self, func, result_destination, job_id, *chunk):
+        result_destination = result_destination[0]
         try:
             if func is not None:
                 self.funcs[job_id] = func
             else:
                 func = self.funcs[job_id]
-            results = [func(args) for args in chunk]
+            results = [func(args) for args in chunk[0]]
             self.send_chunk_results(results, result_destination, job_id)
         except Exception as e:
             self.send_chunk_exc(e, result_destination, job_id)
 
     @coro_ext(event_notify=True)
-    def runChunk_th(self, _, chunk, result_destination, job_id):
+    def runChunk_th(self, func, result_destination, job_id, *chunk):
+        result_destination = result_destination[0]
         try:
-            results = [func(args) for func, args in chunk]
+            results = [func(args) for func, args in chunk[0]]
             self.send_chunk_results(results, result_destination, job_id)
         except Exception as e:
             self.send_chunk_exc(e, result_destination, job_id)
 
-    def runChunk(self, _, chunk, result_destination, job_id):
+    def runChunk(self, func, result_destination, job_id, *chunk):
+        result_destination = result_destination[0]
         try:
-            results = [func(args) for func, args in chunk]
+            results = [func(args) for func, args in chunk[0]]
             self.send_chunk_results(results, result_destination, job_id)
         except Exception as e:
             self.send_chunk_exc(e, result_destination, job_id)

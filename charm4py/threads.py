@@ -1,6 +1,5 @@
 from greenlet import getcurrent
 from .ray.api import get_object_store
-import traceback
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -38,13 +37,15 @@ class Future(object):
         self.blocked = False  # flag to check if creator thread is blocked on the future
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
-        self.store_id = (self.src << 32) + self.fid
+        if store:
+            self.store_id = (self.src << 32) + self.fid
+        else:
+            self.store_id = 0
         self.store = store
         self._requested = False
         self.num_borrowers = 0
         self.parent = None
         self.borrow_depth = 0
-        #charm.threadMgr.borrowed_futures[(self.store_id, 0)] = self
 
     def get(self):
         """ Blocking call on current entry method's thread to obtain the values of the
@@ -107,32 +108,49 @@ class Future(object):
 
     def lookup_location(self):
         from .charm import charm
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_location(self.store_id)
     
     def lookup_object(self):
         from .charm import charm
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
     
     def delete_object(self):
         from .charm import charm
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         obj_store = get_object_store()
         obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
     
     def is_local(self):
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         return self.lookup_object() != None
     
     def create_object(self, obj):
         from .charm import charm
-        #print("Created object", self.store_id)
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.store_id, obj)
 
     def request_object(self):
+        if not self.store:
+            raise ValueError("Operation not supported for future not"
+                             " stored in the object store")
         if self._requested:
             return
         from .charm import charm
@@ -142,17 +160,19 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        # keep track of who this future is being sent to
+        # keep track of how many PEs this future is being sent to
         self.num_borrowers += 1
-        #if self.store:
-        #    print("Serializing", self.store_id, ":", self.num_borrowers, "on", charm.myPe())
-        charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
+        if self.store:
+            charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
         return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe())
 
     def __setstate__(self, state):
         self.fid, self.src, self.store, self.borrow_depth, self.parent = state
         self.borrow_depth += 1
-        self.store_id = (self.src << 32) + self.fid
+        if self.store:
+            self.store_id = (self.src << 32) + self.fid
+        else:
+            self.store_id = 0
         self._requested = False
         self.num_borrowers = 0
 

@@ -73,7 +73,7 @@ class EntryMethod(object):
             else:
                 blockFuture.send(ret)  # send result back to remote
 
-    def _run_prof(self, obj, header, args):
+    def _run_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
@@ -81,7 +81,7 @@ class EntryMethod(object):
         ems.append(self)
         exception = None
         try:
-            self._run(obj, header, args)
+            self._run(obj, header, args, ret_fut=ret_fut)
         except Exception as e:
             exception = e
         assert self == ems[-1]
@@ -101,7 +101,7 @@ class EntryMethod(object):
         if gr.dead:
             obj._numthreads -= 1
 
-    def _run_th_prof(self, obj, header, args):
+    def _run_th_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
@@ -113,7 +113,7 @@ class EntryMethod(object):
         obj._numthreads += 1
         exception = None
         try:
-            gr.switch(obj, header, args)
+            gr.switch(obj, header, args, ret_fut=ret_fut)
         except Exception as e:
             exception = e
         if gr.dead:
