@@ -15,8 +15,6 @@ else:
     from io import StringIO
 import inspect
 import time
-import atexit
-import cProfile
 import gc
 import ctypes
 from collections import defaultdict

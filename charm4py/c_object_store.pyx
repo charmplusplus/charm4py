@@ -277,7 +277,3 @@ cdef class CObjectStore:
 
             #send a message to home to add entry
             self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
-
-        # check requests buffer
-        # FIXME this is probably unnecessary
-        #self.check_obj_requests_buffer(obj_id)
