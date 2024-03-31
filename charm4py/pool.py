@@ -106,7 +106,7 @@ class PoolScheduler(Chare):
             print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
                   'Warning: charm.pool is experimental (API and performance '
                   'is subject to change)')
-            self.workers = Array(Worker, charm.numPes(), args=[self.thisProxy])
+            self.workers = Group(Worker, args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
             oldSize = len(self.jobs)
@@ -210,10 +210,7 @@ class PoolScheduler(Chare):
                         func = task.func
                     # NOTE: this is a non-standard way of using proxies, but is
                     # faster and allows the scheduler to reuse the same proxy
-                    if not isinstance(worker_id, tuple):
-                        self.workers.elemIdx = (worker_id,)
-                    else:
-                        self.workers.elemIdx = worker_id
+                    self.workers.elemIdx = worker_id
                                 
                     if isinstance(task.data, tuple):
                         job.remote(func, [task.result_dest], job.id, *task.data)
