@@ -6,6 +6,7 @@ from torchvision import datasets, transforms
 from filelock import FileLock
 import numpy as np
 import time
+import sys
 
 from charm4py import ray, charm
 
@@ -124,8 +125,8 @@ class DataWorker(object):
 def sync_train(args):
     ray.init()
 
-    iterations = 201
-    num_workers = 64
+    iterations = 101
+    num_workers = 4
 
     model = ConvNet()
     test_loader = get_data_loader()[1]
@@ -158,7 +159,7 @@ def async_train(args):
 
     model = ConvNet()
     test_loader = get_data_loader()[1]
-    iterations = 201
+    iterations = 101
     num_workers = 4
 
     print("Running asynchronous parameter server training.")
@@ -190,4 +191,8 @@ def async_train(args):
     print("Final accuracy is {:.1f}.".format(accuracy))
     exit()
 
-charm.start(sync_train)
+if __name__ == '__main__':
+    if sys.argv[1] == 'sync':
+        charm.start(sync_train)
+    elif sys.argv[1] == 'async':
+        charm.start(async_train)

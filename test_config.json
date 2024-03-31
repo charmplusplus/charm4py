@@ -289,6 +289,20 @@
         "path": "examples/simple/hello_world.py"
     },
     {
+        "path": "examples/ray/simple.py"
+    },
+    {
+        "path": "examples/ray/parameter_server.py",
+        "args": "sync"
+    },
+    {
+        "path": "examples/ray/parameter_server.py",
+        "args": "async"
+    },
+    {
+        "path": "examples/ray/fib.py"
+    },
+    {
         "prefix": "tests/exec.sh",
         "path": "examples/simple/hello_world.py"
     },

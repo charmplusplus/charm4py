@@ -17,7 +17,7 @@ jobs:
     - name: build-charm4py
       run: |
         git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-        pip3 install setuptools cython cffi greenlet numpy
+        pip3 install setuptools cython cffi greenlet numpy torch torchvision
         git clone https://github.com/UIUC-PPL/charm charm_src/charm
         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
         export CHARM_BUILD_PROCESSES=2

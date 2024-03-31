@@ -8,7 +8,7 @@ def add_task(a, b):
     if a != -1:
         res = add_task.remote(-1, a)
         res = ray.get(res)
-    print("ADD TASK", a, b)
+    print("Add task", a, b)
     return a + b
 
 @ray.remote
@@ -18,7 +18,7 @@ class Compute(object):
 
     def add(self, a, b):
         sleep(2)
-        print("ADD", a, b)
+        print("Add actor method", a, b)
         return a + b
 
 
@@ -32,16 +32,12 @@ def main(args):
     e = arr[2].add(2, d)
     f = arr[3].add(c, 4)
     g = add_task.remote(e, f)
-    #g = charm.pool.map_async(add_task, [(e,f)], chunksize=1, multi_future=True)[0]
-
-    #print("g = ", g.get())
 
     not_ready = [c, d, e, f, g]
     while len(not_ready) > 0:
         ready, not_ready = ray.wait(not_ready)
         print("Fetched value: ", ray.get(ready))
 
-    #sleep(10)
     exit()
 
 
