@@ -15,13 +15,12 @@ CPython (most common implementation) and PyPy_.
 .. _PyPy: http://pypy.org
 
 
-Manually building the Charm++ shared library (required for Python 3.8 and newer)
+Manually building the Charm++ shared library
 --------------------------------------------
 
+Use this to build Charm4py binaries manually, instead of downloading prebuilt libraries from pip.
 This is needed when building Charm++ for specialized machine/network layers
-other than TCP and MPI (e.g. Cray XC/XE). It is also currently needed for Python versions
-3.8 and newer, since the current pip package of Charm4py is only compatible with Python 3.7
-and older.
+other than TCP and MPI (e.g. Cray XC/XE).
 
 Before installing, you need the following prerequisites:
     - CPython: numpy, greenlet and cython (``pip3 install 'numpy>=1.10.0' cython greenlet``)
@@ -76,8 +75,11 @@ array_hello.py, which can be run as follows::
     to manually build the Charm++ library (see below).
 
 
-pip (Python 3.7 and older)
+pip
 ---
+
+This option installs prebuilt Charm4Py binaries from pip. The prebuilt pip libraries
+were built with Python 3.7.
 
 To install on regular Linux, macOS and Windows machines, do::
 
