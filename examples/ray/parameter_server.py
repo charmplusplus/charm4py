@@ -136,11 +136,11 @@ def sync_train(args):
     ps = ParameterServer.remote(1e-2)
     workers = [DataWorker.remote() for i in range(num_workers)]
 
-    current_weights = ps.get_weights()
+    current_weights = ps.get_weights.remote()
     for i in range(iterations):
-        gradients = [worker.compute_gradients(current_weights) for worker in workers]
+        gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
         # Calculate update after all gradients are available.
-        current_weights = ps.apply_gradients(*gradients)
+        current_weights = ps.apply_gradients.remote(*gradients)
 
         if i % 10 == 0:
             # Evaluate the current model.
@@ -167,10 +167,10 @@ def async_train(args):
     ps = ParameterServer.remote(1e-2)
     workers = [DataWorker.remote() for i in range(num_workers)]
 
-    current_weights = ps.get_weights()
+    current_weights = ps.get_weights.remote()
     gradients = {}
     for worker in workers:
-        gradients[worker.compute_gradients(current_weights)] = worker
+        gradients[worker.compute_gradients.remote(current_weights)] = worker
 
     for i in range(iterations * num_workers):
         ready_gradient_list, _ = ray.wait(list(gradients))
@@ -178,8 +178,8 @@ def async_train(args):
         worker = gradients.pop(ready_gradient_id)
 
         # Compute and apply gradients.
-        current_weights = ps.apply_gradients(*[ready_gradient_id])
-        gradients[worker.compute_gradients(current_weights)] = worker
+        current_weights = ps.apply_gradients.remote(*[ready_gradient_id])
+        gradients[worker.compute_gradients.remote(current_weights)] = worker
 
         if i % 10 == 0:
             # Evaluate the current model after every 10 updates.

@@ -718,7 +718,7 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
             assert _slice.start is not None and _slice.stop is not None, 'Must specify start and stop indexes for array slicing'
         return charm.split(proxy, 1, slicing=idx)[0]
 
-def array_proxy_method_gen(ep, argcount, argnames, defaults, is_ray):  # decorator, generates proxy entry methods
+def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
     def proxy_entry_method(proxy, *args, **kwargs):
         num_args = len(args)
         if num_args < argcount and len(kwargs) > 0:
@@ -735,6 +735,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults, is_ray):  # decorat
                     args.append(defaults[def_idx])
 
         header = {}
+        is_ray = kwargs.pop('is_ray', False)
         header['is_ray'] = is_ray
         blockFuture = None
         elemIdx = proxy.elemIdx
@@ -771,9 +772,9 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults, is_ray):  # decorat
     proxy_entry_method.ep = ep
     return proxy_entry_method
 
-def array_ckNew_gen(C, epIdx, is_ray):
+def array_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
-    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False):
+    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False, is_ray=False):
         # if charm.myPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
         if type(dims) == int: dims = (dims,)
 
@@ -808,8 +809,8 @@ def array_ckNew_gen(C, epIdx, is_ray):
         return proxy
     return array_ckNew
 
-def array_ckInsert_gen(epIdx, is_ray):
-    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False):
+def array_ckInsert_gen(epIdx):
+    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False, is_ray=False):
         if type(index) == int: index = (index,)
         assert len(index) == proxy.ndims, 'Invalid index dimensions passed to ckInsert'
         header = {}
@@ -880,9 +881,9 @@ class Array(object):
                 continue
             argcount, argnames, defaults = getEntryMethodInfo(m.C, m.name)
             if Options.profiling:
-                f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults, hasattr(cls, 'is_ray')))
+                f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
-                f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults, hasattr(cls, 'is_ray'))
+                f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f
@@ -890,9 +891,9 @@ class Array(object):
         M['__getitem__'] = array_proxy_elem
         M['__eq__'] = array_proxy__eq__
         M['__hash__'] = array_proxy__hash__
-        M['ckNew'] = array_ckNew_gen(cls, entryMethods[0].epIdx, hasattr(cls, 'is_ray'))
+        M['ckNew'] = array_ckNew_gen(cls, entryMethods[0].epIdx)
         M['__getsecproxy__'] = array_getsecproxy
-        M['ckInsert'] = array_ckInsert_gen(entryMethods[0].epIdx, hasattr(cls, 'is_ray'))
+        M['ckInsert'] = array_ckInsert_gen(entryMethods[0].epIdx)
         M['ckDoneInserting'] = array_proxy_doneInserting
         if not sectionProxy:
             M['ckContribute'] = array_proxy_contribute  # function called when target proxy is Array
@@ -904,8 +905,6 @@ class Array(object):
             M['__setstate__'] = arraysecproxy__setstate__
         proxyCls = type(proxyClassName, (), M)  # create and return proxy class
         proxyCls.issec = sectionProxy
-        if hasattr(cls, 'is_ray'):
-            proxyCls.is_ray = True
         return proxyCls
 
 # ---------------------------------------------------

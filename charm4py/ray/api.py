@@ -15,6 +15,31 @@ def get_object_store():
     global object_store
     return object_store
 
+class RayProxyFunction(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        raise RuntimeError("Cannot call remote function without .remote()")
+
+    def remote(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
+class RayProxy(object):
+    def __init__(self, subclass, args, pe):
+        from charm4py import Chare, register, charm
+        self.proxy = Chare(subclass, args=args, onPE=pe)
+        for f in dir(self.proxy):
+            if not f.startswith('__'):
+                setattr(self, f, RayProxyFunction(self.remote_function(f)))
+
+    def remote_function(self, f):
+        proxy_func = getattr(self.proxy, f)
+        def call_remote(*args, **kwargs):
+            return proxy_func(*args, **kwargs, is_ray=True)
+        return call_remote
+
 
 def get_ray_class(subclass):
     from charm4py import Chare, register, charm
@@ -23,9 +48,9 @@ def get_ray_class(subclass):
         @staticmethod
         def remote(*a):
             global counter
-            chare = Chare(subclass, args=a, onPE=counter % charm.numPes())
+            ray_proxy = RayProxy(subclass, a, counter % charm.numPes())
             counter += 1
-            return chare
+            return ray_proxy
     return RayChare
 
 def get_ray_task(func):
@@ -46,7 +71,6 @@ def remote(*args, **kwargs):
         else:       
             # decorating without any arguments
             subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
-            subclass.is_ray = True
             register(subclass)
             rayclass = get_ray_class(subclass)
             rayclass.__name__ = args[0].__name__

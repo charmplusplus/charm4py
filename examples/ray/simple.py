@@ -27,10 +27,10 @@ def main(args):
     # create 3 instances of MyChare, distributed among cores by the runtime
     arr = [Compute.remote(i) for i in range(4)]
 
-    c = arr[0].add(1, 2) # fut id 0
-    d = arr[1].add(3, c) # fut id 1
-    e = arr[2].add(2, d)
-    f = arr[3].add(c, 4)
+    c = arr[0].add.remote(1, 2) # fut id 0
+    d = arr[1].add.remote(3, c) # fut id 1
+    e = arr[2].add.remote(2, d)
+    f = arr[3].add.remote(c, 4)
     g = add_task.remote(e, f)
 
     not_ready = [c, d, e, f, g]

@@ -30,7 +30,7 @@ class Chunk(object):
 
 class Job(object):
 
-    def __init__(self, id, func, tasks, result, ncores, chunksize):
+    def __init__(self, id, func, tasks, result, ncores, chunksize, is_ray=False):
         self.id = id
         self.max_cores = ncores
         self.n_avail = ncores
@@ -40,6 +40,7 @@ class Job(object):
         self.threaded = False
         self.failed = False
         self.single_task = False
+        self.is_ray = is_ray
         assert chunksize > 0
         if func is not None:
             self.threaded = hasattr(func, '_ck_coro')
@@ -106,7 +107,7 @@ class PoolScheduler(Chare):
             print('Initializing charm.pool with', self.num_workers, 'worker PEs. '
                   'Warning: charm.pool is experimental (API and performance '
                   'is subject to change)')
-            self.workers = Group(Worker, args=[self.thisProxy])
+            self.workers = Array(Worker, charm.numPes(), args=[self.thisProxy])
 
         if len(self.job_id_pool) == 0:
             oldSize = len(self.jobs)
@@ -147,7 +148,7 @@ class PoolScheduler(Chare):
             job.remote = self.workers.runTask_star
         self.schedule()
 
-    def start(self, func, tasks, result, ncores, chunksize):
+    def start(self, func, tasks, result, ncores, chunksize, is_ray=False):
         assert ncores != 0
         if ncores < 0:
             ncores = self.num_workers
@@ -158,7 +159,7 @@ class PoolScheduler(Chare):
 
         self.__start__(func, tasks, result)
 
-        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize)
+        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize, is_ray=is_ray)
         self.__addJob__(job)
 
         if job.chunked:
@@ -210,12 +211,15 @@ class PoolScheduler(Chare):
                         func = task.func
                     # NOTE: this is a non-standard way of using proxies, but is
                     # faster and allows the scheduler to reuse the same proxy
-                    self.workers.elemIdx = worker_id
+                    if not isinstance(worker_id, tuple):
+                        self.workers.elemIdx = (worker_id,)
+                    else:
+                        self.workers.elemIdx = worker_id
                                 
                     if isinstance(task.data, tuple):
-                        job.remote(func, [task.result_dest], job.id, *task.data)
+                        job.remote(func, [task.result_dest], job.id, *task.data, is_ray=job.is_ray)
                     else:
-                        job.remote(func, [task.result_dest], job.id, task.data)
+                        job.remote(func, [task.result_dest], job.id, task.data, is_ray=job.is_ray)
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -234,6 +238,7 @@ class PoolScheduler(Chare):
                 job = prev.job_next
 
     def taskFinished(self, worker_id, job_id, result=None):
+        #print('Job finished')
         job = self.jobs[job_id]
         if job.failed:
             return self.taskError(worker_id, job_id, job.exception)
@@ -452,7 +457,7 @@ class Pool(object):
     def map(self, func, iterable, chunksize=1, ncores=-1, is_ray=False):
         result = Future(store=is_ray)
         # TODO shouldn't send task objects to a central place. what if they are large?
-        self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
+        self.pool_scheduler.start(func, iterable, result, ncores, chunksize, is_ray=is_ray)
         return result.get()
 
     def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False, is_ray=False):
@@ -464,7 +469,7 @@ class Pool(object):
             result = [Future(store=is_ray) for _ in range(len(iterable))]
         else:
             result = Future(store=is_ray)
-        self.pool_scheduler.start(func, iterable, result, ncores, chunksize)
+        self.pool_scheduler.start(func, iterable, result, ncores, chunksize, is_ray=is_ray)
         return result
 
     # iterable is a sequence of (function, args) tuples
