@@ -664,6 +664,15 @@ class Charm(object):
         self.lb_requested = '+balancer' in sys.argv
         self.lib.start()
 
+    def arrayElemDelete(self, aid, index):
+        obj = self.arrays[aid].pop(index)
+        del obj._contributeInfo
+        del obj._local
+        del obj._local_free_head
+        del obj._active_grp_conds
+        obj._cond_next = None
+        obj._cond_last = None
+
     def arrayElemLeave(self, aid, index):
         obj = self.arrays[aid].pop(index)
         if hasattr(obj, '_scookies'):

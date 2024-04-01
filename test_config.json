@@ -112,6 +112,12 @@
         "path": "tests/collections/proxy_eq.py"
     },
     {
+        "path": "tests/collections/array_destroy.py"
+    },
+    {
+        "path": "tests/collections/group_local_branch.py"
+    },
+    {
         "force_min_processes": 4,
         "path": "tests/exceptions/test.py"
     },
