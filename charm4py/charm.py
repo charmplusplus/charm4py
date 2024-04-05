@@ -28,6 +28,7 @@ from .threads import Future, LocalFuture
 from . import reduction
 from . import wait
 import array
+import cProfile
 try:
     import numpy
 except ImportError:
@@ -106,6 +107,7 @@ class Charm(object):
 
         self.options = Options()
         self.options.profiling = False
+        self.options.cprofiling = False
         self.options.pickle_protocol = -1  # -1 selects the highest protocol number
         self.options.local_msg_optim = False
         self.options.local_msg_buf_size = 50
@@ -307,7 +309,8 @@ class Charm(object):
             if isinstance(args, Chare):  # obj migrating in
                 em = self.entryMethods[ep + 1]  # get 'migrated' EntryMethod object instead of __init__
                 obj = args
-                obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
+                obj._contributeInfo = self.lib.initContributeInfo(
+                    aid, index, CONTRIBUTOR_TYPE_ARRAY)
                 self.arrays[aid][index] = obj
                 em.run(obj, {}, ())
             else:
@@ -1008,7 +1011,10 @@ class Charm(object):
     def getPeHostRank(self, pe):
         return self.lib.CkPhysicalRank(pe)
 
-    def exit(self, exit_code=0):
+    def exit(self, exit_code=0, profile_filename="profile"):
+        if self.options.cprofiling:
+            self.thisProxy.stop_cprofile(filename=profile_filename,
+                                         awaitable=True).get()
         self.lib.CkExit(exit_code)
 
     def abort(self, message):
@@ -1028,6 +1034,8 @@ class CharmRemote(Chare):
 
     def __init__(self):
         charm.thisProxy = self.thisProxy
+        if charm.options.cprofiling:
+            self.start_cprofile()
 
     def exit(self, exit_code=0):
         charm.exit(exit_code)
@@ -1043,6 +1051,16 @@ class CharmRemote(Chare):
 
     def addReducer(self, func):
         charm.addReducer(func)
+
+    def start_cprofile(self):
+        self.pr = cProfile.Profile()
+        self.pr.enable()
+
+    def stop_cprofile(self, dump=True, filename="profile"):
+        if hasattr(self, "pr"):
+            self.pr.disable()
+            if dump:
+                self.pr.dump_stats(filename + str(self.myPe()) + ".prof")
 
     # user signature is: `def updateGlobals(self, global_dict, module_name='__main__')`
     def updateGlobals(self, *args):

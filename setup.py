@@ -281,6 +281,10 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
+        compiler_directives = {}
+        if os.environ.get('CHARM4PY_BUILD_CPROFILE') == '1':
+            compiler_directives = {'profile': True}
+
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
@@ -288,7 +292,9 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
                               extra_link_args=extra_link_args,
-                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+                              ),
+                            compiler_directives=compiler_directives,
+                            compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
         try:
             check_cffi()
