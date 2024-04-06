@@ -30,7 +30,7 @@ class Chunk(object):
 
 class Job(object):
 
-    def __init__(self, id, func, tasks, result, ncores, chunksize, is_ray=False):
+    def __init__(self, id, func, tasks, result, ncores, chunksize, num_returns=1, is_ray=False):
         self.id = id
         self.max_cores = ncores
         self.n_avail = ncores
@@ -41,6 +41,7 @@ class Job(object):
         self.failed = False
         self.single_task = False
         self.is_ray = is_ray
+        self.num_returns = num_returns
         assert chunksize > 0
         if func is not None:
             self.threaded = hasattr(func, '_ck_coro')
@@ -60,7 +61,8 @@ class Job(object):
             else:
                 self.tasks = [Chunk(tasks[i:i+chunksize], result[i:i+chunksize]) for i in range(0, len(tasks), chunksize)]
         else:
-            if result is None or isinstance(result, threads.Future):
+            if result is None or (isinstance(result, list) and isinstance(result[0], threads.Future)):
+                # This is the case where multiple tasks use the same future
                 self.results = [None] * len(tasks)
                 self.future = result
                 if func is not None:
@@ -148,7 +150,7 @@ class PoolScheduler(Chare):
             job.remote = self.workers.runTask_star
         self.schedule()
 
-    def start(self, func, tasks, result, ncores, chunksize, is_ray=False):
+    def start(self, func, tasks, result, ncores, chunksize, num_returns=1, is_ray=False):
         assert ncores != 0
         if ncores < 0:
             ncores = self.num_workers
@@ -159,7 +161,8 @@ class PoolScheduler(Chare):
 
         self.__start__(func, tasks, result)
 
-        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize, is_ray=is_ray)
+        job = Job(self.job_id_pool.pop(), func, tasks, result, ncores, chunksize, 
+                  num_returns=num_returns, is_ray=is_ray)
         self.__addJob__(job)
 
         if job.chunked:
@@ -217,9 +220,9 @@ class PoolScheduler(Chare):
                         self.workers.elemIdx = worker_id
                                 
                     if isinstance(task.data, tuple):
-                        job.remote(func, [task.result_dest], job.id, *task.data, is_ray=job.is_ray)
+                        job.remote(func, task.result_dest, job.id, job.num_returns, *task.data, is_ray=job.is_ray)
                     else:
-                        job.remote(func, [task.result_dest], job.id, task.data, is_ray=job.is_ray)
+                        job.remote(func, task.result_dest, job.id, job.num_returns, task.data, is_ray=job.is_ray)
 
                 if len(job.tasks) == 0:
                     prev.job_next = job.job_next
@@ -237,7 +240,7 @@ class PoolScheduler(Chare):
             else:
                 job = prev.job_next
 
-    def taskFinished(self, worker_id, job_id, result=None):
+    def taskFinished(self, worker_id, job_id, num_returns, result=None):
         #print('Job finished')
         job = self.jobs[job_id]
         if job.failed:
@@ -259,9 +262,11 @@ class PoolScheduler(Chare):
                 self.worker_knows[worker_id].remove(job.id)
             if result is not None and job.future is not None:
                 if job.single_task:
-                    job.future.send(job.results[0])
+                    for i in range(num_returns):
+                        job.future[i].send(job.results[0][i])
                 else:
-                    job.future.send(job.results)
+                    for i in range(num_returns):
+                        job.future[i].send(job.results[:][i])
         self.schedule()
 
     def threadPaused(self, worker_id):
@@ -318,30 +323,34 @@ class Worker(Chare):
     def runTaskSingleFunc_th(self, func, result_destination, job_id, *args):
         self.runTaskSingleFunc(func, result_destination, job_id, *args)
 
-    def runTaskSingleFunc(self, func, result_destination, job_id, *args):
+    def runTaskSingleFunc(self, func, result_destination, job_id, num_returns, *args):
         if func is not None:
             self.funcs[job_id] = func
         else:
             func = self.funcs[job_id]
-        self.runTask(func, result_destination, job_id, *args)
+        self.runTask(func, result_destination, job_id, num_returns, *args)
 
     @coro_ext(event_notify=True)
     def runTask_th(self, func, args, result_destination, job_id):
         self.runTask(func, args, result_destination, job_id)
 
-    def runTask(self, func, result_destination, job_id, *args):
-        result_destination = result_destination[0]
+    def runTask(self, func, result_destination, job_id, num_returns, *args):
         try:
             result = func(*args)
             if isinstance(result_destination, int):
-                self.scheduler.taskFinished(self.thisIndex, job_id, (result_destination, result))
+                self.scheduler.taskFinished(self.thisIndex, job_id, num_returns, (result_destination, result))
             else:
                 # assume result_destination is a future
-                result_destination.send(result)
-                self.scheduler.taskFinished(self.thisIndex, job_id)
+                if num_returns > 1:
+                    for res, dest in zip(result, result_destination):
+                        dest.send(res)
+                else:
+                    result_destination[0].send(result)
+                self.scheduler.taskFinished(self.thisIndex, job_id, num_returns)
         except Exception as e:
             if isinstance(e, NotThreadedError):
                 e = Charm4PyError('Function ' + str(func) + ' must be decorated with @coro to be able to suspend')
+            print(e)
             charm.prepareExceptionForSend(e)
             self.scheduler.taskError(self.thisIndex, job_id, e)
             if not isinstance(result_destination, int):
@@ -460,16 +469,17 @@ class Pool(object):
         self.pool_scheduler.start(func, iterable, result, ncores, chunksize, is_ray=is_ray)
         return result.get()
 
-    def map_async(self, func, iterable, chunksize=1, ncores=-1, multi_future=False, is_ray=False):
+    def map_async(self, func, iterable, chunksize=1, ncores=-1, num_returns=1,
+                  multi_future=False, is_ray=False):
         if self.mype == 0:
             # see deepcopy comment above (only need this for async case since
             # the sync case won't return until all the tasks have finished)
             iterable = deepcopy(iterable)
         if multi_future:
-            result = [Future(store=is_ray) for _ in range(len(iterable))]
+            result = [[Future(store=is_ray) for i in range(num_returns)] for _ in range(len(iterable))]
         else:
-            result = Future(store=is_ray)
-        self.pool_scheduler.start(func, iterable, result, ncores, chunksize, is_ray=is_ray)
+            result = [Future(store=is_ray) for i in range(num_returns)]
+        self.pool_scheduler.start(func, iterable, result, ncores, chunksize, num_returns=num_returns, is_ray=is_ray)
         return result
 
     # iterable is a sequence of (function, args) tuples

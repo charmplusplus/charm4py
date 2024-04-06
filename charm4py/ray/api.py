@@ -53,31 +53,43 @@ def get_ray_class(subclass):
             return ray_proxy
     return RayChare
 
-def get_ray_task(func):
+def get_ray_task(func, num_returns):
     from charm4py import charm
     def task(*args):
         func._ck_coro = True
-        return charm.pool.map_async(func, [args], chunksize=1, multi_future=True, is_ray=True)[0]
+        result = charm.pool.map_async(func, [args], chunksize=1, multi_future=True, 
+                                    num_returns=num_returns, is_ray=True)[0]
+        if num_returns > 1:
+            return result
+        else:
+            return result[0]
+
     return task
 
 def remote(*args, **kwargs):
+    if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+        # used decorator without arguments
+        return remote_deco(args[0])
+    else:
+        num_returns = kwargs.pop("num_returns", 1)
+        def wrap_remote_deco(obj):
+            return remote_deco(obj, num_returns=num_returns)
+        return wrap_remote_deco
+
+def remote_deco(obj, num_returns=1):
     from charm4py import charm, Chare, register
     
-    num_returns = kwargs.pop("num_returns", 1)
-    if len(args) == 1 and len(kwargs) == 0:
-        if isinstance(args[0], types.FunctionType):
-            args[0].remote = get_ray_task(args[0])
-            return args[0]
-        else:       
-            # decorating without any arguments
-            subclass = type(args[0].__name__, (Chare, args[0]), {"__init__": args[0].__init__})
-            register(subclass)
-            rayclass = get_ray_class(subclass)
-            rayclass.__name__ = args[0].__name__
-            return rayclass
+    if isinstance(obj, types.FunctionType):
+        obj.remote = get_ray_task(obj, num_returns)
+        return obj
     else:
-        raise NotImplementedError("Arguments not implemented yet")
-    
+        # decorating without any arguments
+        subclass = type(obj.__name__, (Chare, obj), {"__init__": obj.__init__})
+        register(subclass)
+        rayclass = get_ray_class(subclass)
+        rayclass.__name__ = obj.__name__
+        return rayclass
+
 
 def get(arg):
     from charm4py import charm
