@@ -156,6 +156,9 @@ class Charm(object):
         self.threadMgr = threads.EntryMethodThreadManager(self)
         self.createFuture = self.Future = self.threadMgr.createFuture
 
+        # The send buffer is not currently used since we do not buffer messages on
+        # the sender. This should be used later when scheduling decisions are to be
+        # based on locations of arguments
         self.send_buffer = MessageBuffer()
         self.receive_buffer = MessageBuffer()
         # TODO: maybe implement this buffer in c++
@@ -182,7 +185,7 @@ class Charm(object):
     def get_future_value(self, fut):
         #self.print_dbg("Getting data for object", fut.id)
         obj = fut.lookup_object()
-        if obj == None:
+        if obj is None:
             local_f = LocalFuture()
             self.future_get_buffer[fut.store_id] = (local_f, fut)
             fut.request_object()
@@ -370,11 +373,11 @@ class Charm(object):
                 for i, arg in enumerate(args[:-1]):
                     if isinstance(arg, Future):
                         dep_obj = arg.lookup_object()
-                        if dep_obj != None:
-                            args[i] = dep_obj
-                        else:
+                        if dep_obj is None:
                             dep_ids.append(arg.store_id)
                             arg.request_object()
+                        else:
+                            args[i] = dep_obj
             if len(dep_ids) > 0:
                 charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
             else:

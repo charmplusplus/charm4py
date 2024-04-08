@@ -136,7 +136,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        return self.lookup_object() != None
+        return not (self.lookup_object() is None)
     
     def create_object(self, obj):
         from .charm import charm
