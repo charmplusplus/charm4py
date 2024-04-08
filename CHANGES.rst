@@ -2,6 +2,18 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+What's new in v1.1
+==================
+
+- Add a Ray Core API implementation on Charm4py
+- Fixes reductions over a section, use of futures in threaded entry methods
+- Reduce message latency for builtin Numpy datatypes
+- Disabled local message optimization which broke Charm++ semantics in some
+  cases
+- Use a `@register` decorator for registering Chares instead of passing them
+  as a list to `charm.start`
+- Fix build on ARM-based machines
+
 What's new in v1.0
 ==================
 
