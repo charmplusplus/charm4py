@@ -1,5 +1,6 @@
 from greenlet import getcurrent
-from .ray.api import get_object_store
+#from charm4py.ray.api import get_object_store
+import charm4py.ray.api as ray
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -111,7 +112,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = get_object_store()
+        obj_store = ray.get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_location(self.store_id)
     
@@ -120,7 +121,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = get_object_store()
+        obj_store = ray.get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
     
@@ -129,7 +130,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = get_object_store()
+        obj_store = ray.get_object_store()
         obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
     
     def is_local(self):
@@ -143,7 +144,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = get_object_store()
+        obj_store = ray.get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.store_id, obj)
 
@@ -154,7 +155,7 @@ class Future(object):
         if self._requested:
             return
         from .charm import charm
-        obj_store = get_object_store()
+        obj_store = ray.get_object_store()
         obj_store[self.store_id % charm.numPes()].request_location_object(
             self.store_id, charm.myPe())
         self._requested = True

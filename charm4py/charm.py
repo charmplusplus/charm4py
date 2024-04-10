@@ -29,8 +29,8 @@ from .threads import Future, LocalFuture, LocalMultiFuture
 from . import reduction
 from . import wait
 from charm4py.c_object_store import MessageBuffer
-from . import ray
 import array
+import charm4py.ray.api as ray
 try:
     import numpy
 except ImportError:
