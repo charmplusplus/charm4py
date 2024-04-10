@@ -224,7 +224,7 @@ cdef class CObjectStore:
     cpdef void request_location_object(self, ObjectId obj_id, int requesting_pe):
         # this function is intended to be called on home pes of the object id
         cdef object obj = self.lookup_object(obj_id)
-        if obj != None:
+        if not (obj is None):
             self.proxy[requesting_pe].receive_remote_object(obj_id, obj)
             return
         cdef int pe = self.lookup_location(obj_id, fetch=False)
@@ -248,7 +248,7 @@ cdef class CObjectStore:
 
     cpdef void request_object(self, ObjectId obj_id, int requesting_pe):
         cdef object obj = self.lookup_object(obj_id)
-        if obj == None:
+        if obj is None:
             self.buffer_obj_request(obj_id, requesting_pe)
         else:
             self.proxy[requesting_pe].receive_remote_object(obj_id, obj)
