@@ -5,6 +5,7 @@ from ctypes import c_int, c_short, c_char, c_long, c_longlong, c_byte, \
 import sys
 import os
 import time
+import platform
 if sys.version_info < (3, 0, 0):
   import cPickle
 else:
@@ -108,6 +109,7 @@ class CharmLib(object):
     self.chareNames = []
     self.charm = charm
     self.opts = opts
+    self.system = platform.system().lower()
     self.init(libcharm_path)
     self.ReducerType = ReducerTypes.in_dll(self.lib, "charm_reducers")
     self.times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
@@ -609,9 +611,15 @@ class CharmLib(object):
       p = os.environ.get('LIBCHARM_PATH')
       if p is not None: libcharm_path = p
       if libcharm_path is not None:
-        self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'libcharm.so'))
+        if self.system == 'darwin':
+          self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'libcharm.dylib'))
+        else:
+          self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'libcharm.so'))
       else:
-        self.lib = ctypes.CDLL('libcharm.so')
+        if self.system == 'darwin':
+          self.lib = ctypes.CDLL('libcharm.dylib')
+        else:
+          self.lib = ctypes.CDLL('libcharm.so')
     else:
       self.lib = ctypes.CDLL(os.path.join(libcharm_path, 'charm.dll'))
 
