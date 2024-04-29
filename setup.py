@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import shutil
 import platform
 import subprocess
@@ -8,11 +9,15 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.install import install
 from distutils.errors import DistutilsSetupError
+from distutils.command.install_lib import install_lib as _install_lib
 from distutils import log
 import distutils
 
+import Cython.Compiler.Options
+Cython.Compiler.Options.annotate = True
 
 build_mpi = False
+
 
 
 def get_build_machine():
@@ -184,6 +189,7 @@ def build_libcharm(charm_src_dir, build_dir):
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(lib_src_path, output_dir)
+    
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
@@ -256,14 +262,47 @@ class custom_build_ext(build_ext, object):
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
         super(custom_build_ext, self).run()
 
+def batch_rename(src, dst, src_dir_fd=None, dst_dir_fd=None):
+    os.rename(src, dst,
+              src_dir_fd=src_dir_fd,
+              dst_dir_fd=dst_dir_fd)
+    if "c_object_store" in src:
+        direc = src.rsplit('/', 1)
+        install_name_command = "install_name_tool -change lib/libcharm.dylib "
+        install_name_command += direc[0]
+        install_name_command += "/.libs/libcharm.dylib "
+        install_name_command += direc[0]
+        install_name_command += "/c_object_store.so"
+        log.info(install_name_command)
+        os.system(install_name_command)
+    return dst
+
+class _renameInstalled(_install_lib):
+    def __init__(self, *args, **kwargs):
+        _install_lib.__init__(self, *args, **kwargs)
+    
+    def install(self):
+        log.info("Renaming libraries")
+        outfiles = _install_lib.install(self)
+        matcher = re.compile('\.([^.]+)\.so$')
+        renames = [batch_rename(file, re.sub(matcher, '.so', file))
+                for file in outfiles]
+        return renames
+
+
 
 extensions = []
 py_impl = platform.python_implementation()
 
+log.info("Check PyPy")
 if py_impl == 'PyPy':
     os.environ['CHARM4PY_BUILD_CFFI'] = '1'
-elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+
+# elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+else:
+    log.info("Check sys version info")
     if sys.version_info[0] >= 3:
+        log.info("Defining cython args")
         # compile C-extension module (from cython)
         from Cython.Build import cythonize
         my_include_dirs = []
@@ -281,6 +320,14 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+        
+        cobject_extra_args = []
+        log.info("Extra object args for object store")
+        if os.name != 'nt':
+            if system == 'darwin':
+                cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
+            else:
+                cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
 
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
@@ -289,6 +336,15 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
                               libraries=["charm"],
                               extra_compile_args=['-g0', '-O3'],
                               extra_link_args=extra_link_args,
+                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+        
+        extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
+                              sources=['charm4py/c_object_store.pyx'],
+                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                              libraries=["charm"],
+                              extra_compile_args=['-g0', '-O3'],
+                              extra_link_args=cobject_extra_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
         try:
@@ -326,7 +382,7 @@ setuptools.setup(
             'charmrun = charmrun.start:start',
         ],
     },
-    install_requires=['numpy>=1.10.0', 'greenlet', 'cython<3'],
+    install_requires=['numpy>=1.10.0', 'greenlet', 'cython'],
     #python_requires='>=2.7, ~=3.4',
     classifiers=[
         'Intended Audience :: Developers',
@@ -346,6 +402,7 @@ setuptools.setup(
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,
                 'build_ext': custom_build_ext,
-                'install': custom_install},
+                'install': custom_install,
+                'install_lib': _renameInstalled,},
     **additional_setup_keywords
 )
