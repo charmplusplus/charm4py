@@ -266,7 +266,7 @@ def batch_rename(src, dst, src_dir_fd=None, dst_dir_fd=None):
     os.rename(src, dst,
               src_dir_fd=src_dir_fd,
               dst_dir_fd=dst_dir_fd)
-    if "c_object_store" in src:
+    if "c_object_store" in src and system == "darwin":
         direc = src.rsplit('/', 1)
         install_name_command = "install_name_tool -change lib/libcharm.dylib "
         install_name_command += direc[0]
