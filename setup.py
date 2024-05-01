@@ -56,8 +56,7 @@ elif system == 'darwin':
     os.environ['ARCHFLAGS'] = f'-arch {machine}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
-    env = os.environ.get('CPPFLAGS')
-    if env:
+    if 'CPPFLAGS' in os.environ:
         os.environ['CPPFLAGS'] += f'-Wno-error=implicit-function-declaration' #needed because this error will cause builds to fail if the Clang compiler is version 15.0.0 or newer (it is only a warning on older builds)
     else:
         os.environ['CPPFLAGS'] = f'-Wno-error=implicit-function-declaration'
