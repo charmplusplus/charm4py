@@ -57,9 +57,9 @@ elif system == 'darwin':
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
     if 'CPPFLAGS' in os.environ:
-        os.environ['CPPFLAGS'] += f'-Wno-error=implicit-function-declaration' #needed because this error will cause builds to fail if the Clang compiler is version 15.0.0 or newer (it is only a warning on older builds)
+        os.environ['CPPFLAGS'] += ' -Wno-error=implicit-function-declaration' # needed because some functions used by charm4py are not exported by charm.
     else:
-        os.environ['CPPFLAGS'] = f'-Wno-error=implicit-function-declaration'
+        os.environ['CPPFLAGS'] = '-Wno-error=implicit-function-declaration '
 else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
