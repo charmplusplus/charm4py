@@ -23,7 +23,7 @@ build_mpi = False
 def get_build_machine():
     machine = platform.machine()
     if machine == 'arm64' or machine == 'aarch64':
-        return 'arm8'
+        return 'arm64'
     return machine
 
 
