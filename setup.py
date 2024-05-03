@@ -265,21 +265,6 @@ class custom_build_ext(build_ext, object):
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
         super(custom_build_ext, self).run()
 
-def batch_rename(src, dst, src_dir_fd=None, dst_dir_fd=None):
-    os.rename(src, dst,
-              src_dir_fd=src_dir_fd,
-              dst_dir_fd=dst_dir_fd)
-    if "c_object_store" in src and system == "darwin":
-        direc = os.path.dirname(src)
-        install_name_command = "install_name_tool -change lib/libcharm.dylib "
-        install_name_command += direc
-        install_name_command += "/.libs/libcharm.dylib "
-        install_name_command += direc
-        install_name_command += "/c_object_store.so"
-        log.info(install_name_command)
-        os.system(install_name_command)
-    return dst
-
 class _renameInstalled(_install_lib):
     def __init__(self, *args, **kwargs):
         _install_lib.__init__(self, *args, **kwargs)
@@ -287,10 +272,26 @@ class _renameInstalled(_install_lib):
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
-        matcher = re.compile('\.([^.]+)\.so$')
-        renames = [batch_rename(file, re.sub(matcher, '.so', file))
-                for file in outfiles]
-        return renames
+        for file in outfiles:
+            if "c_object_store" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/c_object_store.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+            elif "charmlib_cython" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/charmlib_cython.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+        return outfiles
 
 
 
