@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import shutil
 import platform
 import subprocess
@@ -8,6 +9,7 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.install import install
 from distutils.errors import DistutilsSetupError
+from distutils.command.install_lib import install_lib as _install_lib
 from distutils import log
 import distutils
 
@@ -17,10 +19,11 @@ Cython.Compiler.Options.annotate = True
 build_mpi = False
 
 
+
 def get_build_machine():
     machine = platform.machine()
     if machine == 'arm64' or machine == 'aarch64':
-        return 'arm8'
+        return 'arm64'
     return machine
 
 
@@ -53,6 +56,10 @@ elif system == 'darwin':
     os.environ['ARCHFLAGS'] = f'-arch {machine}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
+    if 'CPPFLAGS' in os.environ:
+        os.environ['CPPFLAGS'] += ' -Wno-error=implicit-function-declaration' # needed because some functions used by charm4py are not exported by charm.
+    else:
+        os.environ['CPPFLAGS'] = '-Wno-error=implicit-function-declaration '
 else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
@@ -185,6 +192,7 @@ def build_libcharm(charm_src_dir, build_dir):
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(lib_src_path, output_dir)
+    
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
@@ -256,6 +264,35 @@ class custom_build_ext(build_ext, object):
         if not self.dry_run:
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
         super(custom_build_ext, self).run()
+
+class _renameInstalled(_install_lib):
+    def __init__(self, *args, **kwargs):
+        _install_lib.__init__(self, *args, **kwargs)
+    
+    def install(self):
+        log.info("Renaming libraries")
+        outfiles = _install_lib.install(self)
+        for file in outfiles:
+            if "c_object_store" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/c_object_store.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+            elif "charmlib_cython" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/charmlib_cython.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+        return outfiles
+
 
 
 extensions = []
@@ -369,6 +406,7 @@ setuptools.setup(
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,
                 'build_ext': custom_build_ext,
-                'install': custom_install},
+                'install': custom_install,
+                'install_lib': _renameInstalled,},
     **additional_setup_keywords
 )
