@@ -1,4 +1,4 @@
-cython>=3.0.0
-numpy>=1.10.0
+cython
+numpy
 greenlet>=3.0.0
-cmake
+cmake #required for the charm++ build
