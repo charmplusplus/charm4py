@@ -4,8 +4,37 @@ from ..threads import Future
 import charm4py
 #from charm4py import charm, register, Group, ObjectStore
 
+
+'''
+class RayClusterState(object):
+    def __init__(self):
+        self.num_cpus = self.avail_num_cpus = 0
+        self.num_gpus = self.avail_num_gpus = 0
+        self.num_cpus_per_host = self.num_gpus_per_host = 0
+        self.num_hosts = 0
+
+    def set_state(self, ncpus_per_host, ngpus_per_host, num_hosts):
+        self.num_cpus = self.avail_num_cpus = ncpus_per_host * num_hosts
+        self.num_gpus = self.avail_num_gpus = ngpus_per_host * num_hosts
+        self.num_cpus_per_host = ncpus_per_host
+        self.num_gpus_per_host = ngpus_per_host
+        self.num_hosts = num_hosts
+
+    def reserve_bundle(self, bundle, host):
+        req_cpu = bundle.pop("CPU", 0)
+        req_gpu = bundle.pop("GPU", 0)
+        if req_cpu >= self.avail_num_cpus and req_gpu >= self.avail_num_gpus:
+            
+            self.avail_num_cpus -= req_cpu
+            self.avail_num_gpus -= req_gpu
+        else:
+            raise RuntimeError("Cannot reserve this bundle, not enough resources")
+'''
+
 counter = 0
 object_store = None
+#ray_cluster_state = RayClusterState()
+
 
 class ObjectRef(Future):
     pass
@@ -16,21 +45,32 @@ def is_initialized():
 
 
 def cluster_resources():
-    return {"CPU": charm4py.charm.numPes(), "GPU": 0}
+    global ray_cluster_state
+    return {"CPU": ray_cluster_state.num_cpus, "GPU": ray_cluster_state.num_gpus}
 
 
 def init(*args, **kwargs):
     print("Initializing object store for ray")
     global object_store
     object_store = charm4py.Group(charm4py.ObjectStore)
+    
+    #ray_cluster_state.num_cpus = kwargs.pop("num_cpus", charm4py.charm.numPes())
+    #ray_cluster_state.num_gpus = kwargs.pop("num_gpus", 0)
+
     charm4py.charm.thisProxy.updateGlobals(
-        {'object_store' : object_store,},
+        {'object_store' : object_store},
         awaitable=True, module_name='charm4py.ray.api').get()
 
 
 def get_object_store():
     global object_store
     return object_store
+
+
+def get_cluster_state():
+    global ray_cluster_state
+    return ray_cluster_state
+
 
 class RayProxyFunction(object):
     def __init__(self, func):
@@ -58,6 +98,13 @@ class RayProxy(object):
         return call_remote
 
 
+def consume_options(cls, *args, **kwargs):
+    #cls.scheduling_startegy = kwargs.pop("scheduling_strategy", None)
+    #cls.num_cpus = kwargs.pop("num_cpus", 1)
+    #cls.num_gpus = kwargs.pop("num_gpus", 0)
+    pass
+
+
 def get_ray_class(subclass):
     #from charm4py import Chare, register, charm
     @charm4py.register
@@ -68,6 +115,10 @@ def get_ray_class(subclass):
             ray_proxy = RayProxy(subclass, a, counter % charm4py.charm.numPes())
             counter += 1
             return ray_proxy
+
+        def options(self, *args, **kwargs):
+            consume_options(self, *args, **kwargs)
+
     return RayChare
 
 def get_ray_task(func, num_returns):
@@ -84,6 +135,7 @@ def get_ray_task(func, num_returns):
     return task
 
 def remote(*args, **kwargs):
+    num_cpus = kwargs.pop("num_cpus", 1)
     if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
         # used decorator without arguments
         return remote_deco(args[0])

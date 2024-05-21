@@ -1,0 +1,1 @@
+from .._private.services import get_node_ip_address
