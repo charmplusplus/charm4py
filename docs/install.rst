@@ -16,7 +16,7 @@ CPython (most common implementation) and PyPy_.
 
 
 Installing Charm4Py on a laptop/personal machine
---------------------------------------------
+------------------------------------------------
 
 This install process covers the installation of Charm4Py on a laptop or personal machine, as opposed to a cluster.
 
