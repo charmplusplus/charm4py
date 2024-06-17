@@ -69,7 +69,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install setuptools cython cffi greenlet numpy=1.26.4 torch torchvision
+          pip3 install setuptools cython cffi greenlet numpy==1.26.4 torch torchvision
       - name: build-charm4py
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
