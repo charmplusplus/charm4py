@@ -18,7 +18,7 @@ jobs:
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
           pip3 install setuptools cython cffi greenlet numpy torch torchvision
-          git clone https://github.com/UIUC-PPL/charm charm_src/charm
+          git clone https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
           export CHARM4PY_BUILD_CFFI=1
@@ -46,7 +46,7 @@ jobs:
       - name: build-charm4py
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-          git clone https://github.com/UIUC-PPL/charm charm_src/charm
+          git clone https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
           export CHARM4PY_BUILD_CFFI=1
@@ -73,7 +73,7 @@ jobs:
       - name: build-charm4py
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-          git clone https://github.com/UIUC-PPL/charm charm_src/charm
+          git clone https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
           export CHARM4PY_BUILD_CFFI=1
@@ -84,5 +84,5 @@ jobs:
           export CHARM4PY_TEST_NUM_PROCESSES=2
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
           python3 auto_test.py
-    
-    
+
+
