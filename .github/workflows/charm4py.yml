@@ -82,6 +82,7 @@ jobs:
         run: |
           export PYTHONPATH="$PWD"
           export CHARM4PY_TEST_NUM_PROCESSES=2
+          export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
           python3 auto_test.py
     
     
