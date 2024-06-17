@@ -197,7 +197,7 @@ def build_libcharm(charm_src_dir, build_dir):
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(lib_src_path, output_dir)
-    
+
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
@@ -273,7 +273,7 @@ class custom_build_ext(build_ext, object):
 class _renameInstalled(_install_lib):
     def __init__(self, *args, **kwargs):
         _install_lib.__init__(self, *args, **kwargs)
-    
+
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
@@ -329,7 +329,7 @@ else:
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
-        
+
         cobject_extra_args = []
         log.info("Extra object args for object store")
         if os.name != 'nt':
@@ -346,7 +346,7 @@ else:
                               extra_compile_args=['-g0', '-O3'],
                               extra_link_args=extra_link_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
-        
+
         extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
                               sources=['charm4py/c_object_store.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
@@ -392,7 +392,7 @@ setuptools.setup(
         ],
     },
     install_requires=['numpy>=1.10.0', 'greenlet>=3.0.0', 'cython>=3.0.0', 'cmake'],
-    #python_requires='>=2.7, ~=3.4',
+    python_requires='~=3.6',
     classifiers=[
         'Intended Audience :: Developers',
         'License :: Free for non-commercial use',
