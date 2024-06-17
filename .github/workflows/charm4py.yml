@@ -37,12 +37,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - name: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
       - name: build-charm4py
         run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-          pip3 install setuptools cython cffi greenlet numpy<2 torch torchvision
           git clone https://github.com/UIUC-PPL/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
@@ -50,7 +55,6 @@ jobs:
           python3 setup.py build_ext --inplace
       - name: test-charm4py
         run: |
-          source .venv/bin/activate
           export PYTHONPATH="$PWD"
           export CHARM4PY_TEST_NUM_PROCESSES=2
           python3 auto_test.py
