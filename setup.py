@@ -23,9 +23,14 @@ build_mpi = False
 def get_build_machine():
     machine = platform.machine()
     if machine == 'arm64' or machine == 'aarch64':
-        return 'arm64'
+        return 'arm8'
     return machine
 
+def get_archflag_machine():
+    machine = platform.machine()
+    if machine == 'arm64' or machine == 'aarch64':
+        return 'arm64'
+    return machine
 
 def get_build_os():
     os = platform.system()
@@ -53,7 +58,7 @@ if system == 'windows' or system.startswith('cygwin'):
     libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
 elif system == 'darwin':
-    os.environ['ARCHFLAGS'] = f'-arch {machine}'
+    os.environ['ARCHFLAGS'] = f'-arch {get_archflag_machine()}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
     if 'CPPFLAGS' in os.environ:
@@ -169,7 +174,7 @@ def build_libcharm(charm_src_dir, build_dir):
             raise DistutilsSetupError('An error occured while building charm library')
 
         if system == 'darwin':
-            old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.so')
+            old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.dylib')
             new_file_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
             shutil.move(old_file_path, new_file_path)
             cmd = ['install_name_tool', '-id', '@rpath/../.libs/' + libcharm_filename, new_file_path]
