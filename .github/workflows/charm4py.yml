@@ -50,6 +50,7 @@ jobs:
           python3 setup.py build_ext --inplace
       - name: test-charm4py
         run: |
+          source .venv/bin/activate
           export PYTHONPATH="$PWD"
           export CHARM4PY_TEST_NUM_PROCESSES=2
           python3 auto_test.py
