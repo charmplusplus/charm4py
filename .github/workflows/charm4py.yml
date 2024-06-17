@@ -47,19 +47,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          pip3 install setuptools cffi torch torchvision
+          pip install setuptools cython cffi greenlet numpy torch torchvision
       - name: build-charm4py
         run: |
           git clone https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
           export CHARM4PY_BUILD_CFFI=1
-          python3 setup.py build_ext --inplace
+          python setup.py build_ext --inplace
       - name: test-charm4py
         run: |
           export PYTHONPATH="$PWD"
           export CHARM4PY_TEST_NUM_PROCESSES=2
-          python3 auto_test.py
+          python auto_test.py
 
   # macos-x86:
   #   runs-on: macos-12
