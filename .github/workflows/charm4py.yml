@@ -45,6 +45,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip3 install -r requirements.txt
+          pip3 install setuptools cffi torch torchvision
       - name: build-charm4py
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
