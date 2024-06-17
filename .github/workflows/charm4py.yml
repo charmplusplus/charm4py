@@ -9,43 +9,47 @@ on:
     - cron: "5 0 * * *" # Runs at 00:05 UTC every day.
 
 jobs:
-  ubuntu-latest:
-    runs-on: ubuntu-latest
+  # ubuntu-latest:
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: build-charm4py
+  #       run: |
+  #         git fetch --unshallow # Need full repo for 'git describe' used by setup.py
+  #         pip3 install setuptools cython cffi greenlet numpy torch torchvision
+  #         git clone https://github.com/charmplusplus/charm charm_src/charm
+  #         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+  #         export CHARM_BUILD_PROCESSES=2
+  #         export CHARM4PY_BUILD_CFFI=1
+  #         python3 setup.py build_ext --inplace
+  #     - name: test-charm4py
+  #       run: |
+  #         export PYTHONPATH="$PWD"
+  #         export CHARM4PY_TEST_NUM_PROCESSES=2
+  #         python3 auto_test.py
+
+  auto_test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.12", "3.13-dev"]
+        os: [ubuntu-latest, macos-13, macos-14]
+      fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
-      - name: build-charm4py
-        run: |
-          git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-          pip3 install setuptools cython cffi greenlet numpy torch torchvision
-          git clone https://github.com/charmplusplus/charm charm_src/charm
-          export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-          export CHARM_BUILD_PROCESSES=2
-          export CHARM4PY_BUILD_CFFI=1
-          python3 setup.py build_ext --inplace
-      - name: test-charm4py
-        run: |
-          export PYTHONPATH="$PWD"
-          export CHARM4PY_TEST_NUM_PROCESSES=2
-          python3 auto_test.py
-
-  macos:
-    runs-on: macos-14
-
-    steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full repo for 'git describe' used by setup.py
       - name: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          python3 -m pip install --upgrade pip
-          pip3 install -r requirements.txt
           pip3 install setuptools cffi torch torchvision
       - name: build-charm4py
         run: |
-          git fetch --unshallow # Need full repo for 'git describe' used by setup.py
           git clone https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=2
@@ -57,32 +61,32 @@ jobs:
           export CHARM4PY_TEST_NUM_PROCESSES=2
           python3 auto_test.py
 
-  macos-x86:
-    runs-on: macos-12
+  # macos-x86:
+  #   runs-on: macos-12
 
-    steps:
-      - uses: actions/checkout@v3
-      - name: setup-python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip3 install setuptools cython cffi greenlet numpy==1.23.2 torch torchvision
-      - name: build-charm4py
-        run: |
-          git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-          git clone https://github.com/charmplusplus/charm charm_src/charm
-          export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-          export CHARM_BUILD_PROCESSES=2
-          export CHARM4PY_BUILD_CFFI=1
-          python3 setup.py build_ext --inplace
-      - name: test-charm4py
-        run: |
-          export PYTHONPATH="$PWD"
-          export CHARM4PY_TEST_NUM_PROCESSES=2
-          export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-          python3 auto_test.py
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: setup-python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #     - name: Install dependencies
+  #       run: |
+  #         python3 -m pip install --upgrade pip
+  #         pip3 install setuptools cython cffi greenlet numpy==1.23.2 torch torchvision
+  #     - name: build-charm4py
+  #       run: |
+  #         git fetch --unshallow # Need full repo for 'git describe' used by setup.py
+  #         git clone https://github.com/charmplusplus/charm charm_src/charm
+  #         export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+  #         export CHARM_BUILD_PROCESSES=2
+  #         export CHARM4PY_BUILD_CFFI=1
+  #         python3 setup.py build_ext --inplace
+  #     - name: test-charm4py
+  #       run: |
+  #         export PYTHONPATH="$PWD"
+  #         export CHARM4PY_TEST_NUM_PROCESSES=2
+  #         export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+  #         python3 auto_test.py
 
 
