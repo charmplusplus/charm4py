@@ -65,11 +65,11 @@ jobs:
       - name: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install setuptools cython cffi greenlet numpy==1.26.4 torch torchvision
+          pip3 install setuptools cython cffi greenlet numpy torch torchvision
       - name: build-charm4py
         run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
