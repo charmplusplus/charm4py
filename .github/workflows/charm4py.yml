@@ -30,7 +30,7 @@ jobs:
           python3 auto_test.py
 
   macos:
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-14, macos-12]
