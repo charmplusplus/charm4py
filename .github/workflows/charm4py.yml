@@ -37,12 +37,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: venv setup
+      - name: build-charm4py
         run: |
           python3 -m venv .venv
           source .venv/bin/activate
-      - name: build-charm4py
-        run: |
           git fetch --unshallow # Need full repo for 'git describe' used by setup.py
           pip3 install setuptools cython cffi greenlet numpy torch torchvision
           git clone https://github.com/UIUC-PPL/charm charm_src/charm
