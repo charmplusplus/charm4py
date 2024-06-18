@@ -75,7 +75,7 @@ the scope of this section.
 
 - Charm4py can access the Charm++ shared library using three different technologies:
   ctypes, cffi and cython. If you are using CPython (the most common
-  implemention of Python), make sure you are using the Cython layer (this is
+  implementation of Python), make sure you are using the Cython layer (this is
   what the pip version of Charm4py uses). If you are using PyPy,
   make sure you are using the CFFI layer. Charm4py will warn at startup if you
   are not using the most efficient layer.
@@ -83,10 +83,10 @@ the scope of this section.
 
 
 
-.. _numpy: http://www.numpy.org/
+.. _numpy: https://www.numpy.org/
 
-.. _Numba: http://numba.pydata.org/
+.. _Numba: https://numba.pydata.org/
 
 .. _Cython: https://cython.org/
 
-.. _PyPy: http://pypy.org/
+.. _PyPy: https://pypy.org/

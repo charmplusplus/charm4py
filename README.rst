@@ -6,7 +6,7 @@ Charm4py
 .. image:: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml/badge.svg?event=push
        :target: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml
 
-.. image:: http://readthedocs.org/projects/charm4py/badge/?version=latest
+.. image:: https://readthedocs.org/projects/charm4py/badge/?version=latest
        :target: https://charm4py.readthedocs.io/
 
 .. image:: https://img.shields.io/pypi/v/charm4py.svg
