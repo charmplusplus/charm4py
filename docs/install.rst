@@ -12,7 +12,7 @@ following Python implementations:
 CPython (most common implementation) and PyPy_.
 
 
-.. _PyPy: http://pypy.org
+.. _PyPy: https://pypy.org
 
 
 Installing Charm4Py on a laptop/personal machine
@@ -41,13 +41,13 @@ into that folder::
 
 Once this is done, there are two ways to build Charm4py. The first way is to change back up
 into the Charm4Py directory and run the install script::
-    
+
     $ cd ..
     $ python3 setup.py install
 
 The other option is to manually build Charm++ before building Charm4py. To do this, change to
 the charm directory and run the following build command::
-    
+
     $ cd charm
     $ ./build charm4py netlrts-<os>-<architecture> -j<N> --with-production
 
@@ -61,7 +61,7 @@ Then, return to the charm4py directory and run setup.py::
     $ python3 setup.py install
 
 
-After building, you can run Charm4py examples. One example you can try is 
+After building, you can run Charm4py examples. One example you can try is
 array_hello.py, which can be run as follows::
 
     $ cd examples/hello
