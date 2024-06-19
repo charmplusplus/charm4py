@@ -125,7 +125,7 @@ class DataWorker(object):
 def sync_train(args):
     ray.init()
 
-    iterations = 101
+    iterations = 11
     num_workers = 4
 
     model = ConvNet()
@@ -159,7 +159,7 @@ def async_train(args):
 
     model = ConvNet()
     test_loader = get_data_loader()[1]
-    iterations = 101
+    iterations = 11
     num_workers = 4
 
     print("Running asynchronous parameter server training.")

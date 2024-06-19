@@ -12,85 +12,77 @@ following Python implementations:
 CPython (most common implementation) and PyPy_.
 
 
-.. _PyPy: http://pypy.org
+.. _PyPy: https://pypy.org
 
 
-pip
----
+Installing Charm4Py on a laptop/personal machine
+------------------------------------------------
 
-To install on regular Linux, macOS and Windows machines, do::
+This install process covers the installation of Charm4Py on a laptop or personal machine, as opposed to a cluster.
 
-    $ pip3 install charm4py
-
-.. note::
-
-    This option uses Charm++'s TCP layer as the communication layer.
-    If you want a faster communication layer (e.g. MPI), see "Install from
-    source" below.
-
-    pip >= 8.0 is recommended to simplify the install and avoid building Charm4py or
-    any dependencies from sources.
-
-    Note that a 64-bit version of Python is required to install and run Charm4py.
-
-
-Install from source
--------------------
-
-.. note::
-    This is not required if installing from a binary wheel with pip.
-
-Prerequisites:
+Before installing, you need the following prerequisites:
     - CPython: numpy, greenlet and cython (``pip3 install 'numpy>=1.10.0' cython greenlet``)
     - PyPy: none
 
-To build the latest *stable* release, do::
+You can get these prerequisites by running the following command::
 
-  $ pip3 install [--install-option="--mpi"] charm4py --no-binary charm4py
+    $ pip3 install -r requirements.txt
 
-Or download the source distribution from PyPI, uncompress and run
-``python3 setup.py install [--mpi]``.
+The first step is to clone the Charm4py repository from Git::
 
-The optional flag ``--mpi``, when enabled, will build the
-Charm++ library with the MPI communication layer (MPI headers and libraries
-need to be installed on the system).
-
-To build the latest *development* version, download Charm4py and Charm++ source code
-and run setup::
-
-    $ git clone https://github.com/UIUC-PPL/charm4py
+    $ git clone https://github.com/charmplusplus/charm4py.git
     $ cd charm4py
-    $ git clone https://github.com/UIUC-PPL/charm charm_src/charm
-    $ python3 setup.py install [--mpi]
 
-.. note::
+Next, create a folder called charm_src in the charm4py repo, and then clone the Charm++ repo
+into that folder::
 
-    The TCP layer (selected by default) will work on desktop, servers and
-    small clusters. The MPI layer is faster and should work on most systems
-    including large clusters and supercomputers. Charm++ however also has support
-    for specialized network layers like uGNI and UCX. To use these, you have
-    to manually build the Charm++ library (see below).
+    $ mkdir charm_src && cd charm_src
+    $ git clone https://github.com/charmplusplus/charm.git
+
+Once this is done, there are two ways to build Charm4py. The first way is to change back up
+into the Charm4Py directory and run the install script::
+
+    $ cd ..
+    $ python3 setup.py install
+
+The other option is to manually build Charm++ before building Charm4py. To do this, change to
+the charm directory and run the following build command::
+
+    $ cd charm
+    $ ./build charm4py netlrts-<os>-<architecture> -j<N> --with-production
+
+For building on a laptop, you must use a netlrts build of Charm4Py. Check the Charm++ documentation
+to identify the correct os and architecture command to pass into the build command. The -j option
+is a cmake option that launches N threads for the make.
+
+Then, return to the charm4py directory and run setup.py::
+
+    $ cd ../..
+    $ python3 setup.py install
 
 
-Manually building the Charm++ shared library
---------------------------------------------
+After building, you can run Charm4py examples. One example you can try is
+array_hello.py, which can be run as follows::
 
-This is needed when building Charm++ for specialized machine/network layers
-other than TCP and MPI (e.g. Cray XC/XE).
+    $ cd examples/hello
+    $ python -m charmrun.start +p2 array_hello.py
 
-Before running ``python3 setup.py`` in the steps above, enter the Charm++ source code
-directory (``charm_src/charm``), and manually build the Charm++ library. The build
-command syntax is::
+Installing Charm4Py on a cluster machine
+----------------------------------------
 
-    $ ./build charm4py <version> -j<N> --with-production
+To install Charm4Py on a cluster machine, you will generally follow the same steps as above, but
+with the following changes. First, when building Charm++, use the MPI build instead of the netlrts
+build::
 
-where ``<version>`` varies based on the system and communication layer, and ``<N>``
-is the number of processes to use for compiling.
-For help in choosing the correct ``<version>``, please refer to the Charm++ manual_
-and the README in Charm++'s root directory.
+    $ ./build charm4py mpi-<os>-<architecture> -j<N> --with-production
 
-After the library has been built, continue with ``python3 setup.py install`` in the
-Charm4py source root directory.
+Next, pass in the MPI option to the python setup script::
+
+    $ python3 setup.py install --mpi
+
+Finally, if necessary, when installing dependencies or when running the install script, add the --user
+option to the Python command to complete the installation without permission errors.
+
 
 
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm
