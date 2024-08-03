@@ -392,7 +392,7 @@ setuptools.setup(
         ],
     },
     install_requires=['numpy>=1.10.0', 'greenlet>=3.0.0', 'cython>=3.0.0', 'cmake'],
-    python_requires='~=3.6',
+    python_requires='>=3.7',
     classifiers=[
         'Intended Audience :: Developers',
         'License :: Free for non-commercial use',
