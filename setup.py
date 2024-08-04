@@ -369,42 +369,13 @@ if os.environ.get('CHARM4PY_BUILD_CFFI') == '1':
     additional_setup_keywords['cffi_modules'] = 'charm4py/charmlib/charmlib_cffi_build.py:ffibuilder'
 
 
-with open('README.rst', 'r') as f:
-    long_description = f.read()
-
-
 setuptools.setup(
-    name='charm4py',
     version=charm4py_version,
-    author='Juan Galvez and individual contributors',
-    author_email='jjgalvez@illinois.edu',
-    description='Charm4py Parallel Programming Framework',
-    long_description=long_description,
-    url='https://github.com/charmplusplus/charm4py',
-    keywords='parallel parallel-programming distributed distributed-computing hpc HPC runtime',
     packages=setuptools.find_packages(),
     package_data={
         'charm4py': ['libcharm_version'],
     },
-    entry_points={
-        'console_scripts': [
-            'charmrun = charmrun.start:start',
-        ],
-    },
     install_requires=['numpy>=1.10.0', 'greenlet>=3.0.0', 'cython>=3.0.0', 'cmake'],
-    python_requires='~=3.6',
-    classifiers=[
-        'Intended Audience :: Developers',
-        'License :: Free for non-commercial use',
-        'Operating System :: MacOS :: MacOS X',
-        'Operating System :: POSIX',
-        'Operating System :: POSIX :: Linux',
-        'Operating System :: Microsoft :: Windows',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
-        'Topic :: System :: Distributed Computing',
-        'Topic :: System :: Clustering',
-    ],
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,
                 'build_ext': custom_build_ext,
