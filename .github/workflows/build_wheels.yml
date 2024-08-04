@@ -27,6 +27,8 @@ jobs:
           echo "Building wheels for ${{ matrix.os }}"
           pwd
           ls
+          git --help
+          git describe --help
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.20.0
