@@ -22,11 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Print status
+        run: echo "Building wheels for ${{ matrix.os }}"
+        run: pwd
+        run: ls ./charm4py
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.20.0
         with:
-          package-dir: ../
-          output-dir: ../wheelhouse
+          package-dir: .
+          output-dir: ./wheelhouse
 
       - uses: actions/upload-artifact@v4
         with:
