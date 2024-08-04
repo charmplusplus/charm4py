@@ -375,7 +375,7 @@ setuptools.setup(
     package_data={
         'charm4py': ['libcharm_version'],
     },
-    install_requires=['numpy>=1.10.0', 'greenlet>=3.0.0', 'cython>=3.0.0', 'cmake'],
+    #install_requires=['numpy>=1.10.0', 'greenlet>=3.0.0', 'cython>=3.0.0', 'cmake'],
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,
                 'build_ext': custom_build_ext,
