@@ -23,9 +23,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Print status
-        run: echo "Building wheels for ${{ matrix.os }}"
-        run: pwd
-        run: ls ./charm4py
+        run: |
+          echo "Building wheels for ${{ matrix.os }}"
+          pwd
+          ls
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.20.0
