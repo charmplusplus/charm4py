@@ -1,14 +1,15 @@
-name: Build wheels
+name: Build and upload wheels
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches:
-      - maya/modernize-build
-  release:
-    types:
-      - published
+    inputs:
+      job:
+        description: "Job to run"
+        required: true
+        default: "build_wheels"
+        options:
+          - build_wheels
+          - publish_test
 
 jobs:
   build_wheels:
@@ -17,20 +18,41 @@ jobs:
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: [ubuntu-latest, macos-13, macos-14]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.8
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
 
-      - name: Print status
-        run: |
-          echo "Building wheels for ${{ matrix.os }}"
-          pwd
-          ls
-          git --help
-          git describe --help
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
+
+      - name: Checkout charm_src # is this best practice? should we use a submodule?
+        uses: actions/checkout@v4
+        with:
+          repository: charmplusplus/charm
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: charm_src/charm
+          fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
+        with:
+          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
+
+      - name: Checkout charm_src # is this best practice? should we use a submodule?
+        uses: actions/checkout@v4
+        with:
+          repository: charmplusplus/charm
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: charm_src/charm
+          fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
 
       - name: Build wheels
+        env:
+          CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
+        env:
+          CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
         uses: pypa/cibuildwheel@v2.20.0
         with:
           package-dir: .
@@ -40,3 +62,27 @@ jobs:
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
+
+  publish_test:
+    name: Publish Python 🐍 distribution 📦 to TestPyPI
+    needs:
+      - build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/charm4py
+
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v3
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish distribution 📦 to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
