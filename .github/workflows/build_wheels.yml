@@ -1,15 +1,6 @@
-name: Build and upload wheels
+name: Build wheels
 
-on:
-  workflow_dispatch:
-    inputs:
-      job:
-        description: "Job to run"
-        required: true
-        default: "build_wheels"
-        options:
-          - build_wheels
-          - publish_test
+on: workflow_dispatch
 
 jobs:
   build_wheels:
@@ -56,27 +47,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
-          path: ./wheelhouse/*.whl
-
-  publish_test:
-    name: Publish Python 🐍 distribution 📦 to TestPyPI
-    runs-on: ubuntu-latest
-
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/charm4py
-
-    permissions:
-      id-token: write # IMPORTANT: mandatory for trusted publishing
-
-    steps:
-      - name: Download all the dists
-        uses: actions/download-artifact@v3
-        with:
           name: python-package-distributions
           path: dist/
-      - name: Publish distribution 📦 to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
