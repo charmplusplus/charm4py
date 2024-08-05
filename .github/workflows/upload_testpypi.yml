@@ -6,7 +6,6 @@ on:
       workflow_id:
         description: "The workflow ID to pull wheels from"
         required: true
-        default: "0"
         type: string
 
 jobs:
@@ -28,6 +27,7 @@ jobs:
           pattern: cibw-* # download all the wheels
           path: dist
           merge-multiple: true
+          run-id: ${{ github.event.inputs.workflow_id }}
       - name: Check status
         run: ls -l dist
       # - name: Publish distribution 📦 to TestPyPI
