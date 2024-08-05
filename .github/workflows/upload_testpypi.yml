@@ -25,10 +25,14 @@ jobs:
         uses: dawidd6/action-download-artifact@v2
         with:
           # download all the wheels
-          path: dist
-          merge-multiple: true
+          path: unmerged
           run_id: ${{ github.event.inputs.workflow_id }}
           workflow: build_wheels.yml
+
+      - name: Merge files to dist
+        run: |
+          mkdir dist
+          mv unmerged/*/*.whl dist
 
       - name: Publish distribution 📦 to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
