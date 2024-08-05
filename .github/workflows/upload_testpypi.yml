@@ -24,15 +24,13 @@ jobs:
       - name: Download all the dists
         uses: dawidd6/action-download-artifact@v2
         with:
-          #pattern: "cibw-*" # download all the wheels
+          # download all the wheels
           path: dist
           merge-multiple: true
-          run-id: ${{ github.event.inputs.workflow_id }}
+          run_id: ${{ github.event.inputs.workflow_id }}
           workflow: build_wheels.yml
 
-      - name: Check status
-        run: ls -l dist
-      # - name: Publish distribution 📦 to TestPyPI
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     repository-url: https://test.pypi.org/legacy/
+      - name: Publish distribution 📦 to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
