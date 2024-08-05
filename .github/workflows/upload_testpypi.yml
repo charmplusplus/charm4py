@@ -2,7 +2,6 @@ name: Publish wheels to testpypi
 
 on:
   workflow_dispatch:
-  pull_request:
 
 jobs:
   publish_test:
@@ -18,7 +17,7 @@ jobs:
 
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           pattern: cibw-* # download all the wheels
           path: dist
