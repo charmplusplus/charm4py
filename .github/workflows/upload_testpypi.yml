@@ -18,8 +18,9 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v3
         with:
-          nname: python-package-distributions
-          path: dist/
+          pattern: cibw-* # download all the wheels
+          path: dist
+          merge-multiple: true
       - name: Publish distribution 📦 to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

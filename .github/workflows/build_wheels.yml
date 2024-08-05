@@ -41,11 +41,8 @@ jobs:
         env:
           CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
         uses: pypa/cibuildwheel@v2.20.0
-        with:
-          package-dir: .
-          output-dir: ./wheelhouse
 
       - uses: actions/upload-artifact@v4
         with:
-          name: python-package-distributions
-          path: dist/
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
