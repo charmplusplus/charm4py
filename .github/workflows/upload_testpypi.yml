@@ -2,6 +2,12 @@ name: Publish wheels to testpypi
 
 on:
   workflow_dispatch:
+    imputs:
+      workflow_id:
+        description: "The workflow ID to pull wheels from"
+        required: true
+        default: "0"
+        type: string
 
 jobs:
   publish_test:
@@ -22,7 +28,9 @@ jobs:
           pattern: cibw-* # download all the wheels
           path: dist
           merge-multiple: true
-      - name: Publish distribution 📦 to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
+      - name: Check status
+        run: ls -l dist
+      # - name: Publish distribution 📦 to TestPyPI
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     repository-url: https://test.pypi.org/legacy/
