@@ -37,8 +37,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: charm_src/charm
           fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
-        with:
-          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
 
       - name: Checkout charm_src # is this best practice? should we use a submodule?
         uses: actions/checkout@v4
@@ -49,8 +47,6 @@ jobs:
           fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
 
       - name: Build wheels
-        env:
-          CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
         env:
           CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
         uses: pypa/cibuildwheel@v2.20.0
