@@ -24,7 +24,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          pattern: "cibw-*" # download all the wheels
+          #pattern: "cibw-*" # download all the wheels
           path: dist
           merge-multiple: true
           run-id: ${{ github.event.inputs.workflow_id }}
