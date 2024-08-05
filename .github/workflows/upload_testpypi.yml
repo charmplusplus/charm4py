@@ -27,6 +27,7 @@ jobs:
           #pattern: "cibw-*" # download all the wheels
           path: dist
           merge-multiple: true
+          github-token: ${{ secrets.GH_PAT }} # token with actions:read permissions on target repo
           run-id: ${{ github.event.inputs.workflow_id }}
       - name: Check status
         run: ls -l dist
