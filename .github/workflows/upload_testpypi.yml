@@ -28,6 +28,7 @@ jobs:
           path: dist
           merge-multiple: true
           run-id: ${{ github.event.inputs.workflow_id }}
+          workflow: build_wheels.yml
 
       - name: Check status
         run: ls -l dist
