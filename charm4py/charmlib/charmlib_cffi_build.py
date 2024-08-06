@@ -6,8 +6,10 @@ ffibuilder = FFI()
 
 if platform.system() == 'Darwin':
     extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
+    extra_compile_args=['-g0', '-O3', '-Wno-error=incompatible-function-pointer-types']
 else:
     extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+    extra_compile_args=['-g0', '-O3']
 
 
 ffibuilder.set_source("charm4py.charmlib._charmlib_cffi",
@@ -100,7 +102,7 @@ ffibuilder.set_source("charm4py.charmlib._charmlib_cffi",
     libraries=['charm'],
     include_dirs=['charm_src/charm/include'],
     library_dirs=['charm4py/.libs'],
-    extra_compile_args=['-g0', '-O3', '-Wno-error=incompatible-function-pointer-types'],
+    extra_compile_args=extra_compile_args,
     extra_link_args=extra_link_args)
 
 ffibuilder.cdef("""
