@@ -100,7 +100,7 @@ ffibuilder.set_source("charm4py.charmlib._charmlib_cffi",
     libraries=['charm'],
     include_dirs=['charm_src/charm/include'],
     library_dirs=['charm4py/.libs'],
-    extra_compile_args=['-g0', '-O3'],
+    extra_compile_args=['-g0', '-O3', '-Wno-error=incompatible-function-pointer-types'],
     extra_link_args=extra_link_args)
 
 ffibuilder.cdef("""
