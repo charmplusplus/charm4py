@@ -117,7 +117,7 @@ class Charm(object):
         self.options.remote_exec = False
         self.options.interactive = Options()
         self.options.interactive.verbose = 1
-        self.options.interactive.broadcast_imports = True    
+        self.options.interactive.broadcast_imports = True
         self.lib = load_charm_library(self)
         self.ReducerType = self.lib.ReducerType
         self.CkContributeToChare = self.lib.CkContributeToChare
