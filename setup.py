@@ -343,7 +343,7 @@ else:
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
-                              extra_compile_args=['-g0', '-O3'],
+                              extra_compile_args=[],
                               extra_link_args=extra_link_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
 
@@ -352,7 +352,7 @@ else:
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
-                              extra_compile_args=['-g0', '-O3'],
+                              extra_compile_args=[],
                               extra_link_args=cobject_extra_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
