@@ -119,8 +119,11 @@ def check_cffi():
     try:
         import cffi
         version_str = cffi.__version__.split('.')
-        if (len(version_str) > 3):
+        
+        # pypy3.9 returns version string like '1.17.0.dev0'
+        if (len(version_str) > 3): 
             version_str = version_str[:3]
+            
         version = tuple(int(v) for v in version_str)
         if version < (1, 7):
             raise DistutilsSetupError('Charm4py requires cffi >= 1.7. '
