@@ -118,7 +118,10 @@ def check_libcharm_version(charm_src_dir):
 def check_cffi():
     try:
         import cffi
-        version = tuple(int(v) for v in cffi.__version__.split('.'))
+        version_str = cffi.__version__.split('.')
+        if (len(version_str) > 3):
+            version_str = version_str[:3]
+        version = tuple(int(v) for v in version_str)
         if version < (1, 7):
             raise DistutilsSetupError('Charm4py requires cffi >= 1.7. '
                                       'Installed version is ' + cffi.__version__)
