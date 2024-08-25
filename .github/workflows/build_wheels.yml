@@ -39,7 +39,7 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_SKIP: "pp* *-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
+          CIBW_SKIP: "*-manylinux_i686 *-manylinux_ppc64le *-manylinux_s390x *musllinux_*"
         uses: pypa/cibuildwheel@v2.20.0
 
       - uses: actions/upload-artifact@v4
