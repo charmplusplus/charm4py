@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
 
       - name: Build sdist
         run: pipx run build --sdist
