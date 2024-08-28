@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: charmplusplus/charm
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # token: ${{ secrets.GITHUB_TOKEN }}
           path: charm_src/charm
           fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
 
