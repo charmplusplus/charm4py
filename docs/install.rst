@@ -25,20 +25,13 @@ To install the latest release of Charm4Py, run::
 
 This will install the latest stable release of Charm4Py, using the default underlying Charm++ build
 (see the `Charm++ manual`_ for more information on the different builds of Charm++). If you want to 
-use a specific Charm++ build, you can install and build Charm4Py from source.
+use a specific Charm++ build, you can install and build Charm4Py from source. Note that the source distribution
+is available via "pip install", but the standard from source build process is via "git clone", as outlined below.
 
 Installing Charm4Py from source
 ------------------------------------------------------------
 
 This install process covers the installation of Charm4Py from source.
-
-Before installing, you need the following prerequisites:
-    - CPython: numpy, greenlet and cython (``pip install numpy>=1.10.0 greenlet>=3.0.0 cython>=3.0.0``)
-    - PyPy: none
-
-You can get these prerequisites by running the following command::
-
-    $ pip install -r requirements.txt
 
 The first step is to clone the Charm4py repository from Git::
 
