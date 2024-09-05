@@ -42,3 +42,4 @@ Repository = "https://github.com/charmplusplus/charm4py"
 
 [project.scripts]
 charmrun = 'charmrun.start:start'
+charm4py_test = 'minitest.mini_test:mini_test'
