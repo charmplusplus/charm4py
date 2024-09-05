@@ -28,6 +28,17 @@ This will install the latest stable release of Charm4Py, using the default under
 use a specific Charm++ build, you can install and build Charm4Py from source. Note that the source distribution
 is available via "pip install", but the standard from source build process is via "git clone", as outlined below.
 
+Charm4Py provides a small number of examples with the binary distribution that can be used as a sanity check to verify basic functionality of the installation.
+Examples can be run via the following command line tool installed with Charm4Py::
+
+    $ charm4py_test [test_name]
+
+Currently, Charm4Py binaries are distributed with the following tests (to be substituted for [test_name]):
+
+- 'group_hello' - A simple hello world example wherein all members of a group print a message.
+- 'array_hello' - A simple hello world example wherein all elements of an array print a message one at a time, passing a message to the next element.
+- 'simple_ray' - A simple example of a Ray application.
+
 Installing Charm4Py from source
 ------------------------------------------------------------
 
@@ -66,7 +77,12 @@ array_hello.py, which can be run as follows::
     $ cd examples/hello
     $ python -m charmrun.start +p2 array_hello.py
 
-Choosing your target architecture when building from source
+
+To run the full Charm4py test suite after building from source, run the following command from the repository root::
+
+    $ python auto_test.py
+
+Choosing your target architecture
 ------------------------------------------------------------
 
 When building from source, as described above, you must chose the appropriate target architecture.
