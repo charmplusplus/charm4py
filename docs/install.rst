@@ -31,13 +31,15 @@ is available via "pip install", but the standard from source build process is vi
 Charm4Py provides a small number of examples with the binary distribution that can be used as a sanity check to verify basic functionality of the installation.
 Examples can be run via the following command line tool installed with Charm4Py::
 
-    $ charm4py_test [test_name]
+    $ charm4py_test [example]
 
-Currently, Charm4Py binaries are distributed with the following tests (to be substituted for [test_name]):
+Currently, Charm4Py binaries are distributed with the following examples:
 
 - 'group_hello' - A simple hello world example wherein all members of a group print a message.
 - 'array_hello' - A simple hello world example wherein all elements of an array print a message one at a time, passing a message to the next element.
 - 'simple_ray' - A simple example of a Ray application.
+
+To run a comprehensive set of tests, install Charm4py from source.
 
 Installing Charm4Py from source
 ------------------------------------------------------------
