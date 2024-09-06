@@ -15,6 +15,7 @@ What's new in v1.1
   as a list to `charm.start`
 - Migrate build system to pyproject.toml
 - Fix build on ARM-based machines
+- Update Cython support, now requires Cython 3.0.0
 
 
 What's new in v1.0
