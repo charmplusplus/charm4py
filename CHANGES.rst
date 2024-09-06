@@ -5,6 +5,7 @@ log in the source code repository.
 What's new in v1.1
 ==================
 
+- Supported PyPI binary distribution for mac and linux
 - Add a Ray Core API implementation on Charm4py
 - Fixes reductions over a section, use of futures in threaded entry methods
 - Reduce message latency for builtin Numpy datatypes
@@ -12,7 +13,9 @@ What's new in v1.1
   cases
 - Use a `@register` decorator for registering Chares instead of passing them
   as a list to `charm.start`
+- Migrate build system to pyproject.toml
 - Fix build on ARM-based machines
+
 
 What's new in v1.0
 ==================
