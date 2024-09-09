@@ -117,22 +117,23 @@ class Worker(Chare):
 
     # Distributed SGD
     @threaded
-    def run(self, done_future=None):
+    def run(self, device, done_future=None):
         if done_future is not None:
             # Starting a new run
             self.done_future = done_future
             self.train_set, bsz = self.partition_dataset()
-            self.model = Net()
+            self.model = Net().to(device)
             self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.5)
             self.num_batches = math.ceil(len(self.train_set.dataset) / float(bsz))
             self.epoch = 0
-
+            
         while self.epoch < self.epochs:
             if self.epoch == 0:
                 charm.LBTurnInstrumentOn()
             t0 = time.time()
             epoch_loss = 0.0
             for data, target in self.train_set:
+                data, target = data.to(device), target.to(device)
                 self.optimizer.zero_grad()
                 output = self.model(data)
                 loss = F.nll_loss(output, target)
@@ -142,7 +143,7 @@ class Worker(Chare):
                 self.optimizer.step()
             print(f'Chare {self.thisIndex[0]:4d} | PE {charm.myPe():4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
             self.epoch += 1
-            if (self.lb_epochs > 0) && (self.epoch % self.lb_epochs == 0):
+            if (self.lb_epochs > 0) and (self.epoch % self.lb_epochs == 0):
                 # Start load balancing
                 self.AtSync()
                 return
@@ -176,6 +177,9 @@ class Worker(Chare):
 def main(args):
     # Initialize PyTorch on all PEs
     Group(TorchInit).init(1, ret=True).get()
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else: device = torch.device('cpu')
 
     # Create chare array and start training
     num_workers = charm.numPes()
@@ -184,8 +188,8 @@ def main(args):
     workers = Array(Worker, num_workers, args=[num_workers, epochs, lb_epochs], useAtSync=True)
     t0 = time.time()
     done = charm.createFuture()
-    print(f'Starting MNIST dataset training with {num_workers} chares on {charm.numPes()} PEs for {epochs} epochs (LB every {lb_epochs} epochs)')
-    workers.run(done)
+    print(f'Starting MNIST dataset training (device = {device}), with {num_workers} chares on {charm.numPes()} PEs for {epochs} epochs (LB every {lb_epochs} epochs)')
+    workers.run(device, done)
     done.get()
 
     # Training complete
