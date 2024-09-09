@@ -6,9 +6,11 @@ What's new in v1.1
 ==================
 
 - PyPI binary distribution 
+
   - supports MacOS (Intel and Apple Silicon architectures) and Manylinux (x86_64)
   - supports both PyPy and CPython
   - PyPI package here: https://pypi.org/project/charm4py/
+
 - Add a Ray Core API implementation on Charm4py
 - Fixes reductions over a section, use of futures in threaded entry methods
 - Reduce message latency for builtin Numpy datatypes
