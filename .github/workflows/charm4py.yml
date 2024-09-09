@@ -3,28 +3,52 @@ name: Charm4py
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
   schedule:
-      - cron: '5 0 * * *'  # Runs at 00:05 UTC every day.
+    - cron: "5 0 * * *" # Runs at 00:05 UTC every day.
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  auto_test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.12"]
+        # macos-13 is x86_64, macos-14 is arm64
+        os: [ubuntu-latest, macos-13, macos-14]
+        exclude:
+          - os: macos-14  # Python 3.7 does not exist for macos-14
+            python-version: "3.7"
+      fail-fast: false
 
     steps:
-    - uses: actions/checkout@v2
-    - name: build-charm4py
-      run: |
-        git fetch --unshallow # Need full repo for 'git describe' used by setup.py
-        pip3 install setuptools cython cffi greenlet numpy
-        git clone https://github.com/UIUC-PPL/charm charm_src/charm
-        export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-        export CHARM_BUILD_PROCESSES=2
-        export CHARM4PY_BUILD_CFFI=1
-        python3 setup.py build_ext --inplace
-    - name: test-charm4py
-      run: |
-        export PYTHONPATH="$PWD"
-        export CHARM4PY_TEST_NUM_PROCESSES=2
-        python3 auto_test.py
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full repo for 'git describe' used by setup.py
+      - name: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install setuptools cython cffi greenlet numpy torch torchvision filelock
+          if [ ${{ matrix.os }} == 'macos-13' ]; then
+            # pypi only distributes torch packages w/ numpy v1 for macos-x86_64
+            pip install 'numpy<2'
+          fi
+      - name: Build Charm++/Charm4py
+        run: |
+          git clone https://github.com/charmplusplus/charm charm_src/charm
+          export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+          export CHARM_BUILD_PROCESSES=2
+          export CHARM4PY_BUILD_CFFI=1
+          python setup.py build_ext --inplace
+      - name: Run auto_test.py
+        run: |
+          export PYTHONPATH="$PWD"
+          export CHARM4PY_TEST_NUM_PROCESSES=2
+          if [ ${{ matrix.os }} == 'macos-13' ]; then
+            # Crashes in ray test otherwise
+            export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+          fi
+          python auto_test.py

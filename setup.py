@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import shutil
 import platform
 import subprocess
@@ -8,23 +9,63 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.install import install
 from distutils.errors import DistutilsSetupError
+from distutils.command.install_lib import install_lib as _install_lib
 from distutils import log
 import distutils
 
+import Cython.Compiler.Options
+Cython.Compiler.Options.annotate = True
 
 build_mpi = False
 
-system = platform.system()
+
+
+def get_build_machine():
+    machine = platform.machine()
+    if machine == 'arm64' or machine == 'aarch64':
+        return 'arm8'
+    return machine
+
+def get_archflag_machine():
+    machine = platform.machine()
+    if machine == 'arm64' or machine == 'aarch64':
+        return 'arm64'
+    return machine
+
+def get_build_os():
+    os = platform.system()
+    return os.lower()
+
+
+def get_build_network_type(build_mpi):
+    return 'netlrts' if not build_mpi else 'mpi'
+
+
+def get_build_triple(build_mpi):
+    return (get_build_machine(),
+            get_build_os(),
+            get_build_network_type(build_mpi)
+            )
+
+
+machine = get_build_machine()
+system = get_build_os()
+
+
 libcharm_filename2 = None
-if system == 'Windows' or system.lower().startswith('cygwin'):
+if system == 'windows' or system.startswith('cygwin'):
     libcharm_filename = 'charm.dll'
     libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
-elif system == 'Darwin':
-    os.environ['ARCHFLAGS'] = '-arch x86_64'
+elif system == 'darwin':
+    os.environ['ARCHFLAGS'] = f'-arch {get_archflag_machine()}'
     libcharm_filename = 'libcharm.dylib'
     charmrun_filename = 'charmrun'
-else:
+    if 'CPPFLAGS' in os.environ:
+        os.environ['CPPFLAGS'] += ' -Wno-error=implicit-function-declaration' # needed because some functions used by charm4py are not exported by charm.
+    else:
+        os.environ['CPPFLAGS'] = '-Wno-error=implicit-function-declaration '
+else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
 
@@ -77,7 +118,13 @@ def check_libcharm_version(charm_src_dir):
 def check_cffi():
     try:
         import cffi
-        version = tuple(int(v) for v in cffi.__version__.split('.'))
+        version_str = cffi.__version__.split('.')
+        
+        # pypy3.9 returns version string like '1.17.0.dev0'
+        if (len(version_str) > 3): 
+            version_str = version_str[:3]
+            
+        version = tuple(int(v) for v in version_str)
         if version < (1, 7):
             raise DistutilsSetupError('Charm4py requires cffi >= 1.7. '
                                       'Installed version is ' + cffi.__version__)
@@ -101,7 +148,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
     if not charm_built(charm_src_dir):
 
-        if system == 'Windows' or system.lower().startswith('cygwin'):
+        if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
                                       ' Please download a Charm4py binary wheel (64-bit Python required)')
 
@@ -118,33 +165,13 @@ def build_libcharm(charm_src_dir, build_dir):
         import multiprocessing
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
-        if system == 'Darwin':
-            if build_mpi:
-                cmd = './build charm4py mpi-darwin-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-        else:
-            try:
-                arch = os.uname()[4]
-            except:
-                arch = None
-            if arch is not None and arch.startswith('arm'):
-                import re
-                regexp = re.compile("armv(\d+).*")
-                m = regexp.match(arch)
-                if m:
-                    version = int(m.group(1))
-                    if version < 8:
-                        cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                    else:
-                        cmd = './build charm4py netlrts-linux-arm8 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                if build_mpi:
-                    cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+
+        target_machine, os_target, target_layer = get_build_triple(build_mpi)
+
+        build_triple = f'{target_layer}-{os_target}-{target_machine}'
+        cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
+        print(cmd)
+
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -152,8 +179,8 @@ def build_libcharm(charm_src_dir, build_dir):
         if rc != 0:
             raise DistutilsSetupError('An error occured while building charm library')
 
-        if system == 'Darwin':
-            old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.so')
+        if system == 'darwin':
+            old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.dylib')
             new_file_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
             shutil.move(old_file_path, new_file_path)
             cmd = ['install_name_tool', '-id', '@rpath/../.libs/' + libcharm_filename, new_file_path]
@@ -176,6 +203,7 @@ def build_libcharm(charm_src_dir, build_dir):
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(lib_src_path, output_dir)
+
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
@@ -248,14 +276,48 @@ class custom_build_ext(build_ext, object):
             build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
         super(custom_build_ext, self).run()
 
+class _renameInstalled(_install_lib):
+    def __init__(self, *args, **kwargs):
+        _install_lib.__init__(self, *args, **kwargs)
+
+    def install(self):
+        log.info("Renaming libraries")
+        outfiles = _install_lib.install(self)
+        for file in outfiles:
+            if "c_object_store" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/c_object_store.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+            elif "charmlib_cython" in file and system == "darwin":
+                direc = os.path.dirname(file)
+                install_name_command = "install_name_tool -change lib/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += direc
+                install_name_command += "/charmlib_cython.*.so"
+                log.info(install_name_command)
+                os.system(install_name_command)
+        return outfiles
+
+
 
 extensions = []
 py_impl = platform.python_implementation()
 
+log.info("Check PyPy")
 if py_impl == 'PyPy':
     os.environ['CHARM4PY_BUILD_CFFI'] = '1'
-elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+
+# elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
+else:
+    log.info("Check sys version info")
     if sys.version_info[0] >= 3:
+        log.info("Defining cython args")
         # compile C-extension module (from cython)
         from Cython.Build import cythonize
         my_include_dirs = []
@@ -269,18 +331,35 @@ elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
 
         extra_link_args = []
         if os.name != 'nt':
-            if system == 'Darwin':
+            if system == 'darwin':
                 extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
             else:
                 extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+
+        cobject_extra_args = []
+        log.info("Extra object args for object store")
+        if os.name != 'nt':
+            if system == 'darwin':
+                cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
+            else:
+                cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
 
         extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                               sources=['charm4py/charmlib/charmlib_cython.pyx'],
                               include_dirs=['charm_src/charm/include'] + my_include_dirs,
                               library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                               libraries=["charm"],
-                              extra_compile_args=['-g0', '-O3'],
+                              extra_compile_args=[],
                               extra_link_args=extra_link_args,
+                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+
+        extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
+                              sources=['charm4py/c_object_store.pyx'],
+                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                              libraries=["charm"],
+                              extra_compile_args=[],
+                              extra_link_args=cobject_extra_args,
                               ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
     else:
         try:
@@ -296,48 +375,16 @@ if os.environ.get('CHARM4PY_BUILD_CFFI') == '1':
     additional_setup_keywords['cffi_modules'] = 'charm4py/charmlib/charmlib_cffi_build.py:ffibuilder'
 
 
-with open('README.rst', 'r') as f:
-    long_description = f.read()
-
-
 setuptools.setup(
-    name='charm4py',
     version=charm4py_version,
-    author='Juan Galvez and individual contributors',
-    author_email='jjgalvez@illinois.edu',
-    description='Charm4py Parallel Programming Framework',
-    long_description=long_description,
-    url='https://github.com/UIUC-PPL/charm4py',
-    keywords='parallel parallel-programming distributed distributed-computing hpc HPC runtime',
     packages=setuptools.find_packages(),
     package_data={
         'charm4py': ['libcharm_version'],
     },
-    entry_points={
-        'console_scripts': [
-            'charmrun = charmrun.start:start',
-        ],
-    },
-    install_requires=['numpy>=1.10.0', 'greenlet'],
-    #python_requires='>=2.7, ~=3.4',
-    classifiers=[
-        'Intended Audience :: Developers',
-        'License :: Free for non-commercial use',
-        'Operating System :: MacOS :: MacOS X',
-        'Operating System :: POSIX',
-        'Operating System :: POSIX :: Linux',
-        'Operating System :: Microsoft :: Windows',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Topic :: System :: Distributed Computing',
-        'Topic :: System :: Clustering',
-    ],
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,
                 'build_ext': custom_build_ext,
-                'install': custom_install},
+                'install': custom_install,
+                'install_lib': _renameInstalled,},
     **additional_setup_keywords
 )

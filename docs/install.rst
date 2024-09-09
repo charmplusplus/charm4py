@@ -7,90 +7,82 @@ Install
 Charm4py runs on Linux, macOS, Windows, Raspberry Pi, and a wide variety of clusters and
 supercomputer environments (including many supercomputers in the TOP500).
 
-Charm4py runs on Python 3.4+. Charm4py has been tested with the
+Charm4py runs on Python 3.7+. Charm4py has been tested with the
 following Python implementations:
 CPython (most common implementation) and PyPy_.
 
 
-.. _PyPy: http://pypy.org
+.. _PyPy: https://pypy.org
 
+Installing Charm4Py binaries (via pip)
+---------------------------------------
 
-pip
----
+The easiest way to install Charm4Py is via pip. Currently, pip wheels are available for Linux and macOS.
 
-To install on regular Linux, macOS and Windows machines, do::
+To install the latest release of Charm4Py, run::
 
-    $ pip3 install charm4py
+    $ pip install charm4py
 
-.. note::
+This will install the latest stable release of Charm4Py, using the default underlying Charm++ build
+(see the `Charm++ manual`_ for more information on the different builds of Charm++). If you want to 
+use a specific Charm++ build, you can install and build Charm4Py from source. Note that the source distribution
+is available via "pip install", but the standard from source build process is via "git clone", as outlined below.
 
-    This option uses Charm++'s TCP layer as the communication layer.
-    If you want a faster communication layer (e.g. MPI), see "Install from
-    source" below.
+Installing Charm4Py from source
+------------------------------------------------------------
 
-    pip >= 8.0 is recommended to simplify the install and avoid building Charm4py or
-    any dependencies from sources.
+This install process covers the installation of Charm4Py from source.
 
-    Note that a 64-bit version of Python is required to install and run Charm4py.
+The first step is to clone the Charm4py repository from Git::
 
-
-Install from source
--------------------
-
-.. note::
-    This is not required if installing from a binary wheel with pip.
-
-Prerequisites:
-    - CPython: numpy, greenlet and cython (``pip3 install 'numpy>=1.10.0' cython greenlet``)
-    - PyPy: none
-
-To build the latest *stable* release, do::
-
-  $ pip3 install [--install-option="--mpi"] charm4py --no-binary charm4py
-
-Or download the source distribution from PyPI, uncompress and run
-``python3 setup.py install [--mpi]``.
-
-The optional flag ``--mpi``, when enabled, will build the
-Charm++ library with the MPI communication layer (MPI headers and libraries
-need to be installed on the system).
-
-To build the latest *development* version, download Charm4py and Charm++ source code
-and run setup::
-
-    $ git clone https://github.com/UIUC-PPL/charm4py
+    $ git clone https://github.com/charmplusplus/charm4py.git
     $ cd charm4py
-    $ git clone https://github.com/UIUC-PPL/charm charm_src/charm
-    $ python3 setup.py install [--mpi]
 
-.. note::
+Next, clone the Charm++ repo into charm_src::
 
-    The TCP layer (selected by default) will work on desktop, servers and
-    small clusters. The MPI layer is faster and should work on most systems
-    including large clusters and supercomputers. Charm++ however also has support
-    for specialized network layers like uGNI and UCX. To use these, you have
-    to manually build the Charm++ library (see below).
+    $ git clone https://github.com/charmplusplus/charm.git charm_src/charm
 
+Once this is done, there are two ways to build Charm4py. The first is to simply run the installation
+from the Charm4py root. This method will use the default Charm++ backend::
 
-Manually building the Charm++ shared library
---------------------------------------------
+    $ cd ..
+    $ pip install .
 
-This is needed when building Charm++ for specialized machine/network layers
-other than TCP and MPI (e.g. Cray XC/XE).
+The other option is to manually build Charm++ before building Charm4py. This may be necessary
+if you want to configure Charm++ differently from the default. To do this, change to
+the charm directory and run the following build command, then build Charm4Py::
 
-Before running ``python3 setup.py`` in the steps above, enter the Charm++ source code
-directory (``charm_src/charm``), and manually build the Charm++ library. The build
-command syntax is::
+    $ cd charm
+    $ ./build charm4py <target-architecture> -j<N> --with-production
+    $ cd ../..
+    $ pip install .
 
-    $ ./build charm4py <version> -j<N> --with-production
+Finally, if necessary, when installing dependencies or when running the install script, add the --user
+option to the Python command to complete the installation without permission errors.
 
-where ``<version>`` varies based on the system and communication layer, and ``<N>``
-is the number of processes to use for compiling.
-For help in choosing the correct ``<version>``, please refer to the Charm++ manual_
-and the README in Charm++'s root directory.
+After building, you can run Charm4py examples. One example you can try is
+array_hello.py, which can be run as follows::
 
-After the library has been built, continue with ``python3 setup.py install`` in the
-Charm4py source root directory.
+    $ cd examples/hello
+    $ python -m charmrun.start +p2 array_hello.py
 
+Choosing your target architecture when building from source
+------------------------------------------------------------
+
+When building from source, as described above, you must chose the appropriate target architecture.
+
+For building on a laptop or personal machine, you must use a netlrts build of Charm4Py. 
+For example, to build for a personal machine running macOS with ARM processors, using 4 cmake 
+threads, you would run::
+    
+    $ ./build charm4py netlrts-darwin-arm -j4 --with-production
+
+To install Charm4Py on a cluster machine, you will generally want to chose a different backend. 
+For example, to use Charm4Py with MPI, build the Charm backend as follows::
+
+    $ ./build charm4py mpi-<os>-<architecture> -j<N> --with-production
+
+Check the Charm++ documentation to identify the correct os and architecture command 
+to pass into the build command. 
 
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm

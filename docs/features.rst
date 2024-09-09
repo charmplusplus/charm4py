@@ -12,7 +12,7 @@ Features
   This contributes to better resource utilization and overlap of computation and communication.
 
 - **Concurrency**: multiple concurrency features are seamlessly integrated into the actor model,
-  including couroutines, channels and futures, that facilitate writing in direct or
+  including coroutines, channels and futures, that facilitate writing in direct or
   sequential style.
   See the :doc:`introduction` for a quick overview.
 
@@ -41,4 +41,4 @@ Features
 
 
 
-.. _Charm++: http://charmplusplus.org/
+.. _Charm++: https://charmplusplus.org/
