@@ -98,7 +98,7 @@ class RayProxy(object):
         return call_remote
 
 
-def consume_options(cls, *args, **kwargs):
+def consume_options(cls, **actor_options):
     #cls.scheduling_startegy = kwargs.pop("scheduling_strategy", None)
     #cls.num_cpus = kwargs.pop("num_cpus", 1)
     #cls.num_gpus = kwargs.pop("num_gpus", 0)
@@ -116,8 +116,8 @@ def get_ray_class(subclass):
             counter += 1
             return ray_proxy
 
-        def options(self, *args, **kwargs):
-            consume_options(self, *args, **kwargs)
+        def options(self, **actor_options):
+            consume_options(self, actor_options)
 
     return RayChare
 
@@ -183,3 +183,12 @@ def put(obj):
     fut = charm4py.charm.threadMgr.createFuture(store=True)
     fut.create_object(obj)
     return fut
+
+def available_resources():
+    resource_list = {
+        "CPU": charm4py.charm.numPes(),
+        "GPU": 0.0,
+        "memory": 10000000000.0,
+        "object_store_memory": 10000000000.0
+    }
+    return resource_list
