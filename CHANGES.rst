@@ -12,6 +12,10 @@ What's new in v1.1
   - PyPI package here: https://pypi.org/project/charm4py/
 
 - Add a Ray Core API implementation on Charm4py
+
+  - Ray is a framework for distributed AI and Python applications (https://docs.ray.io/)
+  - the Charm4py Ray API allows users to run Ray programs with Charm4py background with minimal changes
+
 - Fixes reductions over a section, use of futures in threaded entry methods
 - Reduce message latency for builtin Numpy datatypes
 - Disabled local message optimization which broke Charm++ semantics in some
