@@ -5,7 +5,7 @@ This program solves the single source shortest paths (SSSP) problem in parallel.
 This implementation uses a parallel Bellman-Ford approach, which repeatedly
 relaxes edges until the distance values of each vertex from the source can no
 longer be improved any further. Termination is detected using the quiescence
-detection feature in Charm4Py. To run this program, run the following command:
+detection feature in Charm4Py. To run this program, run the following command::
 
     $ python3 -m charmrun.start +p<N> <num_vertices> <num_edges> <random_seed> <source_vertex>
 
