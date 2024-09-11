@@ -7,11 +7,7 @@ relaxes edges until the distance values of each vertex from the source can no
 longer be improved any further. Termination is detected using the quiescence
 detection feature in Charm4Py. To run this program, run the following command:
 
-```
-
-python3 -m charmrun.start +p<N> <num_vertices> <num_edges> <random_seed> <source_vertex>
-
-```
+    $ python3 -m charmrun.start +p<N> <num_vertices> <num_edges> <random_seed> <source_vertex>
 
 where:
 - num_vertices = the number of vertices in the graph
