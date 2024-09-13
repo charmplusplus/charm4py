@@ -102,7 +102,7 @@ def consume_options(proxy_class, **actor_options):
     #cls.scheduling_startegy = kwargs.pop("scheduling_strategy", None)
     #cls.num_cpus = kwargs.pop("num_cpus", 1)
     #cls.num_gpus = kwargs.pop("num_gpus", 0)
-    pass
+    return proxy_class
 
 
 def get_ray_class(subclass):
@@ -116,8 +116,9 @@ def get_ray_class(subclass):
             counter += 1
             return ray_proxy
 
+        @classmethod
         def options(proxy_class, **actor_options):
-            consume_options(proxy_class, actor_options)
+            return consume_options(proxy_class, **actor_options)
 
     return RayChare
 
