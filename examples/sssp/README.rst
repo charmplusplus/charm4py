@@ -23,3 +23,5 @@ All graph information will be automatically generated before the algorithm execu
 The source and destination of each edge is uniformly generated over the interval [0, num_vertices).
 The weights of each edge are uniformly generated over [0.0, 1.0).
 The graph is a directed graph, and between any pair of vertices, multiple edges may exist.
+Note that at a large scale (10 million edges and above), large messaging costs may cause the program to
+greatly slow down or crash.
