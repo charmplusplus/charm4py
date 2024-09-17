@@ -24,7 +24,7 @@ class RayClusterState(object):
         req_cpu = bundle.pop("CPU", 0)
         req_gpu = bundle.pop("GPU", 0)
         if req_cpu >= self.avail_num_cpus and req_gpu >= self.avail_num_gpus:
-            
+
             self.avail_num_cpus -= req_cpu
             self.avail_num_gpus -= req_gpu
         else:
@@ -53,7 +53,7 @@ def init(*args, **kwargs):
     print("Initializing object store for ray")
     global object_store
     object_store = charm4py.Group(charm4py.ObjectStore)
-    
+
     #ray_cluster_state.num_cpus = kwargs.pop("num_cpus", charm4py.charm.numPes())
     #ray_cluster_state.num_gpus = kwargs.pop("num_gpus", 0)
 
@@ -98,7 +98,7 @@ class RayProxy(object):
         return call_remote
 
 
-def consume_options(cls, *args, **kwargs):
+def consume_options(*args, **kwargs):
     #cls.scheduling_startegy = kwargs.pop("scheduling_strategy", None)
     #cls.num_cpus = kwargs.pop("num_cpus", 1)
     #cls.num_gpus = kwargs.pop("num_gpus", 0)
@@ -116,8 +116,10 @@ def get_ray_class(subclass):
             counter += 1
             return ray_proxy
 
-        def options(self, *args, **kwargs):
-            consume_options(self, *args, **kwargs)
+        @classmethod
+        def options(cls, *args, **kwargs):
+            consume_options(*args, **kwargs)
+            return cls
 
     return RayChare
 
@@ -125,7 +127,7 @@ def get_ray_task(func, num_returns):
     #from charm4py import charm
     def task(*args):
         func._ck_coro = True
-        result = charm4py.charm.pool.map_async(func, [args], chunksize=1, multi_future=True, 
+        result = charm4py.charm.pool.map_async(func, [args], chunksize=1, multi_future=True,
                                                num_returns=num_returns, is_ray=True)[0]
         if num_returns > 1:
             return result
@@ -147,7 +149,7 @@ def remote(*args, **kwargs):
 
 def remote_deco(obj, num_returns=1):
     #from charm4py import charm, Chare, register
-    
+
     if isinstance(obj, types.FunctionType):
         obj.remote = get_ray_task(obj, num_returns)
         return obj

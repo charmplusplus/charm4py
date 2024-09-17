@@ -105,16 +105,19 @@ class ParameterServer(object):
 @ray.remote
 class DataWorker(object):
     def __init__(self):
-        self.model = ConvNet()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = ConvNet().to(self.device)
         self.data_iterator = iter(get_data_loader()[0])
 
     def compute_gradients(self, weights):
         self.model.set_weights(weights)
         try:
             data, target = next(self.data_iterator)
+            data, target = data.to(self.device), target.to(self.device)
         except StopIteration:  # When the epoch ends, start a new epoch.
             self.data_iterator = iter(get_data_loader()[0])
             data, target = next(self.data_iterator)
+            data, target = data.to(self.device), target.to(self.device)
         self.model.zero_grad()
         output = self.model(data)
         loss = F.nll_loss(output, target)

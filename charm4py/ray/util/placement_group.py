@@ -14,6 +14,7 @@ def get_current_placement_group():
 class PlacementGroup(object):
     def __init__(self, bundles=None, strategy="PACK"):
         self.bundles = bundles
+        self.bundle_specs = None
         self.strategy = strategy
-        self.bundle_map = self.map_bundles(bundles, strategy)
-    
+        #self.bundle_map = self.map_bundles(bundles, strategy)
+
