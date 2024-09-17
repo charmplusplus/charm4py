@@ -1,4 +1,5 @@
 from . import wait
+from charm4py import ray
 import sys
 from greenlet import getcurrent
 from collections import defaultdict
@@ -573,6 +574,9 @@ def group_proxy_contribute(proxy, contributeInfo):
 def groupsecproxy_contribute(proxy, contributeInfo):
     charm.CkContributeToSection(contributeInfo, proxy.section[1], proxy.section[0])
 
+def group_proxy_localbranch(proxy):
+    return charm.groups[proxy.gid]
+
 class Group(object):
 
     type_id = GROUP
@@ -631,6 +635,7 @@ class Group(object):
         M['__eq__'] = group_proxy__eq__
         M['__hash__'] = group_proxy__hash__
         M['ckNew'] = group_ckNew_gen(cls, entryMethods[0].epIdx)
+        M['ckLocalBranch'] = group_proxy_localbranch
         M['__getsecproxy__'] = group_getsecproxy
         if not sectionProxy:
             M['ckContribute'] = group_proxy_contribute  # function called when target proxy is Group
@@ -730,6 +735,8 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                     args.append(defaults[def_idx])
 
         header = {}
+        is_ray = kwargs.pop('is_ray', False)
+        header['is_ray'] = is_ray
         blockFuture = None
         elemIdx = proxy.elemIdx
         if 'ret' in kwargs and kwargs['ret']:
@@ -747,6 +754,11 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 array = charm.arrays[aid]
                 if elemIdx in array:
                     destObj = array[elemIdx]
+            if is_ray:
+                blockFuture = charm.createFuture(store=True)
+                args = list(args)
+                args.append(blockFuture)
+                args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
             charm.CkArraySend(aid, elemIdx, ep, msg)
         else:
@@ -762,7 +774,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
 
 def array_ckNew_gen(C, epIdx):
     @classmethod    # make ckNew a class (not instance) method of proxy
-    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False):
+    def array_ckNew(cls, dims=None, ndims=-1, args=[], map=None, useAtSync=False, is_ray=False):
         # if charm.myPe() == 0: print("calling array ckNew for class " + C.__name__ + " cIdx=" + str(C.idx[ARRAY]))
         if type(dims) == int: dims = (dims,)
 
@@ -787,6 +799,7 @@ def array_ckNew_gen(C, epIdx):
             header[b'block'] = creation_future
             header[b'bcast'] = True
             header[b'creation'] = True
+            header[b'is_ray'] = is_ray
 
         msg = charm.packMsg(None, args, header)
         aid = charm.lib.CkCreateArray(C.idx[ARRAY], dims, epIdx, msg, map_gid, useAtSync)
@@ -797,7 +810,7 @@ def array_ckNew_gen(C, epIdx):
     return array_ckNew
 
 def array_ckInsert_gen(epIdx):
-    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False):
+    def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False, is_ray=False):
         if type(index) == int: index = (index,)
         assert len(index) == proxy.ndims, 'Invalid index dimensions passed to ckInsert'
         header = {}
@@ -808,6 +821,7 @@ def array_ckInsert_gen(epIdx):
                 header[b'block'] = proxy.creation_future
                 header[b'bcast'] = True
                 header[b'creation'] = True
+                header[b'is_ray'] = is_ray
         msg = charm.packMsg(None, args, header)
         charm.lib.CkInsert(proxy.aid, index, epIdx, onPE, msg, useAtSync)
     return array_ckInsert
@@ -854,7 +868,6 @@ class Array(object):
 
     @classmethod
     def __getProxyClass__(C, cls, sectionProxy=False):
-        # print("Creating array proxy class for class " + cls.__name__)
         if not sectionProxy:
             proxyClassName = cls.__name__ + 'ArrayProxy'
         else:

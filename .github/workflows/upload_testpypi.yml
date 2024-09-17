@@ -1,0 +1,41 @@
+name: Publish wheels to testpypi
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_id:
+        description: "The workflow ID to pull wheels from"
+        required: true
+        type: string
+
+jobs:
+  publish_test:
+    name: Publish Python 🐍 distribution 📦 to TestPyPI
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/charm4py
+
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+      - name: Download all the dists
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          # download all the wheels
+          path: unmerged
+          run_id: ${{ github.event.inputs.workflow_id }}
+          workflow: build_wheels.yml
+
+      - name: Merge files to dist
+        run: |
+          mkdir dist
+          mv unmerged/*/*.whl dist
+          mv unmerged/*/*.tar.gz dist
+
+      - name: Publish distribution 📦 to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
