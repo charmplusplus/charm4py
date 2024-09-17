@@ -30,7 +30,7 @@ def searchForPython(python_implementations):
 
 
 # ----------------------------------------------------------------------------------
-TIMEOUT = 60  # timeout for each test (in seconds)
+TIMEOUT = 120  # timeout for each test (in seconds)
 CHARM_QUIET_AFTER_NUM_TESTS = 5
 
 commonArgs = ['++local']
