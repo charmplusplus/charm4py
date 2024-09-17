@@ -15,6 +15,7 @@ def matmul(C, A, B):
 
 class SubMatrix(Chare):
     def __init__(self, subdim_size, charedim, init_done):
+        super().__init__()
         self.subdim_size = subdim_size
         self.charedim = charedim
 
