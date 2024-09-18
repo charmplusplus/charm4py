@@ -75,7 +75,6 @@ class Main(Chare):
         #initiate worker array
         num_partitions = charm.numPes()
         self.workers = Array(SsspChares, num_partitions)
-        charm.awaitCreation(self.workers)
         #split edges by pe
         send_lists = [[] for _ in range(num_partitions)]
         avg_partition_size = self.num_edges // num_partitions
