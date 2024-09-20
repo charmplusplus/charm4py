@@ -100,10 +100,10 @@ class Worker(object):
         return train_set, bsz
 
     # Distributed SGD
-    def run(self):
+    def run(self, device):
         # Starting a new run
         self.train_set, bsz = self.partition_dataset()
-        self.model = Net()
+        self.model = Net().to(device)
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.5)
         self.num_batches = math.ceil(len(self.train_set.dataset) / float(bsz))
         self.epoch = 0
@@ -112,12 +112,13 @@ class Worker(object):
             t0 = time.time()
             epoch_loss = 0.0
             for data, target in self.train_set:
+                data, target = data.to(device), target.to(device)
                 self.optimizer.zero_grad()
                 output = self.model(data)
                 loss = F.nll_loss(output, target)
                 epoch_loss += loss.item()
                 loss.backward()
-                self.average_gradients(self.model)
+                self.average_gradients(self.model, device)
                 self.optimizer.step()
             print(f'Rank {rank:4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
             self.epoch += 1
@@ -132,8 +133,10 @@ class Worker(object):
 
 
     # Gradient averaging
-    def average_gradients(self, model):
+    def average_gradients(self, model, device):
         for param in model.parameters():
+            if device == torch.device("cuda"):
+                param.grad.data = param.grad.data.cpu()
             # Obtain numpy arrays from gradient data
             data_shape = param.grad.data.shape
             send_data = param.grad.data.numpy()
@@ -146,7 +149,7 @@ class Worker(object):
             self.time_cnt += 1
 
             # Restore original shape of gradient data
-            param.grad.data = torch.from_numpy(recv_data)
+            param.grad.data = torch.from_numpy(recv_data).to(device)
             param.grad.data /= float(self.num_workers)
 
 def main():
@@ -156,12 +159,17 @@ def main():
     torch.manual_seed(1234)
     print(f'MPI rank {rank} initialized PyTorch with {num_threads} threads')
 
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+        
     # Create workers and start training
     epochs = 6
     workers = Worker(nprocs, epochs)
     t0 = time.time()
-    print(f'Starting MNIST dataset training with {nprocs} MPI processes for {epochs} epochs')
-    workers.run()
+    print(f'Starting MNIST dataset training with {nprocs} MPI processes for {epochs} epochs on device {device}')
+    workers.run(device)
 
     comm.Barrier()
 
