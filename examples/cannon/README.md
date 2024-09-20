@@ -15,9 +15,9 @@ Key features demonstrated:
 
 ## How to run
 
-1. Ensure Numba is installed for improved performance (optional):
+1. Ensure Scipy is installed (required) and Numba is installed for improved performance (optional):
    ```
-   pip install numba
+   pip install scipy numba
    ```
 
 2. Run the example with the following command:
@@ -43,6 +43,7 @@ Key features demonstrated:
 - Charm4py (assumed to be installed)
 - Numpy
 - Numba (optional, for improved performance)
+- Scipy
 
 ## Note
 
