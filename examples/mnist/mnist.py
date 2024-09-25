@@ -78,8 +78,8 @@ class TorchInit(Chare):
     def init(self, num_threads):
         torch.set_num_threads(num_threads)
         torch.manual_seed(1234)
-        print(f'PE {charm.myPe()} initialized PyTorch with {num_threads} threads')
-
+        
+            
 # Chare array
 class Worker(Chare):
 
@@ -97,6 +97,9 @@ class Worker(Chare):
         else:
             # is group element
             self.myrank = self.thisIndex
+            
+            
+
 
     # Partitioning MNIST dataset
     def partition_dataset(self):
@@ -117,7 +120,14 @@ class Worker(Chare):
 
     # Distributed SGD
     @threaded
-    def run(self, device, done_future=None):
+    def run(self, done_future=None):
+        if torch.cuda.is_available():
+            # if multiple devices are available (running with charmrun, not srun), should assign round-robin
+            device_index = charm.myPe() % torch.cuda.device_count()
+            device = torch.device("cuda:" + str(device_index))
+        else:   
+            device = torch.device("cpu")
+        
         if done_future is not None:
             # Starting a new run
             self.done_future = done_future
@@ -139,7 +149,7 @@ class Worker(Chare):
                 loss = F.nll_loss(output, target)
                 epoch_loss += loss.item()
                 loss.backward()
-                self.average_gradients(self.model)
+                self.average_gradients(self.model, device)
                 self.optimizer.step()
             print(f'Chare {self.thisIndex[0]:4d} | PE {charm.myPe():4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
             self.epoch += 1
@@ -155,8 +165,12 @@ class Worker(Chare):
         self.contribute(None, None, self.done_future)
 
     # Gradient averaging
-    def average_gradients(self, model):
+    def average_gradients(self, model, device):
+        
         for param in model.parameters():
+            # send param to cpu
+            param.grad.data = param.grad.data.cpu()
+            
             # Flatten gradient data
             data_shape = param.grad.data.shape
             reshaped_data = param.grad.data.reshape(-1)
@@ -166,9 +180,16 @@ class Worker(Chare):
             agg_data = self.allreduce(reshaped_data, Reducer.sum).get()
             self.agg_time += time.time() - start_time
             self.time_cnt += 1
-
+             
+            # convert numpy array to torch tensor
+            # TODO: why is agg_data only an np.ndarray when running with charmrun, not srun?
+            if (isinstance(agg_data, np.ndarray)):
+                agg_data = torch.from_numpy(agg_data)
+            
             # Restore original shape of gradient data
             param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
+            param.grad.data = param.grad.data.to(device)
+            
 
     # Return method from load balancing
     def resumeFromSync(self):
@@ -177,9 +198,7 @@ class Worker(Chare):
 def main(args):
     # Initialize PyTorch on all PEs
     Group(TorchInit).init(1, ret=True).get()
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    else: device = torch.device('cpu')
+
 
     # Create chare array and start training
     num_workers = charm.numPes()
@@ -188,8 +207,8 @@ def main(args):
     workers = Array(Worker, num_workers, args=[num_workers, epochs, lb_epochs], useAtSync=True)
     t0 = time.time()
     done = charm.createFuture()
-    print(f'Starting MNIST dataset training (device = {device}), with {num_workers} chares on {charm.numPes()} PEs for {epochs} epochs (LB every {lb_epochs} epochs)')
-    workers.run(device, done)
+    
+    workers.run(done)
     done.get()
 
     # Training complete
