@@ -184,8 +184,8 @@ class Worker(Chare):
             agg_data = torch.from_numpy(agg_data)
             
             # Send to device and restore original shape of gradient data
-            param.grad.data = param.grad.data.to(device)
-            param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
+            param.grad.data = agg_data.to(device)
+            param.grad.data = param.grad.data.reshape(data_shape) / float(self.num_workers)
            
             
 
