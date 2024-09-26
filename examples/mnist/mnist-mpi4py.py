@@ -135,12 +135,11 @@ class Worker(object):
     # Gradient averaging
     def average_gradients(self, model, device):
         for param in model.parameters():
-            if device == torch.device("cuda"):
-                param.grad.data = param.grad.data.cpu()
+            param.grad.data = param.grad.data.cpu()
             # Obtain numpy arrays from gradient data
             data_shape = param.grad.data.shape
             send_data = param.grad.data.numpy()
-            recv_data = np.copy(send_data)
+            recv_data = np.empty_like(send_data)
 
             # Blocking allreduce
             start_time = time.time()
@@ -150,7 +149,8 @@ class Worker(object):
 
             # Restore original shape of gradient data
             param.grad.data = torch.from_numpy(recv_data).to(device)
-            param.grad.data /= float(self.num_workers)
+            param.grad.data = param.grad.data.reshape(data_shape) / float(self.num_workers)
+            
 
 def main():
     # Initialize PyTorch on all PEs
@@ -160,7 +160,9 @@ def main():
     print(f'MPI rank {rank} initialized PyTorch with {num_threads} threads')
 
     if torch.cuda.is_available():
-        device = torch.device("cuda")
+        # if multiple devices are available (running with mpirun, not srun), should assign round-robin
+        dev_id = rank % torch.cuda.device_count()
+        device = torch.device("cuda:" + str(dev_id))
     else:
         device = torch.device("cpu")
         
