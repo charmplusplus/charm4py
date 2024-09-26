@@ -166,7 +166,6 @@ class Worker(Chare):
 
     # Gradient averaging
     def average_gradients(self, model, device):
-        
         for param in model.parameters():
             # send param to cpu
             param.grad.data = param.grad.data.cpu()
@@ -182,9 +181,7 @@ class Worker(Chare):
             self.time_cnt += 1
              
             # convert numpy array to torch tensor
-            # TODO: why is agg_data only an np.ndarray when running with charmrun, not srun?
-            if (isinstance(agg_data, np.ndarray)):
-                agg_data = torch.from_numpy(agg_data)
+            agg_data = torch.from_numpy(agg_data)
             
             # Restore original shape of gradient data
             param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
