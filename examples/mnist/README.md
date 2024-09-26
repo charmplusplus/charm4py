@@ -1,6 +1,6 @@
 ## Distributed MNIST with Pytorch
 
-This example implements a data-parallel distributed training algorithm on the MNIST dataset. The implementation uses pytorch to do computation on the GPU, if available. After compute at every time step, data is collected on the CPU for global reduction.
+This example implements a data-parallel distributed training algorithm on the MNIST dataset. The implementation uses pytorch to do computation on the GPU, if available. After compute at every epoch, data is collected on the CPU for global reduction.
 
 ### Running the example
 
