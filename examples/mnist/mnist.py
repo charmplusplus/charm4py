@@ -183,9 +183,10 @@ class Worker(Chare):
             # convert numpy array to torch tensor
             agg_data = torch.from_numpy(agg_data)
             
-            # Restore original shape of gradient data
-            param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
+            # Send to device and restore original shape of gradient data
             param.grad.data = param.grad.data.to(device)
+            param.grad.data = agg_data.reshape(data_shape) / float(self.num_workers)
+           
             
 
     # Return method from load balancing
