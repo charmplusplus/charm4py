@@ -69,7 +69,7 @@ cdef extern from "charm.h":
     void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
-
+    void CkHapiAddCallback(long stream, void *cb, void *msg);
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
