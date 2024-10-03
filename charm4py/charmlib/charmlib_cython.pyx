@@ -826,9 +826,12 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
-  def hapiAddCallback(self, stream, callback):
-    CkHapiAddCallback(<long> stream, <void*> callback, <void*> None)
+  def hapiAddCallback(self, stream, fn):
+    CkHapiAddCallback(<long> stream, testHapiCallback, <void*> fn)
 
+cdef void testHapiCallback(void *f, void* message) noexcept:
+  print("testing hapi callback")
+  (<object>f)()
 
 # first callback from Charm++ shared library
 cdef void registerMainModule() noexcept:
