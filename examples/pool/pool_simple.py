@@ -9,6 +9,9 @@ def twice(x):
 
 def main(args):
     ray.init()
+    if(charm.numPes()==1):
+        print("Error: Run with more than one PE (exiting). For documentation on using pools, see: https://charm4py.readthedocs.io/en/latest/pool.html")
+        exit()
     results = charm.pool.map_async(square, [4], chunksize=1, multi_future=True)
     results_twice = charm.pool.map_async(twice, results, chunksize=1, multi_future=True)
 
