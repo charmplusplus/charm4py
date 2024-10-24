@@ -20,7 +20,7 @@ import sys
 if PY_MAJOR_VERSION < 3:
   from cPickle import dumps, loads
 else:
-  from pickle  import dumps, loads
+  from dill  import dumps, loads
 
 IF HAVE_NUMPY:
   import  numpy as np
