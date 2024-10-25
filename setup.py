@@ -297,7 +297,7 @@ class _renameInstalled(_install_lib):
                 direc = os.path.dirname(file)
                 install_name_command = "install_name_tool -change lib/libcharm.dylib "
                 install_name_command += direc
-                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += "/../.libs/libcharm.dylib "
                 install_name_command += direc
                 install_name_command += "/charmlib_cython.*.so"
                 log.info(install_name_command)
