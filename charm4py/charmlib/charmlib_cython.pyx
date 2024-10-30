@@ -832,7 +832,7 @@ class CharmLib(object):
 
 cdef void depositFutureWithId(void *param, void* message) noexcept:
   cdef int futureId = <int> param
-  charm._future_deposit_result(futureId, 1)
+  charm._future_deposit_result(futureId, None)
 
 # first callback from Charm++ shared library
 cdef void registerMainModule() noexcept:
