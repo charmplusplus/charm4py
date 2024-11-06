@@ -5,7 +5,7 @@ Performance Tips
 Charm4py will help you parallelize and scale your applications, but
 it won't make the sequential parts of your code faster.
 For this, there are several technologies that accelerate Python code, like
-NumPy_, Numba_, Cython_ and PyPy_. These are outside the scope of this section,
+NumPy_, Numba_, and Cython_. These are outside the scope of this section,
 but we highly recommended using Numba. We have found that using Charm4py + Numba,
 it is possible to build parallel applications entirely in Python that have the
 same or similar performance as the equivalent C++ application. Many examples
@@ -82,4 +82,3 @@ the scope of this section.
 
 .. _Cython: https://cython.org/
 
-.. _PyPy: https://pypy.org/
