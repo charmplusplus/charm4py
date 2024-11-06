@@ -826,6 +826,13 @@ class CharmLib(object):
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
+  def hapiAddCudaCallback(self, stream, future):
+    id = future.fid
+    CkHapiAddCallback(<long> stream, depositFutureWithId, <int> id)
+
+cdef void depositFutureWithId(void *param, void* message) noexcept:
+  cdef int futureId = <int> param
+  charm._future_deposit_result(futureId, None)
 
 # first callback from Charm++ shared library
 cdef void registerMainModule() noexcept:

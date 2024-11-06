@@ -729,6 +729,9 @@ class CharmLib(object):
 
   def scheduleTagAfter(self, tag, msecs):
     self.lib.CcdCallFnAfter(self.CcdCallFnAfterCallback_cb, tag, c_double(msecs))
+    
+  def hapiAddCallback(self, stream, callback):
+    self.lib.CkHapiAddCallback(stream, callback, None)
 
   def CcdCallFnAfterCallback(self, userParam, curWallTime):
     try:
