@@ -545,10 +545,10 @@ class Charm(object):
                        " on Python " + str(platform.python_version()) + " (" +
                        py_impl + "). Using '" +
                        self.lib.name + "' interface to access Charm++")
-            if py_impl == 'PyPy':
+            if py_impl != 'CPython':
                 raise Charm4PyError('PyPy is no longer supported. Use CPython instead')
-            if sys.version_info < (3,0,0):
-                raise Charm4PyError('Python 2 is no longer supported. Use Python 3 instead')
+            if sys.version_info < (3,7,0):
+                raise Charm4PyError('Python 2 is no longer supported. Use Python 3.7 or above instead')
             if self.options.profiling:
                 print('Charm4py> Profiling is ON (this affects performance)')
 
