@@ -73,15 +73,8 @@ the scope of this section.
 - Make sure profiling is disabled (it is disabled by default). Charm4py prints
   a warning at startup if it is enabled.
 
-- Charm4py can access the Charm++ shared library using three different technologies:
-  ctypes, cffi and cython. If you are using CPython (the most common
-  implementation of Python), make sure you are using the Cython layer (this is
-  what the pip version of Charm4py uses). If you are using PyPy,
-  make sure you are using the CFFI layer. Charm4py will warn at startup if you
-  are not using the most efficient layer.
-
-
-
+- Charm4py accesses the Charm++ shared library using Cython. Previous support for
+  ctypes and cffi has been removed.
 
 .. _numpy: https://www.numpy.org/
 
