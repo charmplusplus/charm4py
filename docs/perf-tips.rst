@@ -5,7 +5,7 @@ Performance Tips
 Charm4py will help you parallelize and scale your applications, but
 it won't make the sequential parts of your code faster.
 For this, there are several technologies that accelerate Python code, like
-NumPy_, Numba_, Cython_ and PyPy_. These are outside the scope of this section,
+NumPy_, Numba_, and Cython_. These are outside the scope of this section,
 but we highly recommended using Numba. We have found that using Charm4py + Numba,
 it is possible to build parallel applications entirely in Python that have the
 same or similar performance as the equivalent C++ application. Many examples
@@ -73,15 +73,8 @@ the scope of this section.
 - Make sure profiling is disabled (it is disabled by default). Charm4py prints
   a warning at startup if it is enabled.
 
-- Charm4py can access the Charm++ shared library using three different technologies:
-  ctypes, cffi and cython. If you are using CPython (the most common
-  implementation of Python), make sure you are using the Cython layer (this is
-  what the pip version of Charm4py uses). If you are using PyPy,
-  make sure you are using the CFFI layer. Charm4py will warn at startup if you
-  are not using the most efficient layer.
-
-
-
+- Charm4py accesses the Charm++ shared library using Cython. Previous support for
+  ctypes and cffi has been removed.
 
 .. _numpy: https://www.numpy.org/
 
@@ -89,4 +82,3 @@ the scope of this section.
 
 .. _Cython: https://cython.org/
 
-.. _PyPy: https://pypy.org/
