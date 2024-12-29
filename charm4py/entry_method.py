@@ -2,7 +2,17 @@ from . import wait
 from time import time
 import sys
 from greenlet import greenlet, getcurrent
+from . import charm
 
+class EntryMethodOptions:
+    def __init__(self):
+        self.value = 0
+    def set_option(self, val_identifier):
+        self.value |= val_identifier
+    def unset_option(self, val_identifier):
+        raise NotImplementedError("Options are currently permanent")
+    def get(self):
+        return self.value
 
 class EntryMethod(object):
 
@@ -27,6 +37,10 @@ class EntryMethod(object):
                 self.run = self._run
             else:
                 self.run = self._run_prof
+
+        self._msg_opts = None
+        if hasattr(method, '_msg_opts'):
+            self._msg_opts = method._msg_opts
 
         self.when_cond = None
         if hasattr(method, 'when_cond'):
@@ -180,6 +194,14 @@ def when(cond_str):
 
 def coro(func):
     func._ck_coro = True
+    return func
+
+def expedited(func):
+    options = EntryMethodOptions()
+    # TODO: get this value from charm
+    # options.set_value(charm.em_options.CK_EXPEDITED)
+    options.set_option(0x4)
+    func._msg_opts = options
     return func
 
 
