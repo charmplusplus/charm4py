@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.7", "3.9", "3.12"]
+        python-version: ["3.7", "3.9", "3.12", "3.13"]
         # macos-13 is x86_64, macos-14 is arm64
         os: [ubuntu-22.04, ubuntu-latest, macos-13, macos-14]
         exclude:
