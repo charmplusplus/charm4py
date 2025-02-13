@@ -25,7 +25,7 @@ class Test(Chare):
         return 53 * testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0]
 
     def verify(self):
-        assert self._numthreads == 0
+        assert len(self._active_threads) == 0
         self.reduce(self.thisProxy[0].done)
 
     def done(self):

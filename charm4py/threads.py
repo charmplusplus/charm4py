@@ -255,7 +255,7 @@ class EntryMethodThreadManager(object):
         return getcurrent() == self.main_gr
 
     def objMigrating(self, obj):
-        if obj._numthreads > 0:
+        if len(obj._active_threads) > 0:
             raise Charm4PyError('Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):
@@ -296,7 +296,8 @@ class EntryMethodThreadManager(object):
             obj._thread_notify_target.threadResumed(obj._thread_notify_data)
         gr.switch(arg)
         if gr.dead:
-            gr.obj._numthreads -= 1
+            obj = gr.obj
+            obj._active_threads.remove(gr)
 
     def resumeThread_prof(self, gr, arg):
         ems = getcurrent().em_callstack

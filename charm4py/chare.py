@@ -48,7 +48,8 @@ class Chare(object):
         # linked list of active wait condition objects
         self._cond_next = None
         self._cond_last = self
-        self._numthreads = 0
+        self._active_threads = set()
+
 
     def __addLocal__(self, msg):
         if self._local_free_head is None:

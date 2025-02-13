@@ -96,10 +96,10 @@ class EntryMethod(object):
         gr = greenlet(self._run)
         gr.obj = obj
         gr.notify = self.thread_notify
-        obj._numthreads += 1
+        obj._active_threads.add(gr)
         gr.switch(obj, header, args, ret_fut=ret_fut)
         if gr.dead:
-            obj._numthreads -= 1
+            obj._active_threads.remove(gr)
 
     def _run_th_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
@@ -110,14 +110,14 @@ class EntryMethod(object):
         gr.notify = self.thread_notify
         gr.em_callstack = [self]
         self.startMeasuringTime()
-        obj._numthreads += 1
+        obj._active_threads.add(gr)
         exception = None
         try:
             gr.switch(obj, header, args, ret_fut=ret_fut)
         except Exception as e:
             exception = e
         if gr.dead:
-            obj._numthreads -= 1
+            obj._active_threads.remove(gr)
         self.stopMeasuringTime()
         if len(ems) > 0:
             ems[-1].startMeasuringTime()

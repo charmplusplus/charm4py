@@ -10,12 +10,14 @@ class Test(Chare):
     def start(self, done_future):
         self.done_future = done_future
         self.iteration = 0
+        assert len(self._active_threads) == 1
         for _ in range(NUM_ITER):
             assert self.thisProxy[self.thisIndex].work(ret=True).get() == 3625
         self.reduce(self.thisProxy.verify)
 
     @coro
     def work(self):
+        assert len(self._active_threads) == 2
         if self.iteration % 2 == 0:
             mype = charm.myPe()
             assert charm.thisProxy[mype].myPe(ret=True).get() == mype
@@ -23,7 +25,7 @@ class Test(Chare):
         return 3625
 
     def verify(self):
-        assert self._numthreads == 0
+        assert len(self._active_threads) == 0
         self.reduce(self.done_future)
 
 
