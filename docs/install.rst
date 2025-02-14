@@ -7,12 +7,7 @@ Install
 Charm4py runs on Linux, macOS, Windows, Raspberry Pi, and a wide variety of clusters and
 supercomputer environments (including many supercomputers in the TOP500).
 
-Charm4py runs on Python 3.7+. Charm4py has been tested with the
-following Python implementations:
-CPython (most common implementation) and PyPy_.
-
-
-.. _PyPy: https://pypy.org
+Charm4py runs on Python 3.7+. Charm4py supports the CPython Python implementation.
 
 Installing Charm4Py binaries (via pip)
 ---------------------------------------

@@ -541,18 +541,14 @@ class Charm(object):
             import platform
             from . import charm4py_version
             py_impl = platform.python_implementation()
-            out_msg = ("Charm4py> Running Charm4py version " + charm4py_version +
+            print("Charm4py> Running Charm4py version " + charm4py_version +
                        " on Python " + str(platform.python_version()) + " (" +
                        py_impl + "). Using '" +
                        self.lib.name + "' interface to access Charm++")
-            if py_impl == 'PyPy':
-                if self.lib.name != 'cffi':
-                    out_msg += ", **WARNING**: cffi recommended for best performance"
-            elif self.lib.name != 'cython':
-                out_msg += ", **WARNING**: cython recommended for best performance"
-            print(out_msg)
-            if sys.version_info < (3,0,0):
-                print('\nCharm4py> DEPRECATION: Python 2 support is ending. Some new features may not work.\n')
+            if py_impl != 'CPython':
+                raise Charm4PyError('PyPy is no longer supported. Use CPython instead')
+            if sys.version_info < (3,7,0):
+                raise Charm4PyError('Python 2 is no longer supported. Use Python 3.7 or above instead')
             if self.options.profiling:
                 print('Charm4py> Profiling is ON (this affects performance)')
 
@@ -1201,11 +1197,7 @@ def load_charm_library(charm):
         arg_idx = args.index('+libcharm_interface')
         interface = args.pop(arg_idx + 1)
         args.pop(arg_idx)
-        if interface == 'ctypes':
-            from .charmlib.charmlib_ctypes import CharmLib
-        elif interface == 'cffi':
-            from .charmlib.charmlib_cffi import CharmLib
-        elif interface == 'cython':
+        if interface == 'cython':
             from .charmlib.charmlib_cython import CharmLib
         else:
             raise Charm4PyError('Unrecognized interface ' + interface)
@@ -1213,17 +1205,9 @@ def load_charm_library(charm):
         # pick best available interface
         import platform
         py_impl = platform.python_implementation()
-        if py_impl != 'PyPy':
-            try:
-                from .charmlib.charmlib_cython import CharmLib
-            except:
-                try:
-                    from .charmlib.charmlib_cffi import CharmLib
-                except:
-                    from .charmlib.charmlib_ctypes import CharmLib
-        else:
-            # for PyPy we require the cffi interface (cffi comes builtin in PyPy)
-            from .charmlib.charmlib_cffi import CharmLib
+        from .charmlib.charmlib_cython import CharmLib
+        
+      
     return CharmLib(charm, charm.options, libcharm_path)
 
 
