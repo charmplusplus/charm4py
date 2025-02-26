@@ -2,7 +2,9 @@ from . import wait
 from charm4py import ray
 import sys
 from greenlet import getcurrent
+import greenlet
 from collections import defaultdict
+import sauerkraut as skt
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
 # (3) to form Arrays. To achieve this, Charm4py can register with the Charm++ library up to 3
@@ -151,6 +153,17 @@ class Chare(object):
         # NOTE this will fail if called from a chare that is not in an array (as it should be)
         charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
 
+    def AtSyncAndWait(self):
+        charm.CkArraySend(self.thisProxy.aid, self.thisIndex, self.thisProxy.AtSync.ep, (b'', []))
+        import inspect
+        # we can't do the python 'f_back' because
+        # Python doesn't fill all the structures we need.
+        # So, we'll serialize the predecessor in the code
+        # caller_frame = inspect.currentframe().f_back
+        this_frame = inspect.currentframe()
+        self._serialized_frame = skt.copy_frame(this_frame, serialize=True, exclude_locals={'self'})
+        charm.threadMgr.pauseThread()
+
     def migrate(self, toPe):
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
@@ -161,6 +174,23 @@ class Chare(object):
     def setMigratable(self, migratable):
         charm.lib.setMigratable(self.thisProxy.aid, self.thisIndex, migratable)
         self.migratable = migratable
+
+    def resumeFromSync(self):
+        serframe = self._serialized_frame
+        self._serialized_frame = None
+        if serframe is not None:
+            grlt_fn = lambda: skt.deserialize_frame(serframe, run=True, replace_locals={'self': self})
+            grlt = greenlet.greenlet(grlt_fn)
+            grlt.obj = self
+            grlt.notify = None
+            grlt.parent = getcurrent()
+            assert charm.threadMgr.isMainThread()
+            self._active_threads = set([grlt])
+        else:
+            self._active_threads = set()
+        grlt.switch()
+        if grlt.dead:
+            self._active_threads.remove(grlt)
 
     # deposit value of one of the collective futures that was created by this chare
     def _coll_future_deposit_result(self, fid, result=None):
@@ -271,6 +301,10 @@ class Chare(object):
             assert seqno not in ch.data, 'Channel buffer is full'
             ch.data[seqno] = msg
 
+    def __getstate__(self):
+        active_threads = self._active_threads
+        if len(active_threads) > 0:
+            active_threads = set()
 
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
