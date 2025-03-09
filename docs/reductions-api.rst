@@ -6,7 +6,15 @@ A reduction is a distributed and scalable operation that reduces data
 distributed across chares into a smaller set of data.
 A reduction involves the chares in a collection (Group, Array or Section). They are
 started by the elements calling their ``Chare.reduce()`` or ``Chare.allreduce()``
-methods (see :ref:`Chare <chare-api-label>`).
+methods (see :ref:`Chare <chare-api-label>`). 
+
+The reduction calls accumulate objects from a chare collection to a single desired
+collection/object. ``Chare.reduce(<callback>, <data>, <Reducer>)`` is the general format.
+This returns a single collection/object to the callback function after applying the Reducer
+function on all individual chare data.
+
+Alternatively, one can use the ``Chare.contribute()`` to achieve the same. The signature of the
+contribute function is ``Chare.contribute(<data>, <Reducer>, <callback>)``
 
 .. important::
 
