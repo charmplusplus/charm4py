@@ -255,7 +255,7 @@ class EntryMethodThreadManager(object):
         return getcurrent() == self.main_gr
 
     def objMigrating(self, obj):
-        if len(obj._active_threads) > 0:
+        if len(obj._active_threads) > 1:
             raise Charm4PyError('Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):

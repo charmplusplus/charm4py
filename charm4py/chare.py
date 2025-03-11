@@ -5,6 +5,7 @@ from greenlet import getcurrent
 import greenlet
 from collections import defaultdict
 import sauerkraut as skt
+import time
 
 # A Chare class defined by a user can be used in 3 ways: (1) as a Mainchare, (2) to form Groups,
 # (3) to form Arrays. To achieve this, Charm4py can register with the Charm++ library up to 3
@@ -161,15 +162,43 @@ class Chare(object):
         # So, we'll serialize the predecessor in the code
         # caller_frame = inspect.currentframe().f_back
         this_frame = inspect.currentframe()
-        self._serialized_frame = skt.copy_frame(this_frame, serialize=True, exclude_locals={'self'})
+
+        # We are always serializing from a Chare object, so
+        # the zero'th local is always the Chare object itself.
+        # If we include it, it gets double-serialized. Bad!
+        exclude_locals = {0}
+        self._serialized_frame = skt.copy_frame(this_frame.f_back, serialize=True, 
+                                                exclude_locals=exclude_locals, 
+                                                exclude_dead_locals=True, exclude_immutables=True
+                                                )
         charm.threadMgr.pauseThread()
+
+    def migrateAndWait(self, toPe):
+        import inspect
+        # we can't do the python 'f_back' because
+        # Python doesn't fill all the structures we need.
+        # So, we'll serialize the predecessor in the code
+        # caller_frame = inspect.currentframe().f_back
+        this_frame = inspect.currentframe()
+
+        # We are always serializing from a Chare object, so
+        # the zero'th local is always the Chare object itself.
+        # If we include it, it gets double-serialized. Bad!
+        exclude_locals = {0}
+        self._serialized_frame = skt.copy_frame(this_frame, serialize=True, 
+                                                exclude_locals=exclude_locals, 
+                                                exclude_dead_locals=True, exclude_immutables=True
+                                                )
+        charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
+        charm.threadMgr.pauseThread()
+
 
     def migrate(self, toPe):
         charm.lib.CkMigrate(self.thisProxy.aid, self.thisIndex, toPe)
 
     # called after the chare has migrated to a new PE
     def migrated(self):
-        pass
+        self.resumeFromSync()
 
     def setMigratable(self, migratable):
         charm.lib.setMigratable(self.thisProxy.aid, self.thisIndex, migratable)
@@ -179,7 +208,7 @@ class Chare(object):
         serframe = self._serialized_frame
         self._serialized_frame = None
         if serframe is not None:
-            grlt_fn = lambda: skt.deserialize_frame(serframe, run=True, replace_locals={'self': self})
+            grlt_fn = lambda: skt.deserialize_frame(serframe, run=True, replace_locals={0: self})
             grlt = greenlet.greenlet(grlt_fn)
             grlt.obj = self
             grlt.notify = None
@@ -188,6 +217,7 @@ class Chare(object):
             self._active_threads = set([grlt])
         else:
             self._active_threads = set()
+            return
         grlt.switch()
         if grlt.dead:
             self._active_threads.remove(grlt)
@@ -302,9 +332,12 @@ class Chare(object):
             ch.data[seqno] = msg
 
     def __getstate__(self):
-        active_threads = self._active_threads
-        if len(active_threads) > 0:
-            active_threads = set()
+        state = self.__dict__.copy()
+        state['_active_threads'] = set()
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass

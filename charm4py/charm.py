@@ -21,6 +21,7 @@ from collections import defaultdict
 import traceback
 from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
+import greenlet
 from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
 from . import entry_method
@@ -742,6 +743,8 @@ class Charm(object):
         if hasattr(obj, '__channels__'):
             assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
         del obj._contributeInfo  # don't want to pickle this
+        if len(obj._active_threads) > 0:
+            obj._active_threads = set()
         pickled_chare = cPickle.dumps(({}, obj), self.options.pickle_protocol)
         # facilitate garbage collection (especially by removing cyclical references)
         del obj._local
