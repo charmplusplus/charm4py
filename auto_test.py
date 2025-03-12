@@ -61,6 +61,8 @@ for test in tests:
             continue
     if 'timeout_override' in test:
         TIMEOUT = test['timeout_override']
+    else:
+        TIMEOUT = 120
     num_processes = max(test.get('force_min_processes', default_num_processes), default_num_processes)
     for interface in interfaces:
         durations[interface][test['path']] = []
