@@ -16,6 +16,12 @@ function on all individual chare data.
 Alternatively, one can use the ``Chare.contribute()`` to achieve the same. The signature of the
 contribute function is ``Chare.contribute(<data>, <Reducer>, <callback>)``
 
+* ``data``: scalar/vector data. Can be a collection/primitive/object. Each chare contributes some compatible data to the reducer.
+
+* ``Reducer``: charm4py.Reducer - :ref:`reducer-api-label`
+
+* ``callback``: any method - either belonging to a Chare or global or a different class. The reducer sends each reduced data to the callback.
+
 .. important::
 
     Reduction calls are asynchronous and return immediately. Chares can start
