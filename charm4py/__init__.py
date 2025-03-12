@@ -1,6 +1,6 @@
 import sys
-if sys.version_info < (3, 7, 0):
-    raise RuntimeError('Charm4py requires Python 3.7 or higher')
+if sys.version_info < (3, 8, 0):
+    raise RuntimeError('Charm4py requires Python 3.8 or higher')
 import atexit
 import os
 try:
