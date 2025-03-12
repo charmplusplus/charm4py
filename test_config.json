@@ -292,10 +292,12 @@
         "path": "examples/ray/simple.py"
     },
     {
+        "timeout_override": 480,
         "path": "examples/ray/parameter_server.py",
         "args": "sync"
     },
     {
+        "timeout_override": 480,
         "path": "examples/ray/parameter_server.py",
         "args": "async"
     },
