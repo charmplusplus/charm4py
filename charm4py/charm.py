@@ -110,7 +110,7 @@ class Charm(object):
         self.options = Options()
         self.options.profiling = False
         self.options.pickle_protocol = -1  # -1 selects the highest protocol number
-        self.options.local_msg_optim = True
+        self.options.local_msg_optim = False
         self.options.local_msg_buf_size = 50
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
@@ -487,13 +487,9 @@ class Charm(object):
 
     # register class C in Charm
     def registerInCharmAs(self, C, charm_type, libRegisterFunc):
-        import sys
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        entryNames = [method.name for method in entryMethods]
-
-        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, len(entryMethods))
-
+        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
@@ -558,6 +554,7 @@ class Charm(object):
             self.registerInCharm(C)
 
     def registerAs(self, C, charm_type_id):
+        from .sections import SectionManager
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, 'More than one entry point has been specified'
             self.mainchareRegistered = True
@@ -1206,6 +1203,7 @@ def load_charm_library(charm):
         # pick best available interface
         import platform
         py_impl = platform.python_implementation()
+        from .charmlib.charmlib_cython import CharmLib
         
       
     return CharmLib(charm, charm.options, libcharm_path)
