@@ -489,7 +489,8 @@ class Charm(object):
     def registerInCharmAs(self, C, charm_type, libRegisterFunc):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
+        entryNames = [method.name for method in entryMethods]
+        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, len(entryMethods))
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
