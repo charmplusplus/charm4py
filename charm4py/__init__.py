@@ -1,6 +1,6 @@
 import sys
-if sys.version_info < (2, 7, 0):
-    raise RuntimeError('Charm4py requires Python 2.7 or higher')
+if sys.version_info < (3, 8, 0):
+    raise RuntimeError('Charm4py requires Python 3.8 or higher')
 import atexit
 import os
 try:
@@ -30,6 +30,7 @@ if os.environ.get('CHARM_NOLOAD', '0') == '0':
 
     from .chare import Chare, Group, Array, ArrayMap
     from .channel import Channel
+    from .object_store import ObjectStore
 
     def checkCharmStarted():
         if not charm.started:

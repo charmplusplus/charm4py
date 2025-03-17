@@ -2,6 +2,31 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+What's new in v1.1
+==================
+
+- PyPI binary distribution 
+
+  - supports MacOS (Intel and Apple Silicon architectures) and Manylinux (x86_64)
+  - supports both PyPy and CPython
+  - PyPI package here: https://pypi.org/project/charm4py/
+
+- Add a Ray Core API implementation on Charm4py
+
+  - Ray is a framework for distributed AI and Python applications (https://docs.ray.io/)
+  - the Charm4py Ray API allows users to run Ray programs with Charm4py background with minimal changes
+
+- Fixes reductions over a section, use of futures in threaded entry methods
+- Reduce message latency for builtin Numpy datatypes
+- Disabled local message optimization which broke Charm++ semantics in some
+  cases
+- Use a `@register` decorator for registering Chares instead of passing them
+  as a list to `charm.start`
+- Migrate build system to pyproject.toml
+- Fix build on ARM-based machines
+- Update Cython support, now requires Cython 3.0.0
+
+
 What's new in v1.0
 ==================
 

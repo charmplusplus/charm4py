@@ -289,6 +289,22 @@
         "path": "examples/simple/hello_world.py"
     },
     {
+        "path": "examples/ray/simple.py"
+    },
+    {
+        "timeout_override": 480,
+        "path": "examples/ray/parameter_server.py",
+        "args": "sync"
+    },
+    {
+        "timeout_override": 480,
+        "path": "examples/ray/parameter_server.py",
+        "args": "async"
+    },
+    {
+        "path": "examples/ray/fib.py"
+    },
+    {
         "prefix": "tests/exec.sh",
         "path": "examples/simple/hello_world.py"
     },

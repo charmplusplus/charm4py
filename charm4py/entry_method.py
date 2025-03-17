@@ -36,13 +36,19 @@ class EntryMethod(object):
             if isinstance(self.when_cond, wait.ChareStateMsgCond):
                 self.when_cond_func = self.when_cond.cond_func
 
-    def _run(self, obj, header, args):
+    def _run(self, obj, header, args, ret_fut=False):
         """ run entry method of the given object in the current thread """
         # set last entry method executed (note that 'last_em_exec' won't
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
         try:
+            #print(args)
+            if ret_fut:
+                fut = args[-1]
+                args = args[:-1]
             ret = getattr(obj, self.name)(*args)
+            if ret_fut and not (ret is None):
+                fut.create_object(ret)
         except SystemExit:
             exit_code = sys.exc_info()[1].code
             if exit_code is None:
@@ -67,7 +73,7 @@ class EntryMethod(object):
             else:
                 blockFuture.send(ret)  # send result back to remote
 
-    def _run_prof(self, obj, header, args):
+    def _run_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
@@ -75,7 +81,7 @@ class EntryMethod(object):
         ems.append(self)
         exception = None
         try:
-            self._run(obj, header, args)
+            self._run(obj, header, args, ret_fut=ret_fut)
         except Exception as e:
             exception = e
         assert self == ems[-1]
@@ -86,16 +92,16 @@ class EntryMethod(object):
         if exception is not None:
             raise exception
 
-    def _run_th(self, obj, header, args):
+    def _run_th(self, obj, header, args, ret_fut=False):
         gr = greenlet(self._run)
         gr.obj = obj
         gr.notify = self.thread_notify
         obj._numthreads += 1
-        gr.switch(obj, header, args)
+        gr.switch(obj, header, args, ret_fut=ret_fut)
         if gr.dead:
             obj._numthreads -= 1
 
-    def _run_th_prof(self, obj, header, args):
+    def _run_th_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
@@ -107,7 +113,7 @@ class EntryMethod(object):
         obj._numthreads += 1
         exception = None
         try:
-            gr.switch(obj, header, args)
+            gr.switch(obj, header, args, ret_fut=ret_fut)
         except Exception as e:
             exception = e
         if gr.dead:

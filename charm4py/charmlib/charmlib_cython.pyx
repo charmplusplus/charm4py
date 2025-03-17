@@ -1,4 +1,6 @@
-from ccharm cimport *
+# cython: language_level=3
+
+from charm4py.charmlib.ccharm cimport *
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uintptr_t
@@ -238,8 +240,7 @@ cdef class ReceiveMsgBuffer:
     self.msg = NULL
 
   cdef inline int isLocal(self):
-    return self.msg[0] == 'L' and self.msg[1] == ':'
-
+    return self.msg[0] == b'L' and self.msg[1] == b':'
   cdef inline int getLocalTag(self):
     return (<int*>(&self.msg[2]))[0]
 
@@ -876,27 +877,27 @@ class CharmLib(object):
 
 
 # first callback from Charm++ shared library
-cdef void registerMainModule():
+cdef void registerMainModule() noexcept:
   try:
     charm.registerMainModule()
   except:
     charm.handleGeneralError()
 
-cdef void recvReadOnly(int msgSize, char *msg):
+cdef void recvReadOnly(int msgSize, char *msg) noexcept:
   try:
     recv_buffer.setMsg(msg, msgSize)
     charm.recvReadOnly(recv_buffer)
   except:
     charm.handleGeneralError()
 
-cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv):
+cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv) noexcept:
   try:
     args = [argv[i].decode('UTF-8') for i in range(argc)]
     charm.buildMainchare(onPe, <uintptr_t> objPtr, ep, args)
   except:
     charm.handleGeneralError()
 
-cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -906,7 +907,7 @@ cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, i
   except:
     charm.handleGeneralError()
 
-cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -916,7 +917,7 @@ cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start)
   except:
     charm.handleGeneralError()
 
-cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -926,7 +927,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
   except:
     charm.handleGeneralError()
 
-cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   cdef int i = 0
   try:
     if PROFILING:
@@ -941,13 +942,13 @@ cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *array
   except:
     charm.handleGeneralError()
 
-cdef int arrayMapProcNum(int gid, int ndims, const int *arrayIndex):
+cdef int arrayMapProcNum(int gid, int ndims, const int *arrayIndex) noexcept:
   try:
     return charm.arrayMapProcNum(gid, array_index_to_tuple(ndims, arrayIndex))
   except:
     charm.handleGeneralError()
 
-cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int sizing):
+cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int sizing) noexcept:
   cdef int i = 0
   global tempData
   try:
@@ -963,7 +964,7 @@ cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int s
   except:
     charm.handleGeneralError()
 
-cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, int msgSize):
+cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, int msgSize) noexcept:
   cdef int i = 0
   try:
     if PROFILING:
@@ -974,7 +975,7 @@ cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, 
   except:
     charm.handleGeneralError()
 
-cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
+cdef void resumeFromSync(int aid, int ndims, int *arrayIndex) noexcept:
   cdef int i = 0
   try:
     index = array_index_to_tuple(ndims, arrayIndex)
@@ -984,7 +985,7 @@ cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
     charm.handleGeneralError()
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
-                            char **returnBuffers, int *returnBufferSizes):
+                            char **returnBuffers, int *returnBufferSizes) noexcept:
   cdef int numElems
   cdef array.array a
   cdef int item_size
@@ -1018,7 +1019,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
       header = {}
       ctype = charm_reducer_to_ctype[reducerType]
       item_size = c_type_table_sizes[ctype]
-      numElems = dataSize / item_size
+      numElems = dataSize // item_size # force integer division for cython + python3
       if fid > 0:
         pyData.append(fid)
       if numElems == 1:
@@ -1070,7 +1071,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
     charm.handleGeneralError()
 
 # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
-cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer):
+cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer) noexcept:
   cdef int i = 0
   cdef int msgSize
   global tempData
@@ -1103,7 +1104,7 @@ cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer)
   except:
     charm.handleGeneralError()
 
-cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
+cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime) noexcept:
   try:
     charm.triggerCallable(<int>userParam)
   except:

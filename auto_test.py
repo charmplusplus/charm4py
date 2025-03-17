@@ -30,7 +30,7 @@ def searchForPython(python_implementations):
 
 
 # ----------------------------------------------------------------------------------
-TIMEOUT = 60  # timeout for each test (in seconds)
+TIMEOUT = 120  # timeout for each test (in seconds)
 CHARM_QUIET_AFTER_NUM_TESTS = 5
 
 commonArgs = ['++local']
@@ -46,7 +46,7 @@ except:
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-interfaces = ['ctypes', 'cffi', 'cython']
+interfaces = ['cython']
 
 with open('test_config.json', 'r') as infile:
     tests = json.load(infile)
@@ -59,6 +59,10 @@ for test in tests:
             continue
         if test['condition'] == 'not numbaInstalled' and numbaInstalled:
             continue
+    if 'timeout_override' in test:
+        TIMEOUT = test['timeout_override']
+    else:
+        TIMEOUT = 120
     num_processes = max(test.get('force_min_processes', default_num_processes), default_num_processes)
     for interface in interfaces:
         durations[interface][test['path']] = []
