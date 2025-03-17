@@ -53,7 +53,7 @@ system = get_build_os()
 
 
 libcharm_filename2 = None
-if system == 'Windows' or system.lower().startswith('cygwin'):
+if system == 'windows' or system.startswith('cygwin'):
     libcharm_filename = 'charm.dll'
     libcharm_filename2 = 'charm.lib'
     charmrun_filename = 'charmrun.exe'
@@ -89,13 +89,10 @@ except:
 def charm_built(charm_src_dir):
     library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
     if not os.path.exists(library_path):
-        print('Charm not built!')
         return False
     charmrun_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
     if not os.path.exists(charmrun_path):
-        print('Charm not built!')
         return False
-    print('Charm is built!')
     return True
 
 
@@ -134,7 +131,7 @@ def build_libcharm(charm_src_dir, build_dir):
 
     if not charm_built(charm_src_dir):
 
-        if system == 'Windows' or system.lower().startswith('cygwin'):
+        if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
                                       ' Please download a Charm4py binary wheel (64-bit Python required)')
 
@@ -154,34 +151,13 @@ def build_libcharm(charm_src_dir, build_dir):
 
         if enable_tracing:
          extra_build_opts += " --enable-tracing "
+        
+        target_machine, os_target, target_layer = get_build_triple(build_mpi)
 
-        if system == 'Darwin':
-            if build_mpi:
-                cmd = './build charm4py mpi-darwin-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                cmd = './build charm4py netlrts-darwin-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-        else:
-            try:
-                arch = os.uname()[4]
-            except:
-                arch = None
-            if arch is not None and arch.startswith('arm'):
-                import re
-                regexp = re.compile("armv(\d+).*")
-                m = regexp.match(arch)
-                if m:
-                    version = int(m.group(1))
-                    if version < 8:
-                        cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                    else:
-                        cmd = './build charm4py netlrts-linux-arm8 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-arm7 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-            else:
-                if build_mpi:
-                    cmd = './build charm4py mpi-linux-x86_64 -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
-                else:
-                    cmd = './build charm4py netlrts-linux-x86_64 tcp -j' + str(build_num_cores) + ' --with-production ' + extra_build_opts
+        build_triple = f'{target_layer}-{os_target}-{target_machine}'
+        cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
+        print(cmd)
+
         p = subprocess.Popen(cmd.rstrip().split(' '),
                              cwd=os.path.join(charm_src_dir, 'charm'),
                              shell=False)
@@ -310,7 +286,6 @@ class _renameInstalled(_install_lib):
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
-        '''
         for file in outfiles:
             if "c_object_store" in file and system == "darwin":
                 direc = os.path.dirname(file)
@@ -330,7 +305,6 @@ class _renameInstalled(_install_lib):
                 install_name_command += "/charmlib_cython.*.so"
                 log.info(install_name_command)
                 os.system(install_name_command)
-        '''
         return outfiles
 
 
