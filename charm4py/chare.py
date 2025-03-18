@@ -249,7 +249,7 @@ class Chare(object):
         else:
             from .channel import _Channel
             local_port = len(self.__channels__)
-            ch = _Channel(local_port, remote_proxy, False)
+            ch = _Channel(local_port, remote_proxy, False, None)
             self.__channels__.append(ch)
             self.__pendingChannels__.append(ch)
             ch.remote_port = remote_port
@@ -718,7 +718,19 @@ def array_proxy_elem(proxy, idx):  # array proxy [] overload method
             assert _slice.start is not None and _slice.stop is not None, 'Must specify start and stop indexes for array slicing'
         return charm.split(proxy, 1, slicing=idx)[0]
 
+class EntryMethodOptions:
+    def __init__(self):
+        self.value = 0
+    def set_option(self, val_identifier):
+        self.value |= val_identifier
+    def get(self):
+        return self.value
+
 def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, generates proxy entry methods
+    msg_opts = EntryMethodOptions()
+    def set_options(options):
+        nonlocal msg_opts
+        msg_opts = options
     def proxy_entry_method(proxy, *args, **kwargs):
         num_args = len(args)
         if num_args < argcount and len(kwargs) > 0:
@@ -760,7 +772,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 args.append(blockFuture)
                 args = tuple(args)
             msg = charm.packMsg(destObj, args, header)
-            charm.CkArraySend(aid, elemIdx, ep, msg)
+            charm.CkArraySend(aid, elemIdx, ep, msg, msg_opts.get())
         else:
             root, sid = proxy.section
             header[b'sid'] = sid
@@ -770,6 +782,7 @@ def array_proxy_method_gen(ep, argcount, argnames, defaults):  # decorator, gene
                 charm.sectionMgr.thisProxy[root].sendToSection(sid, ep, header, *args)
         return blockFuture
     proxy_entry_method.ep = ep
+    proxy_entry_method.set_options = set_options
     return proxy_entry_method
 
 def array_ckNew_gen(C, epIdx):
@@ -884,6 +897,8 @@ class Array(object):
                 f = profile_send_function(array_proxy_method_gen(m.epIdx, argcount, argnames, defaults))
             else:
                 f = array_proxy_method_gen(m.epIdx, argcount, argnames, defaults)
+            if m._msg_opts is not None:
+                f.set_options(m._msg_opts)
             f.__qualname__ = proxyClassName + '.' + m.name
             f.__name__ = m.name
             M[m.name] = f

@@ -3,13 +3,13 @@ from .threads import LocalFuture
 
 class Channel(object):
 
-    def __new__(cls, chare, remote, local=None):
+    def __new__(cls, chare, remote, local=None, options=None):
         if not hasattr(chare, '__channels__'):
             chare.__initchannelattrs__()
         ch = chare.__findPendingChannel__(remote, False)
         if ch is None:
             local_port = len(chare.__channels__)
-            ch = _Channel(local_port, remote, True)
+            ch = _Channel(local_port, remote, True, options)
             chare.__channels__.append(ch)
             chare.__pendingChannels__.append(ch)
         else:
@@ -28,7 +28,7 @@ CHAN_BUF_SIZE = 40000
 
 class _Channel(object):
 
-    def __init__(self, port, remote, locally_initiated):
+    def __init__(self, port, remote, locally_initiated, opts):
         self.port = port
         self.remote = remote
         self.remote_port = -1
@@ -40,6 +40,9 @@ class _Channel(object):
         self.established = False
         self.established_fut = None
         self.locally_initiated = locally_initiated
+
+        if opts:
+            self.remote._channelRecv__.set_options(opts)
 
     def setEstablished(self):
         self.established = True

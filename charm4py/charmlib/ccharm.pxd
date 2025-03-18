@@ -38,8 +38,8 @@ cdef extern from "charm.h":
     void CkChareExtSend_multi(int onPE, void *objPtr, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
     void CkGroupExtSend(int gid, int npes, int *pes, int epIdx, char *msg, int msgSize);
     void CkGroupExtSend_multi(int gid, int npes, int *pes, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
-    void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize);
-    void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes);
+    void CkArrayExtSend(int aid, int *idx, int ndims, int epIdx, char *msg, int msgSize, int opts);
+    void CkArrayExtSend_multi(int aid, int *idx, int ndims, int epIdx, int num_bufs, char **bufs, int *buf_sizes, int opts);
     void CkForwardMulticastMsg(int gid, int num_children, int *children);
 
     int CkGroupGetReductionNumber(int gid);
@@ -69,7 +69,6 @@ cdef extern from "charm.h":
     void CkStartQDExt_ArrayCallback(int aid, int* idx, int ndims, int epIdx, int fid);
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
-
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
