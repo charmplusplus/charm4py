@@ -1,0 +1,656 @@
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.201 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 64
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008624055000041153
+Time for last run: 0.0005591039999899294
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 132096
+Total Bytes 0
+Elapsed Time 5.591040e-04 seconds
+FLOP/s 2.362637e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.175 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 128
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008715055999971355
+Time for last run: 0.0005877039999973022
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 263168
+Total Bytes 0
+Elapsed Time 5.877040e-04 seconds
+FLOP/s 4.477900e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.175 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 256
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.00856105499997284
+Time for last run: 0.0006010039999750916
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 525312
+Total Bytes 0
+Elapsed Time 6.010040e-04 seconds
+FLOP/s 8.740574e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.174 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 512
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008673455999996804
+Time for last run: 0.0006210040000382833
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 1049600
+Total Bytes 0
+Elapsed Time 6.210040e-04 seconds
+FLOP/s 1.690166e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.175 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 1024
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008787357000016982
+Time for last run: 0.0006138039999541434
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 2098176
+Total Bytes 0
+Elapsed Time 6.138040e-04 seconds
+FLOP/s 3.418316e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.173 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 2048
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008677954999996018
+Time for last run: 0.0005995040000357221
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 4195328
+Total Bytes 0
+Elapsed Time 5.995040e-04 seconds
+FLOP/s 6.997998e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.172 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 4096
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008611556000005294
+Time for last run: 0.0006403040000009241
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 8389632
+Total Bytes 0
+Elapsed Time 6.403040e-04 seconds
+FLOP/s 1.310258e+10
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.173 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 8192
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.008716956000000664
+Time for last run: 0.0006808040000123583
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 16778240
+Total Bytes 0
+Elapsed Time 6.808040e-04 seconds
+FLOP/s 2.464474e+10
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.212 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 64
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.011686076999978923
+Time for last run: 0.001018707000014274
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 132096
+Total Bytes 0
+Elapsed Time 1.018707e-03 seconds
+FLOP/s 1.296703e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.194 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 128
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.009927465000032498
+Time for last run: 0.000985606000028838
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 263168
+Total Bytes 0
+Elapsed Time 9.856060e-04 seconds
+FLOP/s 2.670114e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.192 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 256
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.010256968000021516
+Time for last run: 0.001045707000002949
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 525312
+Total Bytes 0
+Elapsed Time 1.045707e-03 seconds
+FLOP/s 5.023510e+08
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.193 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 512
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.010232867000013357
+Time for last run: 0.0010051070000258733
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 1049600
+Total Bytes 0
+Elapsed Time 1.005107e-03 seconds
+FLOP/s 1.044267e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.181 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 1024
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.009402862000001733
+Time for last run: 0.0009570059999646219
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 2098176
+Total Bytes 0
+Elapsed Time 9.570060e-04 seconds
+FLOP/s 2.192438e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.179 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 2048
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.009789064000017333
+Time for last run: 0.00100620699998899
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 4195328
+Total Bytes 0
+Elapsed Time 1.006207e-03 seconds
+FLOP/s 4.169448e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.190 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 4096
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.015119499999968866
+Time for last run: 0.0009688070000493099
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 8389632
+Total Bytes 0
+Elapsed Time 9.688070e-04 seconds
+FLOP/s 8.659756e+09
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.181 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-115-ga4b8220a7
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Running Task Benchmark
+  Configuration:
+    Task Graph 1:
+      Time Steps: 4
+      Max Width: 4
+      Dependence Type: stencil_1d
+      Radix: 3
+      Period: 0
+      Fraction Connected: 0.250000
+      Kernel:
+        Type: compute_bound
+        Iterations: 8192
+        Samples: 16
+        Imbalance: 0.000000
+      Output Bytes: 16
+      Scratch Bytes: 0
+Time for last run: 0.009021359000030316
+Time for last run: 0.0011290080000208036
+Total Tasks 16
+Total Dependencies 30
+  Unable to estimate local/nonlocal dependencies
+Total FLOPs 16778240
+Total Bytes 0
+Elapsed Time 1.129008e-03 seconds
+FLOP/s 1.486105e+10
+B/s 0.000000e+00
+Transfer (estimated):
+  Unable to estimate local/nonlocal transfer
+[Partition 0][Node 0] End of program
