@@ -10,6 +10,7 @@ from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 
+from ccharm.pxd cimport 
 from ..charm import Charm4PyError
 from .. import reduction as red
 from cpython cimport array
@@ -35,6 +36,8 @@ cdef object np_number = np.number
 
 
 # ------ global constants ------
+
+cdef dict _ccs_handlers = {}
 
 cdef enum:
   NUM_DCOPY_BUFS = 60   # max number of dcopy buffers
@@ -825,6 +828,27 @@ class CharmLib(object):
 
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
+
+  def CcsRegisterHandler(self, str handlername, object handler):
+    cdef const char* chandler_name = handler.encode('utf-8')
+    
+    cdef void c_handler(void* data):
+      try:
+        py_data = bytes(<char*>data)
+        handler(py_data)
+      except Exception as e:
+        print(f"Error in handler '{handlername}': {e}")
+
+    _ccs_handlers[handlername] = handler 
+    CcsRegisterHandler(chandler_name, <CmiHandler>c_handler)
+  
+  def isRemoteRequest(self):
+    return bool(isRemoteRequest())
+  
+  def CcsSendReply(str message):
+    cdef const char* replyData = message.encode('utf-8')
+    cdef int replyLen = len(message)
+    CcsSendReply(replyLen, <const void*>replyData)
 
 
 # first callback from Charm++ shared library
