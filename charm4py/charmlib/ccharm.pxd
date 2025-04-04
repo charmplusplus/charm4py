@@ -70,9 +70,12 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+cdef extern from "conv-header.h":
     ctypedef void (*CmiHandler)(void* )
-    void CcsRegisterHandler(const char *ccs_handlername, CmiHandler fn);
-    int CcsIsRemoteRequest(void);
+
+cdef extern from "conv-ccs.h":
+    void CcsRegisterHandler(const char *ccs_handlername, void (*CmiHandler)(void *msg));
+    int CcsIsRemoteRequest();
     void CcsSendReply(int replyLen, const void *replyData);
 
 

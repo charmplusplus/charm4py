@@ -9,8 +9,8 @@ from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CON
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
+from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
 
-from ccharm.pxd cimport 
 from ..charm import Charm4PyError
 from .. import reduction as red
 from cpython cimport array
@@ -830,25 +830,30 @@ class CharmLib(object):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
   def CcsRegisterHandler(self, str handlername, object handler):
-    cdef const char* chandler_name = handler.encode('utf-8')
+    cdef char* chandler_name = <char *>PyMem_Malloc(len(handlername) * sizeof(char))
+
+    for i in range(len(handlername)):
+      chandler_name[i] = <char>(handlername >> (8 * i))
     
-    cdef void c_handler(void* data):
-      try:
-        py_data = bytes(<char*>data)
-        handler(py_data)
-      except Exception as e:
-        print(f"Error in handler '{handlername}': {e}")
+    cpdef CmiHandler c_handler
+    c_handler = <CmiHandler>handler
 
     _ccs_handlers[handlername] = handler 
     CcsRegisterHandler(chandler_name, <CmiHandler>c_handler)
+    PyMem_Free(chandler_name)
   
   def isRemoteRequest(self):
-    return bool(isRemoteRequest())
+    return bool(CcsIsRemoteRequest())
   
   def CcsSendReply(str message):
-    cdef const char* replyData = message.encode('utf-8')
+    cdef char* replyData = <char *>PyMem_Malloc(len(message) * sizeof(char))
+
+    for i in range(len(message)):
+      replyData[i] = <char>(message >> (8 * i))
+
     cdef int replyLen = len(message)
     CcsSendReply(replyLen, <const void*>replyData)
+    PyMem_Free(replyData)
 
 
 # first callback from Charm++ shared library
