@@ -10,6 +10,7 @@ from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
 from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
+from cython.operator cimport dereference
 
 from ..charm import Charm4PyError
 from .. import reduction as red
@@ -314,6 +315,22 @@ cdef object emptyMsg          # pickled empty Charm4py msg
 cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
+
+#cdef const int CmiReservedHeaderSize = getCmiReservedHeaderSize()
+
+cdef struct remoteMsg:
+  #char[getCmiReservedHeaderSize()] reservedHeader
+  #char[32] reservedHeader
+  CcsImplHeader header
+  void* data
+
+cdef void recvRemoteMessage(void *msg):
+
+    cdef void *shiftedMsg = msg + getCmiReservedHeaderSize()
+    cdef remoteMsg *incomingMsgPtr = <remoteMsg*> shiftedMsg
+    cdef remoteMsg incomingMsg = dereference(incomingMsgPtr)
+    cdef char *handler_name = incomingMsg.header.handler
+    # call correct handler
 
 
 class CharmLib(object):
@@ -835,11 +852,9 @@ class CharmLib(object):
     for i in range(len(handlername)):
       chandler_name[i] = <char>(handlername >> (8 * i))
     
-    cpdef CmiHandler c_handler
-    c_handler = <CmiHandler>handler
 
     _ccs_handlers[handlername] = handler 
-    CcsRegisterHandler(chandler_name, <CmiHandler>c_handler)
+    CcsRegisterHandlerExt(chandler_name, <void *>handler)
     PyMem_Free(chandler_name)
   
   def isRemoteRequest(self):

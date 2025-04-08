@@ -72,9 +72,34 @@ cdef extern from "charm.h":
 
 cdef extern from "conv-header.h":
     ctypedef void (*CmiHandler)(void* )
+    int getCmiReservedHeaderSize()
+
+cdef extern from "sockRoutines.h":
+
+    ctypedef struct skt_ip_t:
+        int tag
+    
+    ctypedef struct ChMessageInt_t:
+        unsigned char[4] data
+
+cdef extern from "ccs-server.h":
+
+    ctypedef struct CcsSecAttr:
+        skt_ip_t ip
+        ChMessageInt_t port
+        ChMessageInt_t replySalt
+        unsigned char auth
+        unsigned char level
+    
+    ctypedef struct CcsImplHeader:
+        CcsSecAttr attr
+        char[32] handler
+        ChMessageInt_t pe
+        ChMessageInt_t replyFd
+        ChMessageInt_t len
 
 cdef extern from "conv-ccs.h":
-    void CcsRegisterHandler(const char *ccs_handlername, void (*CmiHandler)(void *msg));
+    void CcsRegisterHandlerExt(const char *ccs_handlername, void *fn);
     int CcsIsRemoteRequest();
     void CcsSendReply(int replyLen, const void *replyData);
 
