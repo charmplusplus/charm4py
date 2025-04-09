@@ -854,7 +854,7 @@ class CharmLib(object):
     
 
     _ccs_handlers[handlername] = handler 
-    CcsRegisterHandlerExt(chandler_name, <void *>handler)
+    CcsRegisterHandlerExt(chandler_name, <void *>recvRemoteMessage)
     PyMem_Free(chandler_name)
   
   def isRemoteRequest(self):
