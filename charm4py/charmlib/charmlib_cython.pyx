@@ -319,18 +319,41 @@ cdef char* localMsg_ptr = <char*>localMsg
 #cdef const int CmiReservedHeaderSize = getCmiReservedHeaderSize()
 
 cdef struct remoteMsg:
-  #char[getCmiReservedHeaderSize()] reservedHeader
+  char[CmiReservedHeaderSize] reservedHeader
   #char[32] reservedHeader
   CcsImplHeader header
   void* data
 
 cdef void recvRemoteMessage(void *msg):
 
-    cdef void *shiftedMsg = msg + getCmiReservedHeaderSize()
+    cdef void *shiftedMsg = msg + CmiReservedHeaderSize
     cdef remoteMsg *incomingMsgPtr = <remoteMsg*> shiftedMsg
     cdef remoteMsg incomingMsg = dereference(incomingMsgPtr)
     cdef char *handler_name = incomingMsg.header.handler
+
+    cdef object handler 
+    cdef bytes payload 
     # call correct handler
+
+    cdef int payload_length = (<unsigned char *>incomingMsg.header.len.data)[0] | \
+                          (<unsigned char *>incomingMsg.header.len.data)[1] << 8 | \
+                          (<unsigned char *>incomingMsg.header.len.data)[2] << 16 | \
+                          (<unsigned char *>incomingMsg.header.len.data)[3] << 24
+    if payload_length <= 0:
+      print("Error: Payload Length is <= 0")
+      return 
+    
+    payload = bytes(<char*>incomingMsg.data, payload_length)
+
+
+    python_handlername = handler_name.decode('utf-8')
+    handler_func = _ccs_handlers.get(python_handlername)
+    if handler_func is None:
+      print(f"Error: Could not find handler assocaited with name : {python_handlername}")
+      return 
+    
+    handler_func(payload)
+    return 
 
 
 class CharmLib(object):

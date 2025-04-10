@@ -72,7 +72,8 @@ cdef extern from "charm.h":
 
 cdef extern from "conv-header.h":
     ctypedef void (*CmiHandler)(void* )
-    int getCmiReservedHeaderSize()
+    #int getCmiReservedHeaderSize()
+    cdef const int CmiReservedHeaderSize
 
 cdef extern from "sockRoutines.h":
 
