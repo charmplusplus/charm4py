@@ -1092,6 +1092,17 @@ class Charm(object):
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
 
+    #functions for ccs 
+    def CcsRegisterHandler(self, handlername, handler):
+        self.lib.CcsRegisterHandler(handlername, handler)
+
+    def CcsIsRemoteRequest(self):
+        self.lib.CcsIsRemoteRequest()
+    
+    def CcsSendReply(self, message):
+        self.lib.CcsSendReply(message)
+
+
 
 class CharmRemote(Chare):
 

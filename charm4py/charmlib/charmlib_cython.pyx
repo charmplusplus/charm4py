@@ -870,28 +870,21 @@ class CharmLib(object):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
 
   def CcsRegisterHandler(self, str handlername, object handler):
-    cdef char* chandler_name = <char *>PyMem_Malloc(len(handlername) * sizeof(char))
-
-    for i in range(len(handlername)):
-      chandler_name[i] = <char>(handlername >> (8 * i))
-    
+    cdef bytes handler_bytes = handlername.encode("utf-8")
+    cdef const char* c_handlername = handler_bytes
 
     _ccs_handlers[handlername] = handler 
-    CcsRegisterHandlerExt(chandler_name, <void *>recvRemoteMessage)
-    PyMem_Free(chandler_name)
+    CcsRegisterHandlerExt(c_handlername, <void *>recvRemoteMessage)
   
   def isRemoteRequest(self):
     return bool(CcsIsRemoteRequest())
   
   def CcsSendReply(str message):
-    cdef char* replyData = <char *>PyMem_Malloc(len(message) * sizeof(char))
+    cdef bytes message_bytes = message.encode("utf-8")
+    cdef const char* replyData = message_bytes
 
-    for i in range(len(message)):
-      replyData[i] = <char>(message >> (8 * i))
-
-    cdef int replyLen = len(message)
+    cdef int replyLen = len(message_bytes)
     CcsSendReply(replyLen, <const void*>replyData)
-    PyMem_Free(replyData)
 
 
 # first callback from Charm++ shared library
