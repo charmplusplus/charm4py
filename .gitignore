@@ -6,8 +6,13 @@ charm4py/_version.py
 charm4py/charmlib/*.o
 charm4py/charmlib/*.so
 charm4py/charmlib/charmlib_cython.c
+charm4py/charmlib/charmlib_cython.cpp
+charm4py/charmlib/charmlib_cython.html
 charm4py/charmlib/_charmlib_cffi.c
 charm4py/charmlib/build/
+charm4py.egg-info/
+charm4py/c_object_store.cpp
+charm4py/c_object_store.html
 __pycache__
 
 # ignore some common tmp files
