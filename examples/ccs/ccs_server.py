@@ -5,7 +5,7 @@ class RegisterPerChare(Chare):
     def register(self, return_future):
         charm.CcsRegisterHandler("ping2", handler)
         charm.CcsRegisterHandler("ping", handler)
-        self.reduce(return_future, 0, Reducer.sum)
+        self.reduce(return_future, Reducer.nop)
 
 def handler(msg):
     if charm.CcsIsRemoteRequest():
