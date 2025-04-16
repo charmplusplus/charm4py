@@ -153,6 +153,9 @@ class Charm(object):
         # TODO: maybe implement this buffer in c++
         self.future_get_buffer = {}
 
+        #registered methods for ccs
+        self.ccs_methods = {}
+
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
         # list of Chare types that are registered and used internally by the runtime
@@ -1094,13 +1097,20 @@ class Charm(object):
 
     #functions for ccs 
     def CcsRegisterHandler(self, handlername, handler):
+        self.ccs_methods[handlername] = handler
         self.lib.CcsRegisterHandler(handlername, handler)
 
     def CcsIsRemoteRequest(self):
-        self.lib.CcsIsRemoteRequest()
+        self.lib.isRemoteRequest()
     
     def CcsSendReply(self, message):
         self.lib.CcsSendReply(message)
+
+    def callHandler(self, handlername, data):
+        if handlername in self.ccs_methods:
+            self.ccs_methods[handlername](data)
+        else:
+            raise Charm4PyError('Handler ' + handlername + ' not registered')
 
 
 

@@ -316,44 +316,27 @@ cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
 
-#cdef const int CmiReservedHeaderSize = getCmiReservedHeaderSize()
+#cdef const int CmiReservedHeaderSize s= getCmiReservedHeaderSize()
 
 cdef struct remoteMsg:
-  char[CmiReservedHeaderSize] reservedHeader
-  #char[32] reservedHeader
-  CcsImplHeader header
-  void* data
+  int a
+  int b
+  char handler_name[32] # we know it can't be longer
+  char data[1024] #assume generous length at end
 
-cdef void recvRemoteMessage(void *msg):
+cdef void recvRemoteMessage(void *msg) noexcept:
 
-    cdef void *shiftedMsg = msg + CmiReservedHeaderSize
-    cdef remoteMsg *incomingMsgPtr = <remoteMsg*> shiftedMsg
-    cdef remoteMsg incomingMsg = dereference(incomingMsgPtr)
-    cdef char *handler_name = incomingMsg.header.handler
+    cdef void *shiftedMsg = msg + CmiReservedHeaderSize #move past reserved header
+    cdef remoteMsg* incomingMsgPtr = <remoteMsg*> shiftedMsg
+    cdef int handler_length = incomingMsgPtr.a
+    cdef int data_length = incomingMsgPtr.b
 
-    cdef object handler 
-    cdef bytes payload 
-    # call correct handler
+    # turn char arrays into strings
 
-    cdef int payload_length = (<unsigned char *>incomingMsg.header.len.data)[0] | \
-                          (<unsigned char *>incomingMsg.header.len.data)[1] << 8 | \
-                          (<unsigned char *>incomingMsg.header.len.data)[2] << 16 | \
-                          (<unsigned char *>incomingMsg.header.len.data)[3] << 24
-    if payload_length <= 0:
-      print("Error: Payload Length is <= 0")
-      return 
+    handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
+    data = incomingMsgPtr.data[:data_length].decode('utf-8')
     
-    payload = bytes(<char*>incomingMsg.data, payload_length)
-
-
-    python_handlername = handler_name.decode('utf-8')
-    handler_func = _ccs_handlers.get(python_handlername)
-    if handler_func is None:
-      print(f"Error: Could not find handler assocaited with name : {python_handlername}")
-      return 
-    
-    handler_func(payload)
-    return 
+    charm.callHandler(handler_name, data)
 
 
 class CharmLib(object):
@@ -872,14 +855,12 @@ class CharmLib(object):
   def CcsRegisterHandler(self, str handlername, object handler):
     cdef bytes handler_bytes = handlername.encode("utf-8")
     cdef const char* c_handlername = handler_bytes
-
-    _ccs_handlers[handlername] = handler 
     CcsRegisterHandlerExt(c_handlername, <void *>recvRemoteMessage)
   
   def isRemoteRequest(self):
     return bool(CcsIsRemoteRequest())
   
-  def CcsSendReply(str message):
+  def CcsSendReply(self, str message):
     cdef bytes message_bytes = message.encode("utf-8")
     cdef const char* replyData = message_bytes
 
