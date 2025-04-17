@@ -58,6 +58,12 @@ the charm directory and run the following build command, then build Charm4Py::
     $ cd ../..
     $ pip install .
 
+On MacOS, you may need to set your DYLD_LIBRARY_PATH so that the dynamic linker can find Charm++ libraries. For example: 
+
+    $ export DYLD_LIBRARY_PATH=<charm_install_folder>/lib
+
+Replace <charm_install_folder> with the path where you built/installed Charm++(usually this is the charm_src/charm folder)
+
 Finally, if necessary, when installing dependencies or when running the install script, add the --user
 option to the Python command to complete the installation without permission errors.
 
