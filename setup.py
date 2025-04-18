@@ -263,9 +263,11 @@ class _renameInstalled(_install_lib):
     def __init__(self, *args, **kwargs):
         _install_lib.__init__(self, *args, **kwargs)
 
+    
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
+        '''
         for file in outfiles:
             if "c_object_store" in file and system == "darwin":
                 direc = os.path.dirname(file)
@@ -285,6 +287,7 @@ class _renameInstalled(_install_lib):
                 install_name_command += "/charmlib_cython.*.so"
                 log.info(install_name_command)
                 os.system(install_name_command)
+        '''
         return outfiles
 
 

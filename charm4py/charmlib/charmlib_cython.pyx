@@ -319,8 +319,8 @@ cdef char* localMsg_ptr = <char*>localMsg
 #cdef const int CmiReservedHeaderSize s= getCmiReservedHeaderSize()
 
 cdef struct remoteMsg:
-  int a
-  int b
+  int header_length
+  int data_length
   char handler_name[32] # we know it can't be longer
   char data[1024] #assume generous length at end
 
@@ -328,8 +328,8 @@ cdef void recvRemoteMessage(void *msg) noexcept:
 
     cdef void *shiftedMsg = msg + CmiReservedHeaderSize #move past reserved header
     cdef remoteMsg* incomingMsgPtr = <remoteMsg*> shiftedMsg
-    cdef int handler_length = incomingMsgPtr.a
-    cdef int data_length = incomingMsgPtr.b
+    cdef int handler_length = incomingMsgPtr.header_length
+    cdef int data_length = incomingMsgPtr.data_length
 
     # turn char arrays into strings
 
