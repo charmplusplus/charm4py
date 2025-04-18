@@ -70,6 +70,39 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+cdef extern from "conv-header.h":
+    ctypedef void (*CmiHandler)(void* )
+    cdef const int CmiReservedHeaderSize
+
+cdef extern from "sockRoutines.h":
+
+    ctypedef struct skt_ip_t:
+        int tag
+    
+    ctypedef struct ChMessageInt_t:
+        unsigned char[4] data
+
+cdef extern from "ccs-server.h":
+
+    ctypedef struct CcsSecAttr:
+        skt_ip_t ip
+        ChMessageInt_t port
+        ChMessageInt_t replySalt
+        unsigned char auth
+        unsigned char level
+    
+    ctypedef struct CcsImplHeader:
+        CcsSecAttr attr
+        char[32] handler
+        ChMessageInt_t pe
+        ChMessageInt_t replyFd
+        ChMessageInt_t len
+
+cdef extern from "conv-ccs.h":
+    void CcsRegisterHandlerExt(const char *ccs_handlername, void *fn);
+    int CcsIsRemoteRequest();
+    void CcsSendReply(int replyLen, const void *replyData);
+
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
