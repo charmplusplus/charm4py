@@ -9,6 +9,8 @@ from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CON
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.int cimport PyInt_FromSsize_t
 from cpython.ref cimport Py_INCREF
+from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
+from cython.operator cimport dereference
 
 cdef extern from "Python.h":
     char* PyUnicode_AsUTF8(object unicode)
@@ -40,6 +42,8 @@ cdef object np_number = np.number
 
 
 # ------ global constants ------
+
+cdef dict _ccs_handlers = {}
 
 cdef enum:
   NUM_DCOPY_BUFS = 60   # max number of dcopy buffers
@@ -327,6 +331,28 @@ cdef object emptyMsg          # pickled empty Charm4py msg
 cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom reduction, outgoing object migration]
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
+
+#cdef const int CmiReservedHeaderSize s= getCmiReservedHeaderSize()
+
+cdef struct remoteMsg:
+  int header_length
+  int data_length
+  char handler_name[32] # we know it can't be longer
+  char data[1024] #assume generous length at end
+
+cdef void recvRemoteMessage(void *msg) noexcept:
+
+    cdef void *shiftedMsg = msg + CmiReservedHeaderSize #move past reserved header
+    cdef remoteMsg* incomingMsgPtr = <remoteMsg*> shiftedMsg
+    cdef int handler_length = incomingMsgPtr.header_length
+    cdef int data_length = incomingMsgPtr.data_length
+
+    # turn char arrays into strings
+
+    handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
+    data = incomingMsgPtr.data[:data_length].decode('utf-8')
+    
+    charm.callHandler(handler_name, data)
 
 
 class CharmLib(object):
@@ -874,6 +900,21 @@ class CharmLib(object):
 
   def traceEndUserBracketEvent(self, int EventID):
     CkTraceEndUserBracketEvent(EventID)
+
+  def CcsRegisterHandler(self, str handlername, object handler):
+    cdef bytes handler_bytes = handlername.encode("utf-8")
+    cdef const char* c_handlername = handler_bytes
+    CcsRegisterHandlerExt(c_handlername, <void *>recvRemoteMessage)
+  
+  def isRemoteRequest(self):
+    return bool(CcsIsRemoteRequest())
+  
+  def CcsSendReply(self, str message):
+    cdef bytes message_bytes = message.encode("utf-8")
+    cdef const char* replyData = message_bytes
+
+    cdef int replyLen = len(message_bytes)
+    CcsSendReply(replyLen, <const void*>replyData)
 
 
 # first callback from Charm++ shared library
