@@ -127,6 +127,7 @@ class Charm(object):
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
+        self.hapiAddCudaCallback = self.lib.hapiAddCudaCallback
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
