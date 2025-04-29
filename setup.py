@@ -325,6 +325,10 @@ if sys.version_info[0] >= 3:
             cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
         else:
             cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
+            
+    cudaBuild = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '').find('CUDA') != -1
+    if (cudaBuild):
+        print("CUDA build detected")
 
     extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                             sources=['charm4py/charmlib/charmlib_cython.pyx'],
@@ -333,7 +337,8 @@ if sys.version_info[0] >= 3:
                             libraries=["charm"],
                             extra_compile_args=[],
                             extra_link_args=extra_link_args,
-                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy,
+                                                 'HAVE_CUDA_BUILD': cudaBuild}))
 
     extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
                             sources=['charm4py/c_object_store.pyx'],
@@ -342,7 +347,8 @@ if sys.version_info[0] >= 3:
                             libraries=["charm"],
                             extra_compile_args=[],
                             extra_link_args=cobject_extra_args,
-                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy,
+                                                 'HAVE_CUDA_BUILD': cudaBuild}))
 
 
 additional_setup_keywords = {}

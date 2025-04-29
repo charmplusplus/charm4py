@@ -868,6 +868,8 @@ class CharmLib(object):
     CcsSendReply(replyLen, <const void*>replyData)
 
   def hapiAddCudaCallback(self, stream, future):
+    if not HAVE_CUDA_BUILD:
+      raise Charm4PyError("HAPI usage not allowed: Charm++ was not built with CUDA support")
     id = future.fid
     CkHapiAddCallback(<long> stream, depositFutureWithId, <int> id)
 
