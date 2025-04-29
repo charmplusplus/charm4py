@@ -115,23 +115,6 @@ def check_libcharm_version(charm_src_dir):
                                   'Existing version is ' + cur_str)
 
 
-def check_cffi():
-    try:
-        import cffi
-        version_str = cffi.__version__.split('.')
-        
-        # pypy3.9 returns version string like '1.17.0.dev0'
-        if (len(version_str) > 3): 
-            version_str = version_str[:3]
-            
-        version = tuple(int(v) for v in version_str)
-        if version < (1, 7):
-            raise DistutilsSetupError('Charm4py requires cffi >= 1.7. '
-                                      'Installed version is ' + cffi.__version__)
-    except ImportError:
-        raise DistutilsSetupError('cffi is not installed')
-
-
 def build_libcharm(charm_src_dir, build_dir):
 
     lib_output_dirs = []
@@ -280,9 +263,11 @@ class _renameInstalled(_install_lib):
     def __init__(self, *args, **kwargs):
         _install_lib.__init__(self, *args, **kwargs)
 
+    
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
+        '''
         for file in outfiles:
             if "c_object_store" in file and system == "darwin":
                 direc = os.path.dirname(file)
@@ -297,11 +282,12 @@ class _renameInstalled(_install_lib):
                 direc = os.path.dirname(file)
                 install_name_command = "install_name_tool -change lib/libcharm.dylib "
                 install_name_command += direc
-                install_name_command += "/.libs/libcharm.dylib "
+                install_name_command += "/../.libs/libcharm.dylib "
                 install_name_command += direc
                 install_name_command += "/charmlib_cython.*.so"
                 log.info(install_name_command)
                 os.system(install_name_command)
+        '''
         return outfiles
 
 
@@ -309,72 +295,57 @@ class _renameInstalled(_install_lib):
 extensions = []
 py_impl = platform.python_implementation()
 
-log.info("Check PyPy")
-if py_impl == 'PyPy':
-    os.environ['CHARM4PY_BUILD_CFFI'] = '1'
 
-# elif 'CPY_WHEEL_BUILD_UNIVERSAL' not in os.environ:
-else:
-    log.info("Check sys version info")
-    if sys.version_info[0] >= 3:
-        log.info("Defining cython args")
-        # compile C-extension module (from cython)
-        from Cython.Build import cythonize
-        my_include_dirs = []
-        haveNumpy = False
-        try:
-            import numpy
-            haveNumpy = True
-            my_include_dirs.append(numpy.get_include())
-        except:
-            log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found or import failed)')
 
-        extra_link_args = []
-        if os.name != 'nt':
-            if system == 'darwin':
-                extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
-            else:
-                extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
+log.info("Check sys version info")
+if sys.version_info[0] >= 3:
+    log.info("Defining cython args")
+    # compile C-extension module (from cython)
+    from Cython.Build import cythonize
+    my_include_dirs = []
+    haveNumpy = False
+    try:
+        import numpy
+        haveNumpy = True
+        my_include_dirs.append(numpy.get_include())
+    except:
+        log.warn('WARNING: Building charmlib C-extension module without numpy support (numpy not found or import failed)')
 
-        cobject_extra_args = []
-        log.info("Extra object args for object store")
-        if os.name != 'nt':
-            if system == 'darwin':
-                cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
-            else:
-                cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
+    extra_link_args = []
+    if os.name != 'nt':
+        if system == 'darwin':
+            extra_link_args=["-Wl,-rpath,@loader_path/../.libs"]
+        else:
+            extra_link_args=["-Wl,-rpath,$ORIGIN/../.libs"]
 
-        extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
-                              sources=['charm4py/charmlib/charmlib_cython.pyx'],
-                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
-                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
-                              libraries=["charm"],
-                              extra_compile_args=[],
-                              extra_link_args=extra_link_args,
-                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+    cobject_extra_args = []
+    log.info("Extra object args for object store")
+    if os.name != 'nt':
+        if system == 'darwin':
+            cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
+        else:
+            cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
 
-        extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
-                              sources=['charm4py/c_object_store.pyx'],
-                              include_dirs=['charm_src/charm/include'] + my_include_dirs,
-                              library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
-                              libraries=["charm"],
-                              extra_compile_args=[],
-                              extra_link_args=cobject_extra_args,
-                              ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
-    else:
-        try:
-            check_cffi()
-            os.environ['CHARM4PY_BUILD_CFFI'] = '1'
-        except:
-            pass
+    extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
+                            sources=['charm4py/charmlib/charmlib_cython.pyx'],
+                            include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                            library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                            libraries=["charm"],
+                            extra_compile_args=[],
+                            extra_link_args=extra_link_args,
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+
+    extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
+                            sources=['charm4py/c_object_store.pyx'],
+                            include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                            library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
+                            libraries=["charm"],
+                            extra_compile_args=[],
+                            extra_link_args=cobject_extra_args,
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
 
 
 additional_setup_keywords = {}
-if os.environ.get('CHARM4PY_BUILD_CFFI') == '1':
-    check_cffi()
-    additional_setup_keywords['cffi_modules'] = 'charm4py/charmlib/charmlib_cffi_build.py:ffibuilder'
-
-
 setuptools.setup(
     version=charm4py_version,
     packages=setuptools.find_packages(),
