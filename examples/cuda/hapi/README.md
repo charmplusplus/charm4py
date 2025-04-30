@@ -20,8 +20,8 @@ Running example
 
 - If running locally, use:  
 
-$ python3 -m charmrun.start +p<N> hapi-cuda-callback.py  
+`$ python3 -m charmrun.start +p<N> hapi-cuda-callback.py`
 
 - If running on a cluster machine with Slurm, use:  
 
-$ srun -n <N> python3 hapi-cuda-callback.py 
+`$ srun -n <N> python3 hapi-cuda-callback.py`
