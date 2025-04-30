@@ -15,3 +15,13 @@ Usage
   - using torch: `stream_handle = torch.cuda.Stream().cuda_stream`
   - using numba: `stream_handle = numba.cuda.stream().handle.value`
 - currently, the hapiAddCudaCallback is restricted to torch and numba based Cuda streams.
+
+Running example
+
+- If running locally, use:  
+
+$ python3 -m charmrun.start +p<N> hapi-cuda-callback.py  
+
+- If running on a cluster machine with Slurm, use:  
+
+$ srun -n <N> python3 hapi-cuda-callback.py 
