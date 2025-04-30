@@ -326,10 +326,8 @@ if sys.version_info[0] >= 3:
         else:
             cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
             
-    cudaBuild = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '').find('CUDA') != -1
-    if (cudaBuild):
-        print("CUDA build detected")
-
+    cudaBuild = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '').find('cuda') != -1
+    
     extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                             sources=['charm4py/charmlib/charmlib_cython.pyx'],
                             include_dirs=['charm_src/charm/include'] + my_include_dirs,
