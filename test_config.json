@@ -314,7 +314,7 @@
         "args": "300 -1 --NO-RENDER"
     },
     {
-        "path": "examples/ray/mandelbrot.py",
+        "path": "examples/ray/mandelbrot/mandelbrot.py",
         "args": "100 100 10 10"
     }
 ]
