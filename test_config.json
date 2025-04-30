@@ -312,5 +312,9 @@
         "condition": "numbaInstalled",
         "path": "examples/wave2d/wave2d.py",
         "args": "300 -1 --NO-RENDER"
+    },
+    {
+        "path": "examples/ray/mandelbrot.py",
+        "args": "100 100 10 10"
     }
 ]
