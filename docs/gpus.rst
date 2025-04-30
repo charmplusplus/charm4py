@@ -20,6 +20,18 @@ The HAPI Charm4py API is:
     For now, ``charm.hapiAddCudaCallback`` only supports numba and torch streams as input. This function inserts a callback 
     into the stream such that when the callback is reached, the corresponding Charm4py future is set.
 
+Enabling HAPI
+--------
+To build Charm4py with HAPI support, add "cuda" to the Charm build options and follow the steps to build Charm4py from source:
+
+.. code-block:: shell
+
+   export CHARM_EXTRA_BUILD_OPTS="cuda"
+   pip install .
+
+.. warning:: 
+
+    To ensure that the underlying Charm build has Cuda enabled, remove any pre-existing builds in charm_src/charm before setting the Cuda option and running install.
 
 Examples
 --------
