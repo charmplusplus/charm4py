@@ -127,6 +127,7 @@ class Charm(object):
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
+        self.hapiAddCudaCallback = self.lib.hapiAddCudaCallback
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
@@ -933,6 +934,10 @@ class Charm(object):
         stats[2] = max(size, stats[2])
         stats[3] += size
         stats[4] = size
+        
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        self.threadMgr.depositFuture(fid, result)
 
     def __printTable__(self, table, sep):
         col_width = [max(len(x) for x in col) for col in zip(*table)]

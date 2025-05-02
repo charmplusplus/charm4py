@@ -70,6 +70,8 @@ cdef extern from "charm.h":
     void CkStartQDExt_SectionCallback(int sid_pe, int sid_cnt, int rootPE, int ep);
     void CcdCallFnAfter(void (*CcdVoidFn)(void *userParam,double curWallTime), void *arg, double msecs);
 
+    void CkHapiAddCallback(long stream, void (*cb)(void*, void*), int fid);
+    
 cdef extern from "conv-header.h":
     ctypedef void (*CmiHandler)(void* )
     cdef const int CmiReservedHeaderSize
