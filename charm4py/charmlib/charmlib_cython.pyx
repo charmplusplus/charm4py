@@ -7,7 +7,7 @@ from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
 from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
-from cpython.int cimport PyInt_FromSsize_t
+from cpython.long cimport PyLong_FromSsize_t
 from cpython.ref cimport Py_INCREF
 from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
 from cython.operator cimport dereference
@@ -296,12 +296,12 @@ cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
   arrIndex = PyTuple_New(ndims)
   if ndims <= 3:
     for i in range(ndims):
-      d = PyInt_FromSsize_t(arrayIndex[i])
+      d = PyLong_FromSsize_t(arrayIndex[i])
       Py_INCREF(d)
       PyTuple_SET_ITEM(arrIndex, i, d)
   else:
     for i in range(ndims):
-      d = PyInt_FromSsize_t((<short*>arrayIndex)[i])
+      d = PyLong_FromSsize_t((<short*>arrayIndex)[i])
       Py_INCREF(d)
       PyTuple_SET_ITEM(arrIndex, i, d)
   return arrIndex
