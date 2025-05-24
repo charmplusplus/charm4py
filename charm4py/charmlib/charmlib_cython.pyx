@@ -12,6 +12,11 @@ from cpython.ref cimport Py_INCREF
 from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
 from cython.operator cimport dereference
 
+cdef extern from "Python.h":
+    char* PyUnicode_AsUTF8(object unicode)
+
+from libc.string cimport strcmp
+
 from ..charm import Charm4PyError
 from .. import reduction as red
 from cpython cimport array
@@ -107,6 +112,17 @@ ctypedef struct CkReductionTypesExt:
   int external_py
 
 cdef extern CkReductionTypesExt charm_reducers
+
+cdef char ** to_cstring_array(list_str):
+    cdef char **ret = <char **>malloc(len(list_str) * sizeof(char *))
+    for i in range(len(list_str)):
+        ret[i] = list_str[i]
+    return ret
+
+def addStringsToList(targetList, strings):
+  for idx, currentString in enumerate(strings):
+    targetList.append(<char*> malloc(len(currentString)))
+    targetList[idx] = strings[idx]
 
 class CkReductionTypesExt_Wrapper:
 
@@ -347,6 +363,8 @@ class CharmLib(object):
     self.direct_copy_supported = (PY_MAJOR_VERSION >= 3)
     self.name = 'cython'
     self.chareNames = []
+    self.emNames = []
+    self.emStart = 0
     self.init()
     self.ReducerType = CkReductionTypesExt_Wrapper()
     #print(charm_reducers.sum_long, charm_reducers.product_ushort, charm_reducers.max_char, charm_reducers.max_float, charm_reducers.min_char)
@@ -503,34 +521,51 @@ class CharmLib(object):
     if msg is None: CkRegisterReadonlyExt(n1, n2, 0, NULL)
     else: CkRegisterReadonlyExt(n1, n2, len(msg), msg)
 
-  def CkRegisterMainchare(self, str name, int numEntryMethods):
+  def CkRegisterMainchare(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterMainChareExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    # TODO: do we want to track/free these pointers?
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterMainChareExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterGroup(self, str name, int numEntryMethods):
+  def CkRegisterGroup(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterGroupExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterSectionManager(self, str name, int numEntryMethods):
+  def CkRegisterSectionManager(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+
+    CkRegisterSectionManagerExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterArrayMap(self, str name, int numEntryMethods):
+  def CkRegisterArrayMap(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterArrayMapExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterArray(self, str name, int numEntryMethods):
+  def CkRegisterArray(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterArrayExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
   def CkCreateGroup(self, int chareIdx, int epIdx, msg not None):
@@ -851,6 +886,20 @@ class CharmLib(object):
 
   def scheduleTagAfter(self, int tag, double msecs):
     CcdCallFnAfter(CcdCallFnAfterCallback, <void*>tag, msecs)
+
+  def traceRegisterUserEvent(self, str EventDesc, int eventNum=-1):
+    cdef bytes py_bytes = EventDesc.encode()
+    Py_INCREF(py_bytes)
+    # This memory needs to be managed somehow, I think
+    cdef char* c_string = py_bytes
+    cdef int eventID = CkTraceRegisterUserEvent(c_string, eventNum)
+    return eventID
+
+  def traceBeginUserBracketEvent(self, int EventID):
+    CkTraceBeginUserBracketEvent(EventID)
+
+  def traceEndUserBracketEvent(self, int EventID):
+    CkTraceEndUserBracketEvent(EventID)
 
   def CcsRegisterHandler(self, str handlername, object handler):
     cdef bytes handler_bytes = handlername.encode("utf-8")
