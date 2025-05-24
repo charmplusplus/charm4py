@@ -22,11 +22,11 @@ cdef extern from "charm.h":
     int CmiPhysicalRank(int pe);
 
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
-    void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterGroupExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterSectionManagerExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterArrayExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterArrayMapExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterMainChareExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterGroupExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterSectionManagerExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterArrayExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterArrayMapExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
 
     int CkCreateGroupExt(int cIdx, int eIdx, int num_bufs, char **bufs, int *buf_sizes);
     int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, int num_bufs, char **bufs, int *buf_sizes, int map_gid, char useAtSync);
@@ -72,6 +72,10 @@ cdef extern from "charm.h":
 
     void CkHapiAddCallback(long stream, void (*cb)(void*, void*), int fid);
     
+    int CkTraceRegisterUserEvent(char *EventDesc, int eventID);
+    void CkTraceBeginUserBracketEvent(int eventID);
+    void CkTraceEndUserBracketEvent(int eventID);
+
 cdef extern from "conv-header.h":
     ctypedef void (*CmiHandler)(void* )
     cdef const int CmiReservedHeaderSize
