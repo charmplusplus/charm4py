@@ -1,6 +1,7 @@
 # MiniWeather - Distributed Weather Simulation Mini-App
 
-MiniWeather is a high-performance atmospheric dynamics simulation mini-app that demonstrates distributed computing and GPU acceleration techniques using Charm4Py. This example showcases how to combine Charm4Py's distributed parallel computing capabilities with Numba CUDA for GPU acceleration to simulate atmospheric flows with various physical phenomena.
+This is a Charm4Py port of [MiniWeather](https://github.com/mrnorman/miniWeather), an atmospheric dynamics mini-app developed by Oak Ridge National Laboratory researchers. 
+This example demonstrates GPU acceleration techniques using Charm4Py, combining Charm4Py's distributed parallel computing capabilities with Numba CUDA for GPU acceleration to simulate atmospheric flows with various physical phenomena.
 
 ## Features
 
