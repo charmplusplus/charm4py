@@ -350,9 +350,17 @@ cdef void recvRemoteMessage(void *msg) noexcept:
     # turn char arrays into strings
 
     handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
-    data = incomingMsgPtr.data[:data_length].decode('utf-8')
-    
-    charm.callHandler(handler_name, data)
+    data_bytes = incomingMsgPtr.data[:data_length]
+    if handler_name.startswith("lv"):
+        # For LiveViz handlers, pass binary data directly
+        charm.callHandler(handler_name, data_bytes)
+    else:
+        # For all other handlers that expect text, decode as UTF-8
+        try:
+            data = data_bytes.decode('utf-8')
+            charm.callHandler(handler_name, data)
+        except UnicodeDecodeError:
+            charm.callHandler(handler_name, data_bytes)
 
 
 class CharmLib(object):
@@ -909,11 +917,9 @@ class CharmLib(object):
   def isRemoteRequest(self):
     return bool(CcsIsRemoteRequest())
   
-  def CcsSendReply(self, str message):
-    cdef bytes message_bytes = message.encode("utf-8")
-    cdef const char* replyData = message_bytes
-
-    cdef int replyLen = len(message_bytes)
+  def CcsSendReply(self, bytes message):
+    cdef const char* replyData = message
+    cdef int replyLen = len(message)
     CcsSendReply(replyLen, <const void*>replyData)
 
   def hapiAddCudaCallback(self, stream, future):
