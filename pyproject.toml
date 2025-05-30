@@ -25,7 +25,6 @@ requires-python = ">=3.8"
 dependencies = ["numpy>=1.10.0", "greenlet>=3.0.0"]
 classifiers = [
     'Intended Audience :: Developers',
-    'License :: Free for non-commercial use',
     'Operating System :: MacOS :: MacOS X',
     'Operating System :: POSIX',
     'Operating System :: POSIX :: Linux',
@@ -35,6 +34,7 @@ classifiers = [
     'Topic :: System :: Distributed Computing',
     'Topic :: System :: Clustering',
 ]
+license = "Apache-2.0"
 
 [project.urls]
 Documentation = "https://charm4py.readthedocs.io"
