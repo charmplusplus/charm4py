@@ -192,7 +192,7 @@ def is_tag_cond(root_ast):
             idx = idx.n
         elif isinstance(idx, ast.Constant):
             idx = idx.value
-
+        
         if not isinstance(idx, int):
             return None
 

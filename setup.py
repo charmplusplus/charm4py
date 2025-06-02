@@ -17,7 +17,7 @@ import Cython.Compiler.Options
 Cython.Compiler.Options.annotate = True
 
 build_mpi = False
-
+enable_tracing = False
 
 
 def get_build_machine():
@@ -149,6 +149,9 @@ def build_libcharm(charm_src_dir, build_dir):
         build_num_cores = max(int(os.environ.get('CHARM_BUILD_PROCESSES', multiprocessing.cpu_count() // 2)), 1)
         extra_build_opts = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '')
 
+        if enable_tracing:
+         extra_build_opts += " --enable-tracing "
+        
         target_machine, os_target, target_layer = get_build_triple(build_mpi)
 
         build_triple = f'{target_layer}-{os_target}-{target_machine}'
@@ -198,17 +201,23 @@ def build_libcharm(charm_src_dir, build_dir):
 class custom_install(install, object):
 
     user_options = install.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         install.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         install.finalize_options(self)
 
     def run(self):
@@ -218,17 +227,22 @@ class custom_install(install, object):
 class custom_build_py(build_py, object):
 
     user_options = build_py.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         build_py.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         build_py.finalize_options(self)
 
     def run(self):
@@ -241,17 +255,23 @@ class custom_build_py(build_py, object):
 class custom_build_ext(build_ext, object):
 
     user_options = build_ext.user_options + [
-        ('mpi', None, 'Build libcharm with MPI')
+        ('mpi', None, 'Build libcharm with MPI'),
+        ('enable-tracing', None, 'Build libcharm with tracing enabled')
     ]
 
     def initialize_options(self):
         build_ext.initialize_options(self)
         self.mpi = False
+        self.enable_tracing = False
 
     def finalize_options(self):
         global build_mpi
         if not build_mpi:
             build_mpi = bool(self.mpi)
+
+        global enable_tracing
+        if not enable_tracing:
+            enable_tracing = bool(self.enable_tracing)
         build_ext.finalize_options(self)
 
     def run(self):
@@ -263,9 +283,11 @@ class _renameInstalled(_install_lib):
     def __init__(self, *args, **kwargs):
         _install_lib.__init__(self, *args, **kwargs)
 
+    
     def install(self):
         log.info("Renaming libraries")
         outfiles = _install_lib.install(self)
+        '''
         for file in outfiles:
             if "c_object_store" in file and system == "darwin":
                 direc = os.path.dirname(file)
@@ -285,6 +307,7 @@ class _renameInstalled(_install_lib):
                 install_name_command += "/charmlib_cython.*.so"
                 log.info(install_name_command)
                 os.system(install_name_command)
+        '''
         return outfiles
 
 
@@ -322,7 +345,9 @@ if sys.version_info[0] >= 3:
             cobject_extra_args=["-Wl,-rpath,@loader_path/.libs"]
         else:
             cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
-
+            
+    cudaBuild = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '').find('cuda') != -1
+    
     extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                             sources=['charm4py/charmlib/charmlib_cython.pyx'],
                             include_dirs=['charm_src/charm/include'] + my_include_dirs,
@@ -330,7 +355,8 @@ if sys.version_info[0] >= 3:
                             libraries=["charm"],
                             extra_compile_args=[],
                             extra_link_args=extra_link_args,
-                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy,
+                                                 'HAVE_CUDA_BUILD': cudaBuild}))
 
     extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
                             sources=['charm4py/c_object_store.pyx'],
@@ -339,7 +365,8 @@ if sys.version_info[0] >= 3:
                             libraries=["charm"],
                             extra_compile_args=[],
                             extra_link_args=cobject_extra_args,
-                            ), compile_time_env={'HAVE_NUMPY': haveNumpy}))
+                            ), compile_time_env={'HAVE_NUMPY': haveNumpy,
+                                                 'HAVE_CUDA_BUILD': cudaBuild}))
 
 
 additional_setup_keywords = {}

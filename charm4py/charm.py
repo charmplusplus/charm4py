@@ -127,6 +127,7 @@ class Charm(object):
         self.CkChareSend = self.lib.CkChareSend
         self.CkGroupSend = self.lib.CkGroupSend
         self.CkArraySend = self.lib.CkArraySend
+        self.hapiAddCudaCallback = self.lib.hapiAddCudaCallback
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
@@ -152,6 +153,9 @@ class Charm(object):
         self.receive_buffer = MessageBuffer()
         # TODO: maybe implement this buffer in c++
         self.future_get_buffer = {}
+
+        #registered methods for ccs
+        self.ccs_methods = {}
 
     def __init_profiling__(self):
         # these are attributes used only in profiling mode
@@ -489,9 +493,8 @@ class Charm(object):
     def registerInCharmAs(self, C, charm_type, libRegisterFunc):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        # if self.myPe() == 0: print("charm4py:: Registering class " + C.__name__ + " in Charm with " + str(len(entryMethods)) + " entry methods " + str([e.name for e in entryMethods]))
-        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), len(entryMethods))
-        # if self.myPe() == 0: print("charm4py:: Chare idx=" + str(C.idx[charm_type_id]) + " ctor Idx=" + str(startEpIdx))
+        entryNames = [method.name for method in entryMethods]
+        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, len(entryMethods))
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
@@ -547,8 +550,8 @@ class Charm(object):
                        self.lib.name + "' interface to access Charm++")
             if py_impl != 'CPython':
                 raise Charm4PyError('PyPy is no longer supported. Use CPython instead')
-            if sys.version_info < (3,7,0):
-                raise Charm4PyError('Python 2 is no longer supported. Use Python 3.7 or above instead')
+            if sys.version_info < (3,8,0):
+                raise Charm4PyError('Python 2 is no longer supported. Use Python 3.8 or above instead')
             if self.options.profiling:
                 print('Charm4py> Profiling is ON (this affects performance)')
 
@@ -930,6 +933,10 @@ class Charm(object):
         stats[2] = max(size, stats[2])
         stats[3] += size
         stats[4] = size
+        
+    # deposit value of one of the futures that was created on this PE
+    def _future_deposit_result(self, fid, result=None):
+        self.threadMgr.depositFuture(fid, result)
 
     def __printTable__(self, table, sep):
         col_width = [max(len(x) for x in col) for col in zip(*table)]
@@ -1091,6 +1098,24 @@ class Charm(object):
 
     def LBTurnInstrumentOff(self):
         self.lib.LBTurnInstrumentOff()
+
+    #functions for ccs 
+    def CcsRegisterHandler(self, handlername, handler):
+        self.ccs_methods[handlername] = handler
+        self.lib.CcsRegisterHandler(handlername, handler)
+
+    def CcsIsRemoteRequest(self):
+        self.lib.isRemoteRequest()
+    
+    def CcsSendReply(self, message):
+        self.lib.CcsSendReply(message)
+
+    def callHandler(self, handlername, data):
+        if handlername in self.ccs_methods:
+            self.ccs_methods[handlername](data)
+        else:
+            raise Charm4PyError('Handler ' + handlername + ' not registered')
+
 
 
 class CharmRemote(Chare):

@@ -41,6 +41,7 @@ to the largest supercomputers.
    sections
    pool
    rules
+   gpus
 
 .. toctree::
    :maxdepth: 2

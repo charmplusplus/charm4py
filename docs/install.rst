@@ -7,7 +7,7 @@ Install
 Charm4py runs on Linux, macOS, Windows, Raspberry Pi, and a wide variety of clusters and
 supercomputer environments (including many supercomputers in the TOP500).
 
-Charm4py runs on Python 3.7+. Charm4py supports the CPython Python implementation.
+Charm4py runs on Python 3.8+. Charm4py supports the CPython Python implementation.
 
 Installing Charm4Py binaries (via pip)
 ---------------------------------------
@@ -57,6 +57,12 @@ the charm directory and run the following build command, then build Charm4Py::
     $ ./build charm4py <target-architecture> -j<N> --with-production
     $ cd ../..
     $ pip install .
+
+On MacOS, you may need to set your DYLD_LIBRARY_PATH so that the dynamic linker can find Charm++ libraries. For example: 
+
+    $ export DYLD_LIBRARY_PATH=<charm_install_folder>/lib
+
+Replace <charm_install_folder> with the path where you built/installed Charm++(usually this is the charm_src/charm folder)
 
 Finally, if necessary, when installing dependencies or when running the install script, add the --user
 option to the Python command to complete the installation without permission errors.
