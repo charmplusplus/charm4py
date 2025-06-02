@@ -922,6 +922,17 @@ class CharmLib(object):
     cdef int replyLen = len(message)
     CcsSendReply(replyLen, <const void*>replyData)
 
+  def CcsDelayReply(self):
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>malloc(sizeof(CcsDelayedReply))
+    token[0] = CcsDelayReply()
+    return <uintptr_t>token
+
+  def CcsSendDelayedReply(self, uintptr_t p, bytes msg):
+    cdef const char* replyData = msg
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>p
+    CcsSendDelayedReply(token[0], len(msg), <const void*>replyData)
+    free(token)
+
   def hapiAddCudaCallback(self, stream, future):
     if not HAVE_CUDA_BUILD:
       raise Charm4PyError("HAPI usage not allowed: Charm++ was not built with CUDA support")

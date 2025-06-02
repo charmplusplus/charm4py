@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Future, Reducer, Group
+from charm4py import charm, Chare, Array, Future, Reducer, Group, liveviz, coro
 
 def handler(msg):
     print("CCS Ping handler called on " + str(charm.myPe()))
@@ -10,19 +10,21 @@ def handler(msg):
 
 class RegisterPerChare(Chare):
 
-    def register(self, return_future, handler):
-        charm.CcsRegisterHandler("ping2", handler)
-        charm.CcsRegisterHandler("ping", handler)
-        self.reduce(return_future, Reducer.nop)
+  def register(self, request):
+    data = bytearray(25 * 25 * 3)
+    for i in range(25*25):
+      data[i*3 + self.thisIndex%3] = 200  # Red
+    liveviz.LiveViz.deposit(data, self, self.thisIndex*25, 0, 25, 25, 25, 100)
+        
 
 def main(args):
     # No need to initialize converse, because charm.start does this
     # just register the handler
     reg_wait = Future()
     registers = Group(RegisterPerChare)
-    registers.register(reg_wait, handler)
-    reg_wait.get()
+    config = liveviz.Config()
+    liveviz.LiveViz.init(config, registers, registers.register)
     print("CCS Handlers registered . Waiting for net requests...")
 
 
-charm.start(main)
+charm.start(main, modules=['charm4py.liveviz'])
