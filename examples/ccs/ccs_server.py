@@ -1,30 +1,46 @@
 from charm4py import charm, Chare, Array, Future, Reducer, Group, liveviz, coro
+import random
 
-def handler(msg):
-    print("CCS Ping handler called on " + str(charm.myPe()))
-
-    msg = msg.rstrip('\x00') #removes null characters from the end
-    answer = "Hello to sender " + str(msg) + " from PE " + str(charm.myPe()) + ".\n"
-    # send the answer back to the client
-    charm.CcsSendReply(answer)
-
-class RegisterPerChare(Chare):
-
-  def register(self, request):
-    data = bytearray(25 * 25 * 3)
-    for i in range(25*25):
-      data[i*3 + self.thisIndex%3] = 200  # Red
-    liveviz.LiveViz.deposit(data, self, self.thisIndex*25, 0, 25, 25, 25, 100)
-        
+class Unit(Chare):
+  
+  def __init__(self):
+    # Just initialize an empty list - particles will be generated on request
+    self.colors = [(200, 0, 0), (0, 200, 0), (0, 0, 200)]
+    
+  def reqImg(self, request):
+    # Generate 300 new random particles each time
+    self.particles = []
+    
+    for _ in range(300):
+      # Random position within 50x50 box
+      x = random.randint(0, 49)
+      y = random.randint(0, 49)
+      
+      # Random color from the three options
+      color = random.choice(self.colors)
+      
+      # Store particle as (position_x, position_y, color_tuple)
+      self.particles.append((x, y, color))
+    
+    # Create and fill the image data
+    data = bytearray(50 * 50 * 3)
+    
+    for x, y, (r, g, b) in self.particles:
+      # Check if particle is in this chare's section
+      pixel_index = (y * 50 + x) * 3
+      data[pixel_index] = r
+      data[pixel_index + 1] = g
+      data[pixel_index + 2] = b
+    
+    liveviz.LiveViz.deposit(data, self, self.thisIndex[0]*50, self.thisIndex[1]*50, 50, 50, 800, 800)
 
 def main(args):
     # No need to initialize converse, because charm.start does this
     # just register the handler
     reg_wait = Future()
-    registers = Group(RegisterPerChare)
+    units = Array(Unit, dims=(16,16))
     config = liveviz.Config()
-    liveviz.LiveViz.init(config, registers, registers.register)
+    liveviz.LiveViz.init(config, units, units.reqImg)
     print("CCS Handlers registered . Waiting for net requests...")
-
 
 charm.start(main, modules=['charm4py.liveviz'])

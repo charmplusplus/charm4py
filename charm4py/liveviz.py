@@ -1,15 +1,20 @@
-from .charm import charm, Chare, Group
-from .entry_method import coro
+from .charm import charm, Chare
 from dataclasses import dataclass, field
 import struct
+from itertools import chain
 Reducer = charm.reducers
 
 group = None
 
 def viz_gather(contribs):
-  return contribs
+    # Simply flatten without any sorting
+    return list(chain(*contribs))
 
-Reducer.addReducer(viz_gather)
+def viz_gather_preprocess(data, contributor):
+    # Don't add index information
+    return [data]
+
+Reducer.addReducer(viz_gather, pre=viz_gather_preprocess)
 
 @dataclass
 class Config:
