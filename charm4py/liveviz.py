@@ -7,11 +7,9 @@ Reducer = charm.reducers
 group = None
 
 def viz_gather(contribs):
-    # Simply flatten without any sorting
     return list(chain(*contribs))
 
 def viz_gather_preprocess(data, contributor):
-    # Don't add index information
     return [data]
 
 Reducer.addReducer(viz_gather, pre=viz_gather_preprocess)
