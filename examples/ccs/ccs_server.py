@@ -2,11 +2,11 @@ from charm4py import charm, Chare, Array, Future, Reducer, Group
 
 def handler(msg):
     print("CCS Ping handler called on " + str(charm.myPe()))
-
-    msg = msg.rstrip('\x00') #removes null characters from the end
+    msg = msg.decode('utf-8')
+    msg = msg.rstrip('\x00')
     answer = "Hello to sender " + str(msg) + " from PE " + str(charm.myPe()) + ".\n"
-    # send the answer back to the client
-    charm.CcsSendReply(answer)
+    answer_bytes = answer.encode('utf-8')
+    charm.CcsSendReply(answer_bytes)
 
 class RegisterPerChare(Chare):
 

@@ -351,16 +351,7 @@ cdef void recvRemoteMessage(void *msg) noexcept:
 
     handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
     data_bytes = incomingMsgPtr.data[:data_length]
-    if handler_name.startswith("lv"):
-        # For LiveViz handlers, pass binary data directly
-        charm.callHandler(handler_name, data_bytes)
-    else:
-        # For all other handlers that expect text, decode as UTF-8
-        try:
-            data = data_bytes.decode('utf-8')
-            charm.callHandler(handler_name, data)
-        except UnicodeDecodeError:
-            charm.callHandler(handler_name, data_bytes)
+    charm.callHandler(handler_name, data_bytes)
 
 
 class CharmLib(object):
