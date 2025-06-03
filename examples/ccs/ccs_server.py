@@ -33,4 +33,4 @@ def main(args):
     liveviz.LiveViz.init(config, units, units.reqImg)
     print("CCS Handlers registered . Waiting for net requests...")
 
-charm.start(main, modules=['charm4py.liveviz'])
+charm.start(main)

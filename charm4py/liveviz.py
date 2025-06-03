@@ -1,4 +1,4 @@
-from .charm import charm, Chare
+from .charm import charm, Chare, register
 from dataclasses import dataclass, field
 import struct
 from itertools import chain
@@ -82,6 +82,7 @@ class ImageRequest:
     else:
       return cls(version, request_type, width, height)
   
+@register
 class LiveVizGroup(Chare):
   
   def __init__(self, cb):
