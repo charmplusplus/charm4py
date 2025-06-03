@@ -169,7 +169,7 @@ class ByteImage:
           dst_pos = ((starty + y) * total_width + (startx + x)) * bytes_per_pixel
           
           if src_pos + bytes_per_pixel <= len(data):
-            buffer[dst_pos:dst_pos + bytes_per_pixel] = data[src_pos:src_pos + bytes_per_pixel]
+            buffer[dst_pos:dst_pos + bytes_per_pixel] = (buffer[dst_pos:dst_pos + bytes_per_pixel] + data[src_pos:src_pos + bytes_per_pixel]) % 256
     
     return cls(bytes(buffer), total_width, total_height, is_color)
   
