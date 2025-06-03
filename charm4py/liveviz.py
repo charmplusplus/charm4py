@@ -222,7 +222,7 @@ class LiveViz:
     elem.reduce(group.send, data=(buffer,x,y,ht,wid,g_ht,g_wid), reducer=Reducer.viz_gather)
   
   @classmethod
-  def init(cls, cfg, arr, cb, poll=False):
+  def init(cls, cfg, cb, poll=False):
     global group
     cls.cfg = cfg
     grp = Chare(LiveVizGroup, args=[cb, poll], onPE=0)

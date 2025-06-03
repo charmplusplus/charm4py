@@ -22,8 +22,8 @@ Clone the `ccs_tools` repository:
 
 ```bash
 git clone https://github.com/UIUC-PPL/ccs_tools.git
-cd ccs_tools/charm/liveViz
-make
+cd ccs_tools
+ant
 ```
 
 ### Step 5: Run the LiveViz Client

@@ -40,6 +40,7 @@ to the largest supercomputers.
    channels
    sections
    pool
+   liveviz
    rules
    gpus
 

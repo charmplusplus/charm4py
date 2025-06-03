@@ -32,7 +32,7 @@ class Unit(Chare):
 def main(args):
     units = Array(Unit, dims=(16,16))
     config = liveviz.Config()
-    liveviz.LiveViz.init(config, units, units.reqImg, poll=True)
+    liveviz.LiveViz.init(config, units.reqImg, poll=True)
     units.reqImg()
     print("CCS Handlers registered . Waiting for net requests...")
 
