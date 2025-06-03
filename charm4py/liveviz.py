@@ -1,5 +1,6 @@
 from .charm import charm, Chare
 from dataclasses import dataclass, field
+from collections import deque
 import struct
 from itertools import chain
 Reducer = charm.reducers
@@ -84,21 +85,41 @@ class ImageRequest:
   
 class LiveVizGroup(Chare):
   
-  def __init__(self, cb):
+  def __init__(self, cb, poll):
     self.callback = cb
+    self.poll = poll
     charm.CcsRegisterHandler("lvImage", self.image_handler)
+    if poll:
+      self.requests = deque()
+      self.images = deque()
 
   def send(self, result):
     image = ByteImage.from_contributions(result, LiveViz.cfg.isColor)
-    output = ByteImage.with_image_in_corner(image, self.wid, self.ht)
-    charm.CcsSendDelayedReply(self.reply, output.to_binary())
+    if self.poll:
+      if len(self.requests) > 0:
+        req, delayed = self.requests.popleft()
+        output = ByteImage.with_image_in_corner(image, req.width, req.height)
+        charm.CcsSendDelayedReply(delayed, output.to_binary())
+      else:
+        print("sent")
+        self.images.append(image)
+    else:
+      output = ByteImage.with_image_in_corner(image, self.wid, self.ht)
+      charm.CcsSendDelayedReply(self.reply, output.to_binary())
 
   def image_handler(self, msg):
     request = ImageRequest.from_bytes(msg)
-    self.ht = request.height
-    self.wid = request.width
-    self.callback(request)
-    self.reply = charm.CcsDelayReply()
+    if self.poll:
+      if len(self.images) > 0:
+        output = ByteImage.with_image_in_corner(self.images.popleft(), request.width, request.height)
+        charm.CcsSendReply(output.to_binary())
+      else:
+        self.requests.append((request, charm.CcsDelayReply()))
+    else:
+      self.ht = request.height
+      self.wid = request.width
+      self.callback(request)
+      self.reply = charm.CcsDelayReply()
   
 class ByteImage:
   def __init__(self, data=None, width=0, height=0, is_color=True):
@@ -200,9 +221,9 @@ class LiveViz:
     elem.reduce(group.send, data=(buffer,x,y,ht,wid,g_ht,g_wid), reducer=Reducer.viz_gather)
   
   @classmethod
-  def init(cls, cfg, arr, cb):
+  def init(cls, cfg, arr, cb, poll=False):
     global group
     cls.cfg = cfg
-    grp = Chare(LiveVizGroup, args=[cb], onPE=0)
+    grp = Chare(LiveVizGroup, args=[cb, poll], onPE=0)
     charm.thisProxy.updateGlobals({'group': grp}, awaitable=True, module_name='charm4py.liveviz').get()
     charm.CcsRegisterHandler("lvConfig", cls.config_handler)
