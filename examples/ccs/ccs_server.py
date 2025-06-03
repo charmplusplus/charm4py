@@ -36,4 +36,4 @@ def main(args):
     units.reqImg()
     print("CCS Handlers registered . Waiting for net requests...")
 
-charm.start(main, modules=['charm4py.liveviz'])
+charm.start(main)
