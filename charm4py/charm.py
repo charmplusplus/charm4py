@@ -1110,6 +1110,12 @@ class Charm(object):
     def CcsSendReply(self, message):
         self.lib.CcsSendReply(message)
 
+    def CcsDelayReply(self):
+        return self.lib.CcsDelayReply()
+    
+    def CcsSendDelayedReply(self, d, message):
+        self.lib.CcsSendDelayedReply(d, message)
+
     def callHandler(self, handlername, data):
         if handlername in self.ccs_methods:
             self.ccs_methods[handlername](data)
