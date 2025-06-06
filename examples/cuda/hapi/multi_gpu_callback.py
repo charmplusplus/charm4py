@@ -12,7 +12,7 @@ def main(args):
 
     N=10000
 
-    if torch.cuda.is_available() is not True:
+    if not torch.cuda.is_available():
         print("Error: No GPU detected")
         charm.exit()
     if torch.cuda.device_count() < 2:
@@ -40,12 +40,14 @@ def main(args):
     #create callbacks (should we implement callbacks to entry methods?)
     future0 = charm.Future()
     future1 = charm.Future()
+    print("Future 0 id: ", future0.fid)
+    print("Future 1 id: ", future1.fid)
     futures = [future0, future1]
     charm.hapiAddCudaCallback(stream0.cuda_stream, future0)
     charm.hapiAddCudaCallback(stream1.cuda_stream, future1)
 
     for fut_object in charm.iwait(futures):
-        print('One device kernel complete')
+        print('One device kernel complete, id: ', fut_object.fid)
 
     charm.exit()
 
