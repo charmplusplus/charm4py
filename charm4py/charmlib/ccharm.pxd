@@ -105,10 +105,13 @@ cdef extern from "ccs-server.h":
         ChMessageInt_t len
 
 cdef extern from "conv-ccs.h":
+    ctypedef struct CcsDelayedReply:
+        CcsImplHeader *hdr;
     void CcsRegisterHandlerExt(const char *ccs_handlername, void *fn);
     int CcsIsRemoteRequest();
     void CcsSendReply(int replyLen, const void *replyData);
-
+    void CcsSendDelayedReply(CcsDelayedReply d,int replyLen, const void *replyData)
+    CcsDelayedReply CcsDelayReply()
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
