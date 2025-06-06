@@ -350,9 +350,8 @@ cdef void recvRemoteMessage(void *msg) noexcept:
     # turn char arrays into strings
 
     handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
-    data = incomingMsgPtr.data[:data_length].decode('utf-8')
-    
-    charm.callHandler(handler_name, data)
+    data_bytes = incomingMsgPtr.data[:data_length]
+    charm.callHandler(handler_name, data_bytes)
 
 
 class CharmLib(object):
@@ -909,12 +908,21 @@ class CharmLib(object):
   def isRemoteRequest(self):
     return bool(CcsIsRemoteRequest())
   
-  def CcsSendReply(self, str message):
-    cdef bytes message_bytes = message.encode("utf-8")
-    cdef const char* replyData = message_bytes
-
-    cdef int replyLen = len(message_bytes)
+  def CcsSendReply(self, bytes message):
+    cdef const char* replyData = message
+    cdef int replyLen = len(message)
     CcsSendReply(replyLen, <const void*>replyData)
+
+  def CcsDelayReply(self):
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>malloc(sizeof(CcsDelayedReply))
+    token[0] = CcsDelayReply()
+    return <uintptr_t>token
+
+  def CcsSendDelayedReply(self, uintptr_t p, bytes msg):
+    cdef const char* replyData = msg
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>p
+    CcsSendDelayedReply(token[0], len(msg), <const void*>replyData)
+    free(token)
 
   def hapiAddCudaCallback(self, stream, future):
     if not HAVE_CUDA_BUILD:
