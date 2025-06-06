@@ -30,6 +30,7 @@ cdef extern from "charm.h":
 
     int CkCreateGroupExt(int cIdx, int eIdx, int num_bufs, char **bufs, int *buf_sizes);
     int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, int num_bufs, char **bufs, int *buf_sizes, int map_gid, char useAtSync);
+    int CkCreateBoundArrayExt(int cIdx, int ndims, int* dims, int eIdx, int num_bufs, char** bufs, int* buf_sizes, int map_gid, char useAtSync, int otherIdx);
     void CkInsertArrayExt(int aid, int ndims, int *index, int epIdx, int onPE, int num_bufs, char **bufs, int *buf_sizes, char useAtSync);
     void CkArrayDoneInsertingExt(int aid);
     void CkMigrateExt(int aid, int ndims, int *index, int toPe);

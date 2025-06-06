@@ -576,7 +576,7 @@ class CharmLib(object):
     cur_buf = 1
     return group_id
 
-  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None, int map_gid, char useAtSync):
+  def CkCreateArray(self, int chareIdx, dims not None, int epIdx, msg not None, int map_gid, char useAtSync, int boundTo):
     global cur_buf
     msg0, dcopy = msg
     cdef int ndims = len(dims)
@@ -588,7 +588,10 @@ class CharmLib(object):
     if all_zero: ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync)
+    if (boundTo == -1):
+      array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync)
+    else:
+      array_id = CkCreateBoundArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync, boundTo)
     cur_buf = 1
     return array_id
 

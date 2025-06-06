@@ -3,7 +3,7 @@
 A program to test migration of chares.
 """
 
-from charm4py import charm, Chare, Array
+from charm4py import charm, Chare, Array, Future
 
 
 CHARES_PER_PE = 1
@@ -19,10 +19,8 @@ class Migrate(Chare):
         Test method called after migration to assert that the
         chare has migrated.
         """
-        if self.thisIndex == (0,):
-            print(self.thisIndex, 'migrated to PE', charm.myPe())
+        print(self.thisIndex, 'migrated to PE', charm.myPe())
         assert charm.myPe() == self.toPe
-        self.contribute(None, None, charm.thisProxy[0].exit)
 
     def start(self):
         """
@@ -33,11 +31,18 @@ class Migrate(Chare):
         self.toPe = (charm.myPe() + 1) % charm.numPes()
         self.thisProxy[self.thisIndex].migrate(self.toPe)
 
+class OtherMigrate(Chare):
+    def print(self):
+        print(self.thisIndex)
+
 
 def main(args):
     if charm.numPes() == 1:
         charm.abort('Run program with more than 1 PE')
     array_proxy = Array(Migrate, CHARES_PER_PE * charm.numPes())
+    bound_array = Array(OtherMigrate, CHARES_PER_PE * charm.numPes(), boundTo=array_proxy)
+    #array_proxy.prox(bound_array)
+    #array_proxy.start()
     array_proxy.start()
 
 
