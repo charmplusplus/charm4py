@@ -54,7 +54,7 @@ if you want to configure Charm++ differently from the default. To do this, chang
 the charm directory and run the following build command, then build Charm4Py::
 
     $ cd charm
-    $ ./build charm4py <target-architecture> -j<N> --with-production
+    $ ./build charm4py <target-architecture> -j<N>
     $ cd ../..
     $ pip install .
 
