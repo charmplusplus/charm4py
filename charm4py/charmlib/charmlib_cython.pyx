@@ -588,10 +588,7 @@ class CharmLib(object):
     if all_zero: ndims = -1   # for creating an empty array Charm++ API expects ndims set to -1
     send_bufs[0] = <char*>msg0
     send_buf_sizes[0] = <int>len(msg0)
-    if (boundTo == -1):
-      array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync)
-    else:
-      array_id = CkCreateBoundArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync, boundTo)
+    array_id = CkCreateArrayExt(chareIdx, ndims, c_index, epIdx, cur_buf, send_bufs, send_buf_sizes, map_gid, useAtSync, boundTo)
     cur_buf = 1
     return array_id
 
