@@ -1,0 +1,235 @@
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.160 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-114-ge1a85fbae
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.001 seconds.
+My PE:  0
+[0] neighbor =  <__main__.PingArrayProxy object at 0x7ffff75ba610>
+My PE:  1
+[1] neighbor =  <__main__.PingArrayProxy object at 0x7ffff75e3970>
+Array length = 1
+RES:: [plain] 1  43.888092041015625
+Array length = 2
+RES:: [plain] 2  43.76024007797241
+Array length = 4
+RES:: [plain] 4  43.49935054779053
+Array length = 8
+RES:: [plain] 8  44.67439651489258
+Array length = 16
+RES:: [plain] 16  47.05125093460083
+Array length = 32
+RES:: [plain] 32  47.47962951660156
+Array length = 64
+RES:: [plain] 64  46.534717082977295
+Array length = 128
+RES:: [plain] 128  47.661781311035156
+Array length = 256
+RES:: [plain] 256  47.47897386550903
+Array length = 512
+RES:: [plain] 512  48.288166522979736
+Array length = 1024
+RES:: [plain] 1024  50.57644844055176
+Array length = 2048
+RES:: [plain] 2048  54.69226837158203
+Array length = 4096
+RES:: [plain] 4096  57.62690305709839
+Array length = 8192
+RES:: [plain] 8192  84.42598581314087
+Array length = 16384
+RES:: [plain] 16384  106.35274648666382
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.131 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-114-ge1a85fbae
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.001 seconds.
+My PE:  0
+[0] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516460>
+My PE:  1
+[1] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516d00>
+Array length = 1
+RES:: [plain] 1  38.94263505935669
+Array length = 2
+RES:: [plain] 2  43.44892501831055
+Array length = 4
+RES:: [plain] 4  39.50059413909912
+Array length = 8
+RES:: [plain] 8  52.47640609741211
+Array length = 16
+RES:: [plain] 16  38.996338844299316
+Array length = 32
+RES:: [plain] 32  45.6354022026062
+Array length = 64
+RES:: [plain] 64  39.72911834716797
+Array length = 128
+RES:: [plain] 128  40.835022926330566
+Array length = 256
+RES:: [plain] 256  38.59835863113403
+Array length = 512
+RES:: [plain] 512  40.82232713699341
+Array length = 1024
+RES:: [plain] 1024  43.23399066925049
+Array length = 2048
+RES:: [plain] 2048  41.06622934341431
+Array length = 4096
+RES:: [plain] 4096  49.25590753555298
+Array length = 8192
+RES:: [plain] 8192  74.65660572052002
+Array length = 16384
+RES:: [plain] 16384  100.98874568939209
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.134 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-114-ge1a85fbae
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.003 seconds.
+My PE:  0
+[0] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516460>
+My PE:  1
+[1] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516d00>
+Array length = 1
+RES:: [plain] 1  39.76237773895264
+Array length = 2
+RES:: [plain] 2  40.10319709777832
+Array length = 4
+RES:: [plain] 4  40.839552879333496
+Array length = 8
+RES:: [plain] 8  37.33038902282715
+Array length = 16
+RES:: [plain] 16  40.25566577911377
+Array length = 32
+RES:: [plain] 32  41.12619161605835
+Array length = 64
+RES:: [plain] 64  38.93637657165527
+Array length = 128
+RES:: [plain] 128  41.21506214141846
+Array length = 256
+RES:: [plain] 256  38.67143392562866
+Array length = 512
+RES:: [plain] 512  42.545437812805176
+Array length = 1024
+RES:: [plain] 1024  49.97760057449341
+Array length = 2048
+RES:: [plain] 2048  48.38055372238159
+Array length = 4096
+RES:: [plain] 4096  53.62778902053833
+Array length = 8192
+RES:: [plain] 8192  84.78057384490967
+Array length = 16384
+RES:: [plain] 16384  116.44357442855835
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.155 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-114-ge1a85fbae
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.001 seconds.
+My PE:  0
+[0] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516460>
+My PE:  1
+[1] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516d00>
+Array length = 1
+RES:: [plain] 1  48.63160848617554
+Array length = 2
+RES:: [plain] 2  46.269893646240234
+Array length = 4
+RES:: [plain] 4  47.40065336227417
+Array length = 8
+RES:: [plain] 8  45.58128118515015
+Array length = 16
+RES:: [plain] 16  42.2205924987793
+Array length = 32
+RES:: [plain] 32  43.89834403991699
+Array length = 64
+RES:: [plain] 64  40.28666019439697
+Array length = 128
+RES:: [plain] 128  40.53777456283569
+Array length = 256
+RES:: [plain] 256  45.09943723678589
+Array length = 512
+RES:: [plain] 512  40.409207344055176
+Array length = 1024
+RES:: [plain] 1024  42.40846633911133
+Array length = 2048
+RES:: [plain] 2048  45.08596658706665
+Array length = 4096
+RES:: [plain] 4096  50.440847873687744
+Array length = 8192
+RES:: [plain] 8192  76.10297203063965
+Array length = 16384
+RES:: [plain] 16384  97.93758392333984
+[Partition 0][Node 0] End of program
+Charmrun> scalable start enabled. 
+Charmrun> started all node programs in 0.137 seconds.
+Charm++> Running in non-SMP mode: 2 processes (PEs)
+Converse/Charm++ Commit ID: v7.1.0-devel-114-ge1a85fbae
+Charm++ built with internal error checking enabled.
+Do not use for performance benchmarking (build without --enable-error-checking to do so).
+Isomalloc> Synchronized global address space.
+Charm++> scheduler running in netpoll mode.
+CharmLB> Load balancer assumes all CPUs are same.
+Charm4py> Running Charm4py version 1.0 on Python 3.8.10 (CPython). Using 'cython' interface to access Charm++
+Charm++> Running on 1 hosts (1 sockets x 2 cores x 1 PUs = 2-way SMP)
+Charm++> cpu topology info is gathered in 0.001 seconds.
+My PE:  0
+[0] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516460>
+My PE:  1
+[1] neighbor =  <__main__.PingArrayProxy object at 0x7ffff7516d00>
+Array length = 1
+RES:: [plain] 1  37.310123443603516
+Array length = 2
+RES:: [plain] 2  38.25861215591431
+Array length = 4
+RES:: [plain] 4  40.13127088546753
+Array length = 8
+RES:: [plain] 8  40.22252559661865
+Array length = 16
+RES:: [plain] 16  39.460837841033936
+Array length = 32
+RES:: [plain] 32  38.31470012664795
+Array length = 64
+RES:: [plain] 64  40.29017686843872
+Array length = 128
+RES:: [plain] 128  38.038671016693115
+Array length = 256
+RES:: [plain] 256  37.92917728424072
+Array length = 512
+RES:: [plain] 512  40.43787717819214
+Array length = 1024
+RES:: [plain] 1024  42.65230894088745
+Array length = 2048
+RES:: [plain] 2048  43.689846992492676
+Array length = 4096
+RES:: [plain] 4096  48.7285852432251
+Array length = 8192
+RES:: [plain] 8192  73.81588220596313
+Array length = 16384
+RES:: [plain] 16384  101.6358733177185
+[Partition 0][Node 0] End of program
