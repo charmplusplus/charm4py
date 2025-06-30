@@ -4,9 +4,9 @@ from .ray.api import get_object_store
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
 # this is unsigned short, hence this limit
-# FIXME: This could fail according to the above warning, 
+# FIXME: This could fail according to the above warning,
 # but we need large number of futures for the ray
-# programming model. 
+# programming model.
 FIDMAXVAL = 4294967295
 
 
@@ -26,16 +26,21 @@ class NotThreadedError(Exception):
 # See commit 25e2935 if need to resurrect code where proxies were included when
 # futures were pickled.
 
+
 class Future(object):
 
     def __init__(self, fid, gr, src, num_vals, store=False):
         self.fid = fid  # unique future ID within the process that created it
         self.gr = gr  # greenlet that created the future
-        self.src = src  # PE where the future was created (not used for collective futures)
+        self.src = (
+            src  # PE where the future was created (not used for collective futures)
+        )
         self.nvals = num_vals  # number of values that the future expects to receive
         self.values = []  # values of the future
         self.blocked = False  # flag to check if creator thread is blocked on the future
-        self.gotvalues = False  # flag to check if expected number of values have been received
+        self.gotvalues = (
+            False  # flag to check if expected number of values have been received
+        )
         self.error = None  # if the future receives an Exception, it is set here
         if store:
             self.store_id = (self.src << 32) + self.fid
@@ -48,10 +53,11 @@ class Future(object):
         self.borrow_depth = 0
 
     def get(self):
-        """ Blocking call on current entry method's thread to obtain the values of the
-            future. If the values are already available then they are returned immediately.
+        """Blocking call on current entry method's thread to obtain the values of the
+        future. If the values are already available then they are returned immediately.
         """
         from .charm import charm
+
         if self.store:
             return charm.get_future_value(self)
         else:
@@ -74,7 +80,7 @@ class Future(object):
         self.blocked = 2
 
     def send(self, result=None):
-        """ Send a value to this future. """
+        """Send a value to this future."""
         if self.store:
             self.create_object(result)
         else:
@@ -87,7 +93,7 @@ class Future(object):
         return charm.thisProxy[self.src]._future_deposit_result
 
     def deposit(self, result):
-        """ Deposit a value for this future. """
+        """Deposit a value for this future."""
         self.values.append(result)
         if isinstance(result, Exception):
             self.error = result
@@ -108,55 +114,67 @@ class Future(object):
 
     def lookup_location(self):
         from .charm import charm
+
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_location(self.store_id)
-    
+
     def lookup_object(self):
         from .charm import charm
+
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
-    
+
     def delete_object(self):
         from .charm import charm
+
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         obj_store = get_object_store()
         obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
-    
+
     def is_local(self):
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         return not (self.lookup_object() is None)
-    
+
     def create_object(self, obj):
         from .charm import charm
+
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         obj_store = get_object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.store_id, obj)
 
     def request_object(self):
         if not self.store:
-            raise ValueError("Operation not supported for future not"
-                             " stored in the object store")
+            raise ValueError(
+                "Operation not supported for future not" " stored in the object store"
+            )
         if self._requested:
             return
         from .charm import charm
+
         obj_store = get_object_store()
         obj_store[self.store_id % charm.numPes()].request_location_object(
-            self.store_id, charm.myPe())
+            self.store_id, charm.myPe()
+        )
         self._requested = True
 
     def __getstate__(self):
@@ -180,12 +198,14 @@ class Future(object):
         if self.store:
             if self.parent == None and self.num_borrowers == 0:
                 # This is the owner, delete the object from the object store
-                #print("Deleting owner", self.store_id)
+                # print("Deleting owner", self.store_id)
                 self.delete_object()
             else:
                 # this is a borrower, notify its parent of the deletion
-                #print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
-                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.borrow_depth - 1)
+                # print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
+                charm.thisProxy[self.parent].notify_future_deletion(
+                    self.store_id, self.borrow_depth - 1
+                )
 
 
 class CollectiveFuture(Future):
@@ -235,6 +255,7 @@ class EntryMethodThreadManager(object):
     def __init__(self, _charm):
         global charm, Charm4PyError, threadMgr
         from .charm import Charm4PyError
+
         charm = _charm
         threadMgr = self
         self.options = charm.options
@@ -256,17 +277,23 @@ class EntryMethodThreadManager(object):
 
     def objMigrating(self, obj):
         if obj._numthreads > 0:
-            raise Charm4PyError('Migration of chares with active threads is not currently supported')
+            raise Charm4PyError(
+                "Migration of chares with active threads is not currently supported"
+            )
 
     def throwNotThreadedError(self):
-        raise NotThreadedError("Method '" + charm.last_em_exec.C.__name__ + "." +
-                               charm.last_em_exec.name +
-                               "' must be a couroutine to be able to suspend (decorate it with @coro)")
+        raise NotThreadedError(
+            "Method '"
+            + charm.last_em_exec.C.__name__
+            + "."
+            + charm.last_em_exec.name
+            + "' must be a couroutine to be able to suspend (decorate it with @coro)"
+        )
 
     def pauseThread(self):
-        """ Called by an entry method thread to wait for something.
-            Returns data that the thread was waiting for, or None if it was
-            waiting for an event
+        """Called by an entry method thread to wait for something.
+        Returns data that the thread was waiting for, or None if it was
+        waiting for an event
         """
         gr = getcurrent()
         main_gr = self.main_gr
@@ -287,10 +314,10 @@ class EntryMethodThreadManager(object):
             return main_gr.switch()
 
     def _resumeThread(self, gr, arg):
-        """ Deposit a result or signal that a local entry method thread is waiting on,
-            and resume it. This executes on the main thread.
+        """Deposit a result or signal that a local entry method thread is waiting on,
+        and resume it. This executes on the main thread.
         """
-        #assert getcurrent() == self.main_gr
+        # assert getcurrent() == self.main_gr
         if gr.notify:
             obj = gr.obj
             obj._thread_notify_target.threadResumed(obj._thread_notify_data)
@@ -309,14 +336,14 @@ class EntryMethodThreadManager(object):
             ems[-1].startMeasuringTime()
 
     def createFuture(self, num_vals=1, store=False):
-        """ Creates a new Future object by obtaining a unique (local) future ID. """
+        """Creates a new Future object by obtaining a unique (local) future ID."""
         gr = getcurrent()
         if not store and gr == self.main_gr:
             self.throwNotThreadedError()
         # get a unique local Future ID
         global FIDMAXVAL
         futures = self.futures
-        assert len(futures) < FIDMAXVAL, 'Too many pending futures, cannot create more'
+        assert len(futures) < FIDMAXVAL, "Too many pending futures, cannot create more"
         fid = (self.lastfid % FIDMAXVAL) + 1
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
@@ -326,7 +353,7 @@ class EntryMethodThreadManager(object):
         return f
 
     def createCollectiveFuture(self, fid, obj, proxy):
-        """ fid is supplied in this case and has to be the same for all distributed chares """
+        """fid is supplied in this case and has to be the same for all distributed chares"""
         gr = getcurrent()
         if gr == self.main_gr:
             self.throwNotThreadedError()
@@ -335,13 +362,15 @@ class EntryMethodThreadManager(object):
         return f
 
     def depositFuture(self, fid, result):
-        """ Set a value of a future that is being managed by this ThreadManager. """
+        """Set a value of a future that is being managed by this ThreadManager."""
         futures = self.futures
         try:
             f = futures[fid]
         except KeyError:
-            raise Charm4PyError('No pending future with fid=' + str(fid) + '. A common reason is '
-                                'sending to a future that already received its value(s)')
+            raise Charm4PyError(
+                "No pending future with fid=" + str(fid) + ". A common reason is "
+                "sending to a future that already received its value(s)"
+            )
         if f.deposit(result):
             del futures[fid]
             # resume if a thread is blocked on the future

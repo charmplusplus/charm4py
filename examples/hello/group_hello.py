@@ -8,10 +8,10 @@ from charm4py import charm, Chare, Group
 class Hello(Chare):
 
     def sayHi(self, hello_num):
-        print('Hi[' + str(hello_num) + '] from element', self.thisIndex)
+        print("Hi[" + str(hello_num) + "] from element", self.thisIndex)
         if self.thisIndex == charm.numPes() - 1:
             # we reached the last element
-            print('All done')
+            print("All done")
             exit()
         else:
             # pass the hello message to the next element
@@ -19,7 +19,7 @@ class Hello(Chare):
 
 
 def main(args):
-    print('\nRunning Hello on', charm.numPes(), 'processors')
+    print("\nRunning Hello on", charm.numPes(), "processors")
     # create a Group of Hello chares (there will be one chare per PE)
     group_proxy = Group(Hello)
     # send hello message to the first element

@@ -51,10 +51,10 @@ def test_op(done, op, vector_size, use_numpy=False):
                 assert list(val1) == list(val2)
         else:
             assert val1 == val2
-        print('[Main] Reduction with Reducer.%s passes.' % get_op_name(op))
+        print("[Main] Reduction with Reducer.%s passes." % get_op_name(op))
         done(True)
     except AssertionError:
-        print('[Main] Reduction with Reducer.%s is not correct.' % get_op_name(op))
+        print("[Main] Reduction with Reducer.%s is not correct." % get_op_name(op))
         done(False)
 
 
@@ -64,7 +64,7 @@ def test_op_logical(done, op, vector_size, use_numpy=False):
         if use_numpy:
             data = np.random.rand(vector_size)
             p = 0.1
-            data = np.random.choice(a=[False, True], size=(vector_size), p=[p, 1-p])
+            data = np.random.choice(a=[False, True], size=(vector_size), p=[p, 1 - p])
         else:
             data = list(map(bool, range(0, vector_size)))
     else:
@@ -82,10 +82,10 @@ def test_op_logical(done, op, vector_size, use_numpy=False):
             assert list(val1) == list(val2)
         else:
             assert val1 == val2
-        print('[Main] Reduction with Reducer.%s passes.' % get_op_name(op))
+        print("[Main] Reduction with Reducer.%s passes." % get_op_name(op))
         done(True)
     except AssertionError:
-        print('[Main] Reduction with Reducer.%s is not correct.' % get_op_name(op))
+        print("[Main] Reduction with Reducer.%s is not correct." % get_op_name(op))
         done(False)
 
 
@@ -139,10 +139,10 @@ def main(args):
     passes = sum(map(lambda x: x.get(), test_futures))
 
     if passes == num_tests:
-        print('All tests passed!')
+        print("All tests passed!")
         exit()
     else:
-        print('ERROR: Not all tests passed.')
+        print("ERROR: Not all tests passed.")
         exit(1)
 
 

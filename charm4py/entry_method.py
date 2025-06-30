@@ -16,12 +16,14 @@ class EntryMethod(object):
             self.running = False
 
         method = getattr(C, name)
-        if hasattr(method, '_ck_coro'):
+        if hasattr(method, "_ck_coro"):
             if not profile:
                 self.run = self._run_th
             else:
                 self.run = self._run_th_prof
-            self.thread_notify = hasattr(method, '_ck_coro_notify') and method._ck_coro_notify
+            self.thread_notify = (
+                hasattr(method, "_ck_coro_notify") and method._ck_coro_notify
+            )
         else:
             if not profile:
                 self.run = self._run
@@ -29,20 +31,20 @@ class EntryMethod(object):
                 self.run = self._run_prof
 
         self.when_cond = None
-        if hasattr(method, 'when_cond'):
+        if hasattr(method, "when_cond"):
             # template object specifying the 'when' condition clause
             # for this entry method
-            self.when_cond = getattr(method, 'when_cond')
+            self.when_cond = getattr(method, "when_cond")
             if isinstance(self.when_cond, wait.ChareStateMsgCond):
                 self.when_cond_func = self.when_cond.cond_func
 
     def _run(self, obj, header, args, ret_fut=False):
-        """ run entry method of the given object in the current thread """
+        """run entry method of the given object in the current thread"""
         # set last entry method executed (note that 'last_em_exec' won't
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
         try:
-            #print(args)
+            # print(args)
             if ret_fut:
                 fut = args[-1]
                 args = args[:-1]
@@ -60,13 +62,13 @@ class EntryMethod(object):
         except Exception as e:
             charm.process_em_exc(e, obj, header)
             return
-        if b'block' in header:
-            blockFuture = header[b'block']
-            if b'bcast' in header:
+        if b"block" in header:
+            blockFuture = header[b"block"]
+            if b"bcast" in header:
                 sid = None
-                if b'sid' in header:
-                    sid = header[b'sid']
-                if b'bcastret' in header:
+                if b"sid" in header:
+                    sid = header[b"sid"]
+                if b"bcastret" in header:
                     charm.contribute(ret, charm.reducers.gather, blockFuture, obj, sid)
                 else:
                     charm.contribute(None, None, blockFuture, obj, sid)
@@ -172,9 +174,10 @@ def when(cond_str):
     def _when(func):
         method_args = {}
         for i in range(1, func.__code__.co_argcount):
-            method_args[func.__code__.co_varnames[i]] = i-1
+            method_args[func.__code__.co_varnames[i]] = i - 1
         func.when_cond = wait.parse_cond_str(cond_str, func.__module__, method_args)
         return func
+
     return _when
 
 
@@ -188,6 +191,7 @@ def coro_ext(event_notify=False):
         func._ck_coro = True
         func._ck_coro_notify = event_notify
         return func
+
     return _coro
 
 

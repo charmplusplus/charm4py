@@ -25,7 +25,7 @@ def fib(n):
         # this will create two tasks which will be sent to distributed workers
         # (tasks can execute on any PE). map will block here for the result of
         # fib(n-1) and fib(n-2), which is why we mark fib as a coroutine
-        return sum(charm.pool.map(fib, [n-1, n-2]))
+        return sum(charm.pool.map(fib, [n - 1, n - 2]))
 
 
 @numba.jit(nopython=True, cache=False)  # numba really speeds up the computation
@@ -33,7 +33,7 @@ def fib_seq(n):
     if n < 2:
         return n
     else:
-        return fib_seq(n-1) + fib_seq(n-2)
+        return fib_seq(n - 1) + fib_seq(n - 2)
 
 
 class Util(Chare):
@@ -43,7 +43,7 @@ class Util(Chare):
 
 def main(args):
     global GRAINSIZE
-    print('\nUsage: fib-numba.py [n] [grainsize]')
+    print("\nUsage: fib-numba.py [n] [grainsize]")
     n = 40
     if len(args) > 1:
         n = int(args[1])
@@ -52,14 +52,14 @@ def main(args):
         GRAINSIZE = int(args[2])
     GRAINSIZE = max(2, GRAINSIZE)
     # set GRAINSIZE as a global variable on all processes before starting
-    charm.thisProxy.updateGlobals({'GRAINSIZE': GRAINSIZE}, awaitable=True).get()
+    charm.thisProxy.updateGlobals({"GRAINSIZE": GRAINSIZE}, awaitable=True).get()
     # precompile fib_seq on every process before the actual computation starts,
     # by calling the function. this helps get consistent benchmark results
     Group(Util).compile(awaitable=True).get()
-    print('Calculating fibonacci of N=' + str(n) + ', grainsize=', GRAINSIZE)
+    print("Calculating fibonacci of N=" + str(n) + ", grainsize=", GRAINSIZE)
     t0 = time.time()
     result = fib(n)
-    print('Result is', result, 'elapsed=', round(time.time() - t0, 3))
+    print("Result is", result, "elapsed=", round(time.time() - t0, 3))
     exit()
 
 

@@ -26,11 +26,15 @@ class Main(Chare):
         assert g1 == g1[2].getProxy(ret=True).get()
         assert g1[2] == g1[2].getProxy(elem=True, ret=True).get()
         assert g1[2].getProxy(ret=True).get() == g1[3].getProxy(ret=True).get()
-        assert g1[2].getProxy(True, ret=True).get() != g1[3].getProxy(True, ret=True).get()
+        assert (
+            g1[2].getProxy(True, ret=True).get() != g1[3].getProxy(True, ret=True).get()
+        )
 
         assert g1 != g2
         assert g1[2].getProxy(ret=True).get() != g2[2].getProxy(ret=True).get()
-        assert g1[2].getProxy(True, ret=True).get() != g2[2].getProxy(True, ret=True).get()
+        assert (
+            g1[2].getProxy(True, ret=True).get() != g2[2].getProxy(True, ret=True).get()
+        )
 
         assert g1 != a
         assert a == a

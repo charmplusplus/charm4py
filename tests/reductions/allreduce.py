@@ -41,7 +41,7 @@ def main(args):
 
     for done in wait_alldone:
         done.get()
-    print('DONE')
+    print("DONE")
     exit()
 
 

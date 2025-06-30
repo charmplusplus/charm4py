@@ -12,9 +12,9 @@ def main(args):
     testProxy.getData(f)
 
     data = f.get()
-    print('[Main] Received data: ' + str(data))
-    assert sorted(data) == list(range(numChares)), 'Multi-futures failed!'
-    print('[Main] All done.')
+    print("[Main] Received data: " + str(data))
+    assert sorted(data) == list(range(numChares)), "Multi-futures failed!"
+    print("[Main] All done.")
     exit()
 
 

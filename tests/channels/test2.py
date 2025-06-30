@@ -60,11 +60,11 @@ def main(args):
         for idx in range(P):
             chares.append(collection[idx])
 
-    for collection, numelems in ((a1, P*8), (a2, P*10), (a3, P*4), (a4, P)):
+    for collection, numelems in ((a1, P * 8), (a2, P * 10), (a3, P * 4), (a4, P)):
         for idx in range(numelems):
             chares.append(collection[idx])
 
-    print('There are', len(chares), 'chares')
+    print("There are", len(chares), "chares")
 
     # establish random channels between chares
     global gchannels
@@ -79,19 +79,24 @@ def main(args):
                 num_self_channels += 1
             gchannels[level][a].append(b)
             gchannels[level][b].append(a)
-    charm.thisProxy.updateGlobals({'gchannels': gchannels}, awaitable=True).get()
+    charm.thisProxy.updateGlobals({"gchannels": gchannels}, awaitable=True).get()
 
     done_fut = Future(8 * NUM_LEVELS)  # wait for 8 collections to finish 3 levels
     for collection in (g1, g2, g3, g4, a1, a2, a3, a4):
         collection.setup(awaitable=True).get()
-    print(NUM_CHANNELS * NUM_LEVELS, 'channels set up,', num_self_channels, 'self channels')
+    print(
+        NUM_CHANNELS * NUM_LEVELS,
+        "channels set up,",
+        num_self_channels,
+        "self channels",
+    )
     for collection in (g1, g2, g3, g4, a1, a2, a3, a4):
         for lvl in range(NUM_LEVELS):
             collection.work(lvl, done_fut)
 
     msgs = sum(done_fut.get())
     assert msgs == sum(LEVELS_NUM_ITER[:NUM_LEVELS]) * NUM_CHANNELS * 2
-    print('total msgs received by chares=', msgs)
+    print("total msgs received by chares=", msgs)
     exit()
 
 

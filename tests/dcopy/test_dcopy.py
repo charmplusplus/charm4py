@@ -17,7 +17,9 @@ mainProxy = None
 class Main(Chare):
 
     def __init__(self, args):
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy}, '__main__', awaitable=True).get()
+        charm.thisProxy.updateGlobals(
+            {"mainProxy": self.thisProxy}, "__main__", awaitable=True
+        ).get()
         self.testProxy = Array(Test, charm.numPes() * CHARES_PER_PE)
 
     def start(self):
@@ -27,10 +29,10 @@ class Main(Chare):
 
     def iterationComplete(self):
         if self.iterations % 10 == 0:
-            print('Iteration', self.iterations, 'complete')
+            print("Iteration", self.iterations, "complete")
         self.iterations += 1
         if self.iterations == MAX_ITER:
-            print('Program done. Total time =', time.time() - self.startTime)
+            print("Program done. Total time =", time.time() - self.startTime)
             charm.printStats()
             exit()
         else:
@@ -40,11 +42,11 @@ class Main(Chare):
 class Test(Chare):
 
     def __init__(self):
-        self.x = numpy.arange(DATA_LEN, dtype='float64')
+        self.x = numpy.arange(DATA_LEN, dtype="float64")
         y = self.x * (self.thisIndex[0] + 1)
 
         self.S1 = y.tobytes()
-        self.S2 = array.array('d', y)
+        self.S2 = array.array("d", y)
         self.S3 = y
 
         self.msgsRcvd = 0
@@ -72,10 +74,10 @@ class Test(Chare):
 
         desired = self.x * (src[0] + 1)
 
-        v1 = numpy.frombuffer(d1, dtype='float64')
+        v1 = numpy.frombuffer(d1, dtype="float64")
         assert_allclose(v1, desired, atol=1e-07)
 
-        v2 = numpy.array(d2, dtype='float64')
+        v2 = numpy.array(d2, dtype="float64")
         assert_allclose(v2, desired, atol=1e-07)
 
         assert_allclose(d3, desired, atol=1e-07)

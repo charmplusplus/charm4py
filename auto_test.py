@@ -1,6 +1,7 @@
 import time
 import subprocess
 import sys
+
 if sys.version_info[0] < 3:
     print("auto_test requires Python 3")
     exit(1)
@@ -10,21 +11,23 @@ from collections import defaultdict
 import json
 
 
-if len(sys.argv) == 2 and sys.argv[1] == '-version_check':
+if len(sys.argv) == 2 and sys.argv[1] == "-version_check":
     exit(sys.version_info[0])
 
 
 def searchForPython(python_implementations):
     py3_exec = None
-    py3_exec = shutil.which('python3')
+    py3_exec = shutil.which("python3")
     if py3_exec is None:
-        exec_str = shutil.which('python')
+        exec_str = shutil.which("python")
         if exec_str is not None:
-            version = subprocess.call([exec_str, 'auto_test.py', '-version_check'])
+            version = subprocess.call([exec_str, "auto_test.py", "-version_check"])
             if version >= 3:
                 py3_exec = exec_str
     if py3_exec is None:
-        print("WARNING: Python 3 executable not found for auto_test. If desired, set manually")
+        print(
+            "WARNING: Python 3 executable not found for auto_test. If desired, set manually"
+        )
     else:
         python_implementations.add((3, py3_exec))
 
@@ -33,76 +36,89 @@ def searchForPython(python_implementations):
 TIMEOUT = 120  # timeout for each test (in seconds)
 CHARM_QUIET_AFTER_NUM_TESTS = 5
 
-commonArgs = ['++local']
-default_num_processes = int(os.environ.get('CHARM4PY_TEST_NUM_PROCESSES', 4))
+commonArgs = ["++local"]
+default_num_processes = int(os.environ.get("CHARM4PY_TEST_NUM_PROCESSES", 4))
 
 try:
     import numba
+
     numbaInstalled = True
 except:
     numbaInstalled = False
 
 # search for python executables
-python_implementations = set()   # python implementations can also be added here manually
+python_implementations = set()  # python implementations can also be added here manually
 searchForPython(python_implementations)
 
-interfaces = ['cython']
+interfaces = ["cython"]
 
-with open('test_config.json', 'r') as infile:
+with open("test_config.json", "r") as infile:
     tests = json.load(infile)
 
 num_tests = 0
 durations = defaultdict(dict)
 for test in tests:
-    if 'condition' in test:
-        if test['condition'] == 'numbaInstalled' and not numbaInstalled:
+    if "condition" in test:
+        if test["condition"] == "numbaInstalled" and not numbaInstalled:
             continue
-        if test['condition'] == 'not numbaInstalled' and numbaInstalled:
+        if test["condition"] == "not numbaInstalled" and numbaInstalled:
             continue
-    if 'timeout_override' in test:
-        TIMEOUT = test['timeout_override']
+    if "timeout_override" in test:
+        TIMEOUT = test["timeout_override"]
     else:
         TIMEOUT = 120
-    num_processes = max(test.get('force_min_processes', default_num_processes), default_num_processes)
+    num_processes = max(
+        test.get("force_min_processes", default_num_processes), default_num_processes
+    )
     for interface in interfaces:
-        durations[interface][test['path']] = []
+        durations[interface][test["path"]] = []
         for version, python in sorted(python_implementations):
-            if version < test.get('requires_py_version', -1):
+            if version < test.get("requires_py_version", -1):
                 continue
             additionalArgs = []
-            if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
-                additionalArgs.append('++quiet')
-            cmd = ['charmrun/charmrun']
-            if test.get('prefix'):
-                cmd += [test['prefix']]
-            if not test.get('interactive', False):
-                cmd += [python] + [test['path']]
+            if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and "++quiet" not in commonArgs:
+                additionalArgs.append("++quiet")
+            cmd = ["charmrun/charmrun"]
+            if test.get("prefix"):
+                cmd += [test["prefix"]]
+            if not test.get("interactive", False):
+                cmd += [python] + [test["path"]]
             else:
-                cmd += [python] + ['-m', 'charm4py.interactive']
-            if 'args' in test:
-                cmd += test['args'].split(' ')
+                cmd += [python] + ["-m", "charm4py.interactive"]
+            if "args" in test:
+                cmd += test["args"].split(" ")
             cmd += commonArgs
-            cmd += ['+p' + str(num_processes), '+libcharm_interface', interface]
+            cmd += ["+p" + str(num_processes), "+libcharm_interface", interface]
             cmd += additionalArgs
-            print('Test command is ' + ' '.join(cmd))
+            print("Test command is " + " ".join(cmd))
             startTime = time.time()
             stdin = None
-            if test.get('interactive', False):
-                stdin = open(test['path'])
+            if test.get("interactive", False):
+                stdin = open(test["path"])
             p = subprocess.Popen(cmd, stdin=stdin)
             try:
                 rc = p.wait(TIMEOUT)
             except subprocess.TimeoutExpired:
-                print("Timeout (" + str(TIMEOUT) + " secs) expired when running " + test['path'] + ", Killing process")
+                print(
+                    "Timeout ("
+                    + str(TIMEOUT)
+                    + " secs) expired when running "
+                    + test["path"]
+                    + ", Killing process"
+                )
                 p.kill()
                 rc = -1
             if rc != 0:
-                print("ERROR running test " + test['path'] + " with " + python)
+                print("ERROR running test " + test["path"] + " with " + python)
                 exit(1)
             else:
                 elapsed = round(time.time() - startTime, 3)
-                durations[interface][test['path']].append(elapsed)
-                print("\n\n--------------------- TEST PASSED (in " + str(elapsed) + " secs) ---------------------\n\n")
+                durations[interface][test["path"]].append(elapsed)
+                print(
+                    "\n\n--------------------- TEST PASSED (in "
+                    + str(elapsed)
+                    + " secs) ---------------------\n\n"
+                )
                 num_tests += 1
 
 

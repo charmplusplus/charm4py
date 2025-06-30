@@ -7,10 +7,10 @@ class Test(Chare):
 
     def __init__(self, numParticipants):
         self.numParticipants = numParticipants
-        self.msgsRcvd = 0   # for PE 0
-        self.current  = 1   # for PE 0
-        self.msgsSent = 0   # for PEs != 0
-        #print("Group constructed " + str(self.thisIndex))
+        self.msgsRcvd = 0  # for PE 0
+        self.current = 1  # for PE 0
+        self.msgsSent = 0  # for PEs != 0
+        # print("Group constructed " + str(self.thisIndex))
 
     @when("self.current == id")
     def testWhen(self, id, msg):
@@ -26,7 +26,7 @@ class Test(Chare):
     def run(self):
         if charm.myPe() == 0 or charm.myPe() > self.numParticipants:
             return
-        #print("Group " + str(self.thisIndex) + " sending msg " + str(self.msgsSent))
+        # print("Group " + str(self.thisIndex) + " sending msg " + str(self.msgsSent))
         self.thisProxy[0].testWhen(charm.myPe(), "hi")
         self.msgsSent += 1
         if self.msgsSent < GRP_TO_SEND:
@@ -36,7 +36,7 @@ class Test(Chare):
 def main(args):
     if charm.numPes() < 3:
         charm.abort("Run program with at least 3 PEs")
-    numParticipants = min(charm.numPes()-1, 31)
+    numParticipants = min(charm.numPes() - 1, 31)
     Group(Test, args=[numParticipants]).run()
 
 

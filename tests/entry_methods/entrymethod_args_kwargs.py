@@ -71,7 +71,9 @@ class Main(Chare):
             else:
                 continue
             collection[single_chare].recv(10, 20, 3000, b=4000, awaitable=True).get()
-            collection[single_chare].recv(b=4000, a=3000, y=20, x=10, awaitable=True).get()
+            collection[single_chare].recv(
+                b=4000, a=3000, y=20, x=10, awaitable=True
+            ).get()
 
         exit()
 

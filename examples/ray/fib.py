@@ -12,6 +12,7 @@ import time
 
 # ray version
 
+
 @ray.remote
 def fib(n):
     if n < 2:
@@ -21,22 +22,23 @@ def fib(n):
         # (tasks can execute on any PE). map will block here for the result of
         # fib(n-1) and fib(n-2), which is why we mark fib as a coroutine
         # return sum(charm.pool.map(fib, [n-1, n-2]))
-        result1 = fib.remote(n-1)
-        result2 = fib.remote(n-2)
-        return ray.get(result1)+ray.get(result2)
+        result1 = fib.remote(n - 1)
+        result2 = fib.remote(n - 2)
+        return ray.get(result1) + ray.get(result2)
 
 
 def main(args):
     ray.init()
-    print('\nUsage: fib.py [n]')
+    print("\nUsage: fib.py [n]")
     n = 12
     if len(args) > 1:
         n = int(args[1])
-    print('Calculating fibonacci of N=' + str(n))
+    print("Calculating fibonacci of N=" + str(n))
     t0 = time.time()
     result = fib.remote(n)
-    print('Result is', ray.get(result), 'elapsed=', round(time.time() - t0, 3))
-    #charm.thisProxy.stop_profiling()
+    print("Result is", ray.get(result), "elapsed=", round(time.time() - t0, 3))
+    # charm.thisProxy.stop_profiling()
     exit()
+
 
 charm.start(main)

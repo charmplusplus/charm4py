@@ -4,7 +4,7 @@ from charm4py import charm, Chare, Group, Array
 class MyChare(Chare):
 
     def __init__(self):
-        print('Hello from MyChare instance in processor', charm.myPe())
+        print("Hello from MyChare instance in processor", charm.myPe())
 
 
 def main(args):

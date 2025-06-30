@@ -14,15 +14,16 @@ class Test(Chare):
         charm.scheduleCallableAfter(self.thisProxy[self.thisIndex].next, 1, [-1])
 
     def next(self, from_elem):
-        print(self.thisIndex, 'time=', time() - self.t0, 'from=', from_elem)
+        print(self.thisIndex, "time=", time() - self.t0, "from=", from_elem)
         assert from_elem == self.thisIndex[0] - 1
         assert time() - self.t0 > self.thisIndex[0] + 0.9
         if self.thisIndex[0] == NUM_CHARES - 1:
-            print('DONE')
+            print("DONE")
             exit()
         else:
-            charm.scheduleCallableAfter(self.thisProxy[self.thisIndex[0] + 1].next,
-                                        1, [self.thisIndex[0]])
+            charm.scheduleCallableAfter(
+                self.thisProxy[self.thisIndex[0] + 1].next, 1, [self.thisIndex[0]]
+            )
 
 
 def main(args):

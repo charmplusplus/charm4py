@@ -1,7 +1,9 @@
 from charm4py import charm, Chare, Future, coro
-#modeled after the charm with futures example in the charm++ textbook
+
+# modeled after the charm with futures example in the charm++ textbook
 
 THRESHOLD = 20
+
 
 class Fib(Chare):
 
@@ -33,6 +35,7 @@ class Fib(Chare):
         else:
             return self.seqFib(n - 1) + self.seqFib(n - 2)
 
+
 @coro
 def main(args):
     if len(args) < 2:
@@ -53,5 +56,6 @@ def main(args):
     res = f.get()
     print("The requested Fibonacci number is:", res)
     charm.exit()
+
 
 charm.start(main)

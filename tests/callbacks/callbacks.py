@@ -24,12 +24,12 @@ class CallbackReceiver(Chare):
         self.main = main
 
     def getResult(self, result):
-        #print('[' + str(charm.myPe()) + '] got result:', result)
+        # print('[' + str(charm.myPe()) + '] got result:', result)
         assert result == (charm.numPes() * (charm.numPes() - 1)) // 2
         self.main.workDone(self.thisIndex[0])
 
     def getResultBroadcast(self, result):
-        #print('[' + str(charm.myPe()) + '] got result:', result)
+        # print('[' + str(charm.myPe()) + '] got result:', result)
         assert result == (charm.numPes() * (charm.numPes() - 1)) // 2
         self.contribute(1, Reducer.sum, self.main.workDone)
 
@@ -45,15 +45,15 @@ class Main(Chare):
         controllers = Array(Controller, charm.numPes())
         receivers = Array(CallbackReceiver, charm.numPes(), args=[self.thisProxy])
         workers.work(receivers[1].getResult)
-        self.wait('self.done == 1')
+        self.wait("self.done == 1")
         self.done = -1
 
         controllers[1].start(workers, receivers[2].getResult)
-        self.wait('self.done == 2')
+        self.wait("self.done == 2")
         self.done = -1
 
         controllers[2].start(workers, receivers.getResultBroadcast)
-        self.wait('self.done == ' + str(charm.numPes()))
+        self.wait("self.done == " + str(charm.numPes()))
         self.done = -1
 
         f = Future()

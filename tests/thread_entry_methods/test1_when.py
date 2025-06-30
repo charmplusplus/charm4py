@@ -23,10 +23,15 @@ class Test(Chare):
         self.contribute(None, None, self.thisProxy[0].done)
 
     @coro
-    @when('self.iteration == iteration')
+    @when("self.iteration == iteration")
     def getVal(self, iteration):
-        result = 53 * testGroup[charm.myPe()].getVal(ret=True).get() * self.thisIndex[0] * self.iteration
-        #assert result == 53 * (73 + charm.myPe()) * self.thisIndex[0] * self.iteration
+        result = (
+            53
+            * testGroup[charm.myPe()].getVal(ret=True).get()
+            * self.thisIndex[0]
+            * self.iteration
+        )
+        # assert result == 53 * (73 + charm.myPe()) * self.thisIndex[0] * self.iteration
         self.msgsRcvd += 1
         if self.msgsRcvd == numChares:
             self.msgsRcvd = 0
@@ -41,15 +46,16 @@ class Test(Chare):
 class Test2(Chare):
 
     def getVal(self):
-        return (73 + charm.myPe())
+        return 73 + charm.myPe()
 
 
 def main(args):
     global numChares, testGroup
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)
-    charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},
-                                  '__main__', awaitable=True).get()
+    charm.thisProxy.updateGlobals(
+        {"numChares": numChares, "testGroup": testGroup}, "__main__", awaitable=True
+    ).get()
     Array(Test, numChares)
 
 

@@ -17,7 +17,8 @@ from charm4py import charm, Chare, Group, Array, threaded, Reducer
 import numpy as np
 
 # Add LB command line arguments
-sys.argv += ['+LBOff', '+LBCommOff', '+LBObjOnly']
+sys.argv += ["+LBOff", "+LBCommOff", "+LBObjOnly"]
+
 
 # Dataset partitioning helper
 class Partition(object):
@@ -32,6 +33,7 @@ class Partition(object):
     def __getitem__(self, index):
         data_idx = self.index[index]
         return self.data[data_idx]
+
 
 class DataPartitioner(object):
 
@@ -51,6 +53,7 @@ class DataPartitioner(object):
 
     def use(self, partition):
         return Partition(self.data, self.partitions[partition])
+
 
 # Neural network architecture
 class Net(nn.Module):
@@ -72,14 +75,15 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
+
 # Initialize PyTorch on each PE
 class TorchInit(Chare):
 
     def init(self, num_threads):
         torch.set_num_threads(num_threads)
         torch.manual_seed(1234)
-        
-            
+
+
 # Chare array
 class Worker(Chare):
 
@@ -97,25 +101,23 @@ class Worker(Chare):
         else:
             # is group element
             self.myrank = self.thisIndex
-            
-            
-
 
     # Partitioning MNIST dataset
     def partition_dataset(self):
-        dataset = datasets.MNIST('./data', train=True, download=True,
-                                 transform=transforms.Compose([
-                                     transforms.ToTensor(),
-                                     transforms.Normalize((0.1307,), (0.3081,))
-                                 ]))
+        dataset = datasets.MNIST(
+            "./data",
+            train=True,
+            download=True,
+            transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            ),
+        )
         size = self.num_workers
         bsz = int(128 / float(size))  # my batch size
         partition_sizes = [1.0 / size for _ in range(size)]
         partition = DataPartitioner(dataset, partition_sizes)
         partition = partition.use(self.myrank)
-        train_set = torch.utils.data.DataLoader(partition,
-                                                batch_size=bsz,
-                                                shuffle=True)
+        train_set = torch.utils.data.DataLoader(partition, batch_size=bsz, shuffle=True)
         return train_set, bsz
 
     # Distributed SGD
@@ -125,9 +127,9 @@ class Worker(Chare):
             # if multiple devices are available (running with charmrun, not srun), should assign round-robin
             device_index = charm.myPe() % torch.cuda.device_count()
             device = torch.device("cuda:" + str(device_index))
-        else:   
+        else:
             device = torch.device("cpu")
-        
+
         if done_future is not None:
             # Starting a new run
             self.done_future = done_future
@@ -136,7 +138,7 @@ class Worker(Chare):
             self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.5)
             self.num_batches = math.ceil(len(self.train_set.dataset) / float(bsz))
             self.epoch = 0
-            
+
         while self.epoch < self.epochs:
             if self.epoch == 0:
                 charm.LBTurnInstrumentOn()
@@ -151,17 +153,23 @@ class Worker(Chare):
                 loss.backward()
                 self.average_gradients(self.model, device)
                 self.optimizer.step()
-            print(f'Chare {self.thisIndex[0]:4d} | PE {charm.myPe():4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
+            print(
+                f"Chare {self.thisIndex[0]:4d} | PE {charm.myPe():4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}"
+            )
             self.epoch += 1
             if (self.lb_epochs > 0) and (self.epoch % self.lb_epochs == 0):
                 # Start load balancing
                 self.AtSync()
                 return
 
-        print(f'Chare {self.thisIndex[0]:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}')
+        print(
+            f"Chare {self.thisIndex[0]:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}"
+        )
         self.agg_time_all = self.allreduce(self.agg_time, Reducer.sum).get()
         if self.myrank == 0:
-            print(f'Chare {self.thisIndex[0]:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}')
+            print(
+                f"Chare {self.thisIndex[0]:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}"
+            )
         self.contribute(None, None, self.done_future)
 
     # Gradient averaging
@@ -169,7 +177,7 @@ class Worker(Chare):
         for param in model.parameters():
             # send param to cpu
             param.grad.data = param.grad.data.cpu()
-            
+
             # Flatten gradient data
             data_shape = param.grad.data.shape
             reshaped_data = param.grad.data.reshape(-1)
@@ -179,38 +187,41 @@ class Worker(Chare):
             agg_data = self.allreduce(reshaped_data, Reducer.sum).get()
             self.agg_time += time.time() - start_time
             self.time_cnt += 1
-             
+
             # convert numpy array to torch tensor
             agg_data = torch.from_numpy(agg_data)
-            
+
             # Send to device and restore original shape of gradient data
             param.grad.data = agg_data.to(device)
-            param.grad.data = param.grad.data.reshape(data_shape) / float(self.num_workers)
-           
-            
+            param.grad.data = param.grad.data.reshape(data_shape) / float(
+                self.num_workers
+            )
 
     # Return method from load balancing
     def resumeFromSync(self):
         self.thisProxy[self.thisIndex].run()
 
+
 def main(args):
     # Initialize PyTorch on all PEs
     Group(TorchInit).init(1, ret=True).get()
-
 
     # Create chare array and start training
     num_workers = charm.numPes()
     epochs = 6
     lb_epochs = 0
-    workers = Array(Worker, num_workers, args=[num_workers, epochs, lb_epochs], useAtSync=True)
+    workers = Array(
+        Worker, num_workers, args=[num_workers, epochs, lb_epochs], useAtSync=True
+    )
     t0 = time.time()
     done = charm.createFuture()
-    
+
     workers.run(done)
     done.get()
 
     # Training complete
-    print(f'Done. Elapsed time: {(time.time() - t0):9.3f} s')
+    print(f"Done. Elapsed time: {(time.time() - t0):9.3f} s")
     charm.exit()
+
 
 charm.start(main)

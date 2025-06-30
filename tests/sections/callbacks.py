@@ -45,7 +45,7 @@ class Test(Chare):
         self.contribute(3, Reducer.sum, cb, secProxy)
 
     def work2(self, cb, secProxy=None):
-        data = numpy.arange(100, dtype='float64')
+        data = numpy.arange(100, dtype="float64")
         self.contribute(data, Reducer.sum, cb, secProxy)
 
     def work3(self, cb, secProxy=None):
@@ -56,7 +56,7 @@ class Test(Chare):
 
     def work5(self, cb, secProxy=None):
         if self.idx == 1:
-            cb('test section callback')
+            cb("test section callback")
 
 
 def main(args):
@@ -89,15 +89,15 @@ def main(args):
         assert f.get() == (numchares // 2)
 
         f = Future()
-        expected = numpy.arange(100, dtype='float64')
+        expected = numpy.arange(100, dtype="float64")
         expected *= numchares
         collection.setTest(f, expected, awaitable=True).get()
         collection.work2(secProxy.recvResult)
         assert f.get() == (numchares // 2)
 
         f = Future()
-        expected = numpy.arange(100, dtype='float64')
-        expected *= (numchares // 2)
+        expected = numpy.arange(100, dtype="float64")
+        expected *= numchares // 2
         secProxy.setTest(f, expected, awaitable=True).get()
         secProxy.work2(secProxy.recvResult, secProxy)
         assert f.get() == (numchares // 2)
@@ -127,7 +127,7 @@ def main(args):
         assert f.get() == (numchares // 2)
 
         f = Future()
-        expected = 'test section callback'
+        expected = "test section callback"
         collection.setTest(f, expected, awaitable=True).get()
         collection.work5(secProxy.recvResult)
         assert f.get() == (numchares // 2)

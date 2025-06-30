@@ -36,7 +36,7 @@ def main(args):
             for _ in range(NUM_TRIALS):
                 result = charm.pool.map(func, tasks, chunksize=chunksize)
                 assert result == [func(x) for x in tasks]
-            print('Elapsed=', time() - t0)
+            print("Elapsed=", time() - t0)
 
     # test charm.pool.submit()
     funcs = [square, square_coro, add_val, add_val_coro]
@@ -48,7 +48,7 @@ def main(args):
         for _ in range(NUM_TRIALS):
             result = charm.pool.submit(tasks, chunksize=chunksize)
             assert result == [f(x) for f, x in tasks]
-        print('Elapsed=', time() - t0)
+        print("Elapsed=", time() - t0)
 
     exit()
 

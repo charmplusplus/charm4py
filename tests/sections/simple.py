@@ -12,7 +12,7 @@ def member(obj):
 class Test(Chare):
 
     def __init__(self):
-        self.insection = (member(self) >= 0)
+        self.insection = member(self) >= 0
 
     def setSecProxy(self, proxy):
         self.secProxy = proxy
@@ -33,7 +33,7 @@ def main(args):
     array3d = Array(Test, (4, 5, 3))
 
     # for each array, create one section using member function to determine section membership
-    for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:
+    for array, size in [(array2d, 8 * 8), (array3d, 4 * 5 * 3)]:
         secProxy = charm.split(array, 1, member)[0]
         array.setSecProxy(secProxy, awaitable=True).get()
         f = Future()
@@ -41,7 +41,7 @@ def main(args):
         assert len(f.get()) < size
 
     # for each array, create one section passing a random list of element indexes (half the size of the array)
-    for array, size in [(array2d, 8*8), (array3d, 4*5*3)]:
+    for array, size in [(array2d, 8 * 8), (array3d, 4 * 5 * 3)]:
         elems = array.getElems(ret=True).get()
         assert len(elems) == size
         section_elems = random.sample(elems, size // 2)

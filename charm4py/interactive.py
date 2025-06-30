@@ -13,7 +13,7 @@ HANG_CHECK_FREQ = 0.5  # in secs
 
 def future_():
     f = Future()
-    charm.dynamic_register['_f'] = f
+    charm.dynamic_register["_f"] = f
     return f
 
 
@@ -22,36 +22,38 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
     def __init__(self, args):
         global Charm4PyError
         from .charm import Charm4PyError
+
         # restore original tty stdin and stdout (else readline won't work correctly)
         os.dup2(charm.origStdinFd, 0)
         os.dup2(charm.origStoutFd, 1)
-        charm.dynamic_register['future'] = future_
-        charm.dynamic_register['self'] = self
+        charm.dynamic_register["future"] = future_
+        charm.dynamic_register["self"] = self
         InteractiveInterpreter.__init__(self, locals=charm.dynamic_register)
-        self.filename = '<console>'
+        self.filename = "<console>"
         self.resetbuffer()
         # regexp to detect when user defines a new chare type
-        self.regexpChareDefine = re.compile('class\s*(\S+)\s*\(.*Chare.*\)\s*:')
+        self.regexpChareDefine = re.compile("class\s*(\S+)\s*\(.*Chare.*\)\s*:")
         # regexps to detect import statements
-        self.regexpImport1 = re.compile('\s*from\s*(\S+) import')
-        self.regexpImport2 = re.compile('import\s*(\S+)')
+        self.regexpImport1 = re.compile("\s*from\s*(\S+) import")
+        self.regexpImport2 = re.compile("import\s*(\S+)")
         self.options = charm.options.interactive
 
         try:
             import readline
             import rlcompleter
-            readline.parse_and_bind('tab: complete')
+
+            readline.parse_and_bind("tab: complete")
         except:
             pass
 
         try:
             sys.ps1
         except AttributeError:
-            sys.ps1 = '>>> '
+            sys.ps1 = ">>> "
         try:
             sys.ps2
         except AttributeError:
-            sys.ps2 = '... '
+            sys.ps2 = "... "
         self.thisProxy.start()
 
     def resetbuffer(self):
@@ -69,8 +71,10 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
 
     @coro
     def start(self):
-        self.write('\nCharm4py interactive shell (beta)\n')
-        self.write('charm.options.interactive.verbose = ' + str(self.options.verbose) + '\n')
+        self.write("\nCharm4py interactive shell (beta)\n")
+        self.write(
+            "charm.options.interactive.verbose = " + str(self.options.verbose) + "\n"
+        )
 
         charm.scheduleCallableAfter(self.thisProxy.hang_check_phase1, HANG_CHECK_FREQ)
         self.monitorFutures = []
@@ -89,18 +93,18 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                         line = self.raw_input(prompt)
                         tick = time.time()
                     except EOFError:
-                        self.write('\n')
+                        self.write("\n")
                         break
                     else:
                         more = self.push(line)
                 except KeyboardInterrupt:
-                    self.write('\nKeyboardInterrupt\n')
+                    self.write("\nKeyboardInterrupt\n")
                     self.resetbuffer()
                     more = 0
 
     def push(self, line):
         self.buffer.append(line)
-        source = '\n'.join(self.buffer)
+        source = "\n".join(self.buffer)
         more = self.runsource(source, self.filename)
         if not more:
             self.resetbuffer()
@@ -113,15 +117,17 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 m = self.regexpChareDefine.search(line)
                 if m is not None:
                     newChareTypeName = m.group(1)
-                    source = '\n'.join(self.buffer)
-                    charm.thisProxy.registerNewChareType(newChareTypeName, source, awaitable=True).get()
+                    source = "\n".join(self.buffer)
+                    charm.thisProxy.registerNewChareType(
+                        newChareTypeName, source, awaitable=True
+                    ).get()
                     if self.options.verbose > 0:
-                        self.write('Charm4py> Broadcasted Chare definition\n')
+                        self.write("Charm4py> Broadcasted Chare definition\n")
                     return
 
             line = self.buffer[0]
             module_name = None
-            if 'import' in line:
+            if "import" in line:
                 m = self.regexpImport1.search(line)
                 if m is not None:
                     module_name = m.group(1)
@@ -135,34 +141,50 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
                 if module_name not in sys.modules:  # error importing the module
                     return
                 if self.options.broadcast_imports:
-                    charm.thisProxy.rexec('\n'.join(self.buffer), awaitable=True).get()
+                    charm.thisProxy.rexec("\n".join(self.buffer), awaitable=True).get()
                     if self.options.verbose > 0:
-                        self.write('Charm4py> Broadcasted import statement\n')
+                        self.write("Charm4py> Broadcasted import statement\n")
 
                 new_modules = set(sys.modules.keys()) - prev_modules
                 chare_types = []
                 for module_name in new_modules:
                     try:
-                        members = inspect.getmembers(sys.modules[module_name], inspect.isclass)
+                        members = inspect.getmembers(
+                            sys.modules[module_name], inspect.isclass
+                        )
                     except:
                         # some modules can throw exceptions with inspect.getmembers, ignoring them for now
                         continue
                     for C_name, C in members:
-                        if C.__module__ != chare.__name__ and hasattr(C, 'mro'):
+                        if C.__module__ != chare.__name__ and hasattr(C, "mro"):
                             if chare.ArrayMap in C.mro():
                                 chare_types.append(C)
                             elif Chare in C.mro():
                                 chare_types.append(C)
-                            elif chare.Group in C.mro() or chare.Array in C.mro() or chare.Mainchare in C.mro():
-                                raise Charm4PyError('Chares must not inherit from Group, Array or'
-                                                    ' Mainchare. Refer to new API')
+                            elif (
+                                chare.Group in C.mro()
+                                or chare.Array in C.mro()
+                                or chare.Mainchare in C.mro()
+                            ):
+                                raise Charm4PyError(
+                                    "Chares must not inherit from Group, Array or"
+                                    " Mainchare. Refer to new API"
+                                )
                 if len(chare_types) > 0:
                     if self.options.broadcast_imports:
-                        charm.thisProxy.registerNewChareTypes(chare_types, awaitable=True).get()
+                        charm.thisProxy.registerNewChareTypes(
+                            chare_types, awaitable=True
+                        ).get()
                         if self.options.verbose > 0:
-                            self.write('Broadcasted the following chare definitions: ' + str([str(C) for C in chare_types]) + '\n')
+                            self.write(
+                                "Broadcasted the following chare definitions: "
+                                + str([str(C) for C in chare_types])
+                                + "\n"
+                            )
                     else:
-                        self.write('Charm4py> ERROR: import module(s) contain Chare definitions but the import was not broadcasted\n')
+                        self.write(
+                            "Charm4py> ERROR: import module(s) contain Chare definitions but the import was not broadcasted\n"
+                        )
                 return
         except:
             self.showtraceback()
@@ -171,14 +193,18 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         InteractiveInterpreter.runcode(self, code)
         self.interactive_running = False
 
-    def raw_input(self, prompt=''):
+    def raw_input(self, prompt=""):
         return input(prompt)
 
     def hang_check_phase1(self):
         self.monitorFutures = [f for f in self.monitorFutures if f.blocked]
         if self.interactive_running:
             for f in charm.threadMgr.futures.values():
-                if f.blocked and not hasattr(f, 'ignorehang') and not hasattr(f, 'timestamp'):
+                if (
+                    f.blocked
+                    and not hasattr(f, "ignorehang")
+                    and not hasattr(f, "timestamp")
+                ):
                     f.timestamp = time.time()
                     self.monitorFutures.append(f)
             for f in self.monitorFutures:
@@ -193,19 +219,27 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
         charm.scheduleCallableAfter(self.thisProxy.hang_check_phase1, HANG_CHECK_FREQ)
         for f in monitor_futures:
             if f.blocked:
-                self.write('\nError: system is idle, canceling block on future\n', sched=False)
+                self.write(
+                    "\nError: system is idle, canceling block on future\n", sched=False
+                )
                 charm.threadMgr.cancelFuture(f)
 
     def showtraceback(self):
         error_type, error, tb = sys.exc_info()
-        if hasattr(error, 'remote_stacktrace'):
+        if hasattr(error, "remote_stacktrace"):
             origin, stacktrace = error.remote_stacktrace
-            self.write('----------------- Python Stack Traceback from PE ' + str(origin) + ' -----------------\n')
-            self.write(stacktrace + '\n')
-            self.write(error_type.__name__ + ': ' + str(error) + ' (PE ' + str(origin) + ')\n')
+            self.write(
+                "----------------- Python Stack Traceback from PE "
+                + str(origin)
+                + " -----------------\n"
+            )
+            self.write(stacktrace + "\n")
+            self.write(
+                error_type.__name__ + ": " + str(error) + " (PE " + str(origin) + ")\n"
+            )
         else:
             super(InteractiveConsole, self).showtraceback()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     charm.start(interactive=True)

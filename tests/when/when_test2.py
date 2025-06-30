@@ -18,20 +18,20 @@ class Worker(Chare):
 
     @when("self.ready and (TEST_WHEN_GLOBAL == 33)")
     def startWork(self, x, y, z):
-        assert(self.ready)
+        assert self.ready
         self.ready = False
         self.thisProxy[self.thisIndex].doWork(x, y, z)
 
     def doWork(self, x, y, z):
-        assert(not self.ready)
+        assert not self.ready
         result = 0
         for _ in range(WORKER_ITERS):
-            result += (x * y * z)
+            result += x * y * z
         self.thisProxy[self.thisIndex].workDone(result)
 
     def workDone(self, result):
-        assert(not self.ready)
-        assert(result == X*Y*Z*WORKER_ITERS)
+        assert not self.ready
+        assert result == X * Y * Z * WORKER_ITERS
         self.ready = True
         self.controller.taskDone()
 

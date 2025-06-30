@@ -19,6 +19,7 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 nprocs = comm.Get_size()
 
+
 # Dataset partitioning helper
 class Partition(object):
 
@@ -32,6 +33,7 @@ class Partition(object):
     def __getitem__(self, index):
         data_idx = self.index[index]
         return self.data[data_idx]
+
 
 class DataPartitioner(object):
 
@@ -51,6 +53,7 @@ class DataPartitioner(object):
 
     def use(self, partition):
         return Partition(self.data, self.partitions[partition])
+
 
 # Neural network architecture
 class Net(nn.Module):
@@ -72,6 +75,7 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
+
 # Worker object (1 per MPI rank)
 class Worker(object):
 
@@ -84,19 +88,20 @@ class Worker(object):
 
     # Partitioning MNIST dataset
     def partition_dataset(self):
-        dataset = datasets.MNIST('./data', train=True, download=True,
-                                 transform=transforms.Compose([
-                                     transforms.ToTensor(),
-                                     transforms.Normalize((0.1307,), (0.3081,))
-                                 ]))
+        dataset = datasets.MNIST(
+            "./data",
+            train=True,
+            download=True,
+            transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            ),
+        )
         size = self.num_workers
         bsz = int(128 / float(size))  # my batch size
         partition_sizes = [1.0 / size for _ in range(size)]
         partition = DataPartitioner(dataset, partition_sizes)
         partition = partition.use(rank)
-        train_set = torch.utils.data.DataLoader(partition,
-                                                batch_size=bsz,
-                                                shuffle=True)
+        train_set = torch.utils.data.DataLoader(partition, batch_size=bsz, shuffle=True)
         return train_set, bsz
 
     # Distributed SGD
@@ -120,17 +125,22 @@ class Worker(object):
                 loss.backward()
                 self.average_gradients(self.model, device)
                 self.optimizer.step()
-            print(f'Rank {rank:4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}')
+            print(
+                f"Rank {rank:4d} | Epoch {self.epoch:4d} | Loss {(epoch_loss / self.num_batches):9.3f} | Time {(time.time() - t0):9.3f}"
+            )
             self.epoch += 1
 
-        print(f'Rank {rank:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}')
+        print(
+            f"Rank {rank:4d} training complete, average allreduce time (us): {((self.agg_time / self.time_cnt) * 1000000):9.3f}"
+        )
         agg_time_arr = np.array([self.agg_time])
         agg_time_all_arr = np.array([0.0])
         comm.Allreduce(agg_time_arr, agg_time_all_arr, op=MPI.SUM)
         self.agg_time_all = agg_time_all_arr[0]
         if rank == 0:
-            print(f'Rank {rank:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}')
-
+            print(
+                f"Rank {rank:4d} all average allreduce time (us): {((self.agg_time_all / self.num_workers / self.time_cnt) * 1000000):9.3f}"
+            )
 
     # Gradient averaging
     def average_gradients(self, model, device):
@@ -149,15 +159,17 @@ class Worker(object):
 
             # Restore original shape of gradient data
             param.grad.data = torch.from_numpy(recv_data).to(device)
-            param.grad.data = param.grad.data.reshape(data_shape) / float(self.num_workers)
-            
+            param.grad.data = param.grad.data.reshape(data_shape) / float(
+                self.num_workers
+            )
+
 
 def main():
     # Initialize PyTorch on all PEs
     num_threads = 1
     torch.set_num_threads(num_threads)
     torch.manual_seed(1234)
-    print(f'MPI rank {rank} initialized PyTorch with {num_threads} threads')
+    print(f"MPI rank {rank} initialized PyTorch with {num_threads} threads")
 
     if torch.cuda.is_available():
         # if multiple devices are available (running with mpirun, not srun), should assign round-robin
@@ -165,18 +177,21 @@ def main():
         device = torch.device("cuda:" + str(dev_id))
     else:
         device = torch.device("cpu")
-        
+
     # Create workers and start training
     epochs = 6
     workers = Worker(nprocs, epochs)
     t0 = time.time()
-    print(f'Starting MNIST dataset training with {nprocs} MPI processes for {epochs} epochs on device {device}')
+    print(
+        f"Starting MNIST dataset training with {nprocs} MPI processes for {epochs} epochs on device {device}"
+    )
     workers.run(device)
 
     comm.Barrier()
 
     # Training complete
     if rank == 0:
-        print(f'Done. Elapsed time: {(time.time() - t0):9.3f} s')
+        print(f"Done. Elapsed time: {(time.time() - t0):9.3f} s")
+
 
 main()

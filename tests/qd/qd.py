@@ -58,7 +58,7 @@ class Main(Chare):
         assert charm.numPes() > 1
         numChares = charm.numPes() * CHARES_PER_PE
         self.workers = Array(Worker, numChares, args=[numChares])
-        print('WORK_TIME=', WORK_TIME)
+        print("WORK_TIME=", WORK_TIME)
         qdGroupReceivers = Group(QDReceiver, args=[self.thisProxy])
         qdArrayReceivers = Array(QDReceiver, charm.numPes(), args=[self.thisProxy])
         charm.awaitCreation(self.workers, qdGroupReceivers, qdArrayReceivers)
@@ -82,9 +82,9 @@ class Main(Chare):
             charm.startQD(callback)
             if isinstance(callback, threads.Future):
                 callback.get()
-                print('QD reached')
+                print("QD reached")
             else:
-                self.wait('self.qdReached')
+                self.wait("self.qdReached")
         else:
             charm.waitQD()
         assert time() - t0 > WORK_TIME
@@ -92,7 +92,7 @@ class Main(Chare):
         check_fut.get()
 
     def recvQD(self):
-        print('QD reached')
+        print("QD reached")
         self.qdReached = True
 
 

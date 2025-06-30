@@ -13,7 +13,7 @@ class Test(Chare):
         else:
             myIndex = self.thisIndex
         if charm.numPes() <= 20 or myIndex == 0:
-            print('Test', self.thisIndex, 'created')
+            print("Test", self.thisIndex, "created")
 
     def work(self, main):
         self.contribute(1, Reducer.sum, main.done)
@@ -31,7 +31,7 @@ class Main(Chare):
         self.countReductions += 1
         if self.countReductions == 2:
             assert self.count == (charm.numPes() + charm.numPes() * CHARES_PER_PE)
-            print('Program done')
+            print("Program done")
             exit()
 
 
