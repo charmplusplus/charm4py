@@ -22,10 +22,12 @@ def main(args):
     done = charm.Future()
 
     main_globals = {}
-    main_globals['group1_proxy'] = g1
-    main_globals['group2_proxy'] = g2
-    main_globals['done_future'] = done
-    charm.thisProxy.updateGlobals(main_globals, module_name='__main__', awaitable=True).get()
+    main_globals["group1_proxy"] = g1
+    main_globals["group2_proxy"] = g2
+    main_globals["done_future"] = done
+    charm.thisProxy.updateGlobals(
+        main_globals, module_name="__main__", awaitable=True
+    ).get()
 
     group1_proxy.start()
     done.get()

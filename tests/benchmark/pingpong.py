@@ -1,6 +1,7 @@
 from charm4py import charm, Chare, Array, coro, Future
 from time import time
-#import numpy as np
+
+# import numpy as np
 
 PAYLOAD = 100  # number of bytes
 NITER = 10000
@@ -18,7 +19,7 @@ class Ping(Chare):
     def start(self, done_future, threaded=False):
         self.done_future = done_future
         self.iter = 0
-        #data = np.zeros(PAYLOAD, dtype='int8')
+        # data = np.zeros(PAYLOAD, dtype='int8')
         data = 3
         self.startTime = time()
         if threaded:
@@ -48,7 +49,7 @@ class Ping(Chare):
 
 def main(args):
     threaded = False
-    if len(args) > 1 and args[1] == '-t':
+    if len(args) > 1 and args[1] == "-t":
         threaded = True
     pings = Array(Ping, 2)
     charm.awaitCreation(pings)

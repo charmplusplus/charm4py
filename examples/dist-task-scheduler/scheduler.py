@@ -4,7 +4,7 @@ from charm4py import charm, Chare, Group, Future
 
 
 class Job(object):
-    """ This class is mainly for book-keeping (store and manage job state) """
+    """This class is mainly for book-keeping (store and manage job state)"""
 
     def __init__(self, job_id, func, tasks, callback):
         self.id = job_id
@@ -31,7 +31,7 @@ class Job(object):
 
 
 class Scheduler(Chare):
-    """ The scheduler sends tasks to distributed workers """
+    """The scheduler sends tasks to distributed workers"""
 
     def __init__(self):
         # create a Worker on every process, pass them a reference (proxy) to myself
@@ -42,8 +42,8 @@ class Scheduler(Chare):
         self.jobs = {}
 
     def map_async(self, func, iterable, callback):
-        """ Start a new parallel map job (apply func to elements in iterable).
-            The result will be sent back via the provided callback """
+        """Start a new parallel map job (apply func to elements in iterable).
+        The result will be sent back via the provided callback"""
         self.addJob(func, list(iterable), callback)
         self.schedule()
 
@@ -64,7 +64,7 @@ class Scheduler(Chare):
                 self.workers[free_worker].apply(job.func, task, task_id, job.id)
 
     def taskDone(self, worker_id, task_id, job_id, result):
-        """ Called by workers to tell the scheduler that they are done with a task """
+        """Called by workers to tell the scheduler that they are done with a task"""
         self.free_workers.add(worker_id)
         job = self.jobs[job_id]
         job.addResult(task_id, result)
@@ -81,7 +81,7 @@ class Worker(Chare):
         self.scheduler = scheduler
 
     def apply(self, func, arg, task_id, job_id):
-        """ Apply function to argument and send the result to the scheduler """
+        """Apply function to argument and send the result to the scheduler"""
         result = func(arg)
         self.scheduler.taskDone(self.thisIndex, task_id, job_id, result)
 
@@ -101,7 +101,7 @@ def main(args):
     scheduler.map_async(square, [1, 2, 3, 4, 5], callback=future1)
     scheduler.map_async(square, [1, 3, 5, 7, 9], callback=future2)
     # wait for the two jobs to complete and print the results
-    print('Final results are:')
+    print("Final results are:")
     print(future1.get())
     print(future2.get())
     exit()

@@ -4,8 +4,10 @@ from charm4py import charm, ray
 def square(x):
     return x**2
 
+
 def twice(x):
     return 2 * x
+
 
 def main(args):
     ray.init()
@@ -15,7 +17,8 @@ def main(args):
     for x in results_twice:
         print(x.get())
 
-    #print(result)  # prints [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+    # print(result)  # prints [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
     exit()
+
 
 charm.start(main)

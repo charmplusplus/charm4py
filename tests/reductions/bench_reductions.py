@@ -19,8 +19,11 @@ def assert_almost_equal(actual, desired, tol):
 class Main(Chare):
 
     def __init__(self, args):
-        charm.thisProxy.updateGlobals({'mainProxy': self.thisProxy,
-                                       'NUM_CHARES': charm.numPes() * CHARES_PER_PE}, '__main__', awaitable=True).get()
+        charm.thisProxy.updateGlobals(
+            {"mainProxy": self.thisProxy, "NUM_CHARES": charm.numPes() * CHARES_PER_PE},
+            "__main__",
+            awaitable=True,
+        ).get()
         self.arrayProxy = Array(Test, NUM_CHARES)
         self.arrayProxy.run()
         self.startTime = time.time()
@@ -30,7 +33,7 @@ class Main(Chare):
         self.arrayProxy.run()
 
     def done(self):
-        print('Program done in', time.time() - self.startTime)
+        print("Program done in", time.time() - self.startTime)
         charm.printStats()
         exit()
 
@@ -38,7 +41,7 @@ class Main(Chare):
 class Test(Chare):
 
     def __init__(self):
-        self.data = numpy.arange(DATA_LEN, dtype='float64')
+        self.data = numpy.arange(DATA_LEN, dtype="float64")
         self.reductions = 0
 
     def run(self):

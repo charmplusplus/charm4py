@@ -27,7 +27,7 @@ def main(args):
     assert charm.numPes() > 1
     global section_pes
     section_pes = random.sample(range(charm.numPes()), charm.numPes() // 2)
-    charm.thisProxy.updateGlobals({'section_pes': section_pes}, awaitable=True).get()
+    charm.thisProxy.updateGlobals({"section_pes": section_pes}, awaitable=True).get()
     g = Group(Test, onPEs=section_pes, args=[4862])
     assert g[section_pes[0]].test2(ret=True).get() == 34589
     g.test(awaitable=True).get()

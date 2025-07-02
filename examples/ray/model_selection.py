@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
-#import ray
+# import ray
 from charm4py import charm, ray
 
 
@@ -43,6 +43,7 @@ def get_data_loaders(batch_size):
         shuffle=True,
     )
     return train_loader, test_loader
+
 
 class ConvNet(nn.Module):
     """Simple two layer Convolutional Neural Network."""
@@ -96,6 +97,7 @@ def test(model, test_loader, device=torch.device("cpu")):
 
     return correct / total
 
+
 @ray.remote
 def evaluate_hyperparameters(config):
     model = ConvNet()
@@ -105,6 +107,7 @@ def evaluate_hyperparameters(config):
     )
     train(model, optimizer, train_loader)
     return test(model, test_loader)
+
 
 def main(args):
     ray.init()
@@ -138,18 +141,18 @@ def main(args):
 
         hyperparameters = hyperparameters_mapping[result_id]
         accuracy = ray.get(result_id)
-        #print(
+        # print(
         #    """We achieve accuracy {:.3}% with
         #    learning_rate: {:.2}
         #    batch_size: {}
         #    momentum: {:.2}
-        #""".format(
+        # """.format(
         #        100 * accuracy,
         #        hyperparameters["learning_rate"],
         #        hyperparameters["batch_size"],
         #        hyperparameters["momentum"],
         #    )
-        #)
+        # )
         if accuracy > best_accuracy:
             best_hyperparameters = hyperparameters
             best_accuracy = accuracy
@@ -171,5 +174,6 @@ def main(args):
             )
 
     exit()
+
 
 charm.start(main)

@@ -19,18 +19,18 @@ def fib(n):
         # this will create two tasks which will be sent to distributed workers
         # (tasks can execute on any PE). map will block here for the result of
         # fib(n-1) and fib(n-2), which is why we mark fib as a coroutine
-        return sum(charm.pool.map(fib, [n-1, n-2]))
+        return sum(charm.pool.map(fib, [n - 1, n - 2]))
 
 
 def main(args):
-    print('\nUsage: fib.py [n]')
+    print("\nUsage: fib.py [n]")
     n = 12
     if len(args) > 1:
         n = int(args[1])
-    print('Calculating fibonacci of N=' + str(n))
+    print("Calculating fibonacci of N=" + str(n))
     t0 = time.time()
     result = fib(n)
-    print('Result is', result, 'elapsed=', round(time.time() - t0, 3))
+    print("Result is", result, "elapsed=", round(time.time() - t0, 3))
     exit()
 
 

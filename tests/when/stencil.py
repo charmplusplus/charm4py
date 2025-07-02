@@ -25,7 +25,7 @@ class Cell(Chare):
             self.iter_complete.get()
         self.reduce(done_fut)
 
-    @when('self.iteration == iteration')
+    @when("self.iteration == iteration")
     def recvData(self, iteration, data):
         self.msgs_recvd += 1
         if self.msgs_recvd == len(self.nbs):

@@ -21,7 +21,7 @@ def main(args):
     t0 = time.time()
     a.work(sleepTimes, awaitable=True).get()  # wait for broadcast to complete
     wait_time = time.time() - t0
-    assert(wait_time >= max(sleepTimes))
+    assert wait_time >= max(sleepTimes)
     print(wait_time, max(sleepTimes))
 
     g = Group(Test)
@@ -30,7 +30,7 @@ def main(args):
     t0 = time.time()
     g.work(sleepTimes, awaitable=True).get()  # wait for broadcast to complete
     wait_time = time.time() - t0
-    assert(wait_time >= max(sleepTimes))
+    assert wait_time >= max(sleepTimes)
     print(wait_time, max(sleepTimes))
 
     exit()

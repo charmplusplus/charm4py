@@ -46,7 +46,7 @@ class Util(Chare):
 
     def compile(self):
         # trigger compilation by running the function with dummy data (but correct types)
-        queen_seq(NUM_ROWS-1, numpy.full(NUM_ROWS, -1, dtype=numpy.int8))
+        queen_seq(NUM_ROWS - 1, numpy.full(NUM_ROWS, -1, dtype=numpy.int8))
 
     def getSolutionCount(self):
         return solution_count
@@ -62,14 +62,14 @@ def main(args):
     else:
         GRAINSIZE = max(1, NUM_ROWS - 2)
 
-    print('\nUsage: nqueen [numqueens] [grainsize]')
-    print('Number of queens is', NUM_ROWS, ', grainsize is', GRAINSIZE)
+    print("\nUsage: nqueen [numqueens] [grainsize]")
+    print("Number of queens is", NUM_ROWS, ", grainsize is", GRAINSIZE)
 
     # set NUM_ROWS and GRAINSIZE as global variables on every PE
     global_data = {}
-    global_data['NUM_ROWS'] = NUM_ROWS
-    global_data['GRAINSIZE'] = GRAINSIZE
-    global_data['solution_count'] = 0  # to count number of solutions found on each PE
+    global_data["NUM_ROWS"] = NUM_ROWS
+    global_data["GRAINSIZE"] = GRAINSIZE
+    global_data["solution_count"] = 0  # to count number of solutions found on each PE
     charm.thisProxy.updateGlobals(global_data, awaitable=True).get()
 
     # compile numba functions on every PE before starting, to get
@@ -85,7 +85,15 @@ def main(args):
     charm.waitQD()
     elapsed = time() - startTime
     numSolutions = sum(util.getSolutionCount(ret=True).get())
-    print('There are', numSolutions, 'solutions to', NUM_ROWS, 'queens. Time taken:', round(elapsed, 3), 'secs')
+    print(
+        "There are",
+        numSolutions,
+        "solutions to",
+        NUM_ROWS,
+        "queens. Time taken:",
+        round(elapsed, 3),
+        "secs",
+    )
     exit()
 
 

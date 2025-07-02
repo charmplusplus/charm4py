@@ -14,19 +14,19 @@ class MsgTagCond(object):
     group = True
 
     def __init__(self, cond_str, attrib_name, arg_idx):
-        self.cond_str    = cond_str
+        self.cond_str = cond_str
         self.attrib_name = attrib_name
-        self.arg_idx     = arg_idx
+        self.arg_idx = arg_idx
 
     def evaluateWhen(self, obj, args):
         return args[self.arg_idx] == getattr(obj, self.attrib_name)
 
     def createWaitCondition(self):
         c = object.__new__(MsgTagCond)
-        c.cond_str    = self.cond_str
+        c.cond_str = self.cond_str
         c.attrib_name = self.attrib_name
-        c.arg_idx     = self.arg_idx
-        c.wait_queue  = defaultdict(list)
+        c.arg_idx = self.arg_idx
+        c.wait_queue = defaultdict(list)
         return c
 
     def enqueue(self, elem):
@@ -62,17 +62,17 @@ class ChareStateMsgCond(object):
     group = False
 
     def __init__(self, cond_str, cond_func):
-        self.cond_str  = cond_str
+        self.cond_str = cond_str
         self.cond_func = cond_func
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateMsgCond)
-        c.cond_str  = self.cond_str
+        c.cond_str = self.cond_str
         c.cond_func = self.cond_func
         return c
 
     def evaluateWhen(self, obj, args):
-        #return eval(cond_str)    # eval is very slow
+        # return eval(cond_str)    # eval is very slow
         return self.cond_func(obj, args)
 
     def enqueue(self, elem):
@@ -80,7 +80,7 @@ class ChareStateMsgCond(object):
 
     def check(self, obj):
         t, em, header, args = self.elem
-        #if eval(me.cond_str):    # eval is very slow
+        # if eval(me.cond_str):    # eval is very slow
         if self.cond_func(obj, args):
             em.run(obj, header, args)
             return True, True
@@ -112,20 +112,21 @@ class ChareStateCond(object):
     group = True
 
     def __init__(self, cond_str, module_name):
-        self.cond_str  = cond_str
+        self.cond_str = cond_str
         self.globals_module_name = module_name
-        self.cond_func = eval('lambda self: ' + cond_str,
-                              import_module(module_name).__dict__)
+        self.cond_func = eval(
+            "lambda self: " + cond_str, import_module(module_name).__dict__
+        )
 
     def createWaitCondition(self):
         c = object.__new__(ChareStateCond)
-        c.cond_str   = self.cond_str
-        c.cond_func  = self.cond_func
+        c.cond_str = self.cond_str
+        c.cond_func = self.cond_func
         c.wait_queue = []
         return c
 
     def evaluateWhen(self, obj, args):
-        #return eval(me.cond_str)   # eval is very slow
+        # return eval(me.cond_str)   # eval is very slow
         return self.cond_func(obj)
 
     def enqueue(self, elem):
@@ -133,7 +134,7 @@ class ChareStateCond(object):
 
     def check(self, obj):
         dequeued = False
-        #while eval(me.cond_str):   # eval is very slow
+        # while eval(me.cond_str):   # eval is very slow
         while self.cond_func(obj):
             elem = self.wait_queue.pop()
             if elem[0] == 0:
@@ -153,16 +154,20 @@ class ChareStateCond(object):
         return self.cond_str, self.wait_queue, self._cond_next, self.globals_module_name
 
     def __setstate__(self, state):
-        self.cond_str, self.wait_queue, self._cond_next, self.globals_module_name = state
-        self.cond_func = eval('lambda self: ' + self.cond_str,
-                              import_module(self.globals_module_name).__dict__)
+        self.cond_str, self.wait_queue, self._cond_next, self.globals_module_name = (
+            state
+        )
+        self.cond_func = eval(
+            "lambda self: " + self.cond_str,
+            import_module(self.globals_module_name).__dict__,
+        )
 
 
 def is_tag_cond(root_ast):
-    """ Determine if the AST corresponds to a 'when' condition of the form
-        `self.xyz == args[x]` where xyz is the name of an attribute, x is an
-        integer. if True, returns the condition string, the name of the attribute
-        (e.g. xyz) and the integer index (e.g. x). Otherwise returns None """
+    """Determine if the AST corresponds to a 'when' condition of the form
+    `self.xyz == args[x]` where xyz is the name of an attribute, x is an
+    integer. if True, returns the condition string, the name of the attribute
+    (e.g. xyz) and the integer index (e.g. x). Otherwise returns None"""
     try:
         if not isinstance(root_ast.body, ast.Compare):
             return None
@@ -181,10 +186,10 @@ def is_tag_cond(root_ast):
         elif isinstance(right, ast.Attribute) and (isinstance(left, ast.Subscript)):
             attrib, args = right, left
 
-        if (attrib is None) or (attrib.value.id != 'self'):
+        if (attrib is None) or (attrib.value.id != "self"):
             return None
 
-        if args.value.id != 'args':
+        if args.value.id != "args":
             return None
 
         idx = args.slice.value
@@ -192,11 +197,11 @@ def is_tag_cond(root_ast):
             idx = idx.n
         elif isinstance(idx, ast.Constant):
             idx = idx.value
-        
+
         if not isinstance(idx, int):
             return None
 
-        return ('self.' + attrib.attr + ' == args[' + str(idx) + ']', attrib.attr, idx)
+        return ("self." + attrib.attr + " == args[" + str(idx) + "]", attrib.attr, idx)
     except:
         return None
 
@@ -208,18 +213,25 @@ class MsgArgsTransformer(ast.NodeTransformer):
         self.num_msg_args = 0
 
     def visit_Attribute(self, node):
-        if isinstance(node.value, ast.Name) and node.value.id in self.method_arguments and node.value.id != 'self':
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id in self.method_arguments
+            and node.value.id != "self"
+        ):
             idx = self.method_arguments[node.value.id]
             self.num_msg_args += 1
-            return ast.copy_location(ast.Attribute(
-                value=ast.Subscript(
-                    value=ast.Name(id='args', ctx=ast.Load()),
-                    slice=ast.Index(value=ast.Num(n=idx)),
-                    ctx=node.ctx
+            return ast.copy_location(
+                ast.Attribute(
+                    value=ast.Subscript(
+                        value=ast.Name(id="args", ctx=ast.Load()),
+                        slice=ast.Index(value=ast.Num(n=idx)),
+                        ctx=node.ctx,
+                    ),
+                    attr=node.attr,
+                    ctx=node.ctx,
                 ),
-                attr=node.attr,
-                ctx=node.ctx
-            ), node)
+                node,
+            )
         else:
             return self.generic_visit(node)
 
@@ -227,27 +239,31 @@ class MsgArgsTransformer(ast.NodeTransformer):
         if node.id in self.method_arguments:
             idx = self.method_arguments[node.id]
             self.num_msg_args += 1
-            return ast.copy_location(ast.Subscript(
-                value=ast.Name(id='args', ctx=ast.Load()),
-                slice=ast.Index(value=ast.Num(n=idx)),
-                ctx=node.ctx
-            ), node)
+            return ast.copy_location(
+                ast.Subscript(
+                    value=ast.Name(id="args", ctx=ast.Load()),
+                    slice=ast.Index(value=ast.Num(n=idx)),
+                    ctx=node.ctx,
+                ),
+                node,
+            )
         else:
             return node
 
 
-#import astunparse
+# import astunparse
+
 
 def parse_cond_str(cond_str, module_name, method_arguments={}):
 
-    #print("Original condition string is", cond_str)
-    t = ast.parse(cond_str, filename='<string>', mode='eval')
+    # print("Original condition string is", cond_str)
+    t = ast.parse(cond_str, filename="<string>", mode="eval")
     if len(method_arguments) > 0:
         # in the AST, convert names of method arguments to `args[x]`, where x is the
         # position of the argument in the function definition
         transformer = MsgArgsTransformer(method_arguments)
         transformer.visit(t)
-        #print("Transformed to", astunparse.unparse(t), "num args detected=", transformer.num_msg_args)
+        # print("Transformed to", astunparse.unparse(t), "num args detected=", transformer.num_msg_args)
         if transformer.num_msg_args == 0:
             return ChareStateCond(cond_str, module_name)
     else:
@@ -258,11 +274,12 @@ def parse_cond_str(cond_str, module_name, method_arguments={}):
         return MsgTagCond(*tag_cond)
 
     # compile AST to code, then eval to a lambda function
-    new_tree = ast.parse("lambda self, args: x", filename='<string>', mode='eval')
+    new_tree = ast.parse("lambda self, args: x", filename="<string>", mode="eval")
     new_tree.body.body = t.body
     new_tree = ast.fix_missing_locations(new_tree)
-    lambda_func = eval(compile(new_tree, '<string>', 'eval'),
-                       import_module(module_name).__dict__)
+    lambda_func = eval(
+        compile(new_tree, "<string>", "eval"), import_module(module_name).__dict__
+    )
     return ChareStateMsgCond(cond_str, lambda_func)
 
 

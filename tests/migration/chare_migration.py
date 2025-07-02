@@ -1,4 +1,3 @@
-
 """
 A program to test migration of chares.
 """
@@ -20,7 +19,7 @@ class Migrate(Chare):
         chare has migrated.
         """
         if self.thisIndex == (0,):
-            print(self.thisIndex, 'migrated to PE', charm.myPe())
+            print(self.thisIndex, "migrated to PE", charm.myPe())
         assert charm.myPe() == self.toPe
         self.contribute(None, None, charm.thisProxy[0].exit)
 
@@ -29,14 +28,14 @@ class Migrate(Chare):
         Invoke the starter code for test.
         """
         if charm.myPe() == 0:
-            print(self.thisIndex, 'on PE', charm.myPe(), 'before migration')
+            print(self.thisIndex, "on PE", charm.myPe(), "before migration")
         self.toPe = (charm.myPe() + 1) % charm.numPes()
         self.thisProxy[self.thisIndex].migrate(self.toPe)
 
 
 def main(args):
     if charm.numPes() == 1:
-        charm.abort('Run program with more than 1 PE')
+        charm.abort("Run program with more than 1 PE")
     array_proxy = Array(Migrate, CHARES_PER_PE * charm.numPes())
     array_proxy.start()
 

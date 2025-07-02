@@ -9,9 +9,11 @@ except ImportError:
     def njit(func):
         return func
 
+
 @njit
 def matmul(C, A, B):
     C += A @ B
+
 
 class SubMatrix(Chare):
     def __init__(self, subdim_size, charedim, init_done):
@@ -22,12 +24,12 @@ class SubMatrix(Chare):
         self.neighbor_cache = {}
 
         self.sub_a = np.ones((subdim_size, subdim_size), dtype=np.float64)
-        self.sub_a[:,:] = (charedim*self.thisIndex[1]) + self.thisIndex[0]
+        self.sub_a[:, :] = (charedim * self.thisIndex[1]) + self.thisIndex[0]
         self.sub_b = np.ones((subdim_size, subdim_size), dtype=np.float64)
-        self.sub_b[:,:] = (charedim*self.thisIndex[0]) + self.thisIndex[1]
+        self.sub_b[:, :] = (charedim * self.thisIndex[0]) + self.thisIndex[1]
 
-        self.recv_a = np.ndarray((subdim_size,subdim_size), dtype=np.float64)
-        self.recv_b = np.ndarray((subdim_size,subdim_size), dtype=np.float64)
+        self.recv_a = np.ndarray((subdim_size, subdim_size), dtype=np.float64)
+        self.recv_b = np.ndarray((subdim_size, subdim_size), dtype=np.float64)
 
         self.sub_c = np.zeros((subdim_size, subdim_size), dtype=np.float64)
 
@@ -40,9 +42,7 @@ class SubMatrix(Chare):
 
     def get_neighbor_channel(self, target_idx):
         if target_idx not in self.neighbor_cache:
-            self.neighbor_cache[target_idx] = Channel(self,
-                                                      self.thisProxy[target_idx]
-                                                      )
+            self.neighbor_cache[target_idx] = Channel(self, self.thisProxy[target_idx])
         return self.neighbor_cache[target_idx]
 
     @coro
@@ -74,12 +74,14 @@ class SubMatrix(Chare):
 
     # the communication routines should be optimized so both sends/receives can complete in parallel
     def shift(self, up_shift, left_shift):
-        send_target_idx = ((self.thisIndex[0] - up_shift) % self.charedim,
-                           (self.thisIndex[1] - left_shift) % self.charedim
-                           )
-        recv_target_idx = ((self.thisIndex[0] + up_shift) % self.charedim,
-                           (self.thisIndex[1] + left_shift) % self.charedim
-                           )
+        send_target_idx = (
+            (self.thisIndex[0] - up_shift) % self.charedim,
+            (self.thisIndex[1] - left_shift) % self.charedim,
+        )
+        recv_target_idx = (
+            (self.thisIndex[0] + up_shift) % self.charedim,
+            (self.thisIndex[1] + left_shift) % self.charedim,
+        )
 
         send_ch = self.get_neighbor_channel(send_target_idx)
         recv_ch = self.get_neighbor_channel(recv_target_idx)
@@ -95,9 +97,10 @@ class SubMatrix(Chare):
 def main(args):
     if len(args) < 3:
         print(f"USAGE: {args[0]} matrix_dim chare_dim")
-        print("matrix_dim and chare_dim must be perfect squares "
-              "where matrix_dim is divisible by chare_dim"
-              )
+        print(
+            "matrix_dim and chare_dim must be perfect squares "
+            "where matrix_dim is divisible by chare_dim"
+        )
         charm.exit(1)
     matrix_dim = int(args[1])
     chare_dim = int(args[2])
@@ -111,9 +114,9 @@ def main(args):
     print(f"Size of each chare's sub-array: {8*(subdim_size**2)/(1024**2)}MiB")
 
     init_done = Future()
-    chares = Array(SubMatrix, (chare_dim, chare_dim),
-                   args=[subdim_size, chare_dim, init_done]
-                   )
+    chares = Array(
+        SubMatrix, (chare_dim, chare_dim), args=[subdim_size, chare_dim, init_done]
+    )
     init_done.get()
 
     mult_done_future = Future()
@@ -124,5 +127,6 @@ def main(args):
 
     print(f"Elapsed time: {tend-tstart}")
     charm.exit()
+
 
 charm.start(main)

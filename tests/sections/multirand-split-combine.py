@@ -67,8 +67,8 @@ class Collection(object):
 
     def verify(self, result):
         if set(result) != self.elems:
-            print('self.elems=', self.elems)
-            print('result=', result)
+            print("self.elems=", self.elems)
+            print("result=", result)
             raise Exception
 
     def split(self, N):
@@ -94,7 +94,7 @@ class Collection(object):
                     if (cid, idx) not in insections:
                         insections[(cid, idx)] = []
                     insections[(cid, idx)].append(i)
-        charm.thisProxy.updateGlobals({'insections': insections}, awaitable=True).get()
+        charm.thisProxy.updateGlobals({"insections": insections}, awaitable=True).get()
         assert len(sections) == N
         for section in sections:
             assert len(section) > 0
@@ -106,8 +106,7 @@ class Collection(object):
 
 def partition(elems, N):
     num_elems = len(elems)
-    return [elems[i*num_elems // N: (i+1)*num_elems // N]
-            for i in range(N)]
+    return [elems[i * num_elems // N : (i + 1) * num_elems // N] for i in range(N)]
 
 
 def inSections(obj):
@@ -161,11 +160,16 @@ def main(args):
             c = Collection([], proxy)
             for c_ in cs:
                 c.addElems(c_.elems)
-            assert hasattr(c.proxy, 'section') and c.proxy.issec
+            assert hasattr(c.proxy, "section") and c.proxy.issec
             sections_combined += 1
             collections.append(c)
-    print(len(collections), 'collections created, sections_split=', sections_split,
-          'sections_combined=', sections_combined)
+    print(
+        len(collections),
+        "collections created, sections_split=",
+        sections_split,
+        "sections_combined=",
+        sections_combined,
+    )
 
     if VERBOSE:
         section_sizes = []
@@ -173,11 +177,11 @@ def main(args):
             if c.proxy.issec is not None:
                 section_sizes.append(len(c.elems))
         section_sizes = numpy.array(section_sizes)
-        print(len(section_sizes), 'sections, sizes:')
-        print('min size=', numpy.min(section_sizes))
-        print('median size=', numpy.median(section_sizes))
-        print('mean size=', numpy.mean(section_sizes))
-        print('max size=', numpy.max(section_sizes))
+        print(len(section_sizes), "sections, sizes:")
+        print("min size=", numpy.min(section_sizes))
+        print("median size=", numpy.median(section_sizes))
+        print("mean size=", numpy.mean(section_sizes))
+        print("max size=", numpy.max(section_sizes))
 
     for c in collections:
         if c.proxy.issec:
@@ -187,7 +191,9 @@ def main(args):
 
     for _ in range(NUM_ITER):
         futures = [Future() for _ in range(len(collections))]
-        charm.thisProxy.updateGlobals({'DATA_VERIFY': random.randint(0, 100000)}, awaitable=True).get()
+        charm.thisProxy.updateGlobals(
+            {"DATA_VERIFY": random.randint(0, 100000)}, awaitable=True
+        ).get()
         data = DATA_VERIFY
         for i, c in enumerate(collections):
             sid = None
@@ -198,7 +204,7 @@ def main(args):
             result = futures[i].get()
             collections[i].verify(result)
 
-    print('DONE')
+    print("DONE")
     exit()
 
 

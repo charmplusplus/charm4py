@@ -36,7 +36,7 @@ class Test(Chare):
 class Test2(Chare):
 
     def getVal(self):
-        return (73 + charm.myPe())
+        return 73 + charm.myPe()
 
 
 def main(args):
@@ -44,8 +44,9 @@ def main(args):
     # every chare sends to every other so don't want a ton of chares
     numChares = min(charm.numPes() * 8, 32)
     testGroup = Group(Test2)
-    charm.thisProxy.updateGlobals({'numChares': numChares, 'testGroup': testGroup},
-                                  '__main__', awaitable=True).get()
+    charm.thisProxy.updateGlobals(
+        {"numChares": numChares, "testGroup": testGroup}, "__main__", awaitable=True
+    ).get()
     Array(Test, numChares)
 
 

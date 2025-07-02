@@ -15,15 +15,15 @@ class Controller(Chare):
 
     @coro
     def start(self, monitors, logfilename=None):
-        print('\nStarting hardware monitor...')
+        print("\nStarting hardware monitor...")
         if logfilename is not None:
-            self.log = open(logfilename, 'a')
+            self.log = open(logfilename, "a")
         else:
             self.log = sys.stdout
         self.hosts = monitors.getHostName(ret=True).get()
         for i, host in enumerate(self.hosts):
-            print('Monitor', i, 'running on host', host)
-        print('Going to run for', EXIT_AFTER_SECS, 'secs')
+            print("Monitor", i, "running on host", host)
+        print("Going to run for", EXIT_AFTER_SECS, "secs")
         monitors.start(self.thisProxy)
         charm.scheduleCallableAfter(self.thisProxy.close, EXIT_AFTER_SECS)
 
@@ -32,7 +32,13 @@ class Controller(Chare):
         exit()
 
     def reportAboveThreshold(self, values, from_id):
-        self.log.write('Host ' + str(self.hosts[from_id]) + ' is running hot: ' + str(values) + '\n')
+        self.log.write(
+            "Host "
+            + str(self.hosts[from_id])
+            + " is running hot: "
+            + str(values)
+            + "\n"
+        )
         self.log.flush()
 
 
@@ -55,11 +61,11 @@ class Monitor(Chare):
     def read_sensor(self):
         # note that this depends on specific output format of the sensors
         # command, which could change in the future. Adapt as needed
-        lines = subprocess.check_output('sensors').decode().split('\n')
+        lines = subprocess.check_output("sensors").decode().split("\n")
         temps = []
         for l in lines:
             fields = l.split()
-            if len(fields) > 0 and fields[0] == 'Core':
+            if len(fields) > 0 and fields[0] == "Core":
                 temps.append(float(fields[2][1:-2]))
         return temps
 

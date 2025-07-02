@@ -4,7 +4,7 @@ from charm4py import Chare, Group, charm
 class Hello(Chare):
 
     def SayHi(self):
-        print('Hello World from element', self.thisIndex)
+        print("Hello World from element", self.thisIndex)
 
 
 def main(args):

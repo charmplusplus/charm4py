@@ -4,7 +4,7 @@ from .threads import LocalFuture
 class Channel(object):
 
     def __new__(cls, chare, remote, local=None):
-        if not hasattr(chare, '__channels__'):
+        if not hasattr(chare, "__channels__"):
             chare.__initchannelattrs__()
         ch = chare.__findPendingChannel__(remote, False)
         if ch is None:
@@ -16,7 +16,7 @@ class Channel(object):
             ch.setEstablished()
         if local is None:
             # if local is None, we assume local endpoint is the individual chare
-            if hasattr(chare, 'thisIndex'):
+            if hasattr(chare, "thisIndex"):
                 local = chare.thisProxy[chare.thisIndex]
             else:
                 local = chare.thisProxy
@@ -25,6 +25,7 @@ class Channel(object):
 
 
 CHAN_BUF_SIZE = 40000
+
 
 class _Channel(object):
 
@@ -36,7 +37,9 @@ class _Channel(object):
         self.recv_seqno = 0
         self.data = {}
         self.recv_fut = None  # this future is used to block on self.recv()
-        self.wait_ready = None  # this future is used to block on ready (by charm.iwait())
+        self.wait_ready = (
+            None  # this future is used to block on ready (by charm.iwait())
+        )
         self.established = False
         self.established_fut = None
         self.locally_initiated = locally_initiated

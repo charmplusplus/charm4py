@@ -10,16 +10,16 @@ class Test(Chare):
     def work(self, mainProxy, other, done_fut):
         me = self.thisProxy[self.thisIndex]
         ch = Channel(self, remote=mainProxy)
-        ch.send('hello from ' + str(self.id))
+        ch.send("hello from " + str(self.id))
 
         ch = Channel(self, remote=me)
-        ch.send('self ping', me)
-        assert ch.recv() == ('self ping', me)
+        ch.send("self ping", me)
+        assert ch.recv() == ("self ping", me)
 
         ch = Channel(self, remote=other)
-        ch.send(('hi from ' + str(self.id), me))
+        ch.send(("hi from " + str(self.id), me))
         data = ch.recv()
-        assert data[0] == 'hi from ' + str((self.id + 1) % 2)
+        assert data[0] == "hi from " + str((self.id + 1) % 2)
         assert data[1] == other
         done_fut()
 
@@ -35,8 +35,8 @@ class Main(Chare):
         chare1.work(self.thisProxy, chare0, done_fut)
         ch0 = Channel(self, remote=chare0)
         ch1 = Channel(self, remote=chare1)
-        assert ch0.recv() == 'hello from 0'
-        assert ch1.recv() == 'hello from 1'
+        assert ch0.recv() == "hello from 0"
+        assert ch1.recv() == "hello from 1"
         done_fut.get()
         exit()
 

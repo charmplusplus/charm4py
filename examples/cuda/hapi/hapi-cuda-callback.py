@@ -3,11 +3,13 @@ import time
 import numba.cuda as cuda
 import numpy as np
 
+
 @cuda.jit
 def elementwise_sum_kernel(x_in, x_out):
     idx = cuda.grid(1)
     if idx < x_in.shape[0]:
         x_out[idx] = x_in[idx] + x_in[idx]
+
 
 def main(args):
     N = 1_000_000
@@ -33,7 +35,9 @@ def main(args):
     charm.hapiAddCudaCallback(stream_handle, return_fut)
     return_fut.get()
     kernel_done_time = time.perf_counter()
-    print(f"Callback received, kernel finished in {kernel_done_time - start_time:.6f} seconds.")
+    print(
+        f"Callback received, kernel finished in {kernel_done_time - start_time:.6f} seconds."
+    )
 
     B_host = B_gpu.copy_to_host(stream=s)
 
@@ -43,5 +47,6 @@ def main(args):
     print(f"Sum of result is {sum_result}")
 
     charm.exit()
+
 
 charm.start(main)

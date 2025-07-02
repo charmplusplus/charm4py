@@ -30,11 +30,17 @@ class Main(Chare):
         self.result = 0
         for i in range(NUM_ITER):
             workers.sendVal()
-            self.wait("self.num_responses1 == " + str(num_chares//2) + " and 33 == TEST_GLOBAL")
-            self.wait("self.num_responses2 == " + str(num_chares//2) + " and 47 == ro.X")
-            assert(self.result == num_chares * 237)
-            assert(self.num_responses1 == num_chares//2)
-            assert(self.num_responses2 == num_chares//2)
+            self.wait(
+                "self.num_responses1 == "
+                + str(num_chares // 2)
+                + " and 33 == TEST_GLOBAL"
+            )
+            self.wait(
+                "self.num_responses2 == " + str(num_chares // 2) + " and 47 == ro.X"
+            )
+            assert self.result == num_chares * 237
+            assert self.num_responses1 == num_chares // 2
+            assert self.num_responses2 == num_chares // 2
             self.num_responses1 = self.num_responses2 = 0
             self.result = 0
         charm.printStats()

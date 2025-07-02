@@ -12,8 +12,15 @@ def main(args):
     max_f = Future()
     testProxy.getStats((sum_f, min_f, max_f))
 
-    print('[Main] Sum: ' + str(sum_f.get()) + ', Min: ' + str(min_f.get()) + ', Max: ' + str(max_f.get()))
-    print('[Main] All done.')
+    print(
+        "[Main] Sum: "
+        + str(sum_f.get())
+        + ", Min: "
+        + str(min_f.get())
+        + ", Max: "
+        + str(max_f.get())
+    )
+    print("[Main] All done.")
     exit()
 
 
@@ -28,7 +35,7 @@ class Test(Chare):
         self.contribute(self.thisIndex[0], Reducer.max, self.thisProxy[0].collectStats)
 
     def collectStats(self, stat_result):
-        assert self.thisIndex[0] == 0, 'Reduction target incorrect!'
+        assert self.thisIndex[0] == 0, "Reduction target incorrect!"
         if stat_result == 0:
             self.min_future.send(stat_result)
         elif stat_result == (charm.numPes() * CHARES_PER_PE) - 1:

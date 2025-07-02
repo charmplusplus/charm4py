@@ -52,6 +52,7 @@ def evaluate(model, test_loader):
             correct += (predicted == target).sum().item()
     return 100.0 * correct / total
 
+
 class ConvNet(nn.Module):
     """Small ConvNet for MNIST."""
 
@@ -84,6 +85,7 @@ class ConvNet(nn.Module):
             if g is not None:
                 p.grad = torch.from_numpy(g)
 
+
 @ray.remote
 class ParameterServer(object):
     def __init__(self, lr):
@@ -101,6 +103,7 @@ class ParameterServer(object):
 
     def get_weights(self):
         return self.model.get_weights()
+
 
 @ray.remote
 class DataWorker(object):
@@ -138,7 +141,9 @@ def sync_train(args):
 
     current_weights = ps.get_weights.remote()
     for i in range(iterations):
-        gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
+        gradients = [
+            worker.compute_gradients.remote(current_weights) for worker in workers
+        ]
         # Calculate update after all gradients are available.
         current_weights = ps.apply_gradients.remote(*gradients)
 
@@ -152,7 +157,8 @@ def sync_train(args):
     print("Final accuracy is {:.1f}.".format(accuracy))
     exit()
     # Clean up Ray resources and processes before the next example.
-    #ray.shutdown()
+    # ray.shutdown()
+
 
 def async_train(args):
     ray.init()
@@ -191,8 +197,9 @@ def async_train(args):
     print("Final accuracy is {:.1f}.".format(accuracy))
     exit()
 
-if __name__ == '__main__':
-    if sys.argv[1] == 'sync':
+
+if __name__ == "__main__":
+    if sys.argv[1] == "sync":
         charm.start(sync_train)
-    elif sys.argv[1] == 'async':
+    elif sys.argv[1] == "async":
         charm.start(async_train)

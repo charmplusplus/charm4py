@@ -9,15 +9,15 @@ PHASE_NUM = 10
 class Worker(Chare):
 
     def start(self, done_future):
-        self.cur_id    = 0
+        self.cur_id = 0
         self.phase_cnt = 0
         self.done_future = done_future
 
     @when("self.cur_id == id")
     def recv_id(self, id):
-        #if self.thisIndex == 0:
+        # if self.thisIndex == 0:
         #    return self.contribute(None, None, self.done_future)
-        assert(id == self.cur_id)
+        assert id == self.cur_id
         self.phase_cnt += 1
         if self.phase_cnt == PHASE_NUM:
             self.phase_cnt = 0
@@ -33,8 +33,8 @@ def main(args):
     random.seed(45782)
     ids = []
     for i in range(MAX_VALS):
-        #for _ in range(PHASE_NUM):
-            #ids.append(i)
+        # for _ in range(PHASE_NUM):
+        # ids.append(i)
         ids.append(i)
     random.shuffle(ids)
 
@@ -42,7 +42,7 @@ def main(args):
     g.start(done, awaitable=True).get()
     t0 = time.time()
     for id in ids:
-        #g.recv_id(id)
+        # g.recv_id(id)
         for _ in range(PHASE_NUM):
             g.recv_id(id)
     done.get()

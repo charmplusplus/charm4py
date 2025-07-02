@@ -26,13 +26,14 @@ def make_prediction(model, shard_path):
     # Here we just return the size about the result in this example.
     return len(result)
 
+
 def main(args):
     ray.init()
     # 12 files, one for each remote task.
     input_files = [
-            f"s3://anonymous@air-example-data/ursa-labs-taxi-data/downsampled_2009_full_year_data.parquet"
-            f"/fe41422b01c04169af2a65a83b753e0f_{i:06d}.parquet"
-            for i in range(12)
+        f"s3://anonymous@air-example-data/ursa-labs-taxi-data/downsampled_2009_full_year_data.parquet"
+        f"/fe41422b01c04169af2a65a83b753e0f_{i:06d}.parquet"
+        for i in range(12)
     ]
 
     # ray.put() the model just once to local object store, and then pass the
@@ -58,5 +59,6 @@ def main(args):
 
     exit()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     charm.start(main)

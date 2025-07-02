@@ -5,7 +5,9 @@ from collections import defaultdict
 # Reduction Info object: holds state for an in-progress reduction
 class RedInfo(object):
     def __init__(self):
-        self.ready = False  # got all messages, can reduce and send contribution to the parent
+        self.ready = (
+            False  # got all messages, can reduce and send contribution to the parent
+        )
         self.msgs = []  # list of reduction msgs received on this PE
         self.reducer = None  # reducer function
         self.cb = None  # reduction callback
@@ -20,16 +22,19 @@ class SectionManager(Chare):
             self.parent = None
             self.children = []  # these are PE numbers
             self.local_elems = []  # list of local chares that are part of the section
-            self.buffered_msgs = []  # stores msgs received for this section before creation has completed
+            self.buffered_msgs = (
+                []
+            )  # stores msgs received for this section before creation has completed
             self.redno = 0  # current reduction number for this section
             self.reds = []  # list of RedInfo objects for pending reductions
 
-
     def __init__(self):
-        assert not hasattr(charm, 'sectionMgr')
+        assert not hasattr(charm, "sectionMgr")
         charm.sectionMgr = self
         self.profiling = charm.options.profiling
-        self.sections = defaultdict(SectionManager.SectionEntry)  # stores section entries for this PE
+        self.sections = defaultdict(
+            SectionManager.SectionEntry
+        )  # stores section entries for this PE
         self.send_ep = self.thisProxy.sendToSection.ep
 
     def createSectionDown(self, sid, pes, parent=None):
@@ -54,7 +59,7 @@ class SectionManager(Chare):
         entry.buffered_msgs = []
         self.releaseRed(sid, entry, entry.reds)
 
-    @when('cons is not None or gid in charm.groups')
+    @when("cons is not None or gid in charm.groups")
     def createGroupSectionDown(self, sid, gid, pes, parent=None, cons=None):
         entry = self.sections[sid]
         entry.final = True
@@ -111,8 +116,9 @@ class SectionManager(Chare):
                 em = charm.runningEntryMethod
                 em.startMeasuringSendTime()
             msg = charm.packMsg(None, [sid, ep, header] + list(args), {})
-            charm.lib.CkGroupSendMulti(self.thisProxy.gid, entry.children,
-                                       self.send_ep, msg)
+            charm.lib.CkGroupSendMulti(
+                self.thisProxy.gid, entry.children, self.send_ep, msg
+            )
             del msg
             if profiling:
                 em.stopMeasuringSendTime()
@@ -136,7 +142,9 @@ class SectionManager(Chare):
             # (thus avoiding any copies)
             charm.lib.sendToSection(self.thisProxy.gid, entry.children)
             if profiling:
-                charm.recordSend(charm.msg_recv_stats[4])  # send size is same as last received msg size
+                charm.recordSend(
+                    charm.msg_recv_stats[4]
+                )  # send size is same as last received msg size
                 em.stopMeasuringSendTime()
 
         for obj in entry.local_elems:
@@ -182,9 +190,13 @@ class SectionManager(Chare):
                         redinfo.cb(reduced_data)
                     else:
                         if reducer == Reducer._bcast_exc_reducer:
-                            entry.parent.contrib(sid, entry.redno - 1, reduced_data, reducer, None)
+                            entry.parent.contrib(
+                                sid, entry.redno - 1, reduced_data, reducer, None
+                            )
                         else:
-                            entry.parent.contrib(sid, entry.redno - 1, reduced_data, None, None)
+                            entry.parent.contrib(
+                                sid, entry.redno - 1, reduced_data, None, None
+                            )
             else:
                 return
 
