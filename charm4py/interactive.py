@@ -40,7 +40,6 @@ class InteractiveConsole(Chare, InteractiveInterpreter):
 
         try:
             import readline
-            import rlcompleter
 
             readline.parse_and_bind("tab: complete")
         except:

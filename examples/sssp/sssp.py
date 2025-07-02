@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, coro, Channel, Future, Reducer
+from charm4py import charm, Chare, Array, Future, Reducer
 import random
 import time
 

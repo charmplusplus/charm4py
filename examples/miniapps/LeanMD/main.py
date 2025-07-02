@@ -1,4 +1,3 @@
-import array
 import random
 import numba
 import math

@@ -49,7 +49,7 @@ class EntryMethod(object):
                 fut = args[-1]
                 args = args[:-1]
             ret = getattr(obj, self.name)(*args)
-            if ret_fut and not (ret is None):
+            if ret_fut and ret is not None:
                 fut.create_object(ret)
         except SystemExit:
             exit_code = sys.exc_info()[1].code

@@ -22,7 +22,7 @@ from collections import defaultdict
 import traceback
 from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
-from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
+from .chare import CONTRIBUTOR_TYPE_ARRAY
 from .chare import Chare, Mainchare, Group, ArrayMap, Array
 from . import entry_method
 from . import threads
@@ -30,7 +30,6 @@ from .threads import Future, LocalFuture, LocalMultiFuture
 from . import reduction
 from . import wait
 from charm4py.c_object_store import MessageBuffer
-from . import ray
 import array
 
 try:

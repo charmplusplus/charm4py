@@ -7,12 +7,6 @@ from numba import cuda
 from charm4py import charm, Chare, Array, Future, Reducer, coro, Channel
 
 from constants import (
-    pi,
-    grav,
-    cp,
-    cv,
-    rd,
-    p0,
     C0,
     gamm,
     xlen,
@@ -21,7 +15,6 @@ from constants import (
     cfl,
     max_speed,
     hs,
-    sten_size,
     NUM_VARS,
     ID_DENS,
     ID_UMOM,
@@ -40,9 +33,6 @@ from constants import (
     qweights,
 )
 from kernels import (
-    hydro_const_theta,
-    hydro_const_bvfreq,
-    sample_ellipse_cosine,
     collision as collision_init,
     thermal as thermal_init,
     mountain_waves as mountain_waves_init,
@@ -865,11 +855,11 @@ def main_charm_wrapper(charm_args_list):
                 f"Relative mass change: {(total_final_mass - mass0_sum) / mass0_sum:.6e}"
             )
         else:
-            print(f"Relative mass change: (initial mass was near zero)")
+            print("Relative mass change: (initial mass was near zero)")
         if abs(te0_sum) > 1e-12:
             print(f"Relative TE change:   {(total_final_te - te0_sum) / te0_sum:.6e}")
         else:
-            print(f"Relative TE change:   (initial TE was near zero)")
+            print("Relative TE change:   (initial TE was near zero)")
 
         print("\nMiniWeather Charm4Py Numba CUDA simulation finished.")
 

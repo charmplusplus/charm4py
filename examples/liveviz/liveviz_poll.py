@@ -1,5 +1,4 @@
-from charm4py import charm, Chare, Array, Future, Reducer, Group, liveviz, coro
-import time
+from charm4py import charm, Chare, Array, liveviz
 import random
 
 

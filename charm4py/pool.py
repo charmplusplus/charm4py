@@ -1,4 +1,4 @@
-from . import charm, Chare, Group, Array, coro_ext, threads, Future, register, ray
+from . import charm, Chare, Array, coro_ext, threads, Future, register
 from .charm import Charm4PyError
 from .threads import NotThreadedError
 from collections import defaultdict

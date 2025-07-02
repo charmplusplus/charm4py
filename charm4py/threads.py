@@ -149,7 +149,7 @@ class Future(object):
             raise ValueError(
                 "Operation not supported for future not" " stored in the object store"
             )
-        return not (self.lookup_object() is None)
+        return self.lookup_object() is not None
 
     def create_object(self, obj):
         from .charm import charm

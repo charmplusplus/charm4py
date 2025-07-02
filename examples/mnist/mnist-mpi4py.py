@@ -9,8 +9,6 @@ import torch.optim as optim
 import math
 import random
 import time
-import sys
-from torch.autograd import Variable
 from torchvision import datasets, transforms
 from mpi4py import MPI
 import numpy as np

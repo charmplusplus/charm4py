@@ -40,7 +40,6 @@ commonArgs = ["++local"]
 default_num_processes = int(os.environ.get("CHARM4PY_TEST_NUM_PROCESSES", 4))
 
 try:
-    import numba
 
     numbaInstalled = True
 except:

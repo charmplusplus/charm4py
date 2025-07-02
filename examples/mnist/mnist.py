@@ -11,10 +11,8 @@ import math
 import random
 import time
 import sys
-from torch.autograd import Variable
 from torchvision import datasets, transforms
 from charm4py import charm, Chare, Group, Array, threaded, Reducer
-import numpy as np
 
 # Add LB command line arguments
 sys.argv += ["+LBOff", "+LBCommOff", "+LBObjOnly"]

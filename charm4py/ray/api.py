@@ -1,5 +1,4 @@
 import types
-from copy import deepcopy
 
 counter = 0
 
@@ -36,7 +35,7 @@ class RayProxyFunction(object):
 
 class RayProxy(object):
     def __init__(self, subclass, args, pe):
-        from charm4py import Chare, register, charm
+        from charm4py import Chare
 
         self.proxy = Chare(subclass, args=args, onPE=pe)
         for f in dir(self.proxy):
@@ -80,7 +79,7 @@ def get_ray_task(func):
 
 
 def remote(*args, **kwargs):
-    from charm4py import charm, Chare, register
+    from charm4py import Chare, register
 
     num_returns = kwargs.pop("num_returns", 1)
     if len(args) == 1 and len(kwargs) == 0:
@@ -123,7 +122,6 @@ def wait(futs, num_returns=1, timeout=None, fetch_local=True):
 
 
 def put(obj):
-    from ..threads import Future
     from ..charm import charm
 
     fut = charm.threadMgr.createFuture(store=True)

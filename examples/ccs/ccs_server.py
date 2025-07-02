@@ -1,4 +1,4 @@
-from charm4py import charm, Chare, Array, Future, Reducer, Group
+from charm4py import charm, Chare, Future, Reducer, Group
 
 
 def handler(msg):
