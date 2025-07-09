@@ -1,12 +1,21 @@
-from ccharm cimport *
+# cython: language_level=3
+
+from charm4py.charmlib.ccharm cimport *
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uintptr_t
 from cpython.version cimport PY_MAJOR_VERSION
 from cpython.buffer  cimport PyObject_GetBuffer, PyBuffer_Release, PyBUF_ANY_CONTIGUOUS, PyBUF_SIMPLE
 from cpython.tuple   cimport PyTuple_New, PyTuple_SET_ITEM
-from cpython.int cimport PyInt_FromSsize_t
+from cpython.long cimport PyLong_FromSsize_t
 from cpython.ref cimport Py_INCREF
+from cpython.mem cimport PyMem_Malloc, PyMem_Realloc, PyMem_Free
+from cython.operator cimport dereference
+
+cdef extern from "Python.h":
+    char* PyUnicode_AsUTF8(object unicode)
+
+from libc.string cimport strcmp
 
 from ..charm import Charm4PyError
 from .. import reduction as red
@@ -33,6 +42,8 @@ cdef object np_number = np.number
 cdef int CK_DEVICEBUFFER_SIZE_IN_BYTES = CkDeviceBufferSizeInBytes()
 
 # ------ global constants ------
+
+cdef dict _ccs_handlers = {}
 
 cdef enum:
   NUM_DCOPY_BUFS = 60   # max number of dcopy buffers
@@ -101,6 +112,17 @@ ctypedef struct CkReductionTypesExt:
   int external_py
 
 cdef extern CkReductionTypesExt charm_reducers
+
+cdef char ** to_cstring_array(list_str):
+    cdef char **ret = <char **>malloc(len(list_str) * sizeof(char *))
+    for i in range(len(list_str)):
+        ret[i] = list_str[i]
+    return ret
+
+def addStringsToList(targetList, strings):
+  for idx, currentString in enumerate(strings):
+    targetList.append(<char*> malloc(len(currentString)))
+    targetList[idx] = strings[idx]
 
 class CkReductionTypesExt_Wrapper:
 
@@ -222,8 +244,7 @@ cdef class ReceiveMsgBuffer:
     self.msg = NULL
 
   cdef inline int isLocal(self):
-    return self.msg[0] == 'L' and self.msg[1] == ':'
-
+    return self.msg[0] == b'L' and self.msg[1] == b':'
   cdef inline int getLocalTag(self):
     return (<int*>(&self.msg[2]))[0]
 
@@ -275,12 +296,12 @@ cdef inline object array_index_to_tuple(int ndims, int *arrayIndex):
   arrIndex = PyTuple_New(ndims)
   if ndims <= 3:
     for i in range(ndims):
-      d = PyInt_FromSsize_t(arrayIndex[i])
+      d = PyLong_FromSsize_t(arrayIndex[i])
       Py_INCREF(d)
       PyTuple_SET_ITEM(arrIndex, i, d)
   else:
     for i in range(ndims):
-      d = PyInt_FromSsize_t((<short*>arrayIndex)[i])
+      d = PyLong_FromSsize_t((<short*>arrayIndex)[i])
       Py_INCREF(d)
       PyTuple_SET_ITEM(arrIndex, i, d)
   return arrIndex
@@ -324,6 +345,27 @@ cdef object times = [0.0] * 3 # track time in [charm reduction callbacks, custom
 cdef bytes localMsg = b'L:' + (b' ' * sizeof(int))
 cdef char* localMsg_ptr = <char*>localMsg
 
+#cdef const int CmiReservedHeaderSize s= getCmiReservedHeaderSize()
+
+cdef struct remoteMsg:
+  int header_length
+  int data_length
+  char handler_name[32] # we know it can't be longer
+  char data[1024] #assume generous length at end
+
+cdef void recvRemoteMessage(void *msg) noexcept:
+
+    cdef void *shiftedMsg = msg + CmiReservedHeaderSize #move past reserved header
+    cdef remoteMsg* incomingMsgPtr = <remoteMsg*> shiftedMsg
+    cdef int handler_length = incomingMsgPtr.header_length
+    cdef int data_length = incomingMsgPtr.data_length
+
+    # turn char arrays into strings
+
+    handler_name = incomingMsgPtr.handler_name[:handler_length].decode('utf-8')
+    data_bytes = incomingMsgPtr.data[:data_length]
+    charm.callHandler(handler_name, data_bytes)
+
 
 class CharmLib(object):
 
@@ -333,6 +375,8 @@ class CharmLib(object):
     self.direct_copy_supported = (PY_MAJOR_VERSION >= 3)
     self.name = 'cython'
     self.chareNames = []
+    self.emNames = []
+    self.emStart = 0
     self.init()
     self.ReducerType = CkReductionTypesExt_Wrapper()
     #print(charm_reducers.sum_long, charm_reducers.product_ushort, charm_reducers.max_char, charm_reducers.max_float, charm_reducers.min_char)
@@ -676,34 +720,51 @@ class CharmLib(object):
     if msg is None: CkRegisterReadonlyExt(n1, n2, 0, NULL)
     else: CkRegisterReadonlyExt(n1, n2, len(msg), msg)
 
-  def CkRegisterMainchare(self, str name, int numEntryMethods):
+  def CkRegisterMainchare(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterMainChareExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    # TODO: do we want to track/free these pointers?
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterMainChareExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterGroup(self, str name, int numEntryMethods):
+  def CkRegisterGroup(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterGroupExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterGroupExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterSectionManager(self, str name, int numEntryMethods):
+  def CkRegisterSectionManager(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterSectionManagerExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+
+    CkRegisterSectionManagerExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterArrayMap(self, str name, int numEntryMethods):
+  def CkRegisterArrayMap(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterArrayMapExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterArrayMapExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
-  def CkRegisterArray(self, str name, int numEntryMethods):
+  def CkRegisterArray(self, str name, list entryMethodNames, int numEntryMethods):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
-    CkRegisterArrayExt(self.chareNames[-1], numEntryMethods, &chareIdx, &startEpIdx)
+    self.emNames += [name.encode() for name in entryMethodNames]
+    cdef char** c1 = to_cstring_array(self.emNames)
+    CkRegisterArrayExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
+    self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
 
   def CUDAPointerOnDevice(self, long address):
@@ -1015,7 +1076,10 @@ class CharmLib(object):
         elif isinstance(arg, np.ndarray) and not arg.dtype.hasobject:
           np_array = arg
           nbytes = np_array.nbytes
-          direct_copy_hdr.append((i-n_gpu_bufs, 2, (arg.shape, np_array.dtype.name), nbytes))
+          if arg.dtype.isbuiltin:
+            direct_copy_hdr.append((i-n_gpu_bufs, 2, (arg.shape, arg.dtype.char), nbytes))
+          else:
+            direct_copy_hdr.append((i-n_gpu_bufs, 2, (arg.shape, arg.dtype.name), nbytes))
           send_bufs[cur_buf] = <char*>np_array.data
         elif isinstance(arg, bytes):
           nbytes = len(arg)
@@ -1101,29 +1165,76 @@ class CharmLib(object):
 
 
 
+  def traceRegisterUserEvent(self, str EventDesc, int eventNum=-1):
+    cdef bytes py_bytes = EventDesc.encode()
+    Py_INCREF(py_bytes)
+    # This memory needs to be managed somehow, I think
+    cdef char* c_string = py_bytes
+    cdef int eventID = CkTraceRegisterUserEvent(c_string, eventNum)
+    return eventID
+
+  def traceBeginUserBracketEvent(self, int EventID):
+    CkTraceBeginUserBracketEvent(EventID)
+
+  def traceEndUserBracketEvent(self, int EventID):
+    CkTraceEndUserBracketEvent(EventID)
+
+  def CcsRegisterHandler(self, str handlername, object handler):
+    cdef bytes handler_bytes = handlername.encode("utf-8")
+    cdef const char* c_handlername = handler_bytes
+    CcsRegisterHandlerExt(c_handlername, <void *>recvRemoteMessage)
+  
+  def isRemoteRequest(self):
+    return bool(CcsIsRemoteRequest())
+  
+  def CcsSendReply(self, bytes message):
+    cdef const char* replyData = message
+    cdef int replyLen = len(message)
+    CcsSendReply(replyLen, <const void*>replyData)
+
+  def CcsDelayReply(self):
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>malloc(sizeof(CcsDelayedReply))
+    token[0] = CcsDelayReply()
+    return <uintptr_t>token
+
+  def CcsSendDelayedReply(self, uintptr_t p, bytes msg):
+    cdef const char* replyData = msg
+    cdef CcsDelayedReply* token = <CcsDelayedReply*>p
+    CcsSendDelayedReply(token[0], len(msg), <const void*>replyData)
+    free(token)
+
+  def hapiAddCudaCallback(self, stream, future):
+    if not HAVE_CUDA_BUILD:
+      raise Charm4PyError("HAPI usage not allowed: Charm++ was not built with CUDA support")
+    id = future.fid
+    CkHapiAddCallback(<long> stream, depositFutureWithId, <int> id)
+
+cdef void depositFutureWithId(void *param, void* message) noexcept:
+  cdef int futureId = <int> param
+  charm._future_deposit_result(futureId, None)
 
 # first callback from Charm++ shared library
-cdef void registerMainModule():
+cdef void registerMainModule() noexcept:
   try:
     charm.registerMainModule()
   except:
     charm.handleGeneralError()
 
-cdef void recvReadOnly(int msgSize, char *msg):
+cdef void recvReadOnly(int msgSize, char *msg) noexcept:
   try:
     recv_buffer.setMsg(msg, msgSize)
     charm.recvReadOnly(recv_buffer)
   except:
     charm.handleGeneralError()
 
-cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv):
+cdef void buildMainchare(int onPe, void *objPtr, int ep, int argc, char **argv) noexcept:
   try:
     args = [argv[i].decode('UTF-8') for i in range(argc)]
     charm.buildMainchare(onPe, <uintptr_t> objPtr, ep, args)
   except:
     charm.handleGeneralError()
 
-cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -1133,7 +1244,7 @@ cdef void recvChareMsg(int onPe, void *objPtr, int ep, int msgSize, char *msg, i
   except:
     charm.handleGeneralError()
 
-cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -1146,7 +1257,7 @@ cdef void recvGroupMsg(int gid, int ep, int msgSize, char *msg, int dcopy_start)
 cdef void recvGPUDirectGroupMsg(int gid, int ep, int numDevBuffs,
                                 int *devBufSizes, void *devBufs, int msgSize,
                                 char *msg, int dcopy_start
-                                ):
+                                ) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -1161,7 +1272,7 @@ cdef void recvGPUDirectGroupMsg(int gid, int ep, int numDevBuffs,
     charm.handleGeneralError()
 
 
-cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   try:
     if PROFILING:
       charm._precvtime = time.time()
@@ -1173,7 +1284,7 @@ cdef void recvArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int msgSize,
 
 cdef void recvGPUDirectArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int numDevBuffs,
                                 int *devBufSizes, void *devBufs, int msgSize,
-                                char *msg, int dcopy_start):
+                                char *msg, int dcopy_start) noexcept:
 
     cdef int idx = 0
     try:
@@ -1191,7 +1302,7 @@ cdef void recvGPUDirectArrayMsg(int aid, int ndims, int *arrayIndex, int ep, int
     except:
       charm.handleGeneralError()
 
-cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start):
+cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *arrayIndexes, int ep, int msgSize, char *msg, int dcopy_start) noexcept:
   cdef int i = 0
   try:
     if PROFILING:
@@ -1206,13 +1317,13 @@ cdef void recvArrayBcast(int aid, int ndims, int nInts, int numElems, int *array
   except:
     charm.handleGeneralError()
 
-cdef int arrayMapProcNum(int gid, int ndims, const int *arrayIndex):
+cdef int arrayMapProcNum(int gid, int ndims, const int *arrayIndex) noexcept:
   try:
     return charm.arrayMapProcNum(gid, array_index_to_tuple(ndims, arrayIndex))
   except:
     charm.handleGeneralError()
 
-cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int sizing):
+cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int sizing) noexcept:
   cdef int i = 0
   global tempData
   try:
@@ -1228,7 +1339,7 @@ cdef int arrayElemLeave(int aid, int ndims, int *arrayIndex, char **pdata, int s
   except:
     charm.handleGeneralError()
 
-cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, int msgSize):
+cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, int msgSize) noexcept:
   cdef int i = 0
   try:
     if PROFILING:
@@ -1239,7 +1350,7 @@ cdef void arrayElemJoin(int aid, int ndims, int *arrayIndex, int ep, char *msg, 
   except:
     charm.handleGeneralError()
 
-cdef void resumeFromSync(int aid, int ndims, int *arrayIndex):
+cdef void resumeFromSync(int aid, int ndims, int *arrayIndex) noexcept:
   cdef int i = 0
   try:
     index = array_index_to_tuple(ndims, arrayIndex)
@@ -1254,7 +1365,7 @@ cdef void depositFutureWithId(void *param, void *msg):
 
 
 cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, int *sectionInfo,
-                            char **returnBuffers, int *returnBufferSizes):
+                            char **returnBuffers, int *returnBufferSizes) noexcept:
   cdef int numElems
   cdef array.array a
   cdef int item_size
@@ -1288,7 +1399,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
       header = {}
       ctype = charm_reducer_to_ctype[reducerType]
       item_size = c_type_table_sizes[ctype]
-      numElems = dataSize / item_size
+      numElems = dataSize // item_size # force integer division for cython + python3
       if fid > 0:
         pyData.append(fid)
       if numElems == 1:
@@ -1340,7 +1451,7 @@ cdef void createCallbackMsg(void *data, int dataSize, int reducerType, int fid, 
     charm.handleGeneralError()
 
 # callback function invoked by Charm++ for reducing contributions using a Python reducer (built-in or custom)
-cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer):
+cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer) noexcept:
   cdef int i = 0
   cdef int msgSize
   global tempData
@@ -1373,7 +1484,7 @@ cdef int pyReduction(char** msgs, int* msgSizes, int nMsgs, char** returnBuffer)
   except:
     charm.handleGeneralError()
 
-cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime):
+cdef void CcdCallFnAfterCallback(void *userParam, double curWallTime) noexcept:
   try:
     charm.triggerCallable(<int>userParam)
   except:

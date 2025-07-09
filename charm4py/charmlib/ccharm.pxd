@@ -24,11 +24,11 @@ cdef extern from "charm.h":
     int CmiPhysicalRank(int pe);
 
     void CkRegisterReadonlyExt(const char *name, const char *type, size_t msgSize, char *msg);
-    void CkRegisterMainChareExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterGroupExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterSectionManagerExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterArrayExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
-    void CkRegisterArrayMapExt(const char *s, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterMainChareExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterGroupExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterSectionManagerExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterArrayExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
+    void CkRegisterArrayMapExt(const char *s, const char **emNames, int emNamesStart, int numEntryMethods, int *chareIdx, int *startEpIdx);
 
     int CkCreateGroupExt(int cIdx, int eIdx, int num_bufs, char **bufs, int *buf_sizes);
     int CkCreateArrayExt(int cIdx, int ndims, int *dims, int eIdx, int num_bufs, char **bufs, int *buf_sizes, int map_gid, char useAtSync);
@@ -103,6 +103,48 @@ cdef extern from "charm.h":
     void CkCUDAStreamSynchronize(cudaStream_t stream);
 
 
+    void CkHapiAddCallback(long stream, void (*cb)(void*, void*), int fid);
+    
+    int CkTraceRegisterUserEvent(char *EventDesc, int eventID);
+    void CkTraceBeginUserBracketEvent(int eventID);
+    void CkTraceEndUserBracketEvent(int eventID);
+
+cdef extern from "conv-header.h":
+    ctypedef void (*CmiHandler)(void* )
+    cdef const int CmiReservedHeaderSize
+
+cdef extern from "sockRoutines.h":
+
+    ctypedef struct skt_ip_t:
+        int tag
+    
+    ctypedef struct ChMessageInt_t:
+        unsigned char[4] data
+
+cdef extern from "ccs-server.h":
+
+    ctypedef struct CcsSecAttr:
+        skt_ip_t ip
+        ChMessageInt_t port
+        ChMessageInt_t replySalt
+        unsigned char auth
+        unsigned char level
+    
+    ctypedef struct CcsImplHeader:
+        CcsSecAttr attr
+        char[32] handler
+        ChMessageInt_t pe
+        ChMessageInt_t replyFd
+        ChMessageInt_t len
+
+cdef extern from "conv-ccs.h":
+    ctypedef struct CcsDelayedReply:
+        CcsImplHeader *hdr;
+    void CcsRegisterHandlerExt(const char *ccs_handlername, void *fn);
+    int CcsIsRemoteRequest();
+    void CcsSendReply(int replyLen, const void *replyData);
+    void CcsSendDelayedReply(CcsDelayedReply d,int replyLen, const void *replyData)
+    CcsDelayedReply CcsDelayReply()
 
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,

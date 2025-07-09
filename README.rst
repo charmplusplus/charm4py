@@ -3,10 +3,10 @@ Charm4py
 ========
 
 
-.. image:: https://github.com/UIUC-PPL/charm4py/actions/workflows/charm4py.yml/badge.svg?event=push
-       :target: https://github.com/UIUC-PPL/charm4py/actions/workflows/charm4py.yml
+.. image:: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml/badge.svg?event=push
+       :target: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml
 
-.. image:: http://readthedocs.org/projects/charm4py/badge/?version=latest
+.. image:: https://readthedocs.org/projects/charm4py/badge/?version=latest
        :target: https://charm4py.readthedocs.io/
 
 .. image:: https://img.shields.io/pypi/v/charm4py.svg
@@ -77,14 +77,14 @@ Contact
 -------
 
 We would like feedback from the community. If you have feature suggestions,
-support questions or general comments, please visit our `forum`_
-or emails us at <charm@cs.illinois.edu>, or
+support questions or general comments, please visit the repository's `discussion page`_
+or email us at <charm@cs.illinois.edu>.
 
 Main author at <jjgalvez@illinois.edu>
 
 
-.. _Charm++: https://github.com/UIUC-PPL/charm
+.. _Charm++: https://github.com/charmplusplus/charm
 
 .. _Documentation: https://charm4py.readthedocs.io
 
-.. _forum: https://charm.discourse.group/c/charm4py
+.. _discussion page: https://github.com/charmplusplus/charm4py/discussions

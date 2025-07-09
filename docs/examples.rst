@@ -3,7 +3,7 @@ Examples
 ========
 
 There are several examples in the source code repository, with documentation
-and comments: https://github.com/UIUC-PPL/charm4py/tree/master/examples
+and comments: https://github.com/charmplusplus/charm4py/tree/main/examples
 
 These include:
 

@@ -58,7 +58,7 @@ Start and exit
 
     .. note::
         Calling Python's ``exit()`` function from a chare has the same effect (Charm4py
-        intercepts the SystemExit exception and calls ``charm.exit()``.
+        intercepts the SystemExit exception and calls ``charm.exit()``).
 
 * **charm.abort(message)**:
 
@@ -155,7 +155,7 @@ completion (see :ref:`Proxies <proxy-api-label>`).
     called from coroutines.
 
     .. warning::
-        Do not suspend the coroutine until ``iawait`` has finished yielding
+        Do not suspend the coroutine until ``iwait`` has finished yielding
         all the objects.
 
 * **charm.startQD(callback)**

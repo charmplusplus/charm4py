@@ -11,9 +11,9 @@ that run on a wide range of devices: from small multi-core devices up
 to the largest supercomputers.
 
 
-.. _Charm++: http://charmplusplus.org/
+.. _Charm++: https://charmplusplus.org/
 
-.. _NAMD: http://www.ks.uiuc.edu/Research/namd/
+.. _NAMD: https://www.ks.uiuc.edu/Research/namd/
 
 
 
@@ -40,7 +40,9 @@ to the largest supercomputers.
    channels
    sections
    pool
+   liveviz
    rules
+   gpus
 
 .. toctree::
    :maxdepth: 2
