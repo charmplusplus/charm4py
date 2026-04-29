@@ -225,7 +225,8 @@
     },
     {
         "force_min_processes": 4,
-        "path": "tests/sections/constrained_groups.py"
+        "path": "tests/sections/constrained_groups.py",
+        "args" : "+netpoll"
     },
     {
         "force_min_processes": 4,
