@@ -188,9 +188,7 @@ def is_tag_cond(root_ast):
             return None
 
         idx = args.slice.value
-        if isinstance(idx, ast.Num):
-            idx = idx.n
-        elif isinstance(idx, ast.Constant):
+        if isinstance(idx, ast.Constant):
             idx = idx.value
         
         if not isinstance(idx, int):
@@ -214,7 +212,7 @@ class MsgArgsTransformer(ast.NodeTransformer):
             return ast.copy_location(ast.Attribute(
                 value=ast.Subscript(
                     value=ast.Name(id='args', ctx=ast.Load()),
-                    slice=ast.Index(value=ast.Num(n=idx)),
+                    slice = ast.Constant(value=idx),
                     ctx=node.ctx
                 ),
                 attr=node.attr,
@@ -229,7 +227,7 @@ class MsgArgsTransformer(ast.NodeTransformer):
             self.num_msg_args += 1
             return ast.copy_location(ast.Subscript(
                 value=ast.Name(id='args', ctx=ast.Load()),
-                slice=ast.Index(value=ast.Num(n=idx)),
+                slice = ast.Constant(value=idx),
                 ctx=node.ctx
             ), node)
         else:
