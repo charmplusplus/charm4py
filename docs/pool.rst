@@ -17,7 +17,8 @@ or creating more processes than processors.
 
     ``charm.pool`` is experimental,
     the API and performance (especially at large scales) is still subject to
-    change.
+    change. Additionally, do not include any Future objects in the iterable provided
+    to map or map_async, unless you set is_ray to True.
 
 .. note::
 

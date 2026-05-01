@@ -1185,9 +1185,9 @@ class CharmRemote(Chare):
             # if yes, remove it
             fut = charm.threadMgr.borrowed_futures[(store_id, depth)]
             refcount = ctypes.c_long.from_address(id(fut)).value
-            #print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
+            # print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
             if (fut.parent == None and refcount == 3) or (fut.parent != None and refcount == 2):
-                #print("Real deletion of", store_id, "from", charm.myPe())
+                # print("Real deletion of", store_id, "from", charm.myPe())
                 if fut.parent == None:
                     charm.threadMgr.futures.pop(fut.fid)
                 charm.threadMgr.borrowed_futures.pop((store_id, depth))
