@@ -101,7 +101,7 @@ class Jacobi(Chare):
             max_error = check_and_compute(self.temperature, self.new_temperature,
                                           self.istart, self.ifinish, self.jstart, self.jfinish)
             self.temperature, self.new_temperature = self.new_temperature, self.temperature
-            converged = self.allreduce(max_error <= THRESHOLD, Reducer.logical_and).get()
+            converged = self.allreduce(bool(max_error <= THRESHOLD), Reducer.logical_and).get()
             iteration += 1
 
         if self.thisIndex == (0, 0):
