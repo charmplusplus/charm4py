@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import shlex
 import shutil
 import platform
 import subprocess
@@ -42,14 +43,33 @@ def get_build_network_type(build_mpi):
 
 
 def get_build_triple(build_mpi):
+    configured_triple = os.environ.get('CHARM4PY_BUILD_TRIPLET')
+    if configured_triple:
+        return configured_triple
     return (get_build_machine(),
             get_build_os(),
             get_build_network_type(build_mpi)
             )
 
 
+def get_charm_source_dir():
+    configured_dir = os.environ.get('CHARM4PY_CHARM_DIR')
+    if configured_dir:
+        return os.path.abspath(os.path.expanduser(configured_dir))
+    return os.path.join(os.getcwd(), 'charm_src', 'charm')
+
+
+def get_charm_build_dir(charm_src_dir):
+    configured_dir = os.environ.get('CHARM4PY_CHARM_BUILD_DIR')
+    if configured_dir:
+        return os.path.abspath(os.path.expanduser(configured_dir))
+    return charm_src_dir
+
+
 machine = get_build_machine()
 system = get_build_os()
+charm_src_dir = get_charm_source_dir()
+charm_build_dir = get_charm_build_dir(charm_src_dir)
 
 
 libcharm_filename2 = None
@@ -60,6 +80,7 @@ if system == 'windows' or system.startswith('cygwin'):
 elif system == 'darwin':
     os.environ['ARCHFLAGS'] = f'-arch {get_archflag_machine()}'
     libcharm_filename = 'libcharm.dylib'
+    packaged_libcharm_filename = 'libcharm4py.dylib'
     charmrun_filename = 'charmrun'
     if 'CPPFLAGS' in os.environ:
         os.environ['CPPFLAGS'] += ' -Wno-error=implicit-function-declaration' # needed because some functions used by charm4py are not exported by charm.
@@ -68,6 +89,9 @@ elif system == 'darwin':
 else:  # Linux
     libcharm_filename = 'libcharm.so'
     charmrun_filename = 'charmrun'
+
+if system != 'darwin':
+    packaged_libcharm_filename = libcharm_filename
 
 
 try:
@@ -86,19 +110,19 @@ except:
         raise DistutilsSetupError('Could not determine Charm4py version')
 
 
-def charm_built(charm_src_dir):
-    library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
+def charm_built(charm_build_dir):
+    library_path = os.path.join(charm_build_dir, 'lib', libcharm_filename)
     if not os.path.exists(library_path):
         return False
-    charmrun_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
+    charmrun_path = os.path.join(charm_build_dir, 'bin', charmrun_filename)
     if not os.path.exists(charmrun_path):
         return False
     return True
 
 
-def check_libcharm_version(charm_src_dir):
+def check_libcharm_version(charm_build_dir):
     import ctypes
-    library_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
+    library_path = os.path.join(charm_build_dir, 'lib', libcharm_filename)
     lib = ctypes.CDLL(library_path)
     with open(os.path.join(os.getcwd(), 'charm4py', 'libcharm_version'), 'r') as f:
         req_version = tuple(int(n) for n in f.read().split('.'))
@@ -115,7 +139,75 @@ def check_libcharm_version(charm_src_dir):
                                   'Existing version is ' + cur_str)
 
 
-def build_libcharm(charm_src_dir, build_dir):
+def prepare_darwin_libraries(charm_build_dir):
+    """Make a Charm++/Reconverse build relocatable with Charm4py."""
+    library_dir = os.path.join(charm_build_dir, 'lib')
+    libcharm_path = os.path.join(library_dir, libcharm_filename)
+    runtime_name_map = {
+        'libreconverse.dylib': 'libcharm4py_reconverse.dylib',
+        'liblci.dylib': 'libcharm4py_lci.dylib',
+        'liblct.dylib': 'libcharm4py_lct.dylib',
+    }
+    runtime_paths = [os.path.join(library_dir, name)
+                     for name in runtime_name_map]
+    existing_runtime_paths = [path for path in runtime_paths
+                              if os.path.isfile(path)]
+
+    if existing_runtime_paths and len(existing_runtime_paths) != len(runtime_paths):
+        missing = [path for path in runtime_paths if not os.path.isfile(path)]
+        raise DistutilsSetupError(
+            'Incomplete Reconverse runtime in ' + library_dir + ': missing ' +
+            ', '.join(os.path.basename(path) for path in missing))
+
+    bundled_runtime_paths = []
+    for source_path in existing_runtime_paths:
+        bundled_name = runtime_name_map[os.path.basename(source_path)]
+        bundled_path = os.path.join(library_dir, bundled_name)
+        shutil.copy2(source_path, bundled_path)
+        bundled_runtime_paths.append(bundled_path)
+
+    libraries = [libcharm_path] + bundled_runtime_paths
+    for library_path in libraries:
+        if library_path == libcharm_path:
+            install_id = '@rpath/../.libs/' + packaged_libcharm_filename
+        else:
+            install_id = '@loader_path/' + os.path.basename(library_path)
+        subprocess.check_call(['install_name_tool', '-id', install_id, library_path])
+
+    # Reconverse and LCI normally use @rpath install names. Binding these
+    # dependencies to the containing directory avoids accidentally loading a
+    # different Reconverse installation from the host process's search paths.
+    for library_path in libraries:
+        dependencies = subprocess.check_output(
+            ['otool', '-L', library_path], text=True).splitlines()[1:]
+        dependency_paths = [line.strip().split(' (compatibility')[0]
+                            for line in dependencies]
+        for dependency_path in dependency_paths:
+            dependency_name = os.path.basename(dependency_path)
+            original_name = next(
+                (name for name, bundled_name in runtime_name_map.items()
+                 if dependency_name == name or dependency_name == bundled_name),
+                None)
+            if original_name is not None:
+                replacement = ('@loader_path/' +
+                               runtime_name_map[original_name])
+                if dependency_path != replacement:
+                    subprocess.check_call([
+                        'install_name_tool', '-change', dependency_path,
+                        replacement, library_path])
+
+    return bundled_runtime_paths
+
+
+def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
+
+    configured_triple = get_build_triple(build_mpi)
+    if isinstance(configured_triple, str):
+        build_triple = configured_triple
+    else:
+        target_machine, os_target, target_layer = configured_triple
+        build_triple = f'{target_layer}-{os_target}-{target_machine}'
+    is_reconverse_build = build_triple.startswith('reconverse-')
 
     lib_output_dirs = []
     charmrun_output_dirs = []
@@ -126,22 +218,25 @@ def build_libcharm(charm_src_dir, build_dir):
     for output_dir in (lib_output_dirs + charmrun_output_dirs):
         distutils.dir_util.mkpath(output_dir)
 
+    # Source distributions carry a compressed Charm++ tree instead of an
+    # expanded charm_src/charm directory.
+    charm_archive = os.path.join(os.path.dirname(charm_src_dir), 'charm.tar.gz')
+    if not os.path.isdir(charm_src_dir) and os.path.isfile(charm_archive):
+        log.info('Uncompressing charm.tar.gz...')
+        cmd = ['tar', 'xf', os.path.basename(charm_archive)]
+        p = subprocess.Popen(cmd, cwd=os.path.dirname(charm_archive), shell=False)
+        rc = p.wait()
+        if rc != 0:
+            raise DistutilsSetupError('An error occured while building charm library')
+
     if not os.path.exists(charm_src_dir) or not os.path.isdir(charm_src_dir):
         raise DistutilsSetupError('charm sources dir ' + charm_src_dir + ' not found')
 
-    if not charm_built(charm_src_dir):
+    if not charm_built(charm_build_dir):
 
         if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
                                       ' Please download a Charm4py binary wheel (64-bit Python required)')
-
-        if os.path.exists(os.path.join(charm_src_dir, 'charm.tar.gz')):
-            log.info('Uncompressing charm.tar.gz...')
-            cmd = ['tar', 'xf', 'charm.tar.gz']
-            p = subprocess.Popen(cmd, cwd=charm_src_dir, shell=False)
-            rc = p.wait()
-            if rc != 0:
-                raise DistutilsSetupError('An error occured while building charm library')
 
         # divide by 2 to not hog the system. On systems with hyperthreading, this will likely
         # result in using same # cores as physical cores (therefore not all the logical cores)
@@ -152,47 +247,96 @@ def build_libcharm(charm_src_dir, build_dir):
         if enable_tracing:
          extra_build_opts += " --enable-tracing "
         
-        target_machine, os_target, target_layer = get_build_triple(build_mpi)
+        extra_build_args = shlex.split(extra_build_opts)
+        cmd = ['./build', 'charm4py', build_triple,
+               f'-j{build_num_cores}', '--with-production']
+        if charm_build_dir != charm_src_dir:
+            cmd.append('--destination=' + charm_build_dir)
 
-        build_triple = f'{target_layer}-{os_target}-{target_machine}'
-        cmd = f'./build charm4py {build_triple} -j{build_num_cores} --with-production {extra_build_opts}'
-        print(cmd)
+        if is_reconverse_build:
+            if '--disable-fortran' not in extra_build_args:
+                cmd.append('--disable-fortran')
 
-        p = subprocess.Popen(cmd.rstrip().split(' '),
-                             cwd=os.path.join(charm_src_dir, 'charm'),
+            local_reconverse_dir = os.path.join(charm_src_dir, 'reconverse')
+            if (os.path.isdir(local_reconverse_dir) and
+                    not any(arg.startswith('--with-fetch-reconverse-')
+                            for arg in extra_build_args)):
+                cmd.append('--with-fetch-reconverse-dir=' +
+                           local_reconverse_dir)
+
+            configured_lci_dir = os.environ.get('CHARM4PY_LCI_DIR')
+            if configured_lci_dir:
+                local_lci_dir = os.path.abspath(
+                    os.path.expanduser(configured_lci_dir))
+            else:
+                local_lci_dir = os.path.join(
+                    charm_src_dir, build_triple, '_deps', 'lci-src')
+            if os.path.isdir(local_lci_dir):
+                cmd.append('--with-cmake-args=' +
+                           '-DFETCHCONTENT_SOURCE_DIR_LCI=' + local_lci_dir)
+
+        cmd.extend(extra_build_args)
+        log.info('building Charm++: ' + shlex.join(cmd))
+
+        p = subprocess.Popen(cmd,
+                             cwd=charm_src_dir,
                              shell=False)
         rc = p.wait()
         if rc != 0:
             raise DistutilsSetupError('An error occured while building charm library')
 
-        if system == 'darwin':
-            old_file_path = os.path.join(charm_src_dir, 'charm', 'lib', 'libcharm.dylib')
-            new_file_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
-            shutil.move(old_file_path, new_file_path)
-            cmd = ['install_name_tool', '-id', '@rpath/../.libs/' + libcharm_filename, new_file_path]
-            p = subprocess.Popen(cmd, shell=False)
-            rc = p.wait()
-            if rc != 0:
-                raise DistutilsSetupError('install_name_tool error')
+    runtime_lib_src_paths = []
+    if system == 'darwin':
+        # Normalize prebuilt libraries too. Extension modules record the
+        # libcharm ID at link time, and Reconverse's dependencies must remain
+        # colocated after Charm4py is installed.
+        try:
+            runtime_lib_src_paths = prepare_darwin_libraries(charm_build_dir)
+        except subprocess.CalledProcessError as error:
+            raise DistutilsSetupError('install_name_tool error') from error
 
     # verify that the version of charm++ that was built is same or greater than the
     # one required by charm4py
-    check_libcharm_version(charm_src_dir)
+    check_libcharm_version(charm_build_dir)
 
-    # ---- copy libcharm ----
-    lib_src_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename)
+    # ---- copy libcharm and its colocated runtime libraries ----
+    lib_src_path = os.path.join(charm_build_dir, 'lib', libcharm_filename)
+    for source_path in [lib_src_path] + runtime_lib_src_paths:
+        for output_dir in lib_output_dirs:
+            log.info('copying ' + os.path.relpath(source_path) + ' to ' + os.path.relpath(output_dir))
+            shutil.copy(source_path, output_dir)
+    bundled_runtime_names = [
+        'libcharm4py_reconverse.dylib', 'libcharm4py_lci.dylib',
+        'libcharm4py_lct.dylib']
+    if not runtime_lib_src_paths:
+        for output_dir in lib_output_dirs:
+            for filename in bundled_runtime_names:
+                stale_path = os.path.join(output_dir, filename)
+                if os.path.isfile(stale_path):
+                    os.unlink(stale_path)
+    if packaged_libcharm_filename != libcharm_filename:
+        for output_dir in lib_output_dirs:
+            packaged_path = os.path.join(output_dir,
+                                         packaged_libcharm_filename)
+            log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' +
+                     os.path.relpath(packaged_path))
+            shutil.copy(lib_src_path, packaged_path)
     for output_dir in lib_output_dirs:
-        log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
-        shutil.copy(lib_src_path, output_dir)
+        marker_path = os.path.join(output_dir, 'reconverse')
+        if is_reconverse_build:
+            with open(marker_path, 'w'):
+                pass
+        elif os.path.isfile(marker_path):
+            os.unlink(marker_path)
     if libcharm_filename2 is not None:
-        lib_src_path = os.path.join(charm_src_dir, 'charm', 'lib', libcharm_filename2)
+        lib_src_path = os.path.join(charm_build_dir, 'lib', libcharm_filename2)
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(lib_src_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(lib_src_path, output_dir)
 
 
     # ---- copy charmrun ----
-    charmrun_src_path = os.path.join(charm_src_dir, 'charm', 'bin', charmrun_filename)
+    charmrun_src_path = os.path.join(charm_build_dir, 'bin', charmrun_filename)
     for output_dir in charmrun_output_dirs:
         log.info('copying ' + os.path.relpath(charmrun_src_path) + ' to ' + os.path.relpath(output_dir))
         shutil.copy(charmrun_src_path, output_dir)
@@ -247,7 +391,7 @@ class custom_build_py(build_py, object):
 
     def run(self):
         if not self.dry_run:
-            build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
+            build_libcharm(charm_src_dir, charm_build_dir, self.build_lib)
             shutil.copy(os.path.join(os.getcwd(), 'LICENSE'), os.path.join(self.build_lib, 'charm4py'))
         super(custom_build_py, self).run()
 
@@ -276,7 +420,7 @@ class custom_build_ext(build_ext, object):
 
     def run(self):
         if not self.dry_run:
-            build_libcharm(os.path.join(os.getcwd(), 'charm_src'), self.build_lib)
+            build_libcharm(charm_src_dir, charm_build_dir, self.build_lib)
         super(custom_build_ext, self).run()
 
 class _renameInstalled(_install_lib):
@@ -350,7 +494,7 @@ if sys.version_info[0] >= 3:
     
     extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                             sources=['charm4py/charmlib/charmlib_cython.pyx'],
-                            include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                            include_dirs=[os.path.join(charm_build_dir, 'include')] + my_include_dirs,
                             library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                             libraries=["charm"],
                             extra_compile_args=[],
@@ -360,7 +504,7 @@ if sys.version_info[0] >= 3:
 
     extensions.extend(cythonize(setuptools.Extension('charm4py.c_object_store',
                             sources=['charm4py/c_object_store.pyx'],
-                            include_dirs=['charm_src/charm/include'] + my_include_dirs,
+                            include_dirs=[os.path.join(charm_build_dir, 'include')] + my_include_dirs,
                             library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                             libraries=["charm"],
                             extra_compile_args=[],

@@ -76,7 +76,7 @@ cdef extern from "charm.h":
     void CkTraceBeginUserBracketEvent(int eventID);
     void CkTraceEndUserBracketEvent(int eventID);
 
-cdef extern from "conv-header.h":
+cdef extern from "converse.h":
     ctypedef void (*CmiHandler)(void* )
     cdef const int CmiReservedHeaderSize
 
@@ -116,4 +116,3 @@ cdef extern from "conv-ccs.h":
 cdef extern from "spanningTree.h":
     void getPETopoTreeEdges(int pe, int rootPE, int *pes, int numpes, unsigned int bfactor,
                             int *parent, int *child_count, int **children);
-
