@@ -1,6 +1,7 @@
 import sys
 import os
 import os.path
+import shutil
 
 
 def executable_is_python(args):
@@ -41,7 +42,7 @@ def nodelist_islocal(filename, regexp):
 
 def checkNodeListLocal(args):
     import re
-    regexp = re.compile("^\s*host\s+(\S+)\s*$")
+    regexp = re.compile(r"^\s*host\s+(\S+)\s*$")
 
     try:
         i = args.index('++nodelist')
@@ -64,16 +65,80 @@ def checkNodeListLocal(args):
     return True
 
 
-def start(args=[]):
+def reconverse_runtime_is_installed():
+    package_root = os.path.dirname(os.path.dirname(__file__))
+    library_dir = os.path.join(package_root, 'charm4py', '.libs')
+    return any(os.path.isfile(os.path.join(library_dir, filename))
+               for filename in ('reconverse',
+                                'libcharm4py_reconverse.dylib',
+                                'libcharm4py_reconverse.so'))
+
+
+def reconverse_args(args):
+    """Translate Charm++'s +p option to lcrun processes and +pe PEs."""
+    translated = []
+    num_pes = 1
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in ('+p', '+pe'):
+            if index + 1 >= len(args):
+                raise ValueError(arg + ' requires a process count')
+            num_pes = int(args[index + 1])
+            index += 2
+        elif arg.startswith('+pe') and arg[3:].isdigit():
+            num_pes = int(arg[3:])
+            index += 1
+        elif arg.startswith('+p') and arg[2:].isdigit():
+            num_pes = int(arg[2:])
+            index += 1
+        elif arg == '++local':
+            index += 1
+        else:
+            translated.append(arg)
+            index += 1
+    translated.extend(['+pe', str(num_pes)])
+    return num_pes, translated
+
+
+def start(args=None):
     import subprocess
 
-    if len(args) == 0:
+    if args is None or len(args) == 0:
         args = sys.argv[1:]
-    if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
-        args.append('++local')
+    else:
+        args = list(args)
 
     if '++interactive' in args and 'charm4py.interactive' not in args:
         args += ['-m', 'charm4py.interactive']
+
+    if reconverse_runtime_is_installed():
+        try:
+            num_pes, args = reconverse_args(args)
+        except (ValueError, TypeError) as error:
+            print('Invalid Reconverse process count:', error)
+            return 1
+
+        lcrun = os.environ.get('CHARM4PY_LCRUN', os.environ.get('LCRUN'))
+        if lcrun is None:
+            lcrun = shutil.which('lcrun')
+        if lcrun is None:
+            print('Reconverse requires lcrun. Set CHARM4PY_LCRUN or LCRUN '
+                  'to the lcrun executable.')
+            return 1
+
+        cmd = [lcrun, '-n', str(num_pes)]
+        if executable_is_python(args):
+            cmd.append(sys.executable)
+        cmd.extend(args)
+        try:
+            return subprocess.call(cmd)
+        except FileNotFoundError:
+            print('lcrun executable not found:', lcrun)
+            return 1
+
+    if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
+        args.append('++local')
 
     cmd = [os.path.join(os.path.dirname(__file__), 'charmrun')]
     if executable_is_python(args):

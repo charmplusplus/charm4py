@@ -94,4 +94,51 @@ For example, to use Charm4Py with MPI, build the Charm backend as follows::
 Check the Charm++ documentation to identify the correct os and architecture command 
 to pass into the build command. 
 
+Using an external Charm++ source tree
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, Charm4py builds the Charm++ sources in ``charm_src/charm``. The source
+tree, build triplet, and build output directory can instead be selected with
+environment variables:
+
+* ``CHARM4PY_CHARM_DIR`` is the path to the Charm++ source tree.
+* ``CHARM4PY_BUILD_TRIPLET`` overrides the automatically selected build triplet.
+* ``CHARM4PY_CHARM_BUILD_DIR`` selects a separate Charm++ build directory. This
+  directory may contain an existing ``charm4py`` build or may be a new directory
+  that Charm4py will ask the Charm++ build system to create.
+* ``CHARM4PY_LCI_DIR`` optionally selects a local LCI source tree for a
+  Reconverse build, avoiding a network fetch.
+
+For example, to install Charm4py using a Reconverse build on an Apple Silicon Mac::
+
+    $ CHARM4PY_CHARM_DIR=/path/to/charm \
+      CHARM4PY_BUILD_TRIPLET=reconverse-darwin-arm8 \
+      CHARM4PY_CHARM_BUILD_DIR=/path/to/charm/reconverse-darwin-arm8-charm4py \
+      pip install .
+
+Use a distinct ``CHARM4PY_CHARM_BUILD_DIR`` if the triplet has already been built
+with the ``charm++`` target. The ``charm4py`` target has a different CMake
+configuration because it produces the shared ``libcharm`` library.
+
+Reconverse triplets need a Charm++ tree with Reconverse support (the ``recharm``
+branch), where Reconverse is the ``contrib/reconverse`` submodule. Initialize it
+before building::
+
+    $ git -C /path/to/charm submodule update --init contrib/reconverse
+
+A Reconverse build fetches LCI unless ``CHARM4PY_LCI_DIR`` is set or an earlier
+build of the same triplet left LCI sources in ``<triplet>/_deps/lci-src``.
+
+Reconverse launches one Python interpreter per process. Point ``LCRUN`` (or
+``CHARM4PY_LCRUN``) to the LCI launcher, then use the normal Charm4py ``+pN``
+syntax::
+
+    $ export LCRUN=/path/to/lci/lcrun
+    $ python -m charmrun.start +p2 examples/simple/hello_world.py
+
+The Charm4py launcher translates this to two ``lcrun`` processes and passes
+``+pe 2`` to Reconverse. The equivalent direct command is::
+
+    $ $LCRUN -n 2 python examples/simple/hello_world.py +pe 2
+
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm

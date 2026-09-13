@@ -13,6 +13,7 @@ charm4py/charmlib/build/
 charm4py.egg-info/
 charm4py/c_object_store.cpp
 charm4py/c_object_store.html
+charm4py/c_object_store*.so
 __pycache__
 
 # ignore some common tmp files
