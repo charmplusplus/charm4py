@@ -100,12 +100,16 @@ class _Channel(object):
         except BaseException:
             traceback.print_exc()
         self.closed = True
-        if self.exit_on_close:
-            # the driver: the job it ran in is gone
+        if self.exit_on_close == 'driver':
+            # the job the driver ran in is gone
             import signal
             print('charm4py.ray: the Charm4py job ended; exiting', file=sys.stderr,
                   flush=True)
             os.kill(os.getpid(), signal.SIGTERM)
+        elif self.exit_on_close == 'worker':
+            # an actor or task worker dies with its host, even in the middle of a
+            # call that never returns (as Ray's workers die with their raylet)
+            os._exit(1)
         self.work.put(None)
         with self.calls_lock:
             slots, self.calls = list(self.calls.values()), {}
@@ -387,7 +391,7 @@ def _main():
     # inherited that)
     signal.signal(signal.SIGINT, signal.default_int_handler)
     channel = _Channel(conn, side)
-    channel.exit_on_close = info['kind'] == 'driver'
+    channel.exit_on_close = 'driver' if info['kind'] == 'driver' else 'worker'
     api._client = channel
     api.__dict__.update(info['globals'])
     if api._address:

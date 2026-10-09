@@ -148,6 +148,10 @@ shuts down cleanly on SIGINT. On one machine both need `VLLM_HOST_IP=127.0.0.1`,
 since vLLM takes the LAN address as the DP master while a local Ray node is
 127.0.0.1.
 
+`vllm_cycles.py` creates, uses and shuts down an `LLM` repeatedly: 25 TP=2
+cycles give identical text and leave no resources, objects or processes behind;
+startup stays flat (7.9-8.9 s per cycle over 15 cycles, Ray 7.7-8.8 s).
+
 TP=1 matches too. PP=2 fails the same way with vLLM's own multiprocessing
 executor (`intermediate_tensors` is None on the second stage): a vLLM CPU
 issue, not a Ray one.

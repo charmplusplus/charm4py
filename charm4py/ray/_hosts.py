@@ -152,6 +152,15 @@ class _Link(object):
     def kill(self):
         self.worker.kill()
         self._wake_waiters()
+        self._drop_tokens()
+
+    def _drop_tokens(self):
+        # the process is gone: so are its references (now, not whenever the
+        # cyclic garbage collector gets to this link)
+        self.side.refs.clear()
+        self.side.sent.clear()
+        self.side.handles.clear()
+        self.api_calls.clear()
 
     def _wake_waiters(self):
         replies, self.replies = self.replies, {}
@@ -192,6 +201,7 @@ class _Link(object):
 
     def _on_exit(self, code):
         self._wake_waiters()
+        self._drop_tokens()
         self.owner._link_lost(self, code)
 
 
