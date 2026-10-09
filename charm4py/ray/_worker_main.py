@@ -167,6 +167,7 @@ def _run_actor(channel, info, api):
     from charm4py.ray.actor import _ActorExit
     ctx = api._ExecContext(**info['context'])
     api._job = ctx.job
+    _add_job_paths(ctx.job)
     class_name = info['class_name']
     instance = None
     while True:
@@ -231,6 +232,14 @@ def _run_actor(channel, info, api):
             raise RuntimeError('unexpected message for an actor worker: ' + repr(kind))
 
 
+def _add_job_paths(job):
+    """Makes the modules the job's driver can import importable here too (like
+    Ray's code search path): its sys.path entries are appended."""
+    for path in (job or {}).get('sys_path') or ():
+        if path not in sys.path:
+            sys.path.append(path)
+
+
 def _run_tasks(channel, info, api):
     from charm4py.ray import _errors
     from charm4py.ray._serialization import resolve
@@ -246,6 +255,7 @@ def _run_tasks(channel, info, api):
         ctx = api._ExecContext(**context)
         api._set_context(ctx)
         api._job = ctx.job      # also for threads the task starts
+        _add_job_paths(ctx.job)
         name = task_name or (desc[2] if desc[0] == 'ref' else 'task')
         try:
             fn = resolve(desc)
@@ -269,11 +279,11 @@ def _run_tasks(channel, info, api):
 
 
 def _run_driver(channel, info, api):
-    from charm4py.ray.launch import _load_script
+    from charm4py.ray.launch import run_main
     sys.argv = list(info['argv'])
     code = 0
     try:
-        _load_script(info['main_script'], '__main__')
+        run_main(info['main_script'], info.get('main_module'))
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
     except BaseException:

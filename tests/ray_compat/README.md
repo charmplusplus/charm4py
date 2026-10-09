@@ -106,6 +106,16 @@ two runs each); the text is identical across all of them:
 | Ray 2.56.1 (`ray start` beforehand) | 8.8 s, 8.9 s | 1.70 s, 1.71 s |
 | charm4py.ray, `+p4` | 8.6 s, 8.5 s | 1.53 s, 1.53 s |
 
+vLLM's own executor tests also run unmodified under the launcher (`-m` runs a
+module as the driver, like `python -m`):
+
+    cd vllm && VLLM_CPU_RAY=1 VLLM_CPU_KVCACHE_SPACE=1 python -m charmrun.start +p4 \
+        -m charm4py.ray.launch --num-gpus 4 -m pytest tests/distributed/test_ray_v2_executor.py
+
+21 of 23 pass (worker death and the failure callback, collective RPC, shutdown,
+external placement groups, `VLLM_RAY_BUNDLE_INDICES`, TP=1/2/4 and PP=2
+executors, generation at TP=2); the 2 failures are generation at PP=2, below.
+
 TP=1 matches too. PP=2 fails the same way with vLLM's own multiprocessing
 executor (`intermediate_tensors` is None on the second stage): a vLLM CPU
 issue, not a Ray one.

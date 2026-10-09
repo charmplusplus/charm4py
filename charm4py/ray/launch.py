@@ -1,6 +1,7 @@
 """Run an unmodified Ray program on Charm4py.
 
     python -m charmrun.start +p4 -m charm4py.ray.launch [options] script.py [args...]
+    python -m charmrun.start +p4 -m charm4py.ray.launch [options] -m module [args...]
 
 Options (before the script):
   --in-process          see below
@@ -90,12 +91,26 @@ def _parse_options(args):
     return options, args
 
 
+def run_main(script, module):
+    """Runs the driver's code: the script, or the module (python -m)."""
+    if module is not None:
+        import runpy
+        runpy.run_module(module, run_name='__main__', alter_sys=True)
+    else:
+        _load_script(script, '__main__')
+
+
 def _launch():
     options, args = _parse_options(sys.argv[1:])
     in_process = options['in_process']
+    module = None
+    if args and args[0] == '-m':
+        # like python -m: run a module (pytest, say) as the driver
+        module, args = (args[1] if len(args) > 1 else None), args[1:]
     if not args:
         print('usage: python -m charmrun.start +pN -m charm4py.ray.launch [--in-process] '
-              '[--num-cpus N] [--num-gpus N] [--resources JSON] script.py [args]')
+              '[--num-cpus N] [--num-gpus N] [--resources JSON] (script.py | -m module) '
+              '[args]')
         sys.exit(2)
     install_ray_facade()
     shim = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_shim')
@@ -104,11 +119,11 @@ def _launch():
     from charm4py import charm, Chare, Group
     from charm4py.ray import api
 
-    script = os.path.abspath(args[0])
+    script = None if module else os.path.abspath(args[0])
     # worker processes import the script too (as __mp_main__)
     api._main_script = script
-    if in_process:
-        api._default_isolation = 'none'
+    api._main_module = module
+    api._default_isolation = 'none' if in_process else 'process'
     api._default_resources = {k: options[k] for k in ('num_cpus', 'num_gpus', 'resources')}
 
     class _ScriptLoader(Chare):
@@ -117,7 +132,7 @@ def _launch():
         --in-process, PE 0 runs the driver itself and is skipped."""
 
         def __init__(self, argv):
-            if not (in_process and charm.myPe() == 0):
+            if script is not None and not (in_process and charm.myPe() == 0):
                 sys.argv = list(argv)
                 _load_script(script, '__mp_main__')
 
@@ -125,7 +140,7 @@ def _launch():
         sys.argv = argv
         code = 0
         try:
-            _load_script(script, '__main__')
+            run_main(script, module)
         except SystemExit as e:
             code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         except BaseException:
@@ -144,7 +159,11 @@ def _launch():
         # charm_args is argv with Charm's own options (+pe N, ...) removed
         argv = list(charm_args)
         for i, arg in enumerate(argv):
-            if os.path.abspath(arg) == script:
+            if module is not None and arg == '-m' and i + 1 < len(argv) and \
+                    argv[i + 1] == module:
+                argv = argv[i + 1:]
+                break
+            if module is None and os.path.abspath(arg) == script:
                 argv = argv[i:]
                 break
         charm.awaitCreation(Group(_ScriptLoader, args=[argv]))

@@ -17,6 +17,7 @@ import hashlib
 import itertools
 import os
 import socket
+import sys
 import uuid
 
 from greenlet import getcurrent
@@ -52,6 +53,7 @@ ADDRESS_ENV = 'CHARM4PY_RAY_ADDRESS'
 
 # set by charm4py.ray.launch: the script, which worker processes can import
 _main_script = None
+_main_module = None       # or the module run as the driver (launch -m)
 _default_isolation = None
 _default_resources = {}   # node resources given to the launcher (--num-gpus ...)
 
@@ -193,7 +195,8 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
                 raise ValueError("Use the 'num_cpus' and 'num_gpus' keyword instead of "
                                  "'CPU' and 'GPU' in 'resources' keyword")
     job_args = dict(num_cpus=num_cpus, num_gpus=num_gpus, resources=resources,
-                    namespace=namespace, runtime_env=runtime_env, isolation=isolation)
+                    namespace=namespace, runtime_env=runtime_env, isolation=isolation,
+                    sys_path=list(sys.path))
     if not in_charm:
         # the driver process, or a process connecting to the job: PE 0 starts the
         # job and sends back the state every process shares
@@ -210,7 +213,7 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
 
 
 def _start_job(num_cpus=None, num_gpus=None, resources=None, namespace=None,
-               runtime_env=None, isolation=None):
+               runtime_env=None, isolation=None, sys_path=()):
     """On PE 0: begins a job, starting the runtime if it is not running."""
     if not _initialized:
         _start_runtime(num_cpus, num_gpus, resources, isolation)
@@ -220,7 +223,7 @@ def _start_job(num_cpus=None, num_gpus=None, resources=None, namespace=None,
     elif resources is not None:
         raise ValueError('When connecting to an existing cluster, resources must not be '
                          'provided.')
-    return _control.new_job(namespace, runtime_env, ret=True).get()
+    return _control.new_job(namespace, runtime_env, sys_path, ret=True).get()
 
 
 def _start_runtime(num_cpus, num_gpus, resources, isolation):

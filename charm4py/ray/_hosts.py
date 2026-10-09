@@ -117,6 +117,7 @@ class _Link(object):
         if kind in ('driver', 'client'):
             shared['_initialized'] = False   # until this process calls ray.init
         info.update(kind=kind, sys_path=list(sys.path), main_script=api._main_script,
+                    main_module=api._main_module,
                     globals=dict(shared, _client_pe=charm.myPe(),
                                  _client_host=charm.myHost(), _client_kind=kind))
         self.worker.send(_ipc.encode_header('init'), self.side.dumps(info))
@@ -750,13 +751,13 @@ class _RayControl(Chare):
         self._reset()
         return True
 
-    def new_job(self, namespace, runtime_env):
+    def new_job(self, namespace, runtime_env, sys_path):
         import struct
         import uuid
         self.job_counter += 1
         job = {'job_id': struct.pack('<I', self.job_counter).hex(),
                'namespace': namespace if namespace is not None else str(uuid.uuid4()),
-               'runtime_env': dict(runtime_env or {})}
+               'runtime_env': dict(runtime_env or {}), 'sys_path': list(sys_path)}
         self.jobs[job['job_id']] = job
         return job
 
