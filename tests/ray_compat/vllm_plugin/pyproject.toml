@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-cpu-ray"
+version = "0.1"
+description = "Test-only vLLM platform plugin: the CPU platform, usable with the Ray executor"
+
+[project.entry-points."vllm.platform_plugins"]
+cpu_ray = "vllm_cpu_ray:register"
+
+[tool.setuptools]
+packages = ["vllm_cpu_ray"]

@@ -53,6 +53,7 @@ ADDRESS_ENV = 'CHARM4PY_RAY_ADDRESS'
 # set by charm4py.ray.launch: the script, which worker processes can import
 _main_script = None
 _default_isolation = None
+_default_resources = {}   # node resources given to the launcher (--num-gpus ...)
 
 # ---- per-process state ----
 _collections_created = False
@@ -226,6 +227,12 @@ def _start_runtime(num_cpus, num_gpus, resources, isolation):
     global _collections_created
     charm = _charm()
     isolation = isolation or _default_isolation or ('process' if _main_script else 'none')
+    if num_cpus is None:
+        num_cpus = _default_resources.get('num_cpus')
+    if num_gpus is None:
+        num_gpus = _default_resources.get('num_gpus')
+    if resources is None:
+        resources = _default_resources.get('resources')
     from ._hosts import _RayWorker, _ActorHost, _RayControl
     _ensure_gateway()
     globals_update = {}
@@ -286,9 +293,9 @@ def _connect(address):
     object_ref.INERT = True   # references here are tokens of PE 0's references
     conn = Connection(sock.detach())
     side = _ipc.WorkerSide()
-    msg = side.loads(conn.recv_bytes())
-    assert msg[0] == 'init', msg
-    globals().update(msg[1]['globals'])
+    kind, _ = _ipc.decode_header(conn.recv_bytes())
+    assert kind == 'init', kind
+    globals().update(side.loads(conn.recv_bytes())['globals'])
     _client = _Channel(conn, side)
 
 
@@ -622,7 +629,7 @@ def put(value, *, _owner=None):
                         "want to do this, you can wrap the ray.ObjectRef in a list and "
                         "call 'put' on it.")
     if _client is not None:
-        return _client.call('put', value)
+        return _client.call('put', _client.opaque(value))
     ref = _new_ref()
     stored = wrap_value(value)
     ref.create_object(stored)
@@ -633,9 +640,18 @@ def put(value, *, _owner=None):
     return ref
 
 
-def _resolve_args(args, kwargs):
-    """Replaces top-level ObjectRef arguments with their values, like Ray does.
-    Raises _DependencyFailed if any of them holds an error."""
+def _client_args(args, kwargs):
+    """In a worker process: arguments for the host. Top-level references stay
+    references (the host resolves them); other values are serialized here (see
+    _ipc.Opaque)."""
+    def encode(arg):
+        return arg if isinstance(arg, ObjectRef) else _client.opaque(arg)
+    return [encode(a) for a in args], {k: encode(v) for k, v in kwargs.items()}
+
+
+def _fetch_args(args, kwargs):
+    """Replaces top-level ObjectRef arguments with their stored values (still
+    wrapped: see _unwrap_args), fetching them first, like Ray does."""
     refs = [a for a in args if isinstance(a, ObjectRef)]
     refs += [v for v in kwargs.values() if isinstance(v, ObjectRef)]
     if not refs:
@@ -644,20 +660,45 @@ def _resolve_args(args, kwargs):
     _fetch(unique, len(unique), None)
 
     def value_of(arg):
-        if not isinstance(arg, ObjectRef):
-            return arg
-        stored = _local_value(arg)
-        if isinstance(stored, _ErrorValue):
-            raise _DependencyFailed(stored.error)
-        return unwrap_value(stored)
+        return _local_value(arg) if isinstance(arg, ObjectRef) else arg
 
     return ([value_of(a) for a in args], {k: value_of(v) for k, v in kwargs.items()})
+
+
+def _unwrap_args(args, kwargs):
+    """The argument values for the code that runs: resolved references are
+    unwrapped, and serialized values deserialized. Raises _DependencyFailed if a
+    resolved reference holds an error."""
+    from ._ipc import load_value
+
+    def value_of(arg):
+        arg = load_value(arg)
+        if isinstance(arg, _ErrorValue):
+            raise _DependencyFailed(load_value(arg.error))
+        return unwrap_value(arg)
+
+    return ([value_of(a) for a in args], {k: value_of(v) for k, v in kwargs.items()})
+
+
+def _resolve_args(args, kwargs):
+    """Replaces top-level ObjectRef arguments with their values, for code that
+    runs in this process. Raises _DependencyFailed if any of them holds an
+    error."""
+    return _unwrap_args(*_fetch_args(args, kwargs))
 
 
 class _DependencyFailed(Exception):
     def __init__(self, error):
         super().__init__(str(error))
         self.error = error
+
+
+def _creation_error(error, actor_id):
+    """The error of an actor whose constructor failed."""
+    return exceptions.ActorDiedError(
+        cause=getattr(error, 'cause', None), actor_id=actor_id, actor_init_failed=True,
+        error_msg='The actor died because of an error raised in its creation task, ' +
+                  str(error))
 
 
 def _dependency_error(function_name, error):
@@ -675,25 +716,38 @@ def _dependency_error(function_name, error):
         prefix + text, cause, ip=get_node_ip_address())
 
 
-def _store_results(return_refs, result, function_name):
-    n = len(return_refs)
+class _ResultsMismatch(Exception):
+    def __init__(self, error):
+        super().__init__(str(error))
+        self.error = error
+
+
+def _split_results(result, n, function_name):
+    """The ``n`` values a task or method returns (num_returns=n). Raises
+    _ResultsMismatch if it returned a different number."""
     if n == 0:
-        return
+        return []
     if n == 1:
-        _store(return_refs[0], result)
-        return
+        return [result]
     try:
         values = list(result)
     except TypeError:
         values = None
     if values is None or len(values) != n:
         got = 'a non-iterable' if values is None else str(len(values)) + ' objects'
-        err = exceptions.RayTaskError(
+        raise _ResultsMismatch(exceptions.RayTaskError(
             function_name, '  ValueError: Task returned ' + got + ', but num_returns=' +
             str(n) + '.', ValueError('Task returned ' + got + ', but num_returns=' +
-                                     str(n) + '.'), ip=get_node_ip_address())
+                                     str(n) + '.'), ip=get_node_ip_address()))
+    return values
+
+
+def _store_results(return_refs, result, function_name):
+    try:
+        values = _split_results(result, len(return_refs), function_name)
+    except _ResultsMismatch as e:
         for ref in return_refs:
-            _store_error(ref, err)
+            _store_error(ref, e.error)
         return
     for ref, value in zip(return_refs, values):
         _store(ref, value)

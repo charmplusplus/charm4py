@@ -13,6 +13,15 @@ class RaySystemError(RayError):
     pass
 
 
+class RayChannelError(RaySystemError):
+    """A system error of Ray's compiled-graph channels (not implemented by
+    charm4py.ray; defined for code that catches it)."""
+
+
+class RayChannelTimeoutError(RayChannelError, TimeoutError):
+    pass
+
+
 class TaskCancelledError(RayError):
     pass
 

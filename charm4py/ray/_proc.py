@@ -65,13 +65,15 @@ class WorkerProcess(object):
     def pid(self):
         return self._pid
 
-    def send(self, data, request=False):
-        """Sends one message (bytes). ``request``: a reply is expected, so poll
-        soon. A dead worker is noticed by the poller."""
+    def send(self, header, payload, request=False):
+        """Sends one message: two frames, a header and a payload (bytes).
+        ``request``: a reply is expected, so poll soon. A dead worker is noticed
+        by the poller."""
         if self.closed:
             return False
         try:
-            self.conn.send_bytes(data)
+            self.conn.send_bytes(header)
+            self.conn.send_bytes(payload)
         except OSError:
             return False
         if request:
@@ -175,12 +177,13 @@ def _poll(generation):
                 try:
                     if not conn.poll(0):
                         break
-                    data = conn.recv_bytes()
+                    header = conn.recv_bytes()
+                    payload = conn.recv_bytes()   # sent right after its header
                 except (EOFError, OSError):
                     worker._lost()
                     break
                 _last_message = time.monotonic()
-                worker.on_message(data)
+                worker.on_message(header, payload)
     for proc in list(_exited):
         if proc.poll() is not None:
             _exited.remove(proc)

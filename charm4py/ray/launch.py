@@ -1,6 +1,12 @@
 """Run an unmodified Ray program on Charm4py.
 
-    python -m charmrun.start +p4 -m charm4py.ray.launch [--in-process] script.py [args...]
+    python -m charmrun.start +p4 -m charm4py.ray.launch [options] script.py [args...]
+
+Options (before the script):
+  --in-process          see below
+  --num-cpus N          resources of each node (physical host) when the
+  --num-gpus N          runtime starts, like `ray start --num-cpus ...`;
+  --resources JSON      ray.init(num_cpus=...) of the first job overrides them
 
 Every process installs ``charm4py.ray`` as the ``ray`` package (and each
 ``ray.*`` submodule that charm4py.ray provides), then starts Charm4py.
@@ -65,15 +71,31 @@ def _load_script(path, run_name):
     return module
 
 
+def _parse_options(args):
+    """(options, rest of args): the launcher's options come before the script."""
+    import json
+    options = {'in_process': False, 'num_cpus': None, 'num_gpus': None, 'resources': None}
+    while args and args[0].startswith('--'):
+        flag = args[0]
+        if flag == '--in-process':
+            options['in_process'] = True
+            args = args[1:]
+            continue
+        key = flag[2:].replace('-', '_')
+        if key not in options or len(args) < 2:
+            raise SystemExit('charm4py.ray.launch: unknown option or missing value: ' + flag)
+        value = args[1]
+        options[key] = json.loads(value) if key == 'resources' else float(value)
+        args = args[2:]
+    return options, args
+
+
 def _launch():
-    args = sys.argv[1:]
-    in_process = False
-    if args and args[0] == '--in-process':
-        in_process = True
-        args = args[1:]
+    options, args = _parse_options(sys.argv[1:])
+    in_process = options['in_process']
     if not args:
         print('usage: python -m charmrun.start +pN -m charm4py.ray.launch [--in-process] '
-              'script.py [args]')
+              '[--num-cpus N] [--num-gpus N] [--resources JSON] script.py [args]')
         sys.exit(2)
     install_ray_facade()
     shim = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_shim')
@@ -87,6 +109,7 @@ def _launch():
     api._main_script = script
     if in_process:
         api._default_isolation = 'none'
+    api._default_resources = {k: options[k] for k in ('num_cpus', 'num_gpus', 'resources')}
 
     class _ScriptLoader(Chare):
         """Imports the script on a PE, without running its driver code, so the

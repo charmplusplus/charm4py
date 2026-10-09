@@ -1,12 +1,23 @@
 """Serialization between a Charm4py host and its worker processes.
 
-References must not cross this boundary through ObjectRef's own pickling: that
-runs Charm4py's borrower bookkeeping, which assumes every holder is a Charm PE.
-Instead the host gives each reference it sends a token (its object id) and keeps
-the real ObjectRef; the worker holds an inert stand-in, and when the token comes
-back the host substitutes its own ObjectRef again. Actor handles coming from a
-worker are mapped to one host-side handle per worker-side handle, so each keeps
-its own call order."""
+Values made by user code -- arguments, results, errors, objects put in the
+store -- are serialized once, in the worker that makes them, into an Opaque.
+Charm4py processes store and forward an Opaque without deserializing it, so they
+never import the user's modules (vLLM, torch, ...); only the worker that uses
+the value deserializes it. (Ray's raylet does not deserialize objects either.)
+
+References must not cross the worker boundary through ObjectRef's own pickling:
+that runs Charm4py's borrower bookkeeping, which assumes every holder is a Charm
+PE. Instead the host gives each reference it sends a token (its object id) and
+keeps the real ObjectRef; the worker holds an inert stand-in, and when the token
+comes back the host substitutes its own ObjectRef again. An Opaque lists the
+references inside it, so the PEs that carry it keep those alive. Actor handles
+coming from a worker are mapped to one host-side handle per worker-side handle,
+so each keeps its own call order.
+
+Every message between a host and a worker is two frames: a small header
+``(kind, rid)``, pickled with plain pickle, and the payload. A payload that
+cannot be deserialized fails only the request its header names."""
 
 import io
 import pickle
@@ -16,6 +27,45 @@ from .object_ref import ObjectRef
 PROTOCOL = pickle.HIGHEST_PROTOCOL
 
 
+class Opaque(object):
+    """A value serialized by a worker process (``data``), with the references
+    it contains (``refs``: ObjectRefs in a Charm4py process, object ids in the
+    worker that made it)."""
+
+    __slots__ = ('data', 'refs')
+
+    def __init__(self, data, refs=()):
+        self.data = data
+        self.refs = list(refs)
+
+    def __reduce__(self):
+        return (Opaque, (self.data, self.refs))
+
+    def __sizeof__(self):
+        # the object store keeps small values at their home PE (sys.getsizeof)
+        return len(self.data) + 64
+
+    def load(self):
+        """The value, for code that runs in a Charm4py process (isolation
+        'none')."""
+        return _PEUnpickler(io.BytesIO(self.data),
+                            {ref.store_id: ref for ref in self.refs}).load()
+
+
+def load_value(value):
+    return value.load() if type(value) is Opaque else value
+
+
+def encode_header(kind, rid=None):
+    return pickle.dumps((kind, rid), PROTOCOL)
+
+
+def decode_header(data):
+    return pickle.loads(data)
+
+
+# ---------------------------------------------------------------- host side
+
 class _HostPickler(pickle.Pickler):
 
     def __init__(self, buf, side):
@@ -23,9 +73,14 @@ class _HostPickler(pickle.Pickler):
         self.side = side
 
     def persistent_id(self, o):
-        if type(o) is ObjectRef:
+        t = type(o)
+        if t is ObjectRef:
             self.side.refs[o.store_id] = o
             return ('ref', o.store_id)
+        if t is Opaque:
+            for ref in o.refs:
+                self.side.refs[ref.store_id] = ref
+            return ('opaque', o.data, [ref.store_id for ref in o.refs])
         return None
 
 
@@ -36,9 +91,12 @@ class _HostUnpickler(pickle.Unpickler):
         self.side = side
 
     def persistent_load(self, pid):
-        if pid[0] == 'ref':
+        kind = pid[0]
+        if kind == 'ref':
             return self.side.refs[pid[1]]
-        if pid[0] == 'actor':
+        if kind == 'opaque':
+            return Opaque(pid[1], [self.side.refs[i] for i in pid[2]])
+        if kind == 'actor':
             handle = self.side.handles.get(pid[1])
             if handle is None:
                 from .actor import ActorHandle
@@ -62,6 +120,24 @@ class HostSide(object):
     def loads(self, data):
         return _HostUnpickler(io.BytesIO(data), self).load()
 
+
+class _PEUnpickler(pickle.Unpickler):
+    """Loads an Opaque in a Charm4py process."""
+
+    def __init__(self, buf, refs):
+        super().__init__(buf)
+        self.refs = refs
+
+    def persistent_load(self, pid):
+        if pid[0] == 'ref':
+            return self.refs[pid[1]]
+        if pid[0] == 'actor':
+            from .actor import ActorHandle
+            return ActorHandle._from_state(pid[2])
+        raise pickle.UnpicklingError('unknown persistent id ' + repr(pid))
+
+
+# ---------------------------------------------------------------- worker side
 
 def stand_in_ref(store_id):
     """An inert ObjectRef for a worker process: it carries the id only, and it
@@ -88,12 +164,18 @@ class _WorkerPickler(pickle.Pickler):
 
     def __init__(self, buf):
         super().__init__(buf, PROTOCOL)
+        self.ref_ids = []
 
     def persistent_id(self, o):
-        if type(o) is ObjectRef:
+        t = type(o)
+        if t is ObjectRef:
+            self.ref_ids.append(o.store_id)
             return ('ref', o.store_id)
+        if t is Opaque:
+            # made by WorkerSide.opaque: its ids are tokens the host knows
+            return ('opaque', o.data, o.refs)
         from .actor import ActorHandle
-        if type(o) is ActorHandle:
+        if t is ActorHandle:
             return ('actor', o._uid, o._state())
         return None
 
@@ -105,11 +187,17 @@ class _WorkerUnpickler(pickle.Unpickler):
         self.side = side
 
     def persistent_load(self, pid):
-        if pid[0] == 'ref':
+        kind = pid[0]
+        if kind == 'ref':
             ref = self.side.refs.get(pid[1])
             if ref is None:
                 ref = self.side.refs[pid[1]] = stand_in_ref(pid[1])
             return ref
+        if kind == 'opaque':
+            return self.side.loads(pid[1])
+        if kind == 'actor':
+            from .actor import ActorHandle
+            return ActorHandle._from_state(pid[2])
         raise pickle.UnpicklingError('unknown persistent id ' + repr(pid))
 
 
@@ -126,3 +214,10 @@ class WorkerSide(object):
 
     def loads(self, data):
         return _WorkerUnpickler(io.BytesIO(data), self).load()
+
+    def opaque(self, value):
+        """``value`` serialized for the host, which keeps it as an Opaque."""
+        buf = io.BytesIO()
+        pickler = _WorkerPickler(buf)
+        pickler.dump(value)
+        return Opaque(buf.getvalue(), sorted(set(pickler.ref_ids)))

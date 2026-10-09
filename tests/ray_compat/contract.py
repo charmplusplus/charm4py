@@ -109,6 +109,11 @@ def fib(n):
 
 
 @ray.remote
+def read_env(name):
+    return os.environ.get(name)
+
+
+@ray.remote
 def array_sum(a):
     return float(np.sum(a))
 
@@ -835,6 +840,35 @@ def test_fake_vllm_v2_lifecycle():
     remove_placement_group(pg)
     check(eventually(lambda: ray.available_resources().get('GPU', 0) == NUM_GPUS),
           'no leaked reservation')
+
+
+@test
+def test_runtime_env_class_and_task_env_vars():
+    from ray.runtime_env import RuntimeEnv
+    env = RuntimeEnv(env_vars={'CONTRACT_TASK_ENV': 'x'})
+    check(isinstance(env, dict) and env['env_vars'] == {'CONTRACT_TASK_ENV': 'x'})
+    check(ray.get(read_env.options(runtime_env=env).remote('CONTRACT_TASK_ENV')) == 'x')
+    # it does not leak into other tasks' workers
+    check(ray.get([read_env.remote('CONTRACT_TASK_ENV') for _ in range(8)]) == [None] * 8)
+    actor = Probe.options(runtime_env=RuntimeEnv(env_vars={'CONTRACT_TASK_ENV': 'y'})).remote()
+    check(ray.get(actor.env.remote('CONTRACT_TASK_ENV')) == 'y')
+    ray.kill(actor)
+
+
+@test
+def test_state_list_nodes():
+    from ray.util.state import list_nodes
+    try:
+        nodes = list_nodes()
+    except Exception as e:
+        if BACKEND != 'charm4py' and 'dashboard' in str(e).lower():
+            return   # Ray's state API needs the dashboard, which the suite disables
+        raise
+    check(len(nodes) == len([n for n in ray.nodes() if n['Alive']]))
+    node = nodes[0]
+    check(node.node_id == ray.get_runtime_context().get_node_id())
+    check(node.node_ip == ray.nodes()[0]['NodeManagerAddress'])
+    check(node.state == 'ALIVE' and node.is_head_node)
 
 
 def _joined_job(address, results, finish, use_shutdown):

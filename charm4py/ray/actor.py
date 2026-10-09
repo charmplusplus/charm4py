@@ -92,6 +92,7 @@ class ActorClass(object):
         if not inspect.isclass(cls):
             raise TypeError('ActorClass expects a class, got ' + repr(cls))
         self._cls = cls
+        self._class_name = cls.__name__
         self.__ray_target__ = cls
         self._default_options = _options.validate(options, _options.ACTOR_OPTIONS,
                                                   'actors')
@@ -118,10 +119,25 @@ class ActorClass(object):
     def bind(self, *args, **kwargs):
         raise NotImplementedError('Ray DAGs (.bind) are not supported by charm4py.ray')
 
+    def _spec(self):
+        """What the host needs to create this actor, without importing it."""
+        if self._desc is None:
+            self._desc = describe(self._cls, self)
+        return (self._desc, self._class_name, self._method_meta)
+
+    @staticmethod
+    def _from_spec(spec):
+        actor_class = ActorClass.__new__(ActorClass)
+        actor_class._cls = None
+        actor_class._desc, actor_class._class_name, actor_class._method_meta = spec
+        actor_class._default_options = {}
+        return actor_class
+
     def _remote(self, args, kwargs, options):
         api._ensure_initialized()
         if api._client is not None:
-            return api._client.call('_create_actor', self, args, kwargs, options)
+            args, kwargs = api._client_args(args, kwargs)
+            return api._client.call('_create_actor', self._spec(), args, kwargs, options)
         charm = api._charm()
         if self._desc is None:
             self._desc = describe(self._cls, self)
@@ -132,9 +148,9 @@ class ActorClass(object):
         namespace = namespace_opt if namespace_opt is not None else api._namespace()
         key = (charm.myPe(), next(api._actor_counter))
         actor_id = format(key[0], '08x') + format(key[1], '016x') + api._session_id[:8]
-        state = (key, self._cls.__name__, self._method_meta, actor_id)
+        state = (key, self._class_name, self._method_meta, actor_id)
         meta = {
-            'key': key, 'actor_id': actor_id, 'class_name': self._cls.__name__,
+            'key': key, 'actor_id': actor_id, 'class_name': self._class_name,
             'name': name, 'namespace': namespace, 'handle_state': state,
             'get_if_exists': bool(options.get('get_if_exists')),
             'request': _options.resource_request(options, default_cpus=0),
@@ -243,6 +259,7 @@ class ActorHandle(object):
     def _invoke(self, method_name, args, kwargs, num_returns):
         api._ensure_initialized()
         if api._client is not None:
+            args, kwargs = api._client_args(args, kwargs)
             return api._client.call('_invoke', self, method_name, args, kwargs, num_returns)
         refs = [api._new_ref() for _ in range(num_returns)]
         if self._killed is not None:

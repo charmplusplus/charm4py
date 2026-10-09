@@ -82,11 +82,16 @@ def wrap_value(value):
 
 
 def unwrap_value(value):
-    """Returns the stored value, raising the stored error if there is one."""
+    """Returns the stored value, raising the stored error if there is one. A
+    value serialized by a worker process (an Opaque) is deserialized."""
+    from ._ipc import Opaque
+    if type(value) is Opaque:
+        value = value.load()
     if isinstance(value, _NoneValue):
         return None
     if isinstance(value, _ErrorValue):
-        raise_stored_error(value.error)
+        error = value.error
+        raise_stored_error(error.load() if type(error) is Opaque else error)
     return value
 
 

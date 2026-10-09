@@ -38,9 +38,9 @@ The suite assumes one node with 4 CPUs and 2 GPUs, which it requests from
 
 | Backend | Result |
 |---|---|
-| Ray 2.56.1 | 55/55 |
-| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 55/55 |
-| charm4py.ray `--in-process`, `+p4` | fails the isolation tests (by design) |
+| Ray 2.56.1 | 57/57 |
+| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 57/57 |
+| charm4py.ray `--in-process`, `+p4` | fails the isolation tests, and driver threads and actor crashes take a PE down (by design) |
 
 ## How it works
 
@@ -57,7 +57,12 @@ code runs in worker processes that do not load Charm++:
 
 A worker's `ray` calls are forwarded to its host over a socket (any thread may
 call); references cross that boundary as tokens (`_ipc.py`) so Charm4py's
-borrower protocol never sees a non-Charm process. Hosts poll their workers'
+borrower protocol never sees a non-Charm process. Values made by user code
+(arguments, results, errors, `ray.put` objects) are serialized once, in the
+worker that makes them; the Charm4py processes store and forward them as opaque
+bytes and never import the user's modules (as Ray's raylet never deserializes
+objects). Only top-level ObjectRef arguments are visible to the hosts, which
+resolve them. Hosts poll their workers'
 sockets from a Charm timer, every 0.2 ms when active and every 10 ms when idle.
 Isolation gives each actor its own `os.environ`, `CUDA_VISIBLE_DEVICES` (from its
 assigned GPUs) and lifetime: `ray.kill` terminates the process, and a crash
@@ -78,6 +83,32 @@ runtime stops with its last job. GPUs are detected per node as Ray does
 
 Programs that use `charm.start` directly default to in-process execution, since
 their tasks and actors may call Charm4py; `ray.init(_isolation='process')` opts in.
+
+## vLLM
+
+`vllm_generate.py` runs greedy generation through vLLM's `RayExecutorV2`
+(unmodified vLLM `7fe8fc8`). On a machine without GPUs, the test-only platform
+plugin in `vllm_plugin/` (`pip install -e vllm_plugin`, active with
+`VLLM_CPU_RAY=1`) is vLLM's CPU platform with each worker's slot exposed to Ray
+as a logical GPU, so the Ray executor runs on CPUs with gloo collectives:
+
+    VLLM_CPU_RAY=1 VLLM_CPU_KVCACHE_SPACE=1 python -m charmrun.start +p4 \
+        -m charm4py.ray.launch --num-gpus 2 tests/ray_compat/vllm_generate.py 2
+
+`--num-gpus` plays the part of `ray start --num-gpus`: vLLM's engine process
+calls `ray.init()` without resources. Results on the M-series Mac
+(`facebook/opt-125m`, 4 prompts x 24 tokens, `VLLM_CPU_OMP_THREADS_BIND=nobind`,
+two runs each); the text is identical across all of them:
+
+| Executor, TP=2 | `LLM()` startup | generate |
+|---|---|---|
+| vLLM multiprocessing (no Ray) | 8.7 s, 8.8 s | 1.51 s, 1.52 s |
+| Ray 2.56.1 (`ray start` beforehand) | 8.8 s, 8.9 s | 1.70 s, 1.71 s |
+| charm4py.ray, `+p4` | 8.6 s, 8.5 s | 1.53 s, 1.53 s |
+
+TP=1 matches too. PP=2 fails the same way with vLLM's own multiprocessing
+executor (`intermediate_tensors` is None on the second stage): a vLLM CPU
+issue, not a Ray one.
 
 ## What charm4py.ray implements
 

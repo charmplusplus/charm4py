@@ -110,14 +110,12 @@ def validate(options, valid, kind):
         elif key == 'runtime_env':
             if not isinstance(value, dict):
                 raise TypeError('runtime_env must be a dict')
-            unknown = set(value) - {'env_vars', 'nsight'}
+            # 'config' (setup timeouts) has nothing to configure here
+            unknown = set(value) - {'env_vars', 'config', 'nsight', '_nsight'}
             if unknown:
                 _unsupported(kind, key, value, 'only env_vars is supported')
-            if value.get('nsight'):
+            if value.get('nsight') or value.get('_nsight'):
                 _unsupported(kind, key, value, 'nsight')
-            if kind == 'remote functions' and value.get('env_vars'):
-                _unsupported(kind, key, value, 'task env_vars would leak into the '
-                             'shared worker process')
         elif key == 'scheduling_strategy':
             from .util.scheduling_strategies import (
                 PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy)

@@ -47,10 +47,25 @@ class RemoteFunction(object):
     def bind(self, *args, **kwargs):
         raise NotImplementedError('Ray DAGs (.bind) are not supported by charm4py.ray')
 
+    def _spec(self):
+        """What the host needs to run this function, without importing it."""
+        if self._desc is None:
+            self._desc = describe(self._function, self)
+        return self._desc
+
+    @staticmethod
+    def _from_spec(desc):
+        function = RemoteFunction.__new__(RemoteFunction)
+        function._function = None
+        function._desc = desc
+        function._default_options = {}
+        return function
+
     def _remote(self, args, kwargs, options):
         api._ensure_initialized()
         if api._client is not None:
-            return api._client.call('_submit_task', self, args, kwargs, options)
+            args, kwargs = api._client_args(args, kwargs)
+            return api._client.call('_submit_task', self._spec(), args, kwargs, options)
         if self._desc is None:
             self._desc = describe(self._function, self)
         num_returns = options.get('num_returns', 1)
@@ -65,7 +80,8 @@ class RemoteFunction(object):
             pg = strategy.placement_group
             pg_info = (pg.id.hex(), pg.bundle_specs)
         api._workers[pe].execute_task(self._desc, args, kwargs, refs,
-                                      options.get('name'), pg_info, api._current_job())
+                                      options.get('name'), pg_info, api._current_job(),
+                                      api._merged_runtime_env(options.get('runtime_env')))
         return _returns(refs)
 
 
