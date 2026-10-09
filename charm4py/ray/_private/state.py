@@ -30,10 +30,9 @@ class GlobalState(object):
         return api.available_resources()
 
     def placement_group_table(self, placement_group_id=None):
-        from ..util.placement_group import PlacementGroup
-        if placement_group_id is None:
-            return api._control.pg_table(None, ret=True).get()
-        return api._control.pg_table(placement_group_id.hex(), ret=True).get()
+        from ..util.placement_group import _pg_table
+        return _pg_table(placement_group_id.hex() if placement_group_id is not None
+                         else None)
 
 
 state = GlobalState()

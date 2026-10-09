@@ -632,10 +632,12 @@ class Charm(object):
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
-        from .ray._hosts import _RayWorker, _ActorHost, _RayControl, _Gateway
+        from .ray._hosts import _RayWorker, _ActorHost, _JobRegistry, _Gateway
+        from .ray._control import _Control
         self.register(_RayWorker, (GROUP,))
         self.register(_ActorHost, (ARRAY,))
-        self.register(_RayControl, (ARRAY,))
+        self.register(_JobRegistry, (ARRAY,))
+        self.register(_Control, (GROUP,))
         self.register(_Gateway, (ARRAY,))
 
         if self.options.profiling:

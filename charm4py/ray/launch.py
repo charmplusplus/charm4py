@@ -48,7 +48,7 @@ def install_ray_facade(worker=False):
     sys.modules['ray'] = pkg
     skip = {pkg.__name__ + '.launch', pkg.__name__ + '._worker_main'}
     if worker:
-        skip.add(pkg.__name__ + '._hosts')
+        skip.update((pkg.__name__ + '._hosts', pkg.__name__ + '._control'))
     for info in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + '.'):
         if info.name in skip:
             continue

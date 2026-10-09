@@ -1,7 +1,6 @@
 """Placement groups: atomic reservations of resource bundles on nodes."""
 
 import numbers
-import uuid
 
 from .. import api
 from .._options import _check_resource_amount
@@ -50,8 +49,9 @@ class PlacementGroup(object):
         api._ensure_initialized()
         if api._client is not None:
             return api._client.call('_pg_ready', self)
+        from .._control import pg_coordinator
         ref = api._new_ref()
-        api._control.pg_ready(self.id.hex(), ref)
+        api._ctl[pg_coordinator(self.id.hex())].pg_ready(self.id.hex(), ref)
         return ref
 
     def wait(self, timeout_seconds=30):
@@ -122,8 +122,13 @@ def placement_group(bundles, strategy='PACK', name='', lifetime=None,
     api._ensure_initialized()
     if api._client is not None:
         return api._client.call('placement_group', bundles, strategy=strategy, name=name)
-    pg_id = uuid.uuid4().hex[:28] + api._job_id()
-    api._control.create_pg(pg_id, specs, strategy, name, api._job_id())
+    from .. import _control
+    pg_id = _control.new_pg_id(api._job_id())
+    if name:
+        # the first group of that name keeps it
+        _control.local()._claim(('pg', name), pg_id, (pg_id, specs), True)
+    # this PE coordinates the group
+    api._ctl[api._charm().myPe()].create_pg(pg_id, specs, strategy, name, api._job_id())
     return PlacementGroup(PlacementGroupID(pg_id), specs)
 
 
@@ -132,14 +137,18 @@ def remove_placement_group(placement_group):
     api._ensure_initialized()
     if api._client is not None:
         return api._client.call('remove_placement_group', placement_group)
-    api._control.remove_pg(placement_group.id.hex(), ret=True).get()
+    from .._control import pg_coordinator
+    pg_id = placement_group.id.hex()
+    api._ctl[pg_coordinator(pg_id)].remove_pg(pg_id, ret=True).get()
 
 
 def get_placement_group(placement_group_name):
     api._ensure_initialized()
     if api._client is not None:
         return api._client.call('get_placement_group', placement_group_name)
-    found = api._control.pg_by_name(placement_group_name, ret=True).get()
+    from .._control import name_shard
+    name_key = ('pg', placement_group_name)
+    found = api._ctl[name_shard(name_key)].lookup_name(name_key, ret=True).get()
     if found is None:
         raise ValueError('Failed to look up placement group with name: ' +
                          str(placement_group_name))
@@ -159,5 +168,16 @@ def placement_group_table(placement_group=None):
     api._ensure_initialized()
     if api._client is not None:
         return api._client.call('placement_group_table', placement_group)
-    pg_id = placement_group.id.hex() if placement_group is not None else None
-    return api._control.pg_table(pg_id, ret=True).get()
+    return _pg_table(placement_group.id.hex() if placement_group is not None else None)
+
+
+def _pg_table(pg_id):
+    from .._control import pg_coordinator
+    if pg_id is not None:
+        return api._ctl[pg_coordinator(pg_id)].pg_table(pg_id, ret=True).get()
+    # every coordinator's groups
+    replies = [api._ctl[pe].pg_table(None, ret=True) for pe in range(api._charm().numPes())]
+    table = {}
+    for reply in replies:
+        table.update(reply.get())
+    return table

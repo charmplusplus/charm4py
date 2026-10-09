@@ -1,6 +1,6 @@
 """Charm chares that implement Ray: _RayWorker (one per PE) runs tasks,
-_ActorHost (one array element per actor) runs an actor, _RayControl (one, on
-PE 0) owns jobs, actor names, node resources and placement groups, and _Gateway
+_ActorHost (one array element per actor) runs an actor, _JobRegistry (one, on
+PE 0) keeps the job table, and _Gateway
 (on PE 0) lets other processes join the job and, under charm4py.ray.launch, runs
 the driver script in its own process.
 
@@ -120,7 +120,7 @@ class _Link(object):
         info.update(kind=kind, sys_path=list(sys.path), main_script=api._main_script,
                     main_module=api._main_module,
                     globals=dict(shared, _client_pe=charm.myPe(),
-                                 _client_host=charm.myHost(), _client_kind=kind))
+                                 _client_host=api._my_host(), _client_kind=kind))
         self.worker.send(_ipc.encode_header('init'), self.side.dumps(info))
 
     @property
@@ -649,7 +649,8 @@ class _ActorHost(Chare, _LinkOwner):
         self.held.clear()
         self.instance = None
         if notify_control:
-            api._control.actor_died(self.spec['key'])
+            # the actor's coordinator (see _control.py)
+            api._ctl[self.spec['key'][0]].actor_died(self.spec['key'])
 
 
 class _Gateway(Chare, _LinkOwner):
@@ -703,66 +704,15 @@ class _Gateway(Chare, _LinkOwner):
         api._end_job(job_id)
 
 
-def _fits(avail, request):
-    return all(avail.get(k, 0.0) + 1e-9 >= v for k, v in request.items())
-
-
-def _take(avail, ids_pool, request):
-    for k, v in request.items():
-        avail[k] = avail.get(k, 0.0) - v
-    ids = {}
-    for k in ACCELERATOR_KEYS:
-        n = int(request.get(k, 0))
-        if n:
-            ids[k] = ids_pool[k][:n]
-            del ids_pool[k][:n]
-    return ids
-
-
-def _give(avail, ids_pool, request, ids):
-    for k, v in request.items():
-        avail[k] = avail.get(k, 0.0) + v
-    for k, taken in ids.items():
-        ids_pool.setdefault(k, []).extend(taken)
-        ids_pool[k].sort(key=_id_order)
-
-
-def _id_order(device_id):
-    return (0, int(device_id), '') if device_id.isdigit() else (1, 0, device_id)
-
-
-class _RayControl(Chare):
-    """The authority for names, resources and placement groups (on PE 0)."""
+class _JobRegistry(Chare):
+    """The job table (on PE 0): job IDs and the jobs still running. Jobs begin
+    and end rarely; everything else about them is kept where it is used (see
+    _control.py)."""
 
     def __init__(self):
         self.setMigratable(False)
-        self.nodes = []
-        self.actors_proxy = None
         self.job_counter = 0
-        self._reset()
-
-    def _reset(self):
-        self.jobs = {}         # job id -> job record (see api._job)
-        self.actors = {}       # actor key -> record
-        self.names = {}        # (namespace, name) -> actor key
-        self.pgs = {}          # placement group id (hex) -> record
-        self.pending = []      # ('actor', key) / ('pg', id) waiting for resources
-        self.pe_load = collections.Counter()
-        self.killed_early = set()
-
-    def configure(self, nodes, actors_proxy):
-        self.actors_proxy = actors_proxy
-        self.nodes = []
-        for i, node in enumerate(nodes):
-            total = dict(node['Resources'])
-            self.nodes.append({
-                'index': i, 'node_id': node['NodeID'], 'pes': list(node['_pes']),
-                'avail': dict(total),
-                'ids': {k: (list(node['_gpu_ids']) if k == 'GPU' else
-                            [str(i) for i in range(int(total[k]))])
-                        for k in ACCELERATOR_KEYS if total.get(k)}})
-        self._reset()
-        return True
+        self.jobs = {}
 
     def new_job(self, namespace, runtime_env, sys_path):
         import struct
@@ -775,343 +725,10 @@ class _RayControl(Chare):
         return job
 
     def end_job(self, job_id):
-        """Kills the job's actors and removes its placement groups. Returns how
-        many jobs are left."""
-        if self.jobs.pop(job_id, None) is not None:
-            for rec in list(self.actors.values()):
-                if rec['state'] != 'DEAD' and rec['meta']['job']['job_id'] == job_id:
-                    self._kill(rec)
-            for pg in list(self.pgs.values()):
-                if pg['job_id'] == job_id and pg['state'] != 'REMOVED':
-                    self.remove_pg(pg['id'])
-            self._schedule_pending()
+        """Returns how many jobs are left."""
+        self.jobs.pop(job_id, None)
         return len(self.jobs)
 
-    def shutdown(self):
-        for key, rec in list(self.actors.items()):
-            if rec['state'] != 'DEAD':
-                self._kill(rec)
-        for pg in self.pgs.values():
-            pg['state'] = 'REMOVED'
-        self._reset()
+    def reset(self):
+        self.jobs = {}
         return True
-
-    # ---- queries
-
-    def available_resources_per_node(self):
-        return {n['node_id']: {k: v for k, v in n['avail'].items() if v > 1e-9}
-                for n in self.nodes}
-
-    def get_actor(self, name, namespace):
-        key = self.names.get((namespace, name))
-        if key is None:
-            return None
-        rec = self.actors[key]
-        return rec['meta']['handle_state'] if rec['state'] != 'DEAD' else None
-
-    # ---- actors
-
-    def _driver_first_nodes(self):
-        driver = api._charm().getPeHost(0)
-        return sorted(self.nodes, key=lambda n: (n['index'] != driver, n['index']))
-
-    def _choose_pe(self, node):
-        pes = list(node['pes'])
-        if len(pes) > 1 and 0 in pes:
-            pes.remove(0)
-        return min(pes, key=lambda pe: (self.pe_load[pe], pe))
-
-    def create_actor(self, meta):
-        key = meta['key']
-        name = meta['name']
-        if name is not None:
-            name_key = (meta['namespace'], name)
-            existing = self.names.get(name_key)
-            if existing is not None and self.actors[existing]['state'] != 'DEAD':
-                if meta['get_if_exists']:
-                    return ('exists', self.actors[existing]['meta']['handle_state'])
-                return ('taken',)
-            self.names[name_key] = key
-        rec = {'meta': meta, 'state': 'PENDING', 'node': None, 'pe': None, 'ids': {},
-               'bundle': None}
-        self.actors[key] = rec
-        if key in self.killed_early:
-            self.killed_early.discard(key)
-            self._insert_dead(rec, killed_message(meta['class_name'], meta['actor_id']))
-        elif not self._schedule_actor(rec):
-            self.pending.append(('actor', key))
-        return ('ok',)
-
-    def _host_spec(self, rec, node_index, pg_id=None, bundle_specs=None, doa=None):
-        meta = rec['meta']
-        node_id = self.nodes[node_index]['node_id'] if node_index is not None else None
-        return {'key': meta['key'], 'actor_id': meta['actor_id'],
-                'class_name': meta['class_name'], 'name': meta['name'],
-                'runtime_env': meta['runtime_env'], 'job': meta['job'],
-                'accelerator_ids': {k: [str(i) for i in v] for k, v in rec['ids'].items()},
-                'assigned_resources': dict(meta['request']), 'node_id': node_id,
-                'pg_id': pg_id, 'pg_bundle_specs': bundle_specs, 'doa': doa}
-
-    def _insert_dead(self, rec, message, pe=0):
-        """Creates the actor's element only to fail the calls already sent to it."""
-        meta = rec['meta']
-        rec['state'] = 'DEAD'
-        err = ActorDiedError(actor_id=meta['actor_id'], error_msg=message)
-        self.actors_proxy.ckInsert(meta['key'], args=[self._host_spec(rec, None, doa=err)],
-                                   onPE=pe)
-        self._forget_name(rec)
-
-    def _schedule_actor(self, rec):
-        from .util.scheduling_strategies import (PlacementGroupSchedulingStrategy,
-                                                 NodeAffinitySchedulingStrategy)
-        meta = rec['meta']
-        request = meta['request']
-        strategy = meta['strategy']
-        pg_id = bundle_specs = None
-        if isinstance(strategy, PlacementGroupSchedulingStrategy):
-            pg_id = strategy.placement_group.id.hex()
-            pg = self.pgs.get(pg_id)
-            if pg is None or pg['state'] == 'REMOVED':
-                self._insert_dead(rec, 'The actor could not be scheduled: its placement '
-                                  'group ' + pg_id + ' was removed or does not exist.')
-                return True
-            if pg['state'] != 'CREATED':
-                return False
-            index = strategy.placement_group_bundle_index
-            indices = [index] if index >= 0 else range(len(pg['bundles']))
-            for i in indices:
-                bundle = pg['bundles'][i]
-                if _fits(bundle['avail'], request):
-                    rec['ids'] = _take(bundle['avail'], bundle['ids'], request)
-                    rec['bundle'] = (pg_id, i)
-                    node = self.nodes[bundle['node']]
-                    bundle_specs = pg['specs']
-                    break
-            else:
-                return False
-        else:
-            candidates = self._driver_first_nodes()
-            if isinstance(strategy, NodeAffinitySchedulingStrategy):
-                pinned = [n for n in self.nodes if n['node_id'] == strategy.node_id]
-                candidates = pinned + (candidates if strategy.soft else [])
-            for node in candidates:
-                if _fits(node['avail'], request):
-                    rec['ids'] = _take(node['avail'], node['ids'], request)
-                    break
-            else:
-                return False
-        pe = self._choose_pe(node)
-        rec.update(state='ALIVE', node=node['index'], pe=pe)
-        self.pe_load[pe] += 1
-        self.actors_proxy.ckInsert(meta['key'], args=[self._host_spec(
-            rec, node['index'], pg_id, bundle_specs)], onPE=pe)
-        return True
-
-    def _release(self, rec):
-        request = rec['meta']['request']
-        if rec['bundle'] is not None:
-            pg = self.pgs.get(rec['bundle'][0])
-            if pg is not None and pg['state'] == 'CREATED':
-                bundle = pg['bundles'][rec['bundle'][1]]
-                _give(bundle['avail'], bundle['ids'], request, rec['ids'])
-        elif rec['node'] is not None:
-            node = self.nodes[rec['node']]
-            _give(node['avail'], node['ids'], request, rec['ids'])
-        if rec['pe'] is not None:
-            self.pe_load[rec['pe']] -= 1
-        rec['ids'] = {}
-        rec['bundle'] = None
-
-    def _forget_name(self, rec):
-        name = rec['meta']['name']
-        if name is not None:
-            name_key = (rec['meta']['namespace'], name)
-            if self.names.get(name_key) == rec['meta']['key']:
-                del self.names[name_key]
-
-    def _kill(self, rec):
-        if rec['state'] == 'PENDING':
-            self.pending = [p for p in self.pending if p != ('actor', rec['meta']['key'])]
-            self._insert_dead(rec, killed_message(rec['meta']['class_name'],
-                                                  rec['meta']['actor_id']))
-            return
-        if rec['state'] == 'ALIVE':
-            self.actors_proxy[rec['meta']['key']].kill()
-            self._release(rec)
-        rec['state'] = 'DEAD'
-        self._forget_name(rec)
-
-    def kill_actor(self, key):
-        rec = self.actors.get(key)
-        if rec is None:
-            # the creation request has not arrived yet
-            self.killed_early.add(key)
-            return True
-        self._kill(rec)
-        self._schedule_pending()
-        return True
-
-    def actor_died(self, key):
-        rec = self.actors.get(key)
-        if rec is None or rec['state'] == 'DEAD':
-            return
-        self._release(rec)
-        rec['state'] = 'DEAD'
-        self._forget_name(rec)
-        self._schedule_pending()
-
-    def _schedule_pending(self):
-        progress = True
-        while progress and self.pending:
-            progress = False
-            for item in list(self.pending):
-                kind, key = item
-                if kind == 'actor':
-                    done = self._schedule_actor(self.actors[key])
-                else:
-                    done = self._schedule_pg(self.pgs[key])
-                if done:
-                    self.pending.remove(item)
-                    progress = True
-
-    # ---- placement groups
-
-    def create_pg(self, pg_id, specs, strategy, name, job_id):
-        pg = {'id': pg_id, 'specs': specs, 'strategy': strategy, 'name': name,
-              'state': 'PENDING', 'bundles': None, 'ready_refs': [], 'job_id': job_id}
-        self.pgs[pg_id] = pg
-        if not self._schedule_pg(pg):
-            self.pending.append(('pg', pg_id))
-
-    def _assign_bundles(self, specs, strategy):
-        """Node index for each bundle, or None if they cannot all be placed now.
-        Works on copies so a partial assignment never reserves anything."""
-        avail = {n['index']: dict(n['avail']) for n in self.nodes}
-        order = [n['index'] for n in self._driver_first_nodes()]
-
-        def place(i, node):
-            if _fits(avail[node], specs[i]):
-                for k, v in specs[i].items():
-                    avail[node][k] = avail[node].get(k, 0.0) - v
-                return True
-            return False
-
-        if strategy in ('PACK', 'STRICT_PACK'):
-            for node in order:
-                saved = {k: dict(v) for k, v in avail.items()}
-                if all(place(i, node) for i in range(len(specs))):
-                    return [node] * len(specs)
-                avail = saved
-            if strategy == 'STRICT_PACK':
-                return None
-            assignment = []
-            for i in range(len(specs)):
-                preferred = ([assignment[-1]] if assignment else []) + order
-                for node in preferred:
-                    if place(i, node):
-                        assignment.append(node)
-                        break
-                else:
-                    return None
-            return assignment
-        if strategy == 'SPREAD':
-            assignment = []
-            for i in range(len(specs)):
-                ranked = sorted(order, key=lambda n: (assignment.count(n), order.index(n)))
-                for node in ranked:
-                    if place(i, node):
-                        assignment.append(node)
-                        break
-                else:
-                    return None
-            return assignment
-        # STRICT_SPREAD
-        assignment = []
-        for i in range(len(specs)):
-            for node in order:
-                if node not in assignment and place(i, node):
-                    assignment.append(node)
-                    break
-            else:
-                return None
-        return assignment
-
-    def _schedule_pg(self, pg):
-        if pg['state'] != 'PENDING':
-            return True
-        assignment = self._assign_bundles(pg['specs'], pg['strategy'])
-        if assignment is None:
-            return False
-        bundles = []
-        for spec, node_index in zip(pg['specs'], assignment):
-            node = self.nodes[node_index]
-            ids = _take(node['avail'], node['ids'], spec)
-            bundles.append({'node': node_index, 'avail': dict(spec), 'ids': ids,
-                            'all_ids': {k: list(v) for k, v in ids.items()}})
-        pg['bundles'] = bundles
-        pg['state'] = 'CREATED'
-        for ref in pg['ready_refs']:
-            api._store(ref, self._pg_object(pg))
-        pg['ready_refs'] = []
-        return True
-
-    def _pg_object(self, pg):
-        from .util.placement_group import PlacementGroup, PlacementGroupID
-        return PlacementGroup(PlacementGroupID(pg['id']), pg['specs'])
-
-    def pg_ready(self, pg_id, ref):
-        pg = self.pgs.get(pg_id)
-        if pg is None or pg['state'] == 'REMOVED':
-            api._store_error(ref, RaySystemError('Placement group ' + pg_id +
-                                                 ' was removed'))
-        elif pg['state'] == 'CREATED':
-            api._store(ref, self._pg_object(pg))
-        else:
-            pg['ready_refs'].append(ref)
-
-    def remove_pg(self, pg_id):
-        pg = self.pgs.get(pg_id)
-        if pg is None or pg['state'] == 'REMOVED':
-            return True
-        if pg['state'] == 'PENDING':
-            self.pending = [p for p in self.pending if p != ('pg', pg_id)]
-        else:
-            for rec in self.actors.values():
-                if rec['state'] != 'DEAD' and rec['bundle'] is not None and \
-                        rec['bundle'][0] == pg_id:
-                    self._kill(rec)
-            for spec, bundle in zip(pg['specs'], pg['bundles']):
-                node = self.nodes[bundle['node']]
-                _give(node['avail'], node['ids'], spec, bundle['all_ids'])
-        for ref in pg['ready_refs']:
-            api._store_error(ref, RaySystemError('Placement group ' + pg_id + ' was removed'))
-        pg['ready_refs'] = []
-        pg['state'] = 'REMOVED'
-        self._schedule_pending()
-        return True
-
-    def placement_group_bundle_nodes(self, pg_id):
-        return [b['node'] for b in self.pgs[pg_id]['bundles']]
-
-    def _pg_table_entry(self, pg):
-        to_node = {}
-        if pg['bundles'] is not None and pg['state'] == 'CREATED':
-            to_node = {i: self.nodes[b['node']]['node_id'] for i, b in enumerate(pg['bundles'])}
-        return {'placement_group_id': pg['id'], 'name': pg['name'],
-                'bundles': {i: dict(s) for i, s in enumerate(pg['specs'])},
-                'bundles_to_node_id': to_node, 'strategy': pg['strategy'],
-                'state': pg['state'],
-                'stats': {'scheduling_state': 'FINISHED' if pg['state'] == 'CREATED'
-                          else 'PENDING'}}
-
-    def pg_table(self, pg_id):
-        if pg_id is None:
-            return {i: self._pg_table_entry(pg) for i, pg in self.pgs.items()}
-        pg = self.pgs.get(pg_id)
-        return self._pg_table_entry(pg) if pg is not None else {}
-
-    def pg_by_name(self, name):
-        for pg in self.pgs.values():
-            if pg['name'] == name and pg['state'] != 'REMOVED':
-                return (pg['id'], pg['specs'])
-        return None

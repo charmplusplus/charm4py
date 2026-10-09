@@ -159,8 +159,11 @@ class ActorClass(object):
             'runtime_env': api._merged_runtime_env(options.get('runtime_env')),
             'job': api._current_job(),
         }
+        from . import _control
+        ctl = _control.local()
         if name is not None:
-            result = api._control.create_actor(meta, ret=True).get()
+            result = ctl._claim(('actor', namespace, name), key, state,
+                                bool(options.get('get_if_exists')))
             if result[0] == 'exists':
                 return ActorHandle._from_state(result[1])
             if result[0] == 'taken':
@@ -169,8 +172,8 @@ class ActorClass(object):
                     'already taken. Please use a different name or get the existing '
                     "actor using ray.get_actor('" + name + "', namespace='" +
                     str(namespace_opt) + "')")
-        else:
-            api._control.create_actor(meta)
+        # this PE coordinates the actor (see _control.py)
+        ctl.register_actor(meta)
         handle = ActorHandle._from_state(state)
         handle._construct(self._desc, args, kwargs)
         return handle

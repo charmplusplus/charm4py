@@ -45,8 +45,8 @@ The suite assumes one node with 4 CPUs and 2 GPUs, which it requests from
 ## How it works
 
 Charm4py processes (one per PE) run the runtime: object store, task dispatch,
-actor hosts, and `_RayControl` (PE 0: names, resources, placement groups). User
-code runs in worker processes that do not load Charm++:
+actor hosts, and the control plane. User code runs in worker processes that do
+not load Charm++:
 
 - the **driver** process, served by `_DriverHost` on PE 0;
 - one **actor** process per actor, owned by the actor's `_ActorHost` element,
@@ -90,6 +90,24 @@ runtime stops with its last job. GPUs are detected per node as Ray does
 
 Programs that use `charm.start` directly default to in-process execution, since
 their tasks and actors may call Charm4py; `ray.init(_isolation='process')` opts in.
+
+### Control plane
+
+There is no central scheduler (`_control.py`). Each PE coordinates the actors
+and placement groups created on it (life cycle, kill, death, waiting for
+resources); each node's last PE is the only authority for that node's
+resources and accelerator IDs, and places actors on the node's PEs; names are
+hashed over all PEs. Actor placement asks node controllers in turn, the local
+node first; placement groups reserve bundles in two phases among only the nodes
+they use. Waiting work is retried when a node it asked frees resources. Only the
+job table stays on PE 0. `multinode.py` checks placement across nodes, the
+placement group strategies and reservation under contention; with
+`CHARM4PY_RAY_FAKE_NODES=k` it splits one machine's PEs into k nodes, and it
+runs unchanged on Ray (on 3 raylets on one machine):
+
+    CHARM4PY_RAY_FAKE_NODES=3 python -m charmrun.start +p6 -m charm4py.ray.launch \
+        tests/ray_compat/multinode.py                                  # 8/8
+    cd tests/ray_compat && python -c 'import multinode as m; m.ray_oracle_cluster()'
 
 ## vLLM
 
@@ -171,8 +189,6 @@ issue, not a Ray one.
 
 The main ones:
 
-- The control plane is centralized: `_RayControl` (one chare on PE 0) decides
-  actor placement and owns all resources, names and placement groups.
 - Tasks are dispatched round-robin to PEs, without resource admission;
   task `num_gpus` gets no accelerator IDs and no `CUDA_VISIBLE_DEVICES`.
 - No restarts or retries (`max_restarts`, `max_task_retries`,

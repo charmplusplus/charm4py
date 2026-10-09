@@ -3,9 +3,9 @@ put), cluster topology and the per-task execution context.
 
 Model: the first ``ray.init()`` starts the runtime on PE 0. It creates the Charm
 collections that implement Ray -- one object store branch, one task worker per
-PE, a 2-D array holding one element per actor, and a control chare on PE 0 that
-owns names, resources and placement groups -- and broadcasts them to every PE. A
-Ray *node* is a physical host as Charm++ sees it, not a PE.
+PE, a 2-D array holding one element per actor, the control plane (one element
+per PE, see _control.py) and the job registry on PE 0 -- and broadcasts them to
+every PE. A Ray *node* is a physical host as Charm++ sees it, not a PE.
 
 Each ``ray.init()`` -- by the driver, or by another process that connects to the
 job (one the driver started, say) -- begins a Ray *job*, with its own job ID,
@@ -31,7 +31,8 @@ _initialized = False
 object_store = None   # Group(ObjectStore)
 _workers = None       # Group(_RayWorker): runs tasks; element 0 is not special
 _actors = None        # Array(_ActorHost, ndims=2): one element per actor
-_control = None       # _RayControl singleton chare on PE 0
+_ctl = None           # Group(_Control): placement, resources, names, placement groups
+_jobs = None          # _JobRegistry singleton chare on PE 0
 _session_id = None
 _nodes = None         # list of node records, indexed by Charm physical node
 _isolation = 'none'   # 'process': tasks, actors (and the driver) run in worker processes
@@ -223,7 +224,7 @@ def _start_job(num_cpus=None, num_gpus=None, resources=None, namespace=None,
     elif resources is not None:
         raise ValueError('When connecting to an existing cluster, resources must not be '
                          'provided.')
-    return _control.new_job(namespace, runtime_env, sys_path, ret=True).get()
+    return _jobs.new_job(namespace, runtime_env, sys_path, ret=True).get()
 
 
 def _start_runtime(num_cpus, num_gpus, resources, isolation):
@@ -236,22 +237,24 @@ def _start_runtime(num_cpus, num_gpus, resources, isolation):
         num_gpus = _default_resources.get('num_gpus')
     if resources is None:
         resources = _default_resources.get('resources')
-    from ._hosts import _RayWorker, _ActorHost, _RayControl
+    from ._hosts import _RayWorker, _ActorHost, _JobRegistry
+    from ._control import _Control
     _ensure_gateway()
     globals_update = {}
     if not _collections_created:
         store = charm4py.Group(charm4py.ObjectStore)
         workers = charm4py.Group(_RayWorker)
         actors = charm4py.Array(_ActorHost, ndims=2)
-        control = charm4py.Chare(_RayControl, onPE=0)
+        ctl = charm4py.Group(_Control)
+        jobs = charm4py.Chare(_JobRegistry, onPE=0)
         globals_update.update(object_store=store, _workers=workers, _actors=actors,
-                              _control=control)
+                              _ctl=ctl, _jobs=jobs)
         _collections_created = True
     else:
-        workers, actors, control = _workers, _actors, _control
+        workers, actors, ctl = _workers, _actors, _ctl
     session_id = uuid.uuid4().hex
     nodes = _discover_nodes(workers, session_id, num_cpus, num_gpus, resources)
-    control.configure(nodes, actors, ret=True).get()
+    ctl.configure(nodes, actors, awaitable=True).get()
     globals_update.update(_initialized=True, _session_id=session_id, _isolation=isolation,
                           _nodes=nodes, _address=_address)
     charm.thisProxy.updateGlobals(globals_update, awaitable=True,
@@ -324,6 +327,36 @@ def _address_info():
             'node_id': _my_node()['NodeID'] if _nodes else None, 'webui_url': None}
 
 
+# ---- topology: a Ray node is a physical host. For testing the multi-node
+# logic on one machine, CHARM4PY_RAY_FAKE_NODES=k splits the PEs into k nodes.
+
+def _fake_nodes():
+    n = os.environ.get('CHARM4PY_RAY_FAKE_NODES')
+    return max(1, min(int(n), _charm().numPes())) if n else None
+
+
+def _num_hosts():
+    return _fake_nodes() or _charm().numHosts()
+
+
+def _host_pes(host):
+    fake = _fake_nodes()
+    if fake:
+        return [pe for pe in range(_charm().numPes()) if _pe_host(pe) == host]
+    return list(_charm().getHostPes(host))
+
+
+def _pe_host(pe):
+    fake = _fake_nodes()
+    if fake:
+        return pe * fake // _charm().numPes()
+    return _charm().getPeHost(pe)
+
+
+def _my_host():
+    return _pe_host(_charm().myPe())
+
+
 def _node_id_hex(session_id, host):
     # Ray node IDs are 28 bytes (56 hex digits); sha224 has exactly that length
     return hashlib.sha224((session_id + ':node:' + str(host)).encode()).hexdigest()
@@ -331,14 +364,14 @@ def _node_id_hex(session_id, host):
 
 def _discover_nodes(workers, session_id, num_cpus, num_gpus, resources):
     charm = _charm()
-    num_hosts = charm.numHosts()
-    replies = [workers[charm.getHostFirstPe(h)].node_info(ret=True) for h in range(num_hosts)]
+    num_hosts = _num_hosts()
+    replies = [workers[_host_pes(h)[0]].node_info(ret=True) for h in range(num_hosts)]
     nodes = []
     for host, reply in enumerate(replies):
         hostname, ip, memory, gpu_ids = reply.get()
         if num_hosts == 1:
             ip = '127.0.0.1'
-        pes = list(charm.getHostPes(host))
+        pes = _host_pes(host)
         res = {'CPU': float(len(pes) if num_cpus is None else num_cpus),
                'memory': float(memory),
                'object_store_memory': float(memory) * 0.3,
@@ -351,7 +384,7 @@ def _discover_nodes(workers, session_id, num_cpus, num_gpus, resources):
             res['GPU'] = float(len(gpu_ids))
         for key, amount in (resources or {}).items():
             res[key] = float(amount)
-        if host == charm.myHost():
+        if host == _my_host():
             res['node:__internal_head__'] = 1.0
         node_id = _node_id_hex(session_id, host)
         nodes.append({'NodeID': node_id, 'Alive': True, 'alive': True,
@@ -443,8 +476,9 @@ def _end_job(job_id):
     """On PE 0: ends a job, and stops the runtime if no other job is running."""
     if not _initialized:
         return
-    if _control.end_job(job_id, ret=True).get() == 0:
-        _control.shutdown(ret=True).get()
+    _ctl.end_job(job_id, awaitable=True).get()
+    if _jobs.end_job(job_id, ret=True).get() == 0:
+        _ctl.shutdown(awaitable=True).get()
         _pg_bundle_nodes.clear()
         _workers.stop_task_workers(awaitable=True).get()
         _charm().thisProxy.updateGlobals({'_initialized': False}, awaitable=True,
@@ -769,7 +803,7 @@ def _copy_if_local(pe, args, kwargs):
 def _my_node():
     if _client is not None:
         return _nodes[_client_host]
-    return _nodes[_charm().myHost()]
+    return _nodes[_my_host()]
 
 
 def _node_index(node_id):
@@ -803,7 +837,7 @@ def available_resources():
     if _client is not None:
         return _client.call('available_resources')
     total = {}
-    for avail in _control.available_resources_per_node(ret=True).get().values():
+    for avail in available_resources_per_node().values():
         for key, amount in avail.items():
             total[key] = total.get(key, 0.0) + amount
     return {k: v for k, v in total.items() if v > 0}
@@ -813,7 +847,9 @@ def available_resources_per_node():
     _ensure_initialized()
     if _client is not None:
         return _client.call('available_resources_per_node')
-    return _control.available_resources_per_node(ret=True).get()
+    from ._control import node_pe
+    replies = [_ctl[node_pe(i)].node_available(ret=True) for i in range(len(_nodes))]
+    return dict(reply.get() for reply in replies)
 
 
 def total_resources_per_node():
@@ -874,7 +910,9 @@ def _placement_group_bundle_nodes(pg):
     key = pg.id.hex()
     if key not in _pg_bundle_nodes:
         get(pg.ready())
-        _pg_bundle_nodes[key] = _control.placement_group_bundle_nodes(key, ret=True).get()
+        from ._control import pg_coordinator
+        _pg_bundle_nodes[key] = _ctl[pg_coordinator(key)].pg_bundle_nodes(key,
+                                                                         ret=True).get()
     return _pg_bundle_nodes[key]
 
 
@@ -955,7 +993,8 @@ def kill(actor, *, no_restart=True):
     if _client is not None:
         return _client.call('kill', actor, no_restart=no_restart)
     actor._mark_killed()
-    _control.kill_actor(actor._key, ret=True).get()
+    # the actor's coordinator: the PE that created it
+    _ctl[actor._key[0]].kill_actor(actor._key, ret=True).get()
 
 
 def get_actor(name, namespace=None):
@@ -966,7 +1005,9 @@ def get_actor(name, namespace=None):
     if _client is not None:
         return _client.call('get_actor', name, namespace)
     ns = namespace if namespace is not None else _namespace()
-    state = _control.get_actor(name, ns, ret=True).get()
+    from ._control import name_shard
+    name_key = ('actor', ns, name)
+    state = _ctl[name_shard(name_key)].lookup_name(name_key, ret=True).get()
     if state is None:
         raise ValueError(
             "Failed to look up actor with name '" + name + "'. This could because 1. "
