@@ -141,6 +141,13 @@ module as the driver, like `python -m`):
 external placement groups, `VLLM_RAY_BUNDLE_INDICES`, TP=1/2/4 and PP=2
 executors, generation at TP=2); the 2 failures are generation at PP=2, below.
 
+`vllm_serve_dp.sh` runs vLLM's OpenAI server with data parallelism on the Ray
+backend (each engine replica is an actor that creates its own executor and
+workers): DP=2 serves identical completions on charm4py.ray and on Ray, and
+shuts down cleanly on SIGINT. On one machine both need `VLLM_HOST_IP=127.0.0.1`,
+since vLLM takes the LAN address as the DP master while a local Ray node is
+127.0.0.1.
+
 TP=1 matches too. PP=2 fails the same way with vLLM's own multiprocessing
 executor (`intermediate_tensors` is None on the second stage): a vLLM CPU
 issue, not a Ray one.

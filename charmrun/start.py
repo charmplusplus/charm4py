@@ -132,10 +132,22 @@ def start(args=None):
             cmd.append(sys.executable)
         cmd.extend(args)
         try:
-            return subprocess.call(cmd)
+            # the job gets a process group of its own, and SIGINT and SIGTERM
+            # sent to this process are passed on to all of it
+            proc = subprocess.Popen(cmd, start_new_session=True)
         except FileNotFoundError:
             print('lcrun executable not found:', lcrun)
             return 1
+        import signal
+
+        def forward(signum, frame):
+            try:
+                os.killpg(proc.pid, signum)
+            except OSError:
+                pass
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, forward)
+        return proc.wait()
 
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
         args.append('++local')

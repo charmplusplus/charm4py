@@ -36,7 +36,9 @@ class WorkerProcess(object):
     """A worker process started by this PE, or (``sock``) a process that
     connected to it (see Listener)."""
 
-    def __init__(self, env, on_message, on_exit, sock=None, pid=None):
+    def __init__(self, env, on_message, on_exit, sock=None, pid=None, own_session=False):
+        """``own_session``: the process does not get the job's terminal signals
+        (actor and task workers; the driver does)."""
         self.on_message = on_message
         self.on_exit = on_exit
         self.outstanding = 0
@@ -54,7 +56,8 @@ class WorkerProcess(object):
         full_env['CHARM_NOLOAD'] = '1'          # the worker does not load Charm++
         full_env['CHARM4PY_RAY_WORKER'] = '1'
         cmd = [sys.executable, '-m', 'charm4py.ray._worker_main', str(child_sock.fileno())]
-        self.proc = subprocess.Popen(cmd, env=full_env, pass_fds=(child_sock.fileno(),))
+        self.proc = subprocess.Popen(cmd, env=full_env, pass_fds=(child_sock.fileno(),),
+                                     start_new_session=own_session)
         child_sock.close()
         self._pid = self.proc.pid
         self.conn = Connection(parent_sock.detach())

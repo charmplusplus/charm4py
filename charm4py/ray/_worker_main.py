@@ -55,6 +55,7 @@ class _Channel(object):
         self.calls_lock = threading.Lock()
         self.next_rid = 0
         self.closed = False
+        self.exit_on_close = False
         threading.Thread(target=self._read, name='charm4py-ray-reader', daemon=True).start()
         threading.Thread(target=self._release_loop, name='charm4py-ray-release',
                          daemon=True).start()
@@ -99,6 +100,12 @@ class _Channel(object):
         except BaseException:
             traceback.print_exc()
         self.closed = True
+        if self.exit_on_close:
+            # the driver: the job it ran in is gone
+            import signal
+            print('charm4py.ray: the Charm4py job ended; exiting', file=sys.stderr,
+                  flush=True)
+            os.kill(os.getpid(), signal.SIGTERM)
         self.work.put(None)
         with self.calls_lock:
             slots, self.calls = list(self.calls.values()), {}
@@ -375,7 +382,12 @@ def _main():
             sys.path.append(path)
     from charm4py.ray.launch import install_ray_facade, _load_script
     install_ray_facade(worker=True)
+    import signal
+    # a driver gets Ctrl-C (the Charm4py processes ignore it, and the worker
+    # inherited that)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
     channel = _Channel(conn, side)
+    channel.exit_on_close = info['kind'] == 'driver'
     api._client = channel
     api.__dict__.update(info['globals'])
     if api._address:

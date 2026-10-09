@@ -113,6 +113,11 @@ def _launch():
               '[args]')
         sys.exit(2)
     install_ray_facade()
+    if not in_process:
+        # Ctrl-C is for the driver (a process of its own), which ends the job
+        # when it exits; the Charm4py processes keep serving it until then
+        import signal
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     shim = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_shim')
     os.environ['PYTHONPATH'] = os.pathsep.join(
         [shim] + [p for p in os.environ.get('PYTHONPATH', '').split(os.pathsep) if p])

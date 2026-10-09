@@ -112,7 +112,8 @@ class _Link(object):
         self.rids = itertools.count()
         self.blocking = 0             # API calls in progress that may wait
         self.api_calls = {}           # rid -> decoded API call waiting for serve_api
-        self.worker = WorkerProcess(env or {}, self._on_message, self._on_exit, sock=sock)
+        self.worker = WorkerProcess(env or {}, self._on_message, self._on_exit, sock=sock,
+                                    own_session=kind in ('actor', 'tasks'))
         charm = api._charm()
         shared = _shared_globals()
         if kind in ('driver', 'client'):
