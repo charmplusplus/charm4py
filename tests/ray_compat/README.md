@@ -20,9 +20,13 @@ Charm4py (here on Reconverse; `LCRUN` points at LCI's launcher):
     export LCRUN=/path/to/lci/lcrun
     python -m charmrun.start +p4 -m charm4py.ray.launch tests/ray_compat/contract.py
 
-`charm4py.ray.launch` installs `charm4py.ray` as the `ray` package, imports the
-script on every PE as `__mp_main__` (like multiprocessing's spawn mode) and runs
-it on PE 0 as `__main__`. Driver code must be under `if __name__ == '__main__':`.
+`charm4py.ray.launch` installs `charm4py.ray` as the `ray` package and runs the
+program with Ray's process model: the driver script runs in a process of its
+own (served by PE 0), and tasks and actors run in worker processes owned by the
+PEs (see "How it works" below). Every PE and worker imports the script as
+`__mp_main__` (like multiprocessing's spawn mode), so driver code must be under
+`if __name__ == '__main__':`. `--in-process` instead runs the driver, tasks and
+actors as coroutines inside the Charm4py processes.
 
 Arguments select tests by substring, e.g. `contract.py test_wait test_kill`. The
 last line of output is a JSON summary.
@@ -34,13 +38,33 @@ The suite assumes one node with 4 CPUs and 2 GPUs, which it requests from
 
 | Backend | Result |
 |---|---|
-| Ray 2.56.1 | 47/47 |
-| charm4py.ray, `+p4` / `+p8` | 47/47 |
-| charm4py.ray, `+p2` | 46/47 (`test_wait_order_and_num_returns`) |
-| charm4py.ray, `+p1` | 42/47 |
+| Ray 2.56.1 | 52/52 |
+| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 52/52 |
+| charm4py.ray `--in-process`, `+p4` | fails the isolation tests (by design) |
 
-The `+p1`/`+p2` failures all come from the same limitation (below): tasks and
-actors that block in `time.sleep` occupy their whole PE.
+## How it works
+
+Charm4py processes (one per PE) run the runtime: object store, task dispatch,
+actor hosts, and `_RayControl` (PE 0: names, resources, placement groups). User
+code runs in worker processes that do not load Charm++:
+
+- the **driver** process, served by `_DriverHost` on PE 0;
+- one **actor** process per actor, owned by the actor's `_ActorHost` element,
+  which orders its calls and stores their results;
+- a pool of **task** processes per PE, owned by `_RayWorker` (at most the node's
+  CPUs divided among its PEs run at once; a task blocked in `ray.get`/`ray.wait`
+  frees its slot, so nested tasks cannot deadlock the pool).
+
+A worker's `ray` calls are forwarded to its host over a socket (any thread may
+call); references cross that boundary as tokens (`_ipc.py`) so Charm4py's
+borrower protocol never sees a non-Charm process. Hosts poll their workers'
+sockets from a Charm timer, every 0.2 ms when active and every 10 ms when idle.
+Isolation gives each actor its own `os.environ`, `CUDA_VISIBLE_DEVICES` (from its
+assigned GPUs) and lifetime: `ray.kill` terminates the process, and a crash
+becomes `ActorDiedError`.
+
+Programs that use `charm.start` directly default to in-process execution, since
+their tasks and actors may call Charm4py; `ray.init(_isolation='process')` opts in.
 
 ## What charm4py.ray implements
 
@@ -80,23 +104,17 @@ actors that block in `time.sleep` occupy their whole PE.
 
 ## Known gaps
 
-- **Process model.** Tasks and actors run as coroutines inside the Charm4py
-  process of a PE. Code that blocks without yielding (`time.sleep`, a busy loop,
-  a long native call) stops every other task, actor and runtime message on that
-  PE. Consequences: concurrency is bounded by the number of PEs (PE 0, the
-  driver's, is not used for tasks or actors when there are others); with `+p1`
-  such code also blocks the driver; `ray.kill` cannot stop a running method (its
-  pending results fail at once, but the code runs to completion); actors in one
-  process share `os.environ`, so `runtime_env["env_vars"]` is process-wide.
-  This is Phase 3 (actor isolation) of the plan.
-- No resource admission for tasks: task `num_cpus`/`num_gpus` are validated but
-  tasks are dispatched round-robin to PEs regardless.
-- `ray.get`/`ray.wait` must be called from the driver, a task or an actor
-  method -- not from other Python threads (vLLM's `RayWorkerMonitor` thread does
-  this; also Phase 3).
-- Not implemented: `ray.cancel`, DAGs (`.bind`), async actors, streaming
-  generators, object spilling and lineage reconstruction, failure detection of
-  crashed processes, autoscaling. `ray.init(address=...)` cannot join a
-  separately started cluster.
-- References are never freed (their futures stay registered), so long-running
-  programs grow.
+The main ones:
+
+- The control plane is centralized: `_RayControl` (one chare on PE 0) decides
+  actor placement and owns all resources, names and placement groups.
+- Tasks are dispatched round-robin to PEs, without resource admission;
+  task `num_gpus` gets no accelerator IDs and no `CUDA_VISIBLE_DEVICES`.
+- No restarts or retries (`max_restarts`, `max_task_retries`,
+  `retry_exceptions`), no detection of a dead node or Charm4py process.
+- References are never freed; objects move between worker processes by
+  pickling over sockets (no shared-memory object store).
+- Not implemented: `ray.cancel`, `max_concurrency > 1`, async actors,
+  concurrency groups, streaming generators, DAGs, `runtime_env` beyond
+  `env_vars`, detached actors, joining a cluster by `address`, `ray.util` beyond
+  placement groups and scheduling strategies, the state API.

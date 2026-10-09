@@ -8,6 +8,10 @@ same object compare and hash equal, and they print and serialize their ID the wa
 
 from ..threads import Future
 
+# True in actor worker processes, where references are inert stand-ins (see
+# _ipc.py) that must never run Charm4py's pickling or deletion protocol.
+INERT = False
+
 
 class ObjectRef(Future):
 
@@ -31,6 +35,10 @@ class ObjectRef(Future):
         return 'ObjectRef(' + self.hex() + ')'
 
     __str__ = __repr__
+
+    def __del__(self):
+        if not INERT:
+            Future.__del__(self)
 
     def __setstate__(self, state):
         # Future pickles through __getstate__/__setstate__, which does the

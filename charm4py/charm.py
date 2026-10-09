@@ -632,10 +632,11 @@ class Charm(object):
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
-        from .ray._hosts import _RayWorker, _ActorHost, _RayControl
+        from .ray._hosts import _RayWorker, _ActorHost, _RayControl, _DriverHost
         self.register(_RayWorker, (GROUP,))
         self.register(_ActorHost, (ARRAY,))
         self.register(_RayControl, (ARRAY,))
+        self.register(_DriverHost, (ARRAY,))
 
         if self.options.profiling:
             self.internalChareTypes.update({SectionManager, CharmRemote,

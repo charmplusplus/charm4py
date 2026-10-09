@@ -31,8 +31,19 @@ _session_id = None
 _namespace = None
 _nodes = None         # list of node records, indexed by Charm physical node
 _job_runtime_env = None
+_isolation = 'none'   # 'process': tasks, actors (and the driver) run in worker processes
 
 JOB_ID = '01000000'
+
+# ---- set in actor worker processes (see _worker_main.py) ----
+_client = None        # forwards API calls to the actor's host
+_client_pe = None     # the host's PE
+_client_host = None   # the host's node index
+_client_kind = None   # 'driver', 'actor' or 'tasks'
+
+# set by charm4py.ray.launch: the script, which worker processes can import
+_main_script = None
+_default_isolation = None
 
 # ---- per-process state ----
 _collections_created = False
@@ -57,6 +68,10 @@ def is_initialized():
 
 
 def _ensure_initialized():
+    if _client is not None:
+        if not _initialized and _client_kind == 'driver':
+            init()
+        return
     if not _initialized:
         charm = _charm()
         if charm.started and charm.myPe() == 0 and not charm.threadMgr.isMainThread():
@@ -85,6 +100,7 @@ class _RayContext(dict):
 
 
 _INIT_ACCEPTED = {
+    '_isolation',
     'include_dashboard', 'dashboard_host', 'dashboard_port', 'log_to_driver',
     'logging_level', 'logging_format', 'logging_config', 'configure_logging',
     'object_store_memory', 'local_mode', 'job_config', 'storage', 'labels',
@@ -100,9 +116,14 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
     ``address`` is accepted for source compatibility and ignored: the "cluster" is
     always the set of processes started with this Charm4py job. ``num_cpus``,
     ``num_gpus`` and ``resources`` describe each node (each physical host), since
-    every host is started together; by default a node has one CPU per PE."""
+    every host is started together; by default a node has one CPU per PE.
+
+    ``_isolation`` (charm4py only): 'process' runs tasks and actors in worker
+    processes, like Ray; 'none' runs them inside the Charm4py processes, as
+    coroutines. The default is 'process' for programs started with
+    charm4py.ray.launch and 'none' for Charm4py programs (charm.start), whose
+    tasks and actors may use Charm4py."""
     global _collections_created
-    charm = _charm()
     if _initialized:
         if ignore_reinit_error:
             return _RayContext(_address_info())
@@ -113,6 +134,19 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
     for key in kwargs:
         if key not in _INIT_ACCEPTED and not key.startswith('_'):
             raise RuntimeError('Unknown keyword argument(s): ' + key)
+    if _client is not None:
+        # the driver process: Charm4py's PE 0 initializes, and sends back the state
+        # every process shares
+        shared = _client.call('_init', address, num_cpus=num_cpus, num_gpus=num_gpus,
+                              resources=resources, namespace=namespace,
+                              runtime_env=runtime_env, **kwargs)
+        globals().update(shared)
+        return _RayContext(_address_info())
+    charm = _charm()
+    isolation = kwargs.get('_isolation') or _default_isolation or \
+        ('process' if _main_script else 'none')
+    if isolation not in ('process', 'none'):
+        raise ValueError("_isolation must be 'process' or 'none'")
     if not charm.started:
         raise RuntimeError('charm4py.ray.init() must be called after charm.start(), '
                            'from the driver (the main function on PE 0)')
@@ -144,6 +178,7 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
     nodes = _discover_nodes(workers, session_id, num_cpus, num_gpus, resources)
     control.configure(nodes, actors, ret=True).get()
     globals_update.update(_initialized=True, _session_id=session_id,
+                          _isolation=isolation,
                           _namespace=namespace or str(uuid.uuid4()), _nodes=nodes,
                           _job_runtime_env=dict(runtime_env or {}))
     charm.thisProxy.updateGlobals(globals_update, awaitable=True,
@@ -225,11 +260,17 @@ def shutdown(_exiting_interpreter=False):
     may be called again."""
     if not _initialized:
         return
+    if _client is not None:
+        if _client_kind == 'driver':
+            _client.call('_shutdown')
+            globals()['_initialized'] = False
+        return
     charm = _charm()
     if charm.myPe() != 0:
         raise RuntimeError('ray.shutdown() can only be called from the driver (PE 0)')
     _control.shutdown(ret=True).get()
     _pg_bundle_nodes.clear()
+    _workers.stop_task_workers(awaitable=True).get()
     charm.thisProxy.updateGlobals({'_initialized': False}, awaitable=True,
                                   module_name=__name__).get()
 
@@ -348,13 +389,22 @@ def get(object_refs, *, timeout=None):
                          'list of ObjectRefs. ')
     if not refs:
         return []
+    if _client is not None:
+        stored = _client.call('_get_stored', refs, timeout)
+    else:
+        stored = _get_stored(refs, timeout)
+    values = [unwrap_value(value) for value in stored]
+    return values[0] if single else values
+
+
+def _get_stored(refs, timeout):
+    """The stored values (still wrapped) of ``refs``, fetching them first."""
     unique = list({ref.store_id: ref for ref in refs}.values())
     _fetch(unique, len(unique), timeout)
     stored = [_local_value(ref) for ref in refs]
     if any(value is None for value in stored):
         raise exceptions.GetTimeoutError('Get timed out: some object(s) not ready.')
-    values = [unwrap_value(value) for value in stored]
-    return values[0] if single else values
+    return stored
 
 
 def wait(ray_waitables, *, num_returns=1, timeout=None, fetch_local=True):
@@ -385,6 +435,9 @@ def wait(ray_waitables, *, num_returns=1, timeout=None, fetch_local=True):
     if num_returns > len(ray_waitables):
         raise ValueError('num_returns cannot be greater than the number of '
                          'ray_waitables provided to ray.wait.')
+    if _client is not None:
+        return _client.call('wait', ray_waitables, num_returns=num_returns,
+                            timeout=timeout, fetch_local=fetch_local)
     _fetch(ray_waitables, num_returns, timeout)
     ready, not_ready = [], []
     for ref in ray_waitables:
@@ -402,6 +455,8 @@ def put(value, *, _owner=None):
         raise TypeError("Calling 'put' on an ray.ObjectRef is not allowed. If you really "
                         "want to do this, you can wrap the ray.ObjectRef in a list and "
                         "call 'put' on it.")
+    if _client is not None:
+        return _client.call('put', value)
     ref = _new_ref()
     stored = wrap_value(value)
     ref.create_object(stored)
@@ -489,6 +544,8 @@ def _copy_if_local(pe, args, kwargs):
 # ---------------------------------------------------------------- topology
 
 def _my_node():
+    if _client is not None:
+        return _nodes[_client_host]
     return _nodes[_charm().myHost()]
 
 
@@ -520,6 +577,8 @@ def cluster_resources():
 
 def available_resources():
     _ensure_initialized()
+    if _client is not None:
+        return _client.call('available_resources')
     total = {}
     for avail in _control.available_resources_per_node(ret=True).get().values():
         for key, amount in avail.items():
@@ -529,6 +588,8 @@ def available_resources():
 
 def available_resources_per_node():
     _ensure_initialized()
+    if _client is not None:
+        return _client.call('available_resources_per_node')
     return _control.available_resources_per_node(ret=True).get()
 
 
@@ -545,8 +606,8 @@ def get_node_ip_address():
     if _initialized and _nodes:
         return _my_node()['NodeManagerAddress']
     if _node_ip is None:
-        charm = _charm()
-        if charm.started and charm.numHosts() == 1:
+        charm = None if _client is not None else _charm()
+        if charm is not None and charm.started and charm.numHosts() == 1:
             _node_ip = '127.0.0.1'
         else:
             _node_ip = _local_node_info()[1]
@@ -625,14 +686,21 @@ def _set_context(ctx):
     getcurrent()._ray_ctx = ctx
 
 
+def _my_pe():
+    return _client_pe if _client is not None else _charm().myPe()
+
+
 def _new_task_id():
-    charm = _charm()
-    return format((charm.myPe() << 40) + next(_task_counter), '048x')
+    if _client is not None:
+        # unique across the worker processes of one PE
+        return format((_client_pe << 40) + ((os.getpid() & 0xffff) << 24) +
+                      next(_task_counter), '048x')
+    return format((_charm().myPe() << 40) + next(_task_counter), '048x')
 
 
 def _worker_id():
-    return hashlib.sha224(((_session_id or '') + ':worker:' +
-                           str(_charm().myPe())).encode()).hexdigest()
+    who = str(_my_pe()) + (':' + str(os.getpid()) if _client is not None else '')
+    return hashlib.sha224(((_session_id or '') + ':worker:' + who).encode()).hexdigest()
 
 
 # ---------------------------------------------------------------- actors
@@ -645,6 +713,8 @@ def kill(actor, *, no_restart=True):
         raise ValueError('ray.kill() only supported for actors. For tasks, try '
                          'ray.cancel(). Got: ' + str(type(actor)) + '.')
     _ensure_initialized()
+    if _client is not None:
+        return _client.call('kill', actor, no_restart=no_restart)
     actor._mark_killed()
     _control.kill_actor(actor._key, ret=True).get()
 
@@ -654,6 +724,8 @@ def get_actor(name, namespace=None):
     _ensure_initialized()
     if not name:
         raise ValueError('Please supply a non-empty value to get_actor')
+    if _client is not None:
+        return _client.call('get_actor', name, namespace)
     ns = namespace if namespace is not None else _namespace
     state = _control.get_actor(name, ns, ret=True).get()
     if state is None:

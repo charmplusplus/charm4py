@@ -189,6 +189,28 @@ class Counter:
 
 
 @ray.remote
+class Probe:
+    """Process-level behavior of an actor."""
+
+    def pid(self):
+        return os.getpid()
+
+    def env(self, name):
+        return os.environ.get(name)
+
+    def spin_forever(self):
+        while True:
+            time.sleep(0.05)
+
+    def crash(self):
+        os._exit(3)
+
+    def sleep(self, t):
+        time.sleep(t)
+        return t
+
+
+@ray.remote
 class BadInit:
     def __init__(self):
         raise KeyError('constructor failed')
@@ -564,6 +586,91 @@ def test_exit_actor():
     c = Counter.remote()
     raises(ray.exceptions.RayActorError, ray.get, c.leave.remote(), timeout=30)
     raises(ray.exceptions.RayActorError, ray.get, c.get.remote(), timeout=30)
+
+
+@test
+def test_actor_process_isolation():
+    a, b = Probe.remote(), Probe.remote()
+    pid_a, pid_b = ray.get([a.pid.remote(), b.pid.remote()])
+    check(pid_a != os.getpid() and pid_b != os.getpid() and pid_a != pid_b,
+          'every actor has its own process')
+    env = Probe.options(runtime_env={'env_vars': {'CONTRACT_ONLY_IN_ACTOR': 'yes'}}).remote()
+    check(ray.get(env.env.remote('CONTRACT_ONLY_IN_ACTOR')) == 'yes')
+    check(os.environ.get('CONTRACT_ONLY_IN_ACTOR') is None, 'the driver is unaffected')
+    check(ray.get(a.env.remote('CONTRACT_ONLY_IN_ACTOR')) is None,
+          'other actors are unaffected')
+    gpu = Probe.options(num_gpus=1).remote()
+    visible = ray.get(gpu.env.remote('CUDA_VISIBLE_DEVICES'))
+    check(visible in [str(i) for i in range(NUM_GPUS)], 'CUDA_VISIBLE_DEVICES=' + str(visible))
+    for h in (a, b, env, gpu):
+        ray.kill(h)
+
+
+@test
+def test_blocking_actors_run_concurrently():
+    actors = [Probe.remote() for _ in range(3)]
+    ray.get([h.pid.remote() for h in actors])
+    t0 = time.time()
+    check(ray.get([h.sleep.remote(1.0) for h in actors], timeout=10) == [1.0] * 3)
+    check(time.time() - t0 < 2.0, 'took %.2fs' % (time.time() - t0))
+    for h in actors:
+        ray.kill(h)
+
+
+@test
+def test_kill_stops_running_code():
+    a = Probe.remote()
+    pid = ray.get(a.pid.remote())
+    pending = a.spin_forever.remote()
+    time.sleep(0.3)
+    ray.kill(a)
+    raises(ray.exceptions.RayActorError, ray.get, pending, timeout=10)
+
+    def gone():
+        try:
+            os.kill(pid, 0)
+            return False
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+    check(eventually(gone, 10), 'the actor process exited')
+
+
+@test
+def test_actor_crash_detected():
+    a = Probe.remote()
+    ray.get(a.pid.remote())
+    e = raises(ray.exceptions.RayActorError, ray.get, a.crash.remote(), timeout=30)
+    check(isinstance(e, ray.exceptions.ActorDiedError))
+    raises(ray.exceptions.RayActorError, ray.get, a.pid.remote(), timeout=30)
+
+
+@test
+def test_driver_threads():
+    """vLLM's RayWorkerMonitor: a driver thread polls ray.wait with a timeout
+    while the main thread keeps using Ray."""
+    import threading
+    w = Probe.remote()
+    run_ref = w.sleep.remote(1.5)
+    seen = {}
+
+    def monitor():
+        polls = 0
+        while True:
+            done, _ = ray.wait([run_ref], num_returns=1, timeout=0.2)
+            polls += 1
+            if done:
+                seen['polls'] = polls
+                seen['value'] = ray.get(done[0])
+                return
+    t = threading.Thread(target=monitor, daemon=True)
+    t.start()
+    check([ray.get(add.remote(i, i)) for i in range(5)] == [0, 2, 4, 6, 8])
+    t.join(timeout=10)
+    check(not t.is_alive(), 'the monitor thread finished')
+    check(seen.get('value') == 1.5 and seen['polls'] >= 2, str(seen))
+    ray.kill(w)
 
 
 @test

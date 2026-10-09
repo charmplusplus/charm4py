@@ -36,7 +36,8 @@ def describe(obj, wrapper=None):
             found = _lookup(module, qualname)
         except Exception:
             found = None
-        if found is not None and (found is obj or (wrapper is not None and found is wrapper)):
+        if found is not None and (found is obj or found is wrapper or
+                                  _unwrap(found) is obj):
             return ('ref', module, qualname)
     for lib_name in ('cloudpickle', 'dill'):
         try:
@@ -48,6 +49,20 @@ def describe(obj, wrapper=None):
     raise TypeError('charm4py.ray cannot send ' + repr(obj) + ' to other processes: it '
                     'is not reachable by name from its module, and neither cloudpickle '
                     'nor dill is installed to serialize it by value')
+
+
+def by_value(obj):
+    """Describes ``obj`` by value even if it could be found by name (for a
+    process that cannot import the module it comes from)."""
+    try:
+        import cloudpickle
+        data = cloudpickle.dumps(obj)
+        return ('value', 'cloudpickle', data, hashlib.sha1(data).hexdigest())
+    except ImportError:
+        pass
+    import dill
+    data = dill.dumps(obj, byref=False, recurse=True)
+    return ('value', 'dill', data, hashlib.sha1(data).hexdigest())
 
 
 def resolve(desc):

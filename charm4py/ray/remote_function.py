@@ -49,6 +49,8 @@ class RemoteFunction(object):
 
     def _remote(self, args, kwargs, options):
         api._ensure_initialized()
+        if api._client is not None:
+            return api._client.call('_submit_task', self, args, kwargs, options)
         if self._desc is None:
             self._desc = describe(self._function, self)
         num_returns = options.get('num_returns', 1)

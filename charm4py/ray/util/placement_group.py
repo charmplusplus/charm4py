@@ -48,6 +48,8 @@ class PlacementGroup(object):
         """An ObjectRef that becomes ready (holding this placement group) once every
         bundle has been reserved."""
         api._ensure_initialized()
+        if api._client is not None:
+            return api._client.call('_pg_ready', self)
         ref = api._new_ref()
         api._control.pg_ready(self.id.hex(), ref)
         return ref
@@ -118,6 +120,8 @@ def placement_group(bundles, strategy='PACK', name='', lifetime=None,
             raise TypeError("placement_group() got an unexpected keyword argument '" +
                             key + "'")
     api._ensure_initialized()
+    if api._client is not None:
+        return api._client.call('placement_group', bundles, strategy=strategy, name=name)
     pg_id = uuid.uuid4().hex[:28] + api.JOB_ID
     api._control.create_pg(pg_id, specs, strategy, name)
     return PlacementGroup(PlacementGroupID(pg_id), specs)
@@ -126,11 +130,15 @@ def placement_group(bundles, strategy='PACK', name='', lifetime=None,
 def remove_placement_group(placement_group):
     """Releases the reservation and kills the actors scheduled in it."""
     api._ensure_initialized()
+    if api._client is not None:
+        return api._client.call('remove_placement_group', placement_group)
     api._control.remove_pg(placement_group.id.hex(), ret=True).get()
 
 
 def get_placement_group(placement_group_name):
     api._ensure_initialized()
+    if api._client is not None:
+        return api._client.call('get_placement_group', placement_group_name)
     found = api._control.pg_by_name(placement_group_name, ret=True).get()
     if found is None:
         raise ValueError('Failed to look up placement group with name: ' +
@@ -149,5 +157,7 @@ def get_current_placement_group():
 
 def placement_group_table(placement_group=None):
     api._ensure_initialized()
+    if api._client is not None:
+        return api._client.call('placement_group_table', placement_group)
     pg_id = placement_group.id.hex() if placement_group is not None else None
     return api._control.pg_table(pg_id, ret=True).get()

@@ -3,6 +3,7 @@
 import collections
 import functools
 import inspect
+import itertools
 
 from . import api, _options
 from ._serialization import describe
@@ -14,6 +15,8 @@ from .remote_function import _returns
 _INFLIGHT_LIMIT = 10000
 
 _SPECIAL_METHODS = ('__ray_ready__', '__ray_terminate__')
+
+_handle_uids = itertools.count()
 
 
 class _ActorExit(SystemExit):
@@ -117,6 +120,8 @@ class ActorClass(object):
 
     def _remote(self, args, kwargs, options):
         api._ensure_initialized()
+        if api._client is not None:
+            return api._client.call('_create_actor', self, args, kwargs, options)
         charm = api._charm()
         if self._desc is None:
             self._desc = describe(self._cls, self)
@@ -185,8 +190,10 @@ class ActorHandle(object):
         self._class_name = class_name
         self._method_meta = method_meta
         self._actor_id = _ActorID(actor_id)
-        charm = api._charm()
-        self._caller = (charm.myPe(), next(api._caller_counter))
+        self._uid = next(_handle_uids)
+        # in a worker process the host-side copy of this handle is the caller
+        self._caller = None if api._client is not None else (
+            api._charm().myPe(), next(api._caller_counter))
         self._seq = 0
         self._killed = None
         self._inflight = collections.deque()
@@ -234,6 +241,8 @@ class ActorHandle(object):
 
     def _invoke(self, method_name, args, kwargs, num_returns):
         api._ensure_initialized()
+        if api._client is not None:
+            return api._client.call('_invoke', self, method_name, args, kwargs, num_returns)
         refs = [api._new_ref() for _ in range(num_returns)]
         if self._killed is not None:
             for ref in refs:

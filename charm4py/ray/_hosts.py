@@ -1,102 +1,347 @@
 """Charm chares that implement Ray: _RayWorker (one per PE) runs tasks,
-_ActorHost (one array element per actor) runs an actor, and _RayControl (one, on
-PE 0) owns actor names, node resources and placement groups.
+_ActorHost (one array element per actor) runs an actor, _RayControl (one, on
+PE 0) owns actor names, node resources and placement groups, and _DriverHost (on
+PE 0, under charm4py.ray.launch) runs the driver script in its own process.
+
+With isolation 'process' (the default under charm4py.ray.launch) the user's code
+-- tasks, actors and the driver -- runs in worker processes (see _proc.py and
+_worker_main.py); these chares order the work, resolve arguments, store results
+and serve the workers' ray API calls. With isolation 'none' tasks and actors run
+right here, as coroutines of the PE.
 
 Registered by charm._registerInternalChares on every PE at charm.start()."""
 
 import collections
+import itertools
+import math
 import os
-import pickle
-import traceback
+import sys
 
 from greenlet import getcurrent
 
 from charm4py import Chare, coro
-from . import api
+from . import api, _ipc
+from ._errors import task_error as _task_error, crash_error as _crash_error
 from ._options import ACCELERATOR_KEYS
-from ._serialization import resolve
+from ._serialization import resolve, by_value
 from .actor import _ActorExit, killed_message
-from .exceptions import ActorDiedError, RayTaskError, RaySystemError
-
-_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
-_CHARM4PY_DIR = os.path.dirname(_PKG_DIR)
+from .exceptions import ActorDiedError, RaySystemError, RayTaskError
 
 
-def _user_traceback(exc):
-    """The traceback of ``exc`` without the frames of charm4py itself."""
-    frames = [f for f in traceback.extract_tb(exc.__traceback__)
-              if not os.path.abspath(f.filename).startswith(_CHARM4PY_DIR)]
-    lines = traceback.format_list(frames)
-    lines += traceback.format_exception_only(type(exc), exc)
-    return ''.join(lines)
+def _host_api():
+    """The ray API calls an actor worker process can make, run on its host."""
+    import importlib
+    # (ray.util.placement_group the module; the package exports a function of
+    # the same name)
+    pgm = importlib.import_module(__package__ + '.util.placement_group')
+    return {
+        '_init': _init_for_worker,
+        '_shutdown': api.shutdown,
+        '_get_stored': api._get_stored,
+        'wait': api.wait,
+        'put': api.put,
+        'kill': api.kill,
+        'get_actor': api.get_actor,
+        'available_resources': api.available_resources,
+        'available_resources_per_node': api.available_resources_per_node,
+        '_submit_task': lambda fn, args, kwargs, options: fn._remote(args, kwargs, options),
+        '_create_actor': lambda cls, args, kwargs, options: cls._remote(args, kwargs, options),
+        '_invoke': lambda handle, method, args, kwargs, n: handle._invoke(method, args, kwargs, n),
+        'placement_group': pgm.placement_group,
+        'remove_placement_group': pgm.remove_placement_group,
+        'placement_group_table': pgm.placement_group_table,
+        'get_placement_group': pgm.get_placement_group,
+        '_pg_ready': lambda pg: pg.ready(),
+    }
 
 
-def _portable_cause(exc):
-    """``exc`` if it survives pickling (it is stored in the object store and may be
-    sent to other processes), else None."""
-    try:
-        pickle.loads(pickle.dumps(exc))
-        return exc
-    except Exception:
-        return None
+_HOST_API = None
+
+# API calls during which a worker may wait for other work to finish
+_BLOCKING_CALLS = {'_get_stored', 'wait', '_pg_ready'}
+
+_SHARED_GLOBALS = ('_initialized', '_nodes', '_namespace', '_session_id',
+                   '_job_runtime_env', '_isolation')
 
 
-def _task_error(function_name, exc, actor_repr=None, actor_id=None):
-    tb = _user_traceback(exc)
-    cause = _portable_cause(exc)
-    if cause is None:
-        cause = RaySystemError(tb)
-    return RayTaskError(function_name, tb, cause, ip=api.get_node_ip_address(),
-                        actor_repr=actor_repr, actor_id=actor_id)
+def _shared_globals():
+    return {name: getattr(api, name) for name in _SHARED_GLOBALS}
 
 
-def _crash_error(function_name, code):
-    return RayTaskError(function_name, '  SystemExit: ' + str(code) +
-                        '\nThe task called sys.exit()', RaySystemError(
-                            'The worker exited while executing this task (sys.exit(' +
-                            str(code) + '))'), ip=api.get_node_ip_address())
+def _init_for_worker(*args, **kwargs):
+    api.init(*args, **kwargs)
+    return _shared_globals()
 
 
-class _RayWorker(Chare):
+def _resume_later(gr, value):
+    """Resumes a suspended coroutine from the scheduler, whatever greenlet runs."""
+    api._charm().scheduleCallableAfter(
+        lambda: api._charm().threadMgr.resumeThread(gr, value), 0)
+
+
+class _Link(object):
+    """One worker process, owned by a chare (see _LinkOwner)."""
+
+    def __init__(self, owner, link_id, kind, env=None, **info):
+        from ._proc import WorkerProcess
+        self.owner = owner
+        self.id = link_id
+        self.side = _ipc.HostSide()
+        self.replies = {}             # request id -> greenlet waiting for the reply
+        self.rids = itertools.count()
+        self.blocking = 0             # API calls in progress that may wait
+        self.worker = WorkerProcess(env or {}, self._on_message, self._on_exit)
+        charm = api._charm()
+        info.update(kind=kind, sys_path=list(sys.path), main_script=api._main_script,
+                    globals=dict(_shared_globals(), _client_pe=charm.myPe(),
+                                 _client_host=charm.myHost(), _client_kind=kind))
+        self.worker.send(self.side.dumps(('init', info)))
+
+    @property
+    def alive(self):
+        return not self.worker.closed
+
+    @property
+    def pid(self):
+        return self.worker.pid
+
+    def request(self, msg):
+        """Sends a request and suspends until the worker answers. Returns
+        (status, value); status 'died' if the worker died first."""
+        rid = next(self.rids)
+        try:
+            data = self.side.dumps((msg[0], rid) + tuple(msg[1:]))
+        except Exception as e:
+            return ('error', _task_error('<arguments>', e))
+        self.replies[rid] = getcurrent()
+        if not self.worker.send(data, request=True):
+            self.replies.pop(rid, None)
+            return ('died', None)
+        return api._charm().threadMgr.pauseThread()
+
+    def send(self, msg):
+        return self.worker.send(self.side.dumps(msg))
+
+    def kill(self):
+        self.worker.kill()
+        self._wake_waiters()
+
+    def _wake_waiters(self):
+        replies, self.replies = self.replies, {}
+        for gr in replies.values():
+            _resume_later(gr, ('died', None))
+
+    def _on_message(self, data):
+        # runs on the scheduler's main greenlet, from the _proc poller
+        msg = self.side.loads(data)
+        if msg[0] == 'done':
+            self.worker.outstanding -= 1
+            gr = self.replies.pop(msg[1], None)
+            if gr is not None:
+                api._charm().threadMgr.resumeThread(gr, (msg[2], msg[3]))
+        elif msg[0] == 'api':
+            # run it as a coroutine: it may block (ray.get)
+            owner = self.owner
+            owner.thisProxy[owner.thisIndex].serve_api(self.id, msg[1], msg[2], data)
+        elif msg[0] == 'driver_exit':
+            self.owner._driver_exit(msg[1])
+
+    def _on_exit(self, code):
+        self._wake_waiters()
+        self.owner._link_lost(self, code)
+
+
+class _LinkOwner(object):
+    """Serves the ray API calls of the owner's worker processes."""
+
+    @coro
+    def serve_api(self, link_id, rid, name, data):
+        global _HOST_API
+        if _HOST_API is None:
+            _HOST_API = _host_api()
+        link = self.links.get(link_id)
+        if link is None or not link.alive:
+            return
+        blocking = name in _BLOCKING_CALLS
+        if blocking:
+            link.blocking += 1
+            self._link_blocked(link)
+        try:
+            _, _, _, args, kwargs = link.side.loads(data)
+            reply = ('api_reply', rid, True, _HOST_API[name](*args, **kwargs))
+        except Exception as e:
+            reply = ('api_reply', rid, False, e)
+        finally:
+            if blocking:
+                link.blocking -= 1
+        if not link.alive:
+            return
+        try:
+            link.send(reply)
+        except Exception as e:
+            link.send(('api_reply', rid, False, RaySystemError(
+                'the result of ray.' + name + ' could not be sent to the worker: ' +
+                repr(e))))
+
+    def _link_blocked(self, link):
+        pass
+
+    def _link_lost(self, link, code):
+        pass
+
+    def _driver_exit(self, code):
+        pass
+
+
+class _RayWorker(Chare, _LinkOwner):
+    """Runs tasks on its PE: in a pool of task worker processes (isolation
+    'process') or as coroutines of the PE (isolation 'none')."""
+
+    def __init__(self):
+        self.links = {}           # link id -> _Link
+        self.idle = []            # task workers waiting for a task
+        self.busy = set()         # task workers running a task
+        self.waiting = collections.deque()   # coroutines waiting for a worker
+        self.link_ids = itertools.count()
 
     def node_info(self):
         return api._local_node_info()
 
+    def _limit(self):
+        """Task workers that may run at once on this PE: the node's CPUs shared
+        among its task PEs. A worker blocked in ray.get or ray.wait does not
+        count, as in Ray, so nested tasks cannot deadlock the pool."""
+        node = api._my_node()
+        pes = len(api._worker_pes(node['_host']))
+        return max(1, int(math.ceil(node['Resources'].get('CPU', 1.0) / pes)))
+
+    def _running(self):
+        return sum(1 for link in self.busy if link.blocking == 0)
+
+    def _acquire(self):
+        while True:
+            while self.idle:
+                link = self.idle.pop()
+                if link.alive:
+                    self.busy.add(link)
+                    return link
+            if self._running() < self._limit():
+                link = _Link(self, next(self.link_ids), 'tasks')
+                self.links[link.id] = link
+                self.busy.add(link)
+                return link
+            self.waiting.append(getcurrent())
+            api._charm().threadMgr.pauseThread()
+
+    def _release(self, link):
+        self.busy.discard(link)
+        if link.alive:
+            self.idle.append(link)
+        self._wake_one()
+
+    def _wake_one(self):
+        if self.waiting:
+            _resume_later(self.waiting.popleft(), None)
+
+    def _link_blocked(self, link):
+        # a blocked worker frees its slot for another task
+        if link in self.busy:
+            self._wake_one()
+
+    def stop_task_workers(self):
+        """ray.shutdown(): ends this PE's task worker processes."""
+        for link in list(self.links.values()):
+            link.kill()
+        self.links.clear()
+        self.idle = []
+        self.busy.clear()
+
+    def _link_lost(self, link, code):
+        self.links.pop(link.id, None)
+        self.busy.discard(link)
+        if link in self.idle:
+            self.idle.remove(link)
+        self._wake_one()
+
     @coro
     def execute_task(self, fn_desc, args, kwargs, return_refs, name, pg_info):
-        api._set_context(api._ExecContext(
+        ctx = api._ExecContext(
             task_id=api._new_task_id(), node_id=api._my_node()['NodeID'],
             pg_id=pg_info[0] if pg_info else None,
-            pg_bundle_specs=pg_info[1] if pg_info else None))
+            pg_bundle_specs=pg_info[1] if pg_info else None)
+        api._set_context(ctx)
         function_name = name or (fn_desc[2] if fn_desc[0] == 'ref' else 'task')
+        try:
+            args, kwargs = api._resolve_args(args, kwargs)
+        except api._DependencyFailed as e:
+            err = api._dependency_error(function_name, e.error)
+            for ref in return_refs:
+                api._store_error(ref, err)
+            return
+        if api._isolation == 'process':
+            status, value = self._run_in_worker(fn_desc, args, kwargs, ctx, name)
+            if status == 'died':
+                value = RayTaskError(function_name, '  The worker process died while '
+                                     'running this task.', RaySystemError(
+                                         'the task worker process died'),
+                                     ip=api.get_node_ip_address())
+                status = 'error'
+        else:
+            status, value = self._run_here(fn_desc, args, kwargs, function_name, name)
+        if status == 'ok':
+            api._store_results(return_refs, value, function_name)
+        else:
+            for ref in return_refs:
+                api._store_error(ref, value)
+
+    def _run_in_worker(self, fn_desc, args, kwargs, ctx, name):
+        if fn_desc[0] == 'ref' and fn_desc[1] in ('__main__', '__mp_main__') and \
+                not api._main_script:
+            fn_desc = by_value(resolve(fn_desc))
+        link = self._acquire()
+        try:
+            return link.request(('task', fn_desc, args, kwargs,
+                                 {k: getattr(ctx, k) for k in api._ExecContext.__slots__},
+                                 name))
+        finally:
+            self._release(link)
+
+    def _run_here(self, fn_desc, args, kwargs, function_name, name):
         try:
             fn = resolve(fn_desc)
             if name is None:
                 function_name = getattr(fn, '__qualname__', function_name)
-            try:
-                args, kwargs = api._resolve_args(args, kwargs)
-            except api._DependencyFailed as e:
-                err = api._dependency_error(function_name, e.error)
-                for ref in return_refs:
-                    api._store_error(ref, err)
-                return
-            result = fn(*args, **kwargs)
+            return 'ok', fn(*args, **kwargs)
         except SystemExit as e:
-            err = _crash_error(function_name, e.code)
-            for ref in return_refs:
-                api._store_error(ref, err)
-            return
+            return 'error', _crash_error(function_name, e.code)
         except Exception as e:
-            err = _task_error(function_name, e)
-            for ref in return_refs:
-                api._store_error(ref, err)
-            return
-        api._store_results(return_refs, result, function_name)
+            return 'error', _task_error(function_name, e)
 
 
-class _ActorHost(Chare):
-    """Runs one actor. Method calls execute one at a time, in the order each
-    caller (handle) made them, even when a method blocks in ray.get()."""
+def _exit_error(spec):
+    return ActorDiedError(actor_id=spec['actor_id'], error_msg=(
+        'The actor died unexpectedly before finishing this task.\n\tclass_name: ' +
+        spec['class_name'] + '\n\tactor_id: ' + spec['actor_id'] +
+        '\nThe actor is dead because its worker process has died. Worker exit type: '
+        'INTENDED_USER_EXIT Worker exit detail: Worker exits by an user request. '
+        'exit_actor() is called.'))
+
+
+def _crashed_error(spec, pid, code):
+    return ActorDiedError(actor_id=spec['actor_id'], error_msg=(
+        'The actor died unexpectedly before finishing this task.\n\tclass_name: ' +
+        spec['class_name'] + '\n\tactor_id: ' + spec['actor_id'] + '\n\tpid: ' +
+        str(pid) + '\nThe actor is dead because its worker process has died. Worker '
+        'exit type: SYSTEM_ERROR Worker exit detail: the worker process exited with '
+        'code ' + str(code) + '.'))
+
+
+class _ActorHost(Chare, _LinkOwner):
+    """The Charm side of one actor. It orders the calls (one at a time, in the
+    order each handle made them, even when a call blocks in ray.get), resolves
+    their arguments and stores their results. The actor's code runs in a worker
+    process of its own (isolation 'process') or right here, as a coroutine of
+    this PE (isolation 'none')."""
 
     def __init__(self, spec):
         self.spec = spec
@@ -107,6 +352,8 @@ class _ActorHost(Chare):
         self.expected = {}          # caller -> next sequence number to run
         self.held = {}              # caller -> {seq: call} that arrived early
         self.running = False
+        self.link = None            # the actor's worker process (isolation 'process')
+        self.links = {}
         self.setMigratable(False)
         self.ctx = api._ExecContext(
             actor_id=spec['actor_id'], actor_name=spec['name'],
@@ -115,12 +362,42 @@ class _ActorHost(Chare):
             assigned_resources=spec['assigned_resources'], node_id=spec['node_id'])
         if spec.get('doa') is not None:
             self._die(spec['doa'], notify_control=False)
+        elif api._isolation == 'process':
+            self.link = _Link(self, 0, 'actor', env=self._worker_env(),
+                              class_name=spec['class_name'],
+                              context={k: getattr(self.ctx, k)
+                                       for k in api._ExecContext.__slots__})
+            self.links[0] = self.link
+
+    def _worker_env(self):
+        env_vars = (self.spec['runtime_env'] or {}).get('env_vars') or {}
+        env = {k: str(v) for k, v in env_vars.items()}
+        gpus = self.spec['accelerator_ids'].get('GPU')
+        noset = env.get('RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES',
+                        os.environ.get('RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES'))
+        if gpus and not noset:
+            env['CUDA_VISIBLE_DEVICES'] = ','.join(gpus)
+        return env
+
+    def _link_lost(self, link, code):
+        # the worker process died without being asked to
+        if self.state != 'DEAD':
+            self._die(_crashed_error(self.spec, link.pid, code), notify_control=True)
+
+    def _worker_desc(self, desc):
+        """How to send a class to the worker: by name when the worker can import
+        it, else by value."""
+        if desc[0] == 'ref' and desc[1] in ('__main__', '__mp_main__') and \
+                not api._main_script:
+            return by_value(resolve(desc))
+        return desc
 
     def _context(self):
         ctx = api._ExecContext(**{k: getattr(self.ctx, k)
                                   for k in api._ExecContext.__slots__})
         ctx.task_id = api._new_task_id()
         api._set_context(ctx)
+        return ctx
 
     def _actor_repr(self):
         try:
@@ -135,31 +412,46 @@ class _ActorHost(Chare):
         self._context()
         name = self.spec['class_name'] + '.__init__'
         try:
-            env_vars = (self.spec['runtime_env'] or {}).get('env_vars') or {}
-            # NOTE: process-wide; actors that share a process share os.environ
-            os.environ.update({k: str(v) for k, v in env_vars.items()})
-            cls = resolve(cls_desc)
             args, kwargs = api._resolve_args(args, kwargs)
-            instance = cls(*args, **kwargs)
         except api._DependencyFailed as e:
-            err = api._dependency_error(name, e.error)
-            self._die(self._creation_error(err), notify_control=True)
+            self._die(self._creation_error(api._dependency_error(name, e.error)),
+                      notify_control=True)
             return
-        except Exception as e:
-            err = _task_error(name, e, actor_id=self.spec['actor_id'])
-            self._die(self._creation_error(err), notify_control=True)
-            return
-        if self.state == 'DEAD':   # killed while the constructor was blocked
-            return
+        if self.link is not None:
+            status, value = self.link.request(('construct', self._worker_desc(cls_desc),
+                                               args, kwargs))
+            if self.state == 'DEAD':
+                return
+            if status != 'ok':
+                if status == 'died':
+                    self._die(_crashed_error(self.spec, self.link.pid, None),
+                              notify_control=True)
+                else:
+                    self._die(self._creation_error(value), notify_control=True)
+                return
+            instance = None
+        else:
+            try:
+                env_vars = (self.spec['runtime_env'] or {}).get('env_vars') or {}
+                # NOTE: process-wide; in-process actors share os.environ
+                os.environ.update({k: str(v) for k, v in env_vars.items()})
+                instance = resolve(cls_desc)(*args, **kwargs)
+            except Exception as e:
+                err = _task_error(name, e, actor_id=self.spec['actor_id'])
+                self._die(self._creation_error(err), notify_control=True)
+                return
+            if self.state == 'DEAD':   # killed while the constructor was blocked
+                return
         self.instance = instance
         self.state = 'ALIVE'
         self._drain()
 
-    def _creation_error(self, task_error):
+    def _creation_error(self, error):
         return ActorDiedError(
-            cause=task_error.cause, actor_id=self.spec['actor_id'], actor_init_failed=True,
+            cause=getattr(error, 'cause', None), actor_id=self.spec['actor_id'],
+            actor_init_failed=True,
             error_msg='The actor died because of an error raised in its creation task, ' +
-                      str(task_error))
+                      str(error))
 
     @coro
     def invoke(self, caller, seq, method_name, args, kwargs, return_refs):
@@ -204,46 +496,49 @@ class _ActorHost(Chare):
 
     def _execute(self, call):
         method_name, args, kwargs, refs = call
-        self._context()
+        ctx = self._context()
         name = self.spec['class_name'] + '.' + method_name
         try:
             args, kwargs = api._resolve_args(args, kwargs)
-            if method_name == '__ray_ready__':
-                result = True
-            elif method_name == '__ray_terminate__':
-                raise _ActorExit(0)
-            else:
-                result = getattr(self.instance, method_name)(*args, **kwargs)
         except api._DependencyFailed as e:
             err = api._dependency_error(name, e.error)
             for ref in refs:
                 api._store_error(ref, err)
             return
-        except SystemExit:   # exit_actor(), __ray_terminate__ or sys.exit()
-            err = ActorDiedError(actor_id=self.spec['actor_id'], error_msg=(
-                'The actor died unexpectedly before finishing this task.\n\tclass_name: ' +
-                self.spec['class_name'] + '\n\tactor_id: ' + self.spec['actor_id'] +
-                '\nThe actor is dead because its worker process has died. Worker exit '
-                'type: INTENDED_USER_EXIT Worker exit detail: Worker exits by an user '
-                'request. exit_actor() is called.'))
+        if method_name == '__ray_ready__':
+            status, value = 'ok', True
+        elif method_name == '__ray_terminate__':
+            status, value = 'exit', None
+        elif self.link is not None:
+            status, value = self.link.request(('call', method_name, args, kwargs,
+                                               ctx.task_id))
+        else:
+            status, value = self._run_here(name, method_name, args, kwargs)
+        if self.state == 'DEAD' or status == 'died':
+            # killed or crashed while this call ran
+            for ref in refs:
+                api._store_error(ref, self.death)
+        elif status == 'ok':
+            api._store_results(refs, value, name)
+        elif status == 'error':
+            for ref in refs:
+                api._store_error(ref, value)
+        elif status == 'exit':
             if method_name == '__ray_terminate__':
                 # graceful termination succeeds; later calls fail
                 for ref in refs:
                     api._store(ref, None)
                 refs = []
-            self._die(err, notify_control=True, current_refs=refs)
-            return
+            self._die(_exit_error(self.spec), notify_control=True, current_refs=refs)
+
+    def _run_here(self, name, method_name, args, kwargs):
+        try:
+            return 'ok', getattr(self.instance, method_name)(*args, **kwargs)
+        except SystemExit:   # exit_actor() or sys.exit()
+            return 'exit', None
         except Exception as e:
-            err = _task_error(name, e, actor_repr=self._actor_repr(),
-                              actor_id=self.spec['actor_id'])
-            for ref in refs:
-                api._store_error(ref, err)
-            return
-        if self.state == 'DEAD':   # killed while this method was running
-            for ref in refs:
-                api._store_error(ref, self.death)
-            return
-        api._store_results(refs, result, name)
+            return 'error', _task_error(name, e, actor_repr=self._actor_repr(),
+                                        actor_id=self.spec['actor_id'])
 
     def kill(self):
         if self.state != 'DEAD':
@@ -253,6 +548,8 @@ class _ActorHost(Chare):
     def _die(self, error, notify_control, current_refs=()):
         self.state = 'DEAD'
         self.death = error
+        if self.link is not None:
+            self.link.kill()
         for ref in current_refs:
             api._store_error(ref, error)
         while self.queue:
@@ -264,6 +561,28 @@ class _ActorHost(Chare):
         self.instance = None
         if notify_control:
             api._control.actor_died(self.spec['key'])
+
+
+class _DriverHost(Chare, _LinkOwner):
+    """Runs the driver script in its own process (charm4py.ray.launch) and serves
+    its ray API calls. The job ends when the driver does."""
+
+    def __init__(self, argv):
+        self.setMigratable(False)
+        self.links = {}
+        self.link = _Link(self, 0, 'driver', argv=argv)
+        self.links[0] = self.link
+        self.exited = False
+
+    def _driver_exit(self, code):
+        self.exited = True
+        api._charm().exit(code)
+
+    def _link_lost(self, link, code):
+        if not self.exited:
+            print('charm4py.ray: the driver process exited with code ' + str(code) +
+                  ' without finishing', file=sys.stderr)
+            api._charm().exit(code if code else 1)
 
 
 def _fits(avail, request):
