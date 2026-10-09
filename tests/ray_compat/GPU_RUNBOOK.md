@@ -64,11 +64,17 @@ itself), NCCL between actor processes, CUDA initialized in the driver (vLLM then
 spawns its engine process instead of forking it), and GPU memory per actor.
 PP=2 failed on CPU in vLLM itself; on GPUs it should work.
 
-Then the plan's exit criteria: 100 create/generate/shutdown cycles with no
-leaked processes, `/dev/shm` segments or GPU memory, and an OpenAI-compatible
-server run (`python -m charmrun.start +p4 -m charm4py.ray.launch -m
-vllm.entrypoints.openai.api_server --model facebook/opt-125m
---distributed-executor-backend ray --tensor-parallel-size 2`).
+Then the plan's exit criteria, with the scripts used on the Mac:
+
+```bash
+python -m charmrun.start +p4 -m charm4py.ray.launch tests/ray_compat/vllm_cycles.py 100 2
+tests/ray_compat/vllm_serve_dp.sh charm4py      # and: ... ray   (OpenAI server, DP=2)
+CHARM4PY_RAY_FAKE_NODES=3 python -m charmrun.start +p6 -m charm4py.ray.launch \
+    tests/ray_compat/multinode.py               # control plane across nodes
+```
+
+`vllm_cycles.py` checks resources, objects and processes; on GPUs also watch
+`nvidia-smi` memory and `/dev/shm` between cycles.
 
 ## 4. Multi-node (not tried yet)
 
