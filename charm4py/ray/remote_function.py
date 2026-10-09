@@ -65,7 +65,7 @@ class RemoteFunction(object):
             pg = strategy.placement_group
             pg_info = (pg.id.hex(), pg.bundle_specs)
         api._workers[pe].execute_task(self._desc, args, kwargs, refs,
-                                      options.get('name'), pg_info)
+                                      options.get('name'), pg_info, api._current_job())
         return _returns(refs)
 
 

@@ -837,6 +837,77 @@ def test_fake_vllm_v2_lifecycle():
           'no leaked reservation')
 
 
+def _joined_job(address, results, finish, use_shutdown):
+    """Runs in a process the driver starts: joins the cluster like vLLM's engine
+    process does (ray.init with RAY_ADDRESS set), as a job of its own."""
+    try:
+        if address is not None:
+            os.environ['RAY_ADDRESS'] = address
+        ray.init()
+        ctx = ray.get_runtime_context()
+        actor = Counter.options(name='contract_joined', namespace='contract_joined',
+                                num_cpus=0).remote(10)
+        results.put(('ok', ctx.get_job_id(), ray.get(actor.incr.remote()),
+                     ray.get(add.remote(1, 2)), ray.is_initialized()))
+    except BaseException as e:
+        results.put(('error', repr(e)))
+    finish.wait(60)
+    if use_shutdown:
+        ray.shutdown()
+    # otherwise the job ends when this process exits
+
+
+def _check_joined_process(context, address, use_shutdown):
+    import multiprocessing
+    mp = multiprocessing.get_context(context)
+    results, finish = mp.Queue(), mp.Event()
+    proc = mp.Process(target=_joined_job, args=(address, results, finish, use_shutdown))
+    proc.start()
+    try:
+        reply = results.get(timeout=120)
+        check(reply[0] == 'ok', 'the joined process failed: ' + str(reply))
+        _, job_id, value, task_value, initialized = reply
+        check(job_id != ray.get_runtime_context().get_job_id(), 'a job of its own')
+        check((value, task_value, initialized) == (11, 3, True), str(reply))
+        # its named actor is visible to other jobs
+        actor = ray.get_actor('contract_joined', namespace='contract_joined')
+        check(ray.get(actor.incr.remote(), timeout=30) == 12)
+    finally:
+        finish.set()
+        proc.join(60)
+    check(proc.exitcode == 0, 'exit code ' + str(proc.exitcode))
+
+    def actor_gone():
+        try:
+            ray.get_actor('contract_joined', namespace='contract_joined')
+            return False
+        except ValueError:
+            return True
+    # the job's actors end with it
+    check(eventually(actor_gone, timeout=60), 'the joined job\'s actor outlives it')
+    check(ray.get(add.remote(2, 2)) == 4, 'the driver\'s job is unaffected')
+
+
+@test
+def test_spawned_process_joins_cluster():
+    """vLLM's engine process: started by the driver, ray.init() via RAY_ADDRESS."""
+    _check_joined_process('spawn', ray.get_runtime_context().gcs_address, False)
+
+
+@test
+def test_joined_job_shutdown():
+    _check_joined_process('spawn', ray.get_runtime_context().gcs_address, True)
+
+
+@test
+def test_forked_process_joins_cluster():
+    """vLLM forks its engine process by default. Ray does not support forking a
+    process in which Ray is initialized, so this runs on charm4py only."""
+    if BACKEND != 'charm4py':
+        return
+    _check_joined_process('fork', None, False)
+
+
 @test
 def test_shutdown_and_reinit():
     ray.shutdown()

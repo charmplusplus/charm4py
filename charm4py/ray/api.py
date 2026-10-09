@@ -1,18 +1,22 @@
 """Core of the Ray Core API on Charm4py: runtime state, references (get, wait,
 put), cluster topology and the per-task execution context.
 
-Model: ``ray.init()`` runs on the driver (PE 0, inside ``charm.start``). It creates
-the Charm collections that implement Ray -- one object store branch, one task
-worker per PE, a 2-D array holding one element per actor, and a control chare on
-PE 0 that owns names, resources and placement groups -- and broadcasts them to
-every PE. A Ray *node* is a physical host as Charm++ sees it, not a PE."""
+Model: the first ``ray.init()`` starts the runtime on PE 0. It creates the Charm
+collections that implement Ray -- one object store branch, one task worker per
+PE, a 2-D array holding one element per actor, and a control chare on PE 0 that
+owns names, resources and placement groups -- and broadcasts them to every PE. A
+Ray *node* is a physical host as Charm++ sees it, not a PE.
+
+Each ``ray.init()`` -- by the driver, or by another process that connects to the
+job (one the driver started, say) -- begins a Ray *job*, with its own job ID,
+namespace and runtime_env. A job's actors and placement groups end with it; the
+runtime stops when its last job does."""
 
 import copy
 import hashlib
 import itertools
 import os
 import socket
-import sys
 import uuid
 
 from greenlet import getcurrent
@@ -28,18 +32,23 @@ _workers = None       # Group(_RayWorker): runs tasks; element 0 is not special
 _actors = None        # Array(_ActorHost, ndims=2): one element per actor
 _control = None       # _RayControl singleton chare on PE 0
 _session_id = None
-_namespace = None
 _nodes = None         # list of node records, indexed by Charm physical node
-_job_runtime_env = None
 _isolation = 'none'   # 'process': tasks, actors (and the driver) run in worker processes
+_address = None       # where other processes connect to this job (see _hosts._Gateway)
 
-JOB_ID = '01000000'
-
-# ---- set in actor worker processes (see _worker_main.py) ----
-_client = None        # forwards API calls to the actor's host
+# ---- set in processes that do not run Charm4py (see _worker_main.py) ----
+_client = None        # forwards API calls to the process's host
 _client_pe = None     # the host's PE
 _client_host = None   # the host's node index
-_client_kind = None   # 'driver', 'actor' or 'tasks'
+_client_kind = None   # 'driver', 'client' (connected), 'actor' or 'tasks'
+
+# The job of this process (the driver or a connected process), or of the task or
+# actor a worker process runs: {'job_id', 'namespace', 'runtime_env'}. A running
+# task or actor carries its job in its _ExecContext.
+_job = None
+_NO_JOB = {'job_id': '01000000', 'namespace': None, 'runtime_env': {}}
+
+ADDRESS_ENV = 'CHARM4PY_RAY_ADDRESS'
 
 # set by charm4py.ray.launch: the script, which worker processes can import
 _main_script = None
@@ -67,18 +76,46 @@ def is_initialized():
     return _initialized
 
 
+def _in_charm():
+    """True in a Charm4py process (a PE) once Charm4py has started."""
+    charm = getattr(charm4py, 'charm', None)
+    return charm is not None and charm.started
+
+
 def _ensure_initialized():
+    """Ray initializes itself on first use, in the driver and in processes that
+    can connect to the job."""
+    if _initialized:
+        return
     if _client is not None:
-        if not _initialized and _client_kind == 'driver':
+        if _client_kind in ('driver', 'client'):
             init()
         return
-    if not _initialized:
+    if _in_charm():
         charm = _charm()
-        if charm.started and charm.myPe() == 0 and not charm.threadMgr.isMainThread():
+        if charm.myPe() == 0 and not charm.threadMgr.isMainThread():
             init()
-        else:
-            raise exceptions.RaySystemError(
-                'Ray has not been started yet. Call ray.init() from the driver first.')
+            return
+    elif os.environ.get(ADDRESS_ENV):
+        init()
+        return
+    raise exceptions.RaySystemError(
+        'Ray has not been started yet. Call ray.init() from the driver first.')
+
+
+def _current_job():
+    ctx = _current_context()
+    if ctx is not None and ctx.job is not None:
+        return ctx.job
+    return _job or _NO_JOB
+
+
+def _job_id():
+    return _current_job()['job_id']
+
+
+def _namespace():
+    return _current_job()['namespace']
 
 
 class _RayContext(dict):
@@ -111,20 +148,29 @@ _INIT_ACCEPTED = {
 
 def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespace=None,
          runtime_env=None, ignore_reinit_error=False, **kwargs):
-    """Start the Ray layer on the running Charm4py job.
+    """Begin a Ray job on the running Charm4py job, starting the runtime first if
+    this is the first job.
 
-    ``address`` is accepted for source compatibility and ignored: the "cluster" is
-    always the set of processes started with this Charm4py job. ``num_cpus``,
-    ``num_gpus`` and ``resources`` describe each node (each physical host), since
-    every host is started together; by default a node has one CPU per PE.
+    The "cluster" is always the set of processes started with this Charm4py job.
+    In a process the job did not start itself (one the driver started, say),
+    ``ray.init()`` connects to the job: through ``address`` if it is this job's
+    address (``get_runtime_context().gcs_address``), else through
+    CHARM4PY_RAY_ADDRESS, which every process of the job inherits. Other
+    addresses ('auto', 'host:port') are accepted and ignored.
+
+    ``num_cpus``, ``num_gpus`` and ``resources`` describe each node (each
+    physical host), since every host is started together; by default a node has
+    one CPU per PE and the GPUs it can see. Like Ray, they may only be given when
+    the runtime is not running yet.
 
     ``_isolation`` (charm4py only): 'process' runs tasks and actors in worker
     processes, like Ray; 'none' runs them inside the Charm4py processes, as
     coroutines. The default is 'process' for programs started with
     charm4py.ray.launch and 'none' for Charm4py programs (charm.start), whose
     tasks and actors may use Charm4py."""
-    global _collections_created
-    if _initialized:
+    global _job, _initialized
+    in_charm = _in_charm()
+    if (_job is not None) if in_charm else _initialized:
         if ignore_reinit_error:
             return _RayContext(_address_info())
         raise RuntimeError(
@@ -134,24 +180,9 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
     for key in kwargs:
         if key not in _INIT_ACCEPTED and not key.startswith('_'):
             raise RuntimeError('Unknown keyword argument(s): ' + key)
-    if _client is not None:
-        # the driver process: Charm4py's PE 0 initializes, and sends back the state
-        # every process shares
-        shared = _client.call('_init', address, num_cpus=num_cpus, num_gpus=num_gpus,
-                              resources=resources, namespace=namespace,
-                              runtime_env=runtime_env, **kwargs)
-        globals().update(shared)
-        return _RayContext(_address_info())
-    charm = _charm()
-    isolation = kwargs.get('_isolation') or _default_isolation or \
-        ('process' if _main_script else 'none')
-    if isolation not in ('process', 'none'):
+    isolation = kwargs.get('_isolation')
+    if isolation not in (None, 'process', 'none'):
         raise ValueError("_isolation must be 'process' or 'none'")
-    if not charm.started:
-        raise RuntimeError('charm4py.ray.init() must be called after charm.start(), '
-                           'from the driver (the main function on PE 0)')
-    if charm.myPe() != 0:
-        raise RuntimeError('ray.init() can only be called from the driver (PE 0)')
     if runtime_env is not None:
         from ._options import validate, ACTOR_OPTIONS
         validate({'runtime_env': runtime_env}, ACTOR_OPTIONS, 'actors')
@@ -160,8 +191,43 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
             if key in ('CPU', 'GPU'):
                 raise ValueError("Use the 'num_cpus' and 'num_gpus' keyword instead of "
                                  "'CPU' and 'GPU' in 'resources' keyword")
+    job_args = dict(num_cpus=num_cpus, num_gpus=num_gpus, resources=resources,
+                    namespace=namespace, runtime_env=runtime_env, isolation=isolation)
+    if not in_charm:
+        # the driver process, or a process connecting to the job: PE 0 starts the
+        # job and sends back the state every process shares
+        if _client is None:
+            _connect(address)
+        shared = _client.call('_init', **job_args)
+        globals().update(shared)
+        return _RayContext(_address_info())
+    charm = _charm()
+    if charm.myPe() != 0:
+        raise RuntimeError('ray.init() can only be called from the driver (PE 0)')
+    _job = _start_job(**job_args)
+    return _RayContext(_address_info())
 
+
+def _start_job(num_cpus=None, num_gpus=None, resources=None, namespace=None,
+               runtime_env=None, isolation=None):
+    """On PE 0: begins a job, starting the runtime if it is not running."""
+    if not _initialized:
+        _start_runtime(num_cpus, num_gpus, resources, isolation)
+    elif num_cpus is not None or num_gpus is not None:
+        raise ValueError('When connecting to an existing cluster, num_cpus and num_gpus '
+                         'must not be provided.')
+    elif resources is not None:
+        raise ValueError('When connecting to an existing cluster, resources must not be '
+                         'provided.')
+    return _control.new_job(namespace, runtime_env, ret=True).get()
+
+
+def _start_runtime(num_cpus, num_gpus, resources, isolation):
+    global _collections_created
+    charm = _charm()
+    isolation = isolation or _default_isolation or ('process' if _main_script else 'none')
     from ._hosts import _RayWorker, _ActorHost, _RayControl
+    _ensure_gateway()
     globals_update = {}
     if not _collections_created:
         store = charm4py.Group(charm4py.ObjectStore)
@@ -173,24 +239,79 @@ def init(address=None, *, num_cpus=None, num_gpus=None, resources=None, namespac
         _collections_created = True
     else:
         workers, actors, control = _workers, _actors, _control
-
     session_id = uuid.uuid4().hex
     nodes = _discover_nodes(workers, session_id, num_cpus, num_gpus, resources)
     control.configure(nodes, actors, ret=True).get()
-    globals_update.update(_initialized=True, _session_id=session_id,
-                          _isolation=isolation,
-                          _namespace=namespace or str(uuid.uuid4()), _nodes=nodes,
-                          _job_runtime_env=dict(runtime_env or {}))
+    globals_update.update(_initialized=True, _session_id=session_id, _isolation=isolation,
+                          _nodes=nodes, _address=_address)
     charm.thisProxy.updateGlobals(globals_update, awaitable=True,
                                   module_name=__name__).get()
-    return _RayContext(_address_info())
+
+
+def _ensure_gateway():
+    """On PE 0: makes sure other processes can connect to the job."""
+    if _address is None:
+        from ._hosts import _Gateway
+        charm4py.Chare(_Gateway, args=[None], onPE=0).address(ret=True).get()
+
+
+ADDRESS_PREFIX = 'charm4py://'
+
+
+def _connect(address):
+    """Connects this process to the job (see _hosts._Gateway). Its ray calls are
+    then served by PE 0."""
+    global _client
+    from multiprocessing.connection import Connection
+    from . import _ipc, object_ref
+    from ._worker_main import _Channel
+    path = None
+    for candidate in (address, os.environ.get('RAY_ADDRESS'), os.environ.get(ADDRESS_ENV)):
+        if isinstance(candidate, str) and candidate.startswith(ADDRESS_PREFIX):
+            path = candidate[len(ADDRESS_PREFIX):]
+            break
+    if path is None:
+        raise ConnectionError(
+            'Could not find any running Ray instance. Please specify the one to connect '
+            'to by setting `--address` flag or `RAY_ADDRESS` environment variable. '
+            '(charm4py.ray: run the program with charm4py.ray.launch, or connect from a '
+            'process started by one of its processes)')
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.connect(path)
+    except OSError as e:
+        sock.close()
+        raise ConnectionError('Could not connect to the charm4py.ray job at ' +
+                              ADDRESS_PREFIX + path + ': ' + str(e))
+    object_ref.INERT = True   # references here are tokens of PE 0's references
+    conn = Connection(sock.detach())
+    side = _ipc.WorkerSide()
+    msg = side.loads(conn.recv_bytes())
+    assert msg[0] == 'init', msg
+    globals().update(msg[1]['globals'])
+    _client = _Channel(conn, side)
+
+
+def _after_fork_in_child():
+    """A forked child cannot share its parent's connection; it connects anew on
+    its first ray call (Ray does not support using a parent's Ray state either)."""
+    global _client, _client_kind, _initialized, _job
+    if _client is not None:
+        _client = None
+        _client_kind = None
+        _initialized = False
+        _job = None
+
+
+if hasattr(os, 'register_at_fork'):
+    os.register_at_fork(after_in_child=_after_fork_in_child)
 
 
 def _address_info():
     ip = get_node_ip_address()
-    return {'node_ip_address': ip, 'address': ip + ':0', 'gcs_address': ip + ':0',
-            'session_dir': None, 'node_id': _my_node()['NodeID'] if _nodes else None,
-            'webui_url': None}
+    return {'node_ip_address': ip, 'address': _address or ip + ':0',
+            'gcs_address': _address or ip + ':0', 'session_dir': None,
+            'node_id': _my_node()['NodeID'] if _nodes else None, 'webui_url': None}
 
 
 def _node_id_hex(session_id, host):
@@ -204,7 +325,7 @@ def _discover_nodes(workers, session_id, num_cpus, num_gpus, resources):
     replies = [workers[charm.getHostFirstPe(h)].node_info(ret=True) for h in range(num_hosts)]
     nodes = []
     for host, reply in enumerate(replies):
-        hostname, ip, memory = reply.get()
+        hostname, ip, memory, gpu_ids = reply.get()
         if num_hosts == 1:
             ip = '127.0.0.1'
         pes = list(charm.getHostPes(host))
@@ -212,8 +333,12 @@ def _discover_nodes(workers, session_id, num_cpus, num_gpus, resources):
                'memory': float(memory),
                'object_store_memory': float(memory) * 0.3,
                'node:' + ip: 1.0}
-        if num_gpus:
-            res['GPU'] = float(num_gpus)
+        if num_gpus is not None:
+            # logical GPUs: the visible ones first, as in Ray
+            n = int(num_gpus)
+            gpu_ids = gpu_ids[:n] if len(gpu_ids) >= n else [str(i) for i in range(n)]
+        if gpu_ids:
+            res['GPU'] = float(len(gpu_ids))
         for key, amount in (resources or {}).items():
             res[key] = float(amount)
         if host == charm.myHost():
@@ -228,12 +353,39 @@ def _discover_nodes(workers, session_id, num_cpus, num_gpus, resources):
                       'Resources': res, 'Labels': {'ray.io/node_id': node_id},
                       'DeathReason': 0, 'DeathReasonMessage': '',
                       # charm4py-specific: not part of Ray's node table
-                      '_host': host, '_pes': pes})
+                      '_host': host, '_pes': pes, '_gpu_ids': list(gpu_ids)})
     return nodes
 
 
+def _detect_gpus():
+    """IDs of the GPUs this process can see, as Ray finds them: from
+    CUDA_VISIBLE_DEVICES if it is set, else from NVML or nvidia-smi."""
+    visible = os.environ.get('CUDA_VISIBLE_DEVICES')
+    if visible is not None:
+        if visible.strip() in ('', 'NoDevFiles'):
+            return []
+        return [d.strip() for d in visible.split(',') if d.strip()]
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        try:
+            return [str(i) for i in range(pynvml.nvmlDeviceGetCount())]
+        finally:
+            pynvml.nvmlShutdown()
+    except Exception:
+        pass
+    try:
+        import subprocess
+        out = subprocess.run(['nvidia-smi', '-L'], capture_output=True, text=True,
+                             timeout=10).stdout
+        return [str(i) for i, line in enumerate(l for l in out.splitlines()
+                                                 if l.startswith('GPU '))]
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+
 def _local_node_info():
-    """(hostname, routable IP, memory bytes) of this host."""
+    """(hostname, routable IP, memory bytes, GPU IDs) of this host."""
     hostname = socket.gethostname()
     ip = os.environ.get('CHARM4PY_RAY_NODE_IP') or os.environ.get('VLLM_HOST_IP')
     if not ip:
@@ -251,28 +403,42 @@ def _local_node_info():
         memory = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
     except (ValueError, OSError, AttributeError):
         memory = 8 * 1024 ** 3
-    return hostname, ip, memory
+    return hostname, ip, memory, _detect_gpus()
 
 
 def shutdown(_exiting_interpreter=False):
-    """Kill the actors and placement groups of this job and mark Ray as not
-    initialized on every PE. The Charm4py program keeps running, and ray.init()
-    may be called again."""
+    """Ends this process's job: kills its actors and placement groups. The
+    runtime stops with its last job, and ray.init() may be called again."""
+    global _initialized, _job, _client
+    if _client is not None:
+        if _client_kind in ('driver', 'client') and _initialized:
+            try:
+                _client.call('_shutdown')
+            finally:
+                _initialized = False
+                _job = None
+                if _client_kind == 'client':
+                    _client.close()
+                    _client = None
+        return
+    if not _in_charm() or _job is None:
+        return
+    if _charm().myPe() != 0:
+        raise RuntimeError('ray.shutdown() can only be called from the driver (PE 0)')
+    job, _job = _job, None
+    _end_job(job['job_id'])
+
+
+def _end_job(job_id):
+    """On PE 0: ends a job, and stops the runtime if no other job is running."""
     if not _initialized:
         return
-    if _client is not None:
-        if _client_kind == 'driver':
-            _client.call('_shutdown')
-            globals()['_initialized'] = False
-        return
-    charm = _charm()
-    if charm.myPe() != 0:
-        raise RuntimeError('ray.shutdown() can only be called from the driver (PE 0)')
-    _control.shutdown(ret=True).get()
-    _pg_bundle_nodes.clear()
-    _workers.stop_task_workers(awaitable=True).get()
-    charm.thisProxy.updateGlobals({'_initialized': False}, awaitable=True,
-                                  module_name=__name__).get()
+    if _control.end_job(job_id, ret=True).get() == 0:
+        _control.shutdown(ret=True).get()
+        _pg_bundle_nodes.clear()
+        _workers.stop_task_workers(awaitable=True).get()
+        _charm().thisProxy.updateGlobals({'_initialized': False}, awaitable=True,
+                                         module_name=__name__).get()
 
 
 # ---------------------------------------------------------------- references
@@ -662,11 +828,11 @@ class _ExecContext(object):
     runs it, because tasks and actors of one PE interleave on one Python thread."""
 
     __slots__ = ('task_id', 'actor_id', 'actor_name', 'accelerator_ids', 'pg_id',
-                 'pg_bundle_specs', 'runtime_env', 'assigned_resources', 'node_id')
+                 'pg_bundle_specs', 'runtime_env', 'assigned_resources', 'node_id', 'job')
 
     def __init__(self, task_id=None, actor_id=None, actor_name=None,
                  accelerator_ids=None, pg_id=None, pg_bundle_specs=None,
-                 runtime_env=None, assigned_resources=None, node_id=None):
+                 runtime_env=None, assigned_resources=None, node_id=None, job=None):
         self.task_id = task_id
         self.actor_id = actor_id
         self.actor_name = actor_name
@@ -676,6 +842,22 @@ class _ExecContext(object):
         self.runtime_env = runtime_env
         self.assigned_resources = assigned_resources or {}
         self.node_id = node_id
+        self.job = job
+
+
+def _merged_runtime_env(runtime_env):
+    """A task's or actor's runtime_env over its job's, as Ray merges them:
+    env_vars are combined (the task's or actor's win), other fields replaced."""
+    job_env = _current_job().get('runtime_env') or {}
+    if not job_env:
+        return runtime_env
+    merged = dict(job_env)
+    for key, value in (runtime_env or {}).items():
+        if key == 'env_vars':
+            merged[key] = dict(job_env.get('env_vars') or {}, **(value or {}))
+        else:
+            merged[key] = value
+    return merged
 
 
 def _current_context():
@@ -726,7 +908,7 @@ def get_actor(name, namespace=None):
         raise ValueError('Please supply a non-empty value to get_actor')
     if _client is not None:
         return _client.call('get_actor', name, namespace)
-    ns = namespace if namespace is not None else _namespace
+    ns = namespace if namespace is not None else _namespace()
     state = _control.get_actor(name, ns, ret=True).get()
     if state is None:
         raise ValueError(

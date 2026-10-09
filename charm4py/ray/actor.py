@@ -129,7 +129,7 @@ class ActorClass(object):
         if name is not None and (not isinstance(name, str) or not name):
             raise ValueError('Actor name must be a nonempty string, got ' + repr(name))
         namespace_opt = options.get('namespace')
-        namespace = namespace_opt if namespace_opt is not None else api._namespace
+        namespace = namespace_opt if namespace_opt is not None else api._namespace()
         key = (charm.myPe(), next(api._actor_counter))
         actor_id = format(key[0], '08x') + format(key[1], '016x') + api._session_id[:8]
         state = (key, self._cls.__name__, self._method_meta, actor_id)
@@ -139,7 +139,8 @@ class ActorClass(object):
             'get_if_exists': bool(options.get('get_if_exists')),
             'request': _options.resource_request(options, default_cpus=0),
             'strategy': _options.scheduling_strategy(options),
-            'runtime_env': options.get('runtime_env'),
+            'runtime_env': api._merged_runtime_env(options.get('runtime_env')),
+            'job': api._current_job(),
         }
         if name is not None:
             result = api._control.create_actor(meta, ret=True).get()
@@ -275,7 +276,7 @@ class ActorHandle(object):
 def killed_message(class_name, actor_id):
     return ('The actor died unexpectedly before finishing this task.\n\tclass_name: ' +
             class_name + '\n\tactor_id: ' + actor_id + '\n\tnamespace: ' +
-            str(api._namespace) + '\n\tip: ' + api.get_node_ip_address() +
+            str(api._namespace()) + '\n\tip: ' + api.get_node_ip_address() +
             '\nThe actor was killed by `ray.kill`.')
 
 

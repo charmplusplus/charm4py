@@ -33,8 +33,21 @@ def _charm():
 
 
 class WorkerProcess(object):
+    """A worker process started by this PE, or (``sock``) a process that
+    connected to it (see Listener)."""
 
-    def __init__(self, env, on_message, on_exit):
+    def __init__(self, env, on_message, on_exit, sock=None, pid=None):
+        self.on_message = on_message
+        self.on_exit = on_exit
+        self.outstanding = 0
+        self.closed = False
+        if sock is not None:
+            self.proc = None
+            self._pid = pid
+            self.conn = Connection(sock.detach())
+            _workers[self.conn] = self
+            _ensure_polling()
+            return
         parent_sock, child_sock = socket.socketpair()
         full_env = dict(os.environ)
         full_env.update(env)
@@ -43,17 +56,14 @@ class WorkerProcess(object):
         cmd = [sys.executable, '-m', 'charm4py.ray._worker_main', str(child_sock.fileno())]
         self.proc = subprocess.Popen(cmd, env=full_env, pass_fds=(child_sock.fileno(),))
         child_sock.close()
+        self._pid = self.proc.pid
         self.conn = Connection(parent_sock.detach())
-        self.on_message = on_message
-        self.on_exit = on_exit
-        self.outstanding = 0
-        self.closed = False
         _workers[self.conn] = self
         _ensure_polling()
 
     @property
     def pid(self):
-        return self.proc.pid
+        return self._pid
 
     def send(self, data, request=False):
         """Sends one message (bytes). ``request``: a reply is expected, so poll
@@ -70,10 +80,13 @@ class WorkerProcess(object):
         return True
 
     def kill(self):
-        """Terminates the process now. on_exit is not called."""
+        """Terminates the process now (a connected process is only
+        disconnected). on_exit is not called."""
         if self.closed:
             return
         self._detach()
+        if self.proc is None:
+            return
         try:
             self.proc.kill()
         except OSError:
@@ -94,6 +107,9 @@ class WorkerProcess(object):
         if self.closed:
             return
         self._detach()
+        if self.proc is None:
+            self.on_exit(None)
+            return
         try:
             code = self.proc.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
@@ -102,13 +118,58 @@ class WorkerProcess(object):
         self.on_exit(code)
 
 
+class Listener(object):
+    """A Unix socket that other processes of the job connect to (ray.init in a
+    process this job did not start, e.g. one started by the driver).
+    ``on_connect(sock)`` gets each accepted connection."""
+
+    def __init__(self, on_connect):
+        import tempfile
+        self.dir = tempfile.mkdtemp(prefix='c4pray-')   # private (mode 0700)
+        self.path = os.path.join(self.dir, 'sock')
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.bind(self.path)
+        self.sock.listen(64)
+        self.sock.setblocking(False)
+        self.on_connect = on_connect
+        _listeners[self.sock] = self
+        _ensure_polling()
+
+    def _accept(self):
+        while True:
+            try:
+                sock, _ = self.sock.accept()
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                return
+            sock.setblocking(True)
+            self.on_connect(sock)
+
+    def close(self):
+        _listeners.pop(self.sock, None)
+        try:
+            self.sock.close()
+            os.unlink(self.path)
+            os.rmdir(self.dir)
+        except OSError:
+            pass
+
+
+_listeners = {}         # socket -> Listener
+
+
 def _poll(generation):
     global _poll_due, _last_message
     if generation != _generation:
         return   # superseded by an earlier poll scheduled for an urgent request
     _poll_due = None
-    if _workers:
-        for conn in _wait_ready(list(_workers), timeout=0):
+    if _workers or _listeners:
+        for conn in _wait_ready(list(_workers) + list(_listeners), timeout=0):
+            listener = _listeners.get(conn)
+            if listener is not None:
+                listener._accept()
+                continue
             worker = _workers.get(conn)
             while worker is not None and not worker.closed:
                 try:
@@ -130,7 +191,7 @@ def _ensure_polling(urgent=False):
     """Schedules the next poll. ``urgent`` (a request was just sent) moves an
     idle-rate poll forward."""
     global _generation, _poll_due
-    if not (_workers or _exited):
+    if not (_workers or _exited or _listeners):
         return
     quiet = time.monotonic() - _last_message
     if urgent or quiet < _RECENT:

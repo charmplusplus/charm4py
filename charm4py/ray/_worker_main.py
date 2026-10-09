@@ -9,12 +9,14 @@ load Charm++: its ``ray`` API forwards to the host (api._client). It is one of
 - a task worker: runs tasks one at a time, for a pool kept by a PE;
 - the driver: runs the user's script (charm4py.ray.launch).
 
+A process that connects to the job (api._connect) uses the same _Channel.
+
 Messages from the host:  ('init', info) ('construct', rid, desc, args, kwargs)
                          ('call', rid, method, args, kwargs, task_id)
                          ('task', rid, desc, args, kwargs, context, name)
                          ('api_reply', rid, ok, value)
 Messages to the host:    ('done', rid, status, value)  status: ok | error | exit
-                         ('api', rid, name, args, kwargs)
+                         ('api', rid, name, args, kwargs, job)
                          ('driver_exit', code)
 
 A reader thread receives everything: API replies go to the thread that made the
@@ -32,8 +34,10 @@ class _Channel(object):
     """The connection to the host, shared by every thread of the worker."""
 
     def __init__(self, conn, side):
+        from charm4py.ray import api
         self.conn = conn
         self.side = side
+        self.current_job = api._current_job
         self.send_lock = threading.Lock()
         self.work = queue.Queue()
         self.calls = {}               # rid -> [event, reply]
@@ -77,7 +81,7 @@ class _Channel(object):
             rid = self.next_rid
             self.next_rid += 1
             self.calls[rid] = slot
-        self.send(('api', rid, api_name, args, kwargs))
+        self.send(('api', rid, api_name, args, kwargs, self.current_job()))
         slot[0].wait()
         reply = slot[1]
         if reply is None:
@@ -85,6 +89,13 @@ class _Channel(object):
         if reply[2]:
             return reply[3]
         raise reply[3]
+
+
+    def close(self):
+        try:
+            self.conn.close()
+        except OSError:
+            pass
 
 
 def _host_gone():
@@ -106,6 +117,7 @@ def _run_actor(channel, info, api):
     from charm4py.ray._serialization import resolve
     from charm4py.ray.actor import _ActorExit
     ctx = api._ExecContext(**info['context'])
+    api._job = ctx.job
     instance = None
     while True:
         msg = channel.work.get()
@@ -154,7 +166,9 @@ def _run_tasks(channel, info, api):
         if msg is None:
             return 0
         _, rid, desc, args, kwargs, context, task_name = msg
-        api._set_context(api._ExecContext(**context))
+        ctx = api._ExecContext(**context)
+        api._set_context(ctx)
+        api._job = ctx.job      # also for threads the task starts
         name = task_name or (desc[2] if desc[0] == 'ref' else 'task')
         try:
             fn = resolve(desc)
@@ -177,6 +191,17 @@ def _run_driver(channel, info, api):
     except BaseException:
         traceback.print_exc()
         code = 1
+    # what the interpreter does at exit -- wait for non-daemon threads, then run
+    # the atexit handlers (applications stop their own processes there) -- while
+    # Ray still works; then end the job, like Ray's own atexit handler
+    for thread in threading.enumerate():
+        if thread is not threading.current_thread() and not thread.daemon:
+            thread.join()
+    try:
+        import atexit
+        atexit._run_exitfuncs()
+    except BaseException:
+        traceback.print_exc()
     try:
         if api.is_initialized():
             api.shutdown()
@@ -207,6 +232,9 @@ def _main():
     channel = _Channel(conn, side)
     api._client = channel
     api.__dict__.update(info['globals'])
+    if api._address:
+        # processes this one starts can connect to the job
+        os.environ[api.ADDRESS_ENV] = api._address
     if info['kind'] != 'driver' and info.get('main_script'):
         _load_script(info['main_script'], '__mp_main__')
     run = {'actor': _run_actor, 'tasks': _run_tasks, 'driver': _run_driver}[info['kind']]

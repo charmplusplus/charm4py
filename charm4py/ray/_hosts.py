@@ -1,7 +1,8 @@
 """Charm chares that implement Ray: _RayWorker (one per PE) runs tasks,
 _ActorHost (one array element per actor) runs an actor, _RayControl (one, on
-PE 0) owns actor names, node resources and placement groups, and _DriverHost (on
-PE 0, under charm4py.ray.launch) runs the driver script in its own process.
+PE 0) owns jobs, actor names, node resources and placement groups, and _Gateway
+(on PE 0) lets other processes join the job and, under charm4py.ray.launch, runs
+the driver script in its own process.
 
 With isolation 'process' (the default under charm4py.ray.launch) the user's code
 -- tasks, actors and the driver -- runs in worker processes (see _proc.py and
@@ -35,8 +36,8 @@ def _host_api():
     # the same name)
     pgm = importlib.import_module(__package__ + '.util.placement_group')
     return {
-        '_init': _init_for_worker,
-        '_shutdown': api.shutdown,
+        '_init': _init_link,
+        '_shutdown': _shutdown_link,
         '_get_stored': api._get_stored,
         'wait': api.wait,
         'put': api.put,
@@ -60,17 +61,28 @@ _HOST_API = None
 # API calls during which a worker may wait for other work to finish
 _BLOCKING_CALLS = {'_get_stored', 'wait', '_pg_ready'}
 
-_SHARED_GLOBALS = ('_initialized', '_nodes', '_namespace', '_session_id',
-                   '_job_runtime_env', '_isolation')
+# API calls that act on the calling process's link (its job)
+_LINK_CALLS = {'_init', '_shutdown'}
+
+_SHARED_GLOBALS = ('_initialized', '_nodes', '_session_id', '_isolation', '_address')
 
 
 def _shared_globals():
     return {name: getattr(api, name) for name in _SHARED_GLOBALS}
 
 
-def _init_for_worker(*args, **kwargs):
-    api.init(*args, **kwargs)
-    return _shared_globals()
+def _init_link(link, **job_args):
+    """ray.init() in the driver or in a connected process: begins its job."""
+    if link.job is not None:
+        raise RuntimeError('ray.init() was already called by this process')
+    link.job = api._start_job(**job_args)
+    return dict(_shared_globals(), _job=link.job)
+
+
+def _shutdown_link(link):
+    job, link.job = link.job, None
+    if job is not None:
+        api._end_job(job['job_id'])
 
 
 def _resume_later(gr, value):
@@ -82,18 +94,26 @@ def _resume_later(gr, value):
 class _Link(object):
     """One worker process, owned by a chare (see _LinkOwner)."""
 
-    def __init__(self, owner, link_id, kind, env=None, **info):
+    def __init__(self, owner, link_id, kind, env=None, sock=None, **info):
+        """``kind``: 'driver', 'actor' or 'tasks' starts a worker process; 'client'
+        serves a process that connected through ``sock``."""
         from ._proc import WorkerProcess
         self.owner = owner
         self.id = link_id
+        self.kind = kind
+        self.job = None               # the job a driver or client began (ray.init)
+        self.env_key = None
         self.side = _ipc.HostSide()
         self.replies = {}             # request id -> greenlet waiting for the reply
         self.rids = itertools.count()
         self.blocking = 0             # API calls in progress that may wait
-        self.worker = WorkerProcess(env or {}, self._on_message, self._on_exit)
+        self.worker = WorkerProcess(env or {}, self._on_message, self._on_exit, sock=sock)
         charm = api._charm()
+        shared = _shared_globals()
+        if kind in ('driver', 'client'):
+            shared['_initialized'] = False   # until this process calls ray.init
         info.update(kind=kind, sys_path=list(sys.path), main_script=api._main_script,
-                    globals=dict(_shared_globals(), _client_pe=charm.myPe(),
+                    globals=dict(shared, _client_pe=charm.myPe(),
                                  _client_host=charm.myHost(), _client_kind=kind))
         self.worker.send(self.side.dumps(('init', info)))
 
@@ -167,7 +187,11 @@ class _LinkOwner(object):
             link.blocking += 1
             self._link_blocked(link)
         try:
-            _, _, _, args, kwargs = link.side.loads(data)
+            _, _, _, args, kwargs, job = link.side.loads(data)
+            # the calling task's, actor's or process's job
+            api._set_context(api._ExecContext(job=job))
+            if name in _LINK_CALLS:
+                args = (link,) + tuple(args)
             reply = ('api_reply', rid, True, _HOST_API[name](*args, **kwargs))
         except Exception as e:
             reply = ('api_reply', rid, False, e)
@@ -199,7 +223,7 @@ class _RayWorker(Chare, _LinkOwner):
 
     def __init__(self):
         self.links = {}           # link id -> _Link
-        self.idle = []            # task workers waiting for a task
+        self.idle = []            # task workers waiting for a task (newest last)
         self.busy = set()         # task workers running a task
         self.waiting = collections.deque()   # coroutines waiting for a worker
         self.link_ids = itertools.count()
@@ -218,15 +242,22 @@ class _RayWorker(Chare, _LinkOwner):
     def _running(self):
         return sum(1 for link in self.busy if link.blocking == 0)
 
-    def _acquire(self):
+    def _acquire(self, env):
+        """A task worker whose environment has ``env`` (the job's env_vars)."""
+        env_key = tuple(sorted(env.items()))
         while True:
-            while self.idle:
-                link = self.idle.pop()
-                if link.alive:
+            for i in range(len(self.idle) - 1, -1, -1):
+                link = self.idle[i]
+                if link.alive and link.env_key == env_key:
+                    del self.idle[i]
                     self.busy.add(link)
                     return link
             if self._running() < self._limit():
-                link = _Link(self, next(self.link_ids), 'tasks')
+                if len(self.idle) >= self._limit():
+                    # idle workers of other jobs' environments: retire the oldest
+                    self.idle.pop(0).kill()
+                link = _Link(self, next(self.link_ids), 'tasks', env=env)
+                link.env_key = env_key
                 self.links[link.id] = link
                 self.busy.add(link)
                 return link
@@ -264,11 +295,12 @@ class _RayWorker(Chare, _LinkOwner):
         self._wake_one()
 
     @coro
-    def execute_task(self, fn_desc, args, kwargs, return_refs, name, pg_info):
+    def execute_task(self, fn_desc, args, kwargs, return_refs, name, pg_info, job):
         ctx = api._ExecContext(
             task_id=api._new_task_id(), node_id=api._my_node()['NodeID'],
             pg_id=pg_info[0] if pg_info else None,
-            pg_bundle_specs=pg_info[1] if pg_info else None)
+            pg_bundle_specs=pg_info[1] if pg_info else None, job=job,
+            runtime_env=job['runtime_env'] if job else None)
         api._set_context(ctx)
         function_name = name or (fn_desc[2] if fn_desc[0] == 'ref' else 'task')
         try:
@@ -298,7 +330,8 @@ class _RayWorker(Chare, _LinkOwner):
         if fn_desc[0] == 'ref' and fn_desc[1] in ('__main__', '__mp_main__') and \
                 not api._main_script:
             fn_desc = by_value(resolve(fn_desc))
-        link = self._acquire()
+        env_vars = ((ctx.job or {}).get('runtime_env') or {}).get('env_vars') or {}
+        link = self._acquire({k: str(v) for k, v in env_vars.items()})
         try:
             return link.request(('task', fn_desc, args, kwargs,
                                  {k: getattr(ctx, k) for k in api._ExecContext.__slots__},
@@ -359,7 +392,8 @@ class _ActorHost(Chare, _LinkOwner):
             actor_id=spec['actor_id'], actor_name=spec['name'],
             accelerator_ids=spec['accelerator_ids'], pg_id=spec['pg_id'],
             pg_bundle_specs=spec['pg_bundle_specs'], runtime_env=spec['runtime_env'],
-            assigned_resources=spec['assigned_resources'], node_id=spec['node_id'])
+            assigned_resources=spec['assigned_resources'], node_id=spec['node_id'],
+            job=spec['job'])
         if spec.get('doa') is not None:
             self._die(spec['doa'], notify_control=False)
         elif api._isolation == 'process':
@@ -563,26 +597,55 @@ class _ActorHost(Chare, _LinkOwner):
             api._control.actor_died(self.spec['key'])
 
 
-class _DriverHost(Chare, _LinkOwner):
-    """Runs the driver script in its own process (charm4py.ray.launch) and serves
-    its ray API calls. The job ends when the driver does."""
+class _Gateway(Chare, _LinkOwner):
+    """On PE 0: other processes of the job -- ones the driver starts, say --
+    connect here to use Ray (see api._connect), each as a job of its own that ends
+    when it disconnects. Under charm4py.ray.launch it also runs the driver script
+    in a process of its own and serves its ray calls; the Charm4py job ends when
+    the driver does."""
 
     def __init__(self, argv):
+        from ._proc import Listener
         self.setMigratable(False)
         self.links = {}
-        self.link = _Link(self, 0, 'driver', argv=argv)
-        self.links[0] = self.link
+        self.link_ids = itertools.count()
         self.exited = False
+        self.listener = Listener(self._connected)
+        api._address = api.ADDRESS_PREFIX + self.listener.path
+        # every process started from here on inherits it
+        os.environ[api.ADDRESS_ENV] = api._address
+        if argv is not None:
+            link = _Link(self, next(self.link_ids), 'driver', argv=argv)
+            self.links[link.id] = link
+
+    def address(self):
+        return api._address
+
+    def _connected(self, sock):
+        link = _Link(self, next(self.link_ids), 'client', sock=sock)
+        self.links[link.id] = link
 
     def _driver_exit(self, code):
         self.exited = True
+        self.listener.close()
         api._charm().exit(code)
 
     def _link_lost(self, link, code):
-        if not self.exited:
-            print('charm4py.ray: the driver process exited with code ' + str(code) +
-                  ' without finishing', file=sys.stderr)
-            api._charm().exit(code if code else 1)
+        self.links.pop(link.id, None)
+        if link.kind == 'driver':
+            if not self.exited:
+                print('charm4py.ray: the driver process exited with code ' + str(code) +
+                      ' without finishing', file=sys.stderr)
+                self.listener.close()
+                api._charm().exit(code if code else 1)
+        elif link.job is not None:
+            # the process ended (or disconnected) without ray.shutdown()
+            self.thisProxy.end_job(link.job['job_id'])
+            link.job = None
+
+    @coro
+    def end_job(self, job_id):
+        api._end_job(job_id)
 
 
 def _fits(avail, request):
@@ -606,7 +669,11 @@ def _give(avail, ids_pool, request, ids):
         avail[k] = avail.get(k, 0.0) + v
     for k, taken in ids.items():
         ids_pool.setdefault(k, []).extend(taken)
-        ids_pool[k].sort()
+        ids_pool[k].sort(key=_id_order)
+
+
+def _id_order(device_id):
+    return (0, int(device_id), '') if device_id.isdigit() else (1, 0, device_id)
 
 
 class _RayControl(Chare):
@@ -616,9 +683,11 @@ class _RayControl(Chare):
         self.setMigratable(False)
         self.nodes = []
         self.actors_proxy = None
+        self.job_counter = 0
         self._reset()
 
     def _reset(self):
+        self.jobs = {}         # job id -> job record (see api._job)
         self.actors = {}       # actor key -> record
         self.names = {}        # (namespace, name) -> actor key
         self.pgs = {}          # placement group id (hex) -> record
@@ -634,10 +703,34 @@ class _RayControl(Chare):
             self.nodes.append({
                 'index': i, 'node_id': node['NodeID'], 'pes': list(node['_pes']),
                 'avail': dict(total),
-                'ids': {k: list(range(int(total[k]))) for k in ACCELERATOR_KEYS
-                        if total.get(k)}})
+                'ids': {k: (list(node['_gpu_ids']) if k == 'GPU' else
+                            [str(i) for i in range(int(total[k]))])
+                        for k in ACCELERATOR_KEYS if total.get(k)}})
         self._reset()
         return True
+
+    def new_job(self, namespace, runtime_env):
+        import struct
+        import uuid
+        self.job_counter += 1
+        job = {'job_id': struct.pack('<I', self.job_counter).hex(),
+               'namespace': namespace if namespace is not None else str(uuid.uuid4()),
+               'runtime_env': dict(runtime_env or {})}
+        self.jobs[job['job_id']] = job
+        return job
+
+    def end_job(self, job_id):
+        """Kills the job's actors and removes its placement groups. Returns how
+        many jobs are left."""
+        if self.jobs.pop(job_id, None) is not None:
+            for rec in list(self.actors.values()):
+                if rec['state'] != 'DEAD' and rec['meta']['job']['job_id'] == job_id:
+                    self._kill(rec)
+            for pg in list(self.pgs.values()):
+                if pg['job_id'] == job_id and pg['state'] != 'REMOVED':
+                    self.remove_pg(pg['id'])
+            self._schedule_pending()
+        return len(self.jobs)
 
     def shutdown(self):
         for key, rec in list(self.actors.items()):
@@ -699,7 +792,7 @@ class _RayControl(Chare):
         node_id = self.nodes[node_index]['node_id'] if node_index is not None else None
         return {'key': meta['key'], 'actor_id': meta['actor_id'],
                 'class_name': meta['class_name'], 'name': meta['name'],
-                'runtime_env': meta['runtime_env'],
+                'runtime_env': meta['runtime_env'], 'job': meta['job'],
                 'accelerator_ids': {k: [str(i) for i in v] for k, v in rec['ids'].items()},
                 'assigned_resources': dict(meta['request']), 'node_id': node_id,
                 'pg_id': pg_id, 'pg_bundle_specs': bundle_specs, 'doa': doa}
@@ -828,9 +921,9 @@ class _RayControl(Chare):
 
     # ---- placement groups
 
-    def create_pg(self, pg_id, specs, strategy, name):
+    def create_pg(self, pg_id, specs, strategy, name, job_id):
         pg = {'id': pg_id, 'specs': specs, 'strategy': strategy, 'name': name,
-              'state': 'PENDING', 'bundles': None, 'ready_refs': []}
+              'state': 'PENDING', 'bundles': None, 'ready_refs': [], 'job_id': job_id}
         self.pgs[pg_id] = pg
         if not self._schedule_pg(pg):
             self.pending.append(('pg', pg_id))

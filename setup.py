@@ -525,6 +525,8 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     package_data={
         'charm4py': ['libcharm_version'],
+        # not a package: put on PYTHONPATH by charm4py.ray.launch
+        'charm4py.ray': ['_shim/ray/__init__.py'],
     },
     ext_modules=extensions,
     cmdclass = {'build_py': custom_build_py,

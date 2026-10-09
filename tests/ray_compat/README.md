@@ -38,8 +38,8 @@ The suite assumes one node with 4 CPUs and 2 GPUs, which it requests from
 
 | Backend | Result |
 |---|---|
-| Ray 2.56.1 | 52/52 |
-| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 52/52 |
+| Ray 2.56.1 | 55/55 |
+| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 55/55 |
 | charm4py.ray `--in-process`, `+p4` | fails the isolation tests (by design) |
 
 ## How it works
@@ -63,14 +63,31 @@ Isolation gives each actor its own `os.environ`, `CUDA_VISIBLE_DEVICES` (from it
 assigned GPUs) and lifetime: `ray.kill` terminates the process, and a crash
 becomes `ActorDiedError`.
 
+Each `ray.init()` begins a Ray *job* (its own job ID, namespace and
+runtime_env); the first one also starts the runtime, with its resources. Besides
+the driver, any process started by the job's processes can call `ray.init()`:
+the launcher puts a directory on `PYTHONPATH` whose `ray` package loads
+charm4py.ray, and sets `CHARM4PY_RAY_ADDRESS`, through which the process
+connects to `_Gateway` on PE 0 (`get_runtime_context().gcs_address` gives the
+same address, for `RAY_ADDRESS`). This is how vLLM's engine process -- forked or
+spawned by the driver, which never calls `ray.init()` -- uses Ray
+(`engine_process.py` checks that layout on both backends). A job's actors and
+placement groups end when it calls `ray.shutdown()` or its process exits; the
+runtime stops with its last job. GPUs are detected per node as Ray does
+(`CUDA_VISIBLE_DEVICES`, else NVML or `nvidia-smi`) unless `num_gpus` is given.
+
 Programs that use `charm.start` directly default to in-process execution, since
 their tasks and actors may call Charm4py; `ray.init(_isolation='process')` opts in.
 
 ## What charm4py.ray implements
 
-- `ray.init` (`address` is ignored; `num_cpus`, `num_gpus`, `resources` describe
-  each node), `is_initialized`, `shutdown` (kills this job's actors and
-  placement groups; `ray.init` can be called again).
+- `ray.init` (`num_cpus`, `num_gpus`, `resources` describe each node and may
+  only be given by the job that starts the runtime; `address`/`RAY_ADDRESS`
+  connect to this job, other addresses are ignored), `is_initialized`,
+  `shutdown` (ends this job: kills its actors and placement groups; `ray.init`
+  can be called again). Jobs: separate job IDs and default namespaces, job
+  `runtime_env` merged into its actors' and tasks', fate-sharing with the
+  process that began the job.
 - Remote functions: `@ray.remote`, `@ray.remote(**options)`, `.options()` (returns
   a copy), positional and keyword arguments, `num_returns` (0, 1, n). Top-level
   ObjectRef arguments are resolved; nested ones are passed as references.
@@ -116,5 +133,6 @@ The main ones:
   pickling over sockets (no shared-memory object store).
 - Not implemented: `ray.cancel`, `max_concurrency > 1`, async actors,
   concurrency groups, streaming generators, DAGs, `runtime_env` beyond
-  `env_vars`, detached actors, joining a cluster by `address`, `ray.util` beyond
-  placement groups and scheduling strategies, the state API.
+  `env_vars`, detached actors, connecting from a host other than PE 0's or from
+  a process the job did not start (it lacks the `import ray` shim), `ray.util`
+  beyond placement groups and scheduling strategies, the state API.

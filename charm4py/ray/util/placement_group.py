@@ -122,8 +122,8 @@ def placement_group(bundles, strategy='PACK', name='', lifetime=None,
     api._ensure_initialized()
     if api._client is not None:
         return api._client.call('placement_group', bundles, strategy=strategy, name=name)
-    pg_id = uuid.uuid4().hex[:28] + api.JOB_ID
-    api._control.create_pg(pg_id, specs, strategy, name)
+    pg_id = uuid.uuid4().hex[:28] + api._job_id()
+    api._control.create_pg(pg_id, specs, strategy, name, api._job_id())
     return PlacementGroup(PlacementGroupID(pg_id), specs)
 
 

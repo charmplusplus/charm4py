@@ -20,7 +20,7 @@ class RuntimeContext(object):
         return api._my_node()['NodeID']
 
     def get_job_id(self):
-        return api.JOB_ID
+        return api._job_id()
 
     def get_worker_id(self):
         return api._worker_id()
@@ -55,14 +55,14 @@ class RuntimeContext(object):
 
     @property
     def namespace(self):
-        return api._namespace
+        return api._namespace()
 
     @property
     def runtime_env(self):
         ctx = self._ctx()
         if ctx is not None and ctx.runtime_env is not None:
             return dict(ctx.runtime_env)
-        return dict(api._job_runtime_env or {})
+        return dict(api._current_job().get('runtime_env') or {})
 
     def get_runtime_env_string(self):
         return json.dumps(self.runtime_env)
@@ -73,7 +73,9 @@ class RuntimeContext(object):
 
     @property
     def gcs_address(self):
-        return api.get_node_ip_address() + ':0'
+        """Where other processes connect to this job: ray.init(address=...) or
+        RAY_ADDRESS."""
+        return api._address or api.get_node_ip_address() + ':0'
 
     def get(self):
         out = {'job_id': self.get_job_id(), 'node_id': self.get_node_id(),

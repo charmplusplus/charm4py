@@ -14,7 +14,12 @@ script's driver code must be guarded by a ``__name__ == '__main__'`` check.
 
 ``--in-process`` runs the driver as a coroutine of PE 0 and tasks and actors as
 coroutines of the PEs (no worker processes): lighter, but code that blocks
-stalls its PE."""
+stalls its PE.
+
+Processes started by the job's processes (by the driver, say) inherit a
+PYTHONPATH entry that makes their ``import ray`` load charm4py.ray too (see
+_shim/ray), and CHARM4PY_RAY_ADDRESS, through which their ``ray.init()`` joins
+the job."""
 
 import importlib
 import os
@@ -71,6 +76,9 @@ def _launch():
               'script.py [args]')
         sys.exit(2)
     install_ray_facade()
+    shim = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_shim')
+    os.environ['PYTHONPATH'] = os.pathsep.join(
+        [shim] + [p for p in os.environ.get('PYTHONPATH', '').split(os.pathsep) if p])
     from charm4py import charm, Chare, Group
     from charm4py.ray import api
 
@@ -117,14 +125,15 @@ def _launch():
                 argv = argv[i:]
                 break
         charm.awaitCreation(Group(_ScriptLoader, args=[argv]))
+        from charm4py.ray._hosts import _Gateway
         if in_process:
             # the driver runs as a coroutine of PE 0 (blocking code stalls PE 0)
+            Chare(_Gateway, args=[None], onPE=0).address(ret=True).get()
             run_driver_here(argv)
         else:
             # the driver runs in a process of its own, like a Ray driver; the job
             # ends when it does
-            from charm4py.ray._hosts import _DriverHost
-            Chare(_DriverHost, args=[argv], onPE=0)
+            Chare(_Gateway, args=[argv], onPE=0)
 
     # charm.start registers the Chare classes of __main__ (this module)
     globals()['_ScriptLoader'] = _ScriptLoader
