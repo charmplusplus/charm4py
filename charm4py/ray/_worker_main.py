@@ -21,6 +21,7 @@ Each message is a header ``(kind, rid)`` and a payload (see _ipc.py):
   to the host     done        (status, value)   ok: [Opaque per return] | error: Opaque
                                                 exit: exit code
                   api         (name, args, kwargs, job)
+                  release     [(object id, tokens)]   references this worker let go
                   driver_exit code
 
 Arguments arrive resolved: a top-level ObjectRef argument becomes the stored
@@ -34,6 +35,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import traceback
 from multiprocessing.connection import Connection
 
@@ -54,13 +56,33 @@ class _Channel(object):
         self.next_rid = 0
         self.closed = False
         threading.Thread(target=self._read, name='charm4py-ray-reader', daemon=True).start()
+        threading.Thread(target=self._release_loop, name='charm4py-ray-release',
+                         daemon=True).start()
 
     def send(self, kind, rid, payload):
         data = self.side.dumps(payload)
         header = self.ipc.encode_header(kind, rid)
         with self.send_lock:
+            self._send_released()
             self.conn.send_bytes(header)
             self.conn.send_bytes(data)
+
+    def _send_released(self):
+        # (holding send_lock) tells the host which references this worker let go
+        released = self.side.take_released()
+        if released:
+            self.conn.send_bytes(self.ipc.encode_header('release'))
+            self.conn.send_bytes(self.side.dumps(released))
+
+    def _release_loop(self):
+        while not self.closed:
+            time.sleep(0.1)
+            if self.side.released:
+                try:
+                    with self.send_lock:
+                        self._send_released()
+                except OSError:
+                    return
 
     def _read(self):
         try:
@@ -68,17 +90,10 @@ class _Channel(object):
                 kind, rid = self.ipc.decode_header(self.conn.recv_bytes())
                 data = self.conn.recv_bytes()
                 if kind == 'api_reply':
-                    try:
-                        reply = self.side.loads(data)
-                    except BaseException as e:
-                        reply = (False, _undecodable('the reply of a ray call', e))
-                    with self.calls_lock:
-                        slot = self.calls.pop(rid, None)
-                    if slot is not None:
-                        slot[1] = reply
-                        slot[0].set()
+                    self._deliver(rid, data)
                 else:
                     self.work.put((kind, rid, data))
+                del data
         except (EOFError, OSError):
             pass
         except BaseException:
@@ -88,6 +103,19 @@ class _Channel(object):
         with self.calls_lock:
             slots, self.calls = list(self.calls.values()), {}
         for slot in slots:
+            slot[0].set()
+
+    def _deliver(self, rid, data):
+        # (a function, so the reader keeps no reply -- and no reference in it --
+        # alive while it waits for the next message)
+        try:
+            reply = self.side.loads(data)
+        except BaseException as e:
+            reply = (False, _undecodable('the reply of a ray call', e))
+        with self.calls_lock:
+            slot = self.calls.pop(rid, None)
+        if slot is not None:
+            slot[1] = reply
             slot[0].set()
 
     def call(self, api_name, /, *args, **kwargs):
@@ -162,9 +190,6 @@ def _payload(channel, data, rid, what):
 
 
 def _run_actor(channel, info, api):
-    from charm4py.ray import _errors
-    from charm4py.ray._serialization import resolve
-    from charm4py.ray.actor import _ActorExit
     ctx = api._ExecContext(**info['context'])
     api._job = ctx.job
     _add_job_paths(ctx.job)
@@ -175,61 +200,76 @@ def _run_actor(channel, info, api):
         if msg is None:
             return 0
         kind, rid, data = msg
-        if kind == 'construct':
-            payload = _payload(channel, data, rid, 'the actor class or its arguments')
-            if payload is None:
-                continue
-            desc, args, kwargs = payload
-            ctx.task_id = api._new_task_id()
-            api._set_context(ctx)
-            name = class_name + '.__init__'
+        del msg
+        # (each call's arguments and results are local to _actor_step, so an idle
+        # actor does not keep the last call's references alive)
+        instance, done = _actor_step(channel, info, api, ctx, class_name, instance,
+                                     kind, rid, data)
+        if done:
+            return 0
+
+
+def _actor_step(channel, info, api, ctx, class_name, instance, kind, rid, data):
+    """Handles one message for an actor worker. Returns (instance, finished)."""
+    from charm4py.ray import _errors
+    from charm4py.ray._serialization import resolve
+    from charm4py.ray.actor import _ActorExit
+    if kind == 'construct':
+        payload = _payload(channel, data, rid, 'the actor class or its arguments')
+        if payload is None:
+            return instance, False
+        desc, args, kwargs = payload
+        ctx.task_id = api._new_task_id()
+        api._set_context(ctx)
+        name = class_name + '.__init__'
+        try:
+            args, kwargs = api._unwrap_args(args, kwargs)
+            instance = resolve(desc)(*args, **kwargs)
+            channel.send('done', rid, ('ok', None))
+        except api._DependencyFailed as e:
+            _reply_error(channel, rid, api._creation_error(
+                api._dependency_error(name, e.error), ctx.actor_id))
+        except Exception as e:
+            _reply_error(channel, rid, api._creation_error(
+                _errors.task_error(name, e, actor_id=ctx.actor_id), ctx.actor_id))
+    elif kind == 'call':
+        payload = _payload(channel, data, rid, 'the arguments of an actor method')
+        if payload is None:
+            return instance, False
+        method, args, kwargs, task_id, num_returns = payload
+        ctx.task_id = task_id
+        api._set_context(ctx)
+        name = class_name + '.' + method
+        try:
+            args, kwargs = api._unwrap_args(args, kwargs)
+        except api._DependencyFailed as e:
+            _reply_error(channel, rid, api._dependency_error(name, e.error))
+            return instance, False
+        try:
+            result = getattr(instance, method)(*args, **kwargs)
+        except _ActorExit:
+            channel.send('done', rid, ('exit', None))
+            return instance, True
+        except SystemExit as e:
+            channel.send('done', rid, ('exit', e.code))
+            return instance, True
+        except Exception as e:
             try:
-                args, kwargs = api._unwrap_args(args, kwargs)
-                instance = resolve(desc)(*args, **kwargs)
-                channel.send('done', rid, ('ok', None))
-            except api._DependencyFailed as e:
-                _reply_error(channel, rid, api._creation_error(
-                    api._dependency_error(name, e.error), ctx.actor_id))
-            except Exception as e:
-                _reply_error(channel, rid, api._creation_error(
-                    _errors.task_error(name, e, actor_id=ctx.actor_id), ctx.actor_id))
-        elif kind == 'call':
-            payload = _payload(channel, data, rid, 'the arguments of an actor method')
-            if payload is None:
-                continue
-            method, args, kwargs, task_id, num_returns = payload
-            ctx.task_id = task_id
-            api._set_context(ctx)
-            name = class_name + '.' + method
-            try:
-                args, kwargs = api._unwrap_args(args, kwargs)
-            except api._DependencyFailed as e:
-                _reply_error(channel, rid, api._dependency_error(name, e.error))
-                continue
-            try:
-                result = getattr(instance, method)(*args, **kwargs)
-            except _ActorExit:
-                channel.send('done', rid, ('exit', None))
-                return 0
-            except SystemExit as e:
-                channel.send('done', rid, ('exit', e.code))
-                return 0
-            except Exception as e:
-                try:
-                    actor_repr = repr(instance)
-                except Exception:
-                    actor_repr = None
-                _reply_error(channel, rid, _errors.task_error(
-                    name, e, actor_repr=actor_repr, actor_id=ctx.actor_id))
-                continue
-            try:
-                values = api._split_results(result, num_returns, name)
-            except api._ResultsMismatch as e:
-                _reply_error(channel, rid, e.error)
-                continue
-            _reply_ok(channel, rid, values, name)
-        else:
-            raise RuntimeError('unexpected message for an actor worker: ' + repr(kind))
+                actor_repr = repr(instance)
+            except Exception:
+                actor_repr = None
+            _reply_error(channel, rid, _errors.task_error(
+                name, e, actor_repr=actor_repr, actor_id=ctx.actor_id))
+            return instance, False
+        try:
+            values = api._split_results(result, num_returns, name)
+        except api._ResultsMismatch as e:
+            _reply_error(channel, rid, e.error)
+            return instance, False
+        _reply_ok(channel, rid, values, name)
+    else:
+        raise RuntimeError('unexpected message for an actor worker: ' + repr(kind))
+    return instance, False
 
 
 def _add_job_paths(job):
@@ -241,41 +281,47 @@ def _add_job_paths(job):
 
 
 def _run_tasks(channel, info, api):
-    from charm4py.ray import _errors
-    from charm4py.ray._serialization import resolve
     while True:
         msg = channel.work.get()
         if msg is None:
             return 0
         kind, rid, data = msg
-        payload = _payload(channel, data, rid, 'the task function or its arguments')
-        if payload is None:
-            continue
-        desc, args, kwargs, context, task_name, num_returns = payload
-        ctx = api._ExecContext(**context)
-        api._set_context(ctx)
-        api._job = ctx.job      # also for threads the task starts
-        _add_job_paths(ctx.job)
-        name = task_name or (desc[2] if desc[0] == 'ref' else 'task')
-        try:
-            fn = resolve(desc)
-            name = task_name or getattr(fn, '__qualname__', name)
-            args, kwargs = api._unwrap_args(args, kwargs)
-            result = fn(*args, **kwargs)
-            values = api._split_results(result, num_returns, name)
-        except api._DependencyFailed as e:
-            _reply_error(channel, rid, api._dependency_error(name, e.error))
-            continue
-        except api._ResultsMismatch as e:
-            _reply_error(channel, rid, e.error)
-            continue
-        except SystemExit as e:
-            _reply_error(channel, rid, _errors.crash_error(name, e.code))
-            continue
-        except Exception as e:
-            _reply_error(channel, rid, _errors.task_error(name, e))
-            continue
-        _reply_ok(channel, rid, values, name)
+        del msg
+        # (locals of _task_step: an idle worker keeps no references alive)
+        _task_step(channel, api, rid, data)
+
+
+def _task_step(channel, api, rid, data):
+    from charm4py.ray import _errors
+    from charm4py.ray._serialization import resolve
+    payload = _payload(channel, data, rid, 'the task function or its arguments')
+    if payload is None:
+        return
+    desc, args, kwargs, context, task_name, num_returns = payload
+    ctx = api._ExecContext(**context)
+    api._set_context(ctx)
+    api._job = ctx.job      # also for threads the task starts
+    _add_job_paths(ctx.job)
+    name = task_name or (desc[2] if desc[0] == 'ref' else 'task')
+    try:
+        fn = resolve(desc)
+        name = task_name or getattr(fn, '__qualname__', name)
+        args, kwargs = api._unwrap_args(args, kwargs)
+        result = fn(*args, **kwargs)
+        values = api._split_results(result, num_returns, name)
+    except api._DependencyFailed as e:
+        _reply_error(channel, rid, api._dependency_error(name, e.error))
+        return
+    except api._ResultsMismatch as e:
+        _reply_error(channel, rid, e.error)
+        return
+    except SystemExit as e:
+        _reply_error(channel, rid, _errors.crash_error(name, e.code))
+        return
+    except Exception as e:
+        _reply_error(channel, rid, _errors.task_error(name, e))
+        return
+    _reply_ok(channel, rid, values, name)
 
 
 def _run_driver(channel, info, api):

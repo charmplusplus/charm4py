@@ -1,19 +1,33 @@
 """ObjectRef: the Ray-facing reference type.
 
 An ObjectRef is a Charm4py object-store future (``Future(store=True)``), so the
-existing object store, dependency buffering and borrower tracking all keep
-working. What this class adds is Ray's identity semantics: two references to the
-same object compare and hash equal, and they print and serialize their ID the way
-``ray.ObjectRef`` does."""
+existing object store and dependency buffering keep working. What this class
+adds is Ray's identity semantics -- two references to the same object compare
+and hash equal, and they print their ID the way ``ray.ObjectRef`` does -- and
+reference counting: the object is freed once no ObjectRef for it exists in any
+process (see _refs.py)."""
 
 from ..threads import Future
+from . import _refs
 
-# True in actor worker processes, where references are inert stand-ins (see
-# _ipc.py) that must never run Charm4py's pickling or deletion protocol.
+# True in worker processes, where references are inert stand-ins (see _ipc.py)
+# that are neither counted nor pickled through Charm4py.
 INERT = False
 
 
+def _my_pe():
+    import charm4py
+    return charm4py.charm.myPe()
+
+
 class ObjectRef(Future):
+
+    def __init__(self, fid, gr, src, num_vals, store=True):
+        # a reference does not need the greenlet that made it
+        super().__init__(fid, None, src, num_vals, store=True)
+        self._counted = not INERT
+        if self._counted:
+            _refs.created(self.store_id)
 
     def hex(self):
         # Ray object IDs are 28 bytes, printed as 56 hex digits
@@ -36,20 +50,39 @@ class ObjectRef(Future):
 
     __str__ = __repr__
 
-    def __del__(self):
-        if not INERT:
-            Future.__del__(self)
+    def __getstate__(self):
+        if INERT:
+            raise TypeError('an ObjectRef in a worker process is pickled by its '
+                            'channel (see charm4py/ray/_ipc.py)')
+        _refs.sent(self.store_id)
+        return (self.store_id, _my_pe())
 
     def __setstate__(self, state):
-        # Future pickles through __getstate__/__setstate__, which does the
-        # borrower bookkeeping; also give the copy the attributes a Future has
-        Future.__setstate__(self, state)
+        store_id, sender = state
+        self.store_id = store_id
+        self.fid = store_id & 0xffffffff
+        self.src = store_id >> 32
+        self.store = True
+        self.parent = None
+        self.num_borrowers = 0
+        self.borrow_depth = 0
+        self._requested = False
         self.gr = None
         self.nvals = 1
         self.values = []
         self.blocked = False
         self.gotvalues = False
         self.error = None
+        self._counted = not INERT
+        if self._counted:
+            _refs.received(store_id, sender)
+
+    def __del__(self):
+        if self.__dict__.get('_counted'):
+            try:
+                _refs.dropped(self.store_id)
+            except Exception:
+                pass   # interpreter shutdown
 
 
 class _NoneValue(object):

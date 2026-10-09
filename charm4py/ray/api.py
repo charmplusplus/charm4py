@@ -977,5 +977,16 @@ def get_actor(name, namespace=None):
     return ActorHandle._from_state(state)
 
 
+def _object_counts():
+    """charm4py only, for tests: [(objects, locations)] in each PE's object store
+    branch."""
+    _ensure_initialized()
+    if _client is not None:
+        return _client.call('_object_counts')
+    charm = _charm()
+    replies = [_workers[pe].object_counts(ret=True) for pe in range(charm.numPes())]
+    return [reply.get() for reply in replies]
+
+
 def cancel(ref, *, force=False, recursive=True):
     raise NotImplementedError('ray.cancel() is not supported by charm4py.ray yet')

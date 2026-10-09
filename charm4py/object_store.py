@@ -1,6 +1,19 @@
 from charm4py import charm, Chare, Group, Array, Future, coro, Channel, Reducer, register
 from charm4py.c_object_store import CObjectStore
 
+_refs = None
+
+
+def _holds(obj_id):
+    global _refs
+    if _refs is None:
+        from charm4py.ray import _refs
+    return _refs.holds(obj_id)
+
+# An object is kept on a PE only while that PE holds a reference to it (see
+# charm4py/ray/_refs.py): a value, location or copy that arrives after the
+# object was freed -- messages are not ordered -- is dropped.
+
 @register
 class ObjectStore(Chare):
     def __init__(self):
@@ -48,16 +61,32 @@ class ObjectStore(Chare):
         """
         if self._object_store.has_location(obj_id):
             return
+        if not _holds(obj_id):
+            # freed already: the copy made on ``pe`` is not needed
+            self.thisProxy[pe].delete_object(obj_id)
+            return
         self.update_location(obj_id, pe)
 
     def insert_object_small(self, obj_id, obj):
+        if not _holds(obj_id):
+            return   # freed already
         self._object_store.insert_object_small(obj_id, obj)
+
+    def free_object(self, obj_id):
+        """ On the home PE, once no reference to the object is left: delete it
+        everywhere """
+        self._object_store.free_object(obj_id)
+
+    def num_objects(self):
+        return self._object_store.num_objects()
     
     def receive_remote_object(self, obj_id, obj):
         """ Add object to local object map
         Then check receive buffer to see if any messages are buffered
         on the receiving end on this PE
         """
+        if not _holds(obj_id):
+            return   # no reference left here (freed, or dropped while it came)
         self._object_store.receive_remote_object(obj_id, obj)
         charm.check_receive_buffer(obj_id)
         charm.check_futures_buffer(obj_id)

@@ -871,6 +871,51 @@ def test_state_list_nodes():
     check(node.state == 'ALIVE' and node.is_head_node)
 
 
+@ray.remote
+class Holder:
+    def __init__(self):
+        self.kept = None
+
+    def make(self, n):
+        return np.ones(n)
+
+    def keep(self, refs):
+        self.kept = refs   # nested references: borrowed, not resolved
+        return len(refs)
+
+    def drop(self):
+        self.kept = None
+
+
+@test
+def test_objects_are_freed():
+    """Objects nobody references any more are freed everywhere (charm4py only:
+    it reads the object store's size)."""
+    if BACKEND != 'charm4py':
+        return
+    counts = ray._object_counts
+
+    def total():
+        return sum(objects for objects, _ in counts())
+
+    base = total()
+    holder = Holder.remote()
+    for i in range(20):
+        ref = ray.put(np.zeros(50000))
+        check(ray.get(array_sum.remote(ref)) == 0.0)
+        check(ray.get(holder.make.remote(1000)).sum() == 1000)
+        refs = [make_array.remote(2000) for _ in range(3)]
+        check(ray.get(holder.keep.remote(refs)) == 3)
+        del ref, refs
+    # the actor still holds the last 3 arrays
+    check(eventually(lambda: total() <= base + 3, timeout=20),
+          'objects left: ' + str(total() - base))
+    ray.get(holder.drop.remote())
+    check(eventually(lambda: total() <= base, timeout=20),
+          'objects left after drop: ' + str(total() - base))
+    ray.kill(holder)
+
+
 def _joined_job(address, results, finish, use_shutdown):
     """Runs in a process the driver starts: joins the cluster like vLLM's engine
     process does (ray.init with RAY_ADDRESS set), as a job of its own."""

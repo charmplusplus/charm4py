@@ -56,6 +56,7 @@ def _host_api():
         'placement_group_table': pgm.placement_group_table,
         'get_placement_group': pgm.get_placement_group,
         '_pg_ready': lambda pg: pg.ready(),
+        '_object_counts': api._object_counts,
     }
 
 
@@ -182,6 +183,9 @@ class _Link(object):
             # run it as a coroutine: it may block (ray.get)
             owner = self.owner
             owner.thisProxy[owner.thisIndex].serve_api(self.id, rid)
+        elif kind == 'release':
+            if not isinstance(payload, Exception):
+                self.side.release(payload)
         elif kind == 'driver_exit':
             self.owner._driver_exit(payload)
 
@@ -251,6 +255,15 @@ class _RayWorker(Chare, _LinkOwner):
 
     def node_info(self):
         return api._local_node_info()
+
+    def release_refs(self, obj_ids):
+        """Copies of references this PE sent are accounted for (see _refs.py)."""
+        from . import _refs
+        _refs.released(obj_ids)
+
+    def object_counts(self):
+        """(objects, locations) in this PE's object store branch (for tests)."""
+        return api.object_store[api._charm().myPe()].ckLocalBranch().num_objects()
 
     def _limit(self):
         """Task workers that may run at once on this PE: the node's CPUs shared

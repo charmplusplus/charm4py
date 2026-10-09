@@ -247,6 +247,7 @@ class EntryMethodThreadManager(object):
         self.options = charm.options
         self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
+        self.last_ref_fid = 0  # last object-store future (ObjectRef) ID
         self.borrowed_futures = {}
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
 
@@ -318,7 +319,9 @@ class EntryMethodThreadManager(object):
     def createFuture(self, num_vals=1, store=False):
         """ Creates a new Future object by obtaining a unique (local) future ID. """
         gr = getcurrent()
-        if not store and gr == self.main_gr:
+        if store:
+            return self._createObjectRef(num_vals)
+        if gr == self.main_gr:
             self.throwNotThreadedError()
         # get a unique local Future ID
         global FIDMAXVAL
@@ -328,13 +331,26 @@ class EntryMethodThreadManager(object):
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
         self.lastfid = fid
-        if store:
-            from .ray.object_ref import ObjectRef
-            f = ObjectRef(fid, gr, charm._myPe, num_vals, store=store)
-        else:
-            f = Future(fid, gr, charm._myPe, num_vals, store=store)
+        f = Future(fid, gr, charm._myPe, num_vals, store=store)
         futures[fid] = f
         return f
+
+    def _createObjectRef(self, num_vals):
+        """ An object-store future: an ObjectRef. Its id need only be unique
+            among the objects this PE owns that are still referenced; it is not
+            registered here, since no value is deposited into it (the value goes
+            to the object store), and the object is freed when the last
+            reference to it goes away (see charm4py/ray/_refs.py). """
+        from .ray.object_ref import ObjectRef
+        from .ray import _refs
+        base = charm._myPe << 32
+        fid = self.last_ref_fid
+        while True:
+            fid = (fid % FIDMAXVAL) + 1
+            if not _refs.holds(base + fid):
+                break
+        self.last_ref_fid = fid
+        return ObjectRef(fid, None, charm._myPe, num_vals, store=True)
 
     def createCollectiveFuture(self, fid, obj, proxy):
         """ fid is supplied in this case and has to be the same for all distributed chares """

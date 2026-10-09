@@ -64,4 +64,6 @@ cdef class CObjectStore:
     cpdef void bulk_send_location(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes)
     cpdef bint is_known(self, ObjectId obj_id)
     cpdef bint has_location(self, ObjectId obj_id)
+    cpdef void free_object(self, ObjectId obj_id)
+    cpdef object num_objects(self)
     cpdef void create_object(self, ObjectId obj_id, object obj)

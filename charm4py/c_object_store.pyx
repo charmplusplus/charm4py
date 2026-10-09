@@ -198,6 +198,10 @@ cdef class CObjectStore:
         cdef int[::1] arr = <int [:vec.size()]> vec.data()
         cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
         self.proxy[pe].bulk_send_object(obj_id, req_pes)
+        # remember the copies, so that freeing the object deletes them too
+        cdef int i
+        for i in range(<int> vec.size()):
+            self.location_map[obj_id].push_back(vec[i])
         self.obj_loc_req_buffer.erase(obj_id)
 
     cdef void check_obj_requests_buffer(self, ObjectId obj_id):
@@ -226,6 +230,8 @@ cdef class CObjectStore:
         cdef object obj = self.lookup_object(obj_id)
         if not (obj is None):
             self.proxy[requesting_pe].receive_remote_object(obj_id, obj)
+            # remember the copy, so that freeing the object deletes it too
+            self.location_map[obj_id].push_back(requesting_pe)
             return
         cdef int pe = self.lookup_location(obj_id, fetch=False)
         if pe == -1:
@@ -274,6 +280,29 @@ cdef class CObjectStore:
 
     cpdef bint has_location(self, ObjectId obj_id):
         return self.location_map.find(obj_id) != self.location_map.end()
+
+    cpdef void free_object(self, ObjectId obj_id):
+        # on the home PE, once no reference to the object is left: delete every
+        # copy and forget the object, its locations and its pending requests
+        from charm4py import charm
+        cdef int me = charm.myPe()
+        cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
+        cdef set done = set([me])
+        cdef int pe
+        if it != self.location_map.end():
+            for pe in deref(it).second:
+                if pe not in done:
+                    done.add(pe)
+                    self.proxy[pe].delete_object(obj_id)
+            self.location_map.erase(obj_id)
+        self.delete_object(obj_id)
+        self.obj_req_buffer.erase(obj_id)
+        self.loc_req_buffer.erase(obj_id)
+        self.obj_loc_req_buffer.erase(obj_id)
+
+    cpdef object num_objects(self):
+        # (objects, locations) known on this PE
+        return (self.object_map.size(), self.location_map.size())
 
     cpdef bint is_known(self, ObjectId obj_id):
         return (self.object_map.find(obj_id) != self.object_map.end() or

@@ -4,6 +4,7 @@ import collections
 import functools
 import inspect
 import itertools
+import weakref
 
 from . import api, _options
 from ._serialization import describe
@@ -269,7 +270,8 @@ class ActorHandle(object):
         seq = self._seq
         self._seq += 1
         if refs:
-            self._inflight.append(refs)
+            # weakly: a call whose results nobody references need not be failed
+            self._inflight.append([weakref.ref(ref) for ref in refs])
             if len(self._inflight) > _INFLIGHT_LIMIT:
                 self._inflight.popleft()
         args, kwargs = list(args), dict(kwargs)
@@ -285,8 +287,10 @@ class ActorHandle(object):
         self._killed = ActorDiedError(actor_id=self._actor_id.hex(), error_msg=
                                       killed_message(self._class_name, self._actor_id.hex()))
         for refs in self._inflight:
-            for ref in refs:
-                api._store_error(ref, self._killed)
+            for weak in refs:
+                ref = weak()
+                if ref is not None:
+                    api._store_error(ref, self._killed)
         self._inflight.clear()
 
 

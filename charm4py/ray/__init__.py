@@ -7,6 +7,7 @@ this package as ``ray`` (see charm4py/ray/launch.py)."""
 
 from . import exceptions
 from .object_ref import ObjectRef
+from .api import _object_counts  # noqa: F401  (charm4py only, for tests)
 from .api import (init, shutdown, is_initialized, get, wait, put, kill, get_actor, cancel,
                   nodes, cluster_resources, available_resources, get_object_store)
 from .runtime_context import get_runtime_context

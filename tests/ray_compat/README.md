@@ -38,8 +38,8 @@ The suite assumes one node with 4 CPUs and 2 GPUs, which it requests from
 
 | Backend | Result |
 |---|---|
-| Ray 2.56.1 | 57/57 |
-| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 57/57 |
+| Ray 2.56.1 | 58/58 |
+| charm4py.ray (launcher, worker processes), `+p1` `+p2` `+p4` `+p8` | 58/58 |
 | charm4py.ray `--in-process`, `+p4` | fails the isolation tests, and driver threads and actor crashes take a PE down (by design) |
 
 ## How it works
@@ -62,7 +62,14 @@ borrower protocol never sees a non-Charm process. Values made by user code
 worker that makes them; the Charm4py processes store and forward them as opaque
 bytes and never import the user's modules (as Ray's raylet never deserializes
 objects). Only top-level ObjectRef arguments are visible to the hosts, which
-resolve them. Hosts poll their workers'
+resolve them.
+
+Objects are freed once no process references them (`_refs.py`): between PEs a
+borrower tree with no message-order assumptions, between a PE and its workers
+exact token counts. `refcount_stress.py` passes references nested in arguments,
+results, `put` objects and actor state across PEs and drops them while copies
+are in flight; every value arrives and the object store ends empty (`+p1` to
+`+p8`). Hosts poll their workers'
 sockets from a Charm timer, every 0.2 ms when active and every 10 ms when idle.
 Isolation gives each actor its own `os.environ`, `CUDA_VISIBLE_DEVICES` (from its
 assigned GPUs) and lifetime: `ray.kill` terminates the process, and a crash
@@ -170,8 +177,9 @@ The main ones:
   task `num_gpus` gets no accelerator IDs and no `CUDA_VISIBLE_DEVICES`.
 - No restarts or retries (`max_restarts`, `max_task_retries`,
   `retry_exceptions`), no detection of a dead node or Charm4py process.
-- References are never freed; objects move between worker processes by
-  pickling over sockets (no shared-memory object store).
+- Objects move between worker processes by pickling over sockets (no
+  shared-memory object store); no memory limits or spilling; no lineage
+  reconstruction of lost objects.
 - Not implemented: `ray.cancel`, `max_concurrency > 1`, async actors,
   concurrency groups, streaming generators, DAGs, `runtime_env` beyond
   `env_vars`, detached actors, connecting from a host other than PE 0's or from
