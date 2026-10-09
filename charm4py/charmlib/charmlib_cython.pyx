@@ -28,6 +28,11 @@ if PY_MAJOR_VERSION < 3:
   from cPickle import dumps, loads
 else:
   from dill  import dumps, loads
+  import dill
+  # Pickle classes and functions that are importable by name, like pickle does
+  # (by value, a __main__ class arrives as a different class object, which
+  # breaks isinstance and super()); dill still serializes what is not.
+  dill.settings['byref'] = True
 
 IF HAVE_NUMPY:
   import  numpy as np
