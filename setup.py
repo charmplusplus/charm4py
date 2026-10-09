@@ -110,10 +110,14 @@ except:
         raise DistutilsSetupError('Could not determine Charm4py version')
 
 
-def charm_built(charm_build_dir):
+def charm_built(charm_build_dir, is_reconverse_build=False):
     library_path = os.path.join(charm_build_dir, 'lib', libcharm_filename)
     if not os.path.exists(library_path):
         return False
+    # Reconverse launches through lcrun (or srun), so Charm++ does not build
+    # charmrun for it.
+    if is_reconverse_build:
+        return True
     charmrun_path = os.path.join(charm_build_dir, 'bin', charmrun_filename)
     if not os.path.exists(charmrun_path):
         return False
@@ -232,7 +236,7 @@ def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
     if not os.path.exists(charm_src_dir) or not os.path.isdir(charm_src_dir):
         raise DistutilsSetupError('charm sources dir ' + charm_src_dir + ' not found')
 
-    if not charm_built(charm_build_dir):
+    if not charm_built(charm_build_dir, is_reconverse_build):
 
         if system == 'windows' or system.startswith('cygwin'):
             raise DistutilsSetupError('Building charm++ from setup.py not currently supported on Windows.'
@@ -330,6 +334,8 @@ def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
 
     # ---- copy charmrun ----
     charmrun_src_path = os.path.join(charm_build_dir, 'bin', charmrun_filename)
+    if is_reconverse_build and not os.path.exists(charmrun_src_path):
+        return
     for output_dir in charmrun_output_dirs:
         log.info('copying ' + os.path.relpath(charmrun_src_path) + ' to ' + os.path.relpath(output_dir))
         shutil.copy(charmrun_src_path, output_dir)
