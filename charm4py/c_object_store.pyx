@@ -115,7 +115,9 @@ cdef class CObjectStore:
         from charm4py import charm
         #FIXME when is a copy required here?
         #obj_copy = deepcopy(obj)
-        if self.object_map.find(obj_id) != self.object_map.end():
+        # the first value created for an object id wins: ignore this one if the
+        # object, or a location for it, is already known here (its home PE)
+        if self.is_known(obj_id):
             return
         Py_INCREF(obj)
         self.object_map[obj_id] = <void*> obj
@@ -169,10 +171,8 @@ cdef class CObjectStore:
         cdef ObjectPEMapIterator it = self.location_map.find(obj_id)
         if it != self.location_map.end():
             return self.choose_pe(deref(it).second)
-        cdef int npes
         if fetch:
-            npes = charm.numPes()
-            self.proxy[obj_id % npes].request_location(obj_id, charm.myPe())
+            self.proxy[obj_id >> 32].request_location(obj_id, charm.myPe())
         return -1
 
     cdef void check_loc_requests_buffer(self, ObjectId obj_id):
@@ -183,9 +183,9 @@ cdef class CObjectStore:
         cdef vector[int] vec = deref(it).second
         cdef np.npy_intp size = vec.size()
         cdef int pe = self.lookup_location(obj_id, fetch=False)
-        cdef int[::1] arr = <int [:vec.size()]> vec.data()
-        cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
-        self.proxy[pe].bulk_request_location(obj_id, req_pes)
+        cdef int i
+        for i in range(<int> vec.size()):
+            self.proxy[vec[i]].update_location(obj_id, pe)
         self.loc_req_buffer.erase(obj_id)
 
     cdef void check_obj_loc_requests_buffer(self, ObjectId obj_id):
@@ -198,7 +198,7 @@ cdef class CObjectStore:
         cdef int[::1] arr = <int [:vec.size()]> vec.data()
         cdef np.ndarray[int, ndim=1] req_pes = np.asarray(arr)
         self.proxy[pe].bulk_send_object(obj_id, req_pes)
-        self.loc_req_buffer.erase(obj_id)
+        self.obj_loc_req_buffer.erase(obj_id)
 
     cdef void check_obj_requests_buffer(self, ObjectId obj_id):
         cdef ObjectPEMapIterator it = self.obj_req_buffer.find(obj_id)
@@ -261,19 +261,38 @@ cdef class CObjectStore:
         for i in range(requesting_pes.shape[0]):
             self.proxy[requesting_pes[i]].receive_remote_object(obj_id, obj)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cpdef void bulk_send_location(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes):
+        cdef int pe = self.lookup_location(obj_id, fetch=False)
+        if pe == -1:
+            for i in range(requesting_pes.shape[0]):
+                self.buffer_loc_request(obj_id, requesting_pes[i])
+            return
+        for i in range(requesting_pes.shape[0]):
+            self.proxy[requesting_pes[i]].update_location(obj_id, pe)
+
+    cpdef bint has_location(self, ObjectId obj_id):
+        return self.location_map.find(obj_id) != self.location_map.end()
+
+    cpdef bint is_known(self, ObjectId obj_id):
+        return (self.object_map.find(obj_id) != self.object_map.end() or
+                self.location_map.find(obj_id) != self.location_map.end())
+
     @cython.cdivision(True)
     cpdef void create_object(self, ObjectId obj_id, object obj):
         from charm4py import charm
-        cdef int npes = charm.numPes()
+        # the home of an object is its owner, the PE that created its id
+        cdef int home = obj_id >> 32
 
         # add logic to check size of obj
         cdef int size = sys.getsizeof(obj)
         if size < OBJ_SIZE_THRESHOLD:
             # in this case keep the object data on home
-            self.proxy[obj_id % npes].insert_object_small(obj_id, obj)
+            self.proxy[home].insert_object_small(obj_id, obj)
         else:
             #insert to local object map
             self.insert_object(obj_id, obj)
 
             #send a message to home to add entry
-            self.proxy[obj_id % npes].update_location(obj_id, charm.myPe())
+            self.proxy[home].register_object(obj_id, charm.myPe())

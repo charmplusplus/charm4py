@@ -1,6 +1,5 @@
 from . import wait
 import sys
-import charm4py.ray as ray
 from greenlet import getcurrent
 from collections import defaultdict
 

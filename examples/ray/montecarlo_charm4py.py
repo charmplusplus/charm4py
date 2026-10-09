@@ -65,5 +65,6 @@ def main(args):
     total_num_inside = sum(ray.get(results))
     pi = (total_num_inside * 4) / TOTAL_NUM_SAMPLES
     print(f"Estimated value of π is: {pi}")
+    exit()
 
 charm.start(main)

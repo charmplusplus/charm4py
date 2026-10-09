@@ -61,4 +61,7 @@ cdef class CObjectStore:
     cpdef void receive_remote_object(self, ObjectId obj_id, object obj)
     cpdef void request_object(self, ObjectId obj_id, int requesting_pe)
     cpdef void bulk_send_object(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes)
+    cpdef void bulk_send_location(self, ObjectId obj_id, np.ndarray[int, ndim=1] requesting_pes)
+    cpdef bint is_known(self, ObjectId obj_id)
+    cpdef bint has_location(self, ObjectId obj_id)
     cpdef void create_object(self, ObjectId obj_id, object obj)

@@ -15,7 +15,7 @@ def add_task(a, b):
 @ray.remote
 class Compute(object):
     def __init__(self, arg):
-        print('Hello from MyChare instance in processor', charm.myPe(), 'index', self.thisIndex, arg)
+        print('Hello from Compute actor', arg, 'on processor', charm.myPe())
 
     def add(self, a, b):
         sleep(2)

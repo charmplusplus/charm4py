@@ -39,6 +39,17 @@ class ObjectStore(Chare):
         self._object_store.update_location(obj_id, pe)
         charm.check_send_buffer(obj_id)
 
+    def register_object(self, obj_id, pe):
+        """ Called on the home PE when a large object is created on ``pe``. The
+        first value created for an object id wins: if a location is already
+        registered (a small value stored here also registers one), this one is
+        ignored. Only locations count: when ``pe`` is the home PE itself, the
+        object is already in the local map before this call arrives.
+        """
+        if self._object_store.has_location(obj_id):
+            return
+        self.update_location(obj_id, pe)
+
     def insert_object_small(self, obj_id, obj):
         self._object_store.insert_object_small(obj_id, obj)
     

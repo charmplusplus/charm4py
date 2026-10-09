@@ -1,6 +1,10 @@
 from greenlet import getcurrent
-#from charm4py.ray.api import get_object_store
-import charm4py.ray.api as ray
+
+
+def _object_store():
+    # imported lazily: charm4py.ray imports this module (ObjectRef is a Future)
+    from .ray import api
+    return api.get_object_store()
 
 # Future IDs (fids) are sometimes carried as reference numbers inside
 # Charm++ CkCallback objects. The data type most commonly used for
@@ -39,6 +43,8 @@ class Future(object):
         self.gotvalues = False  # flag to check if expected number of values have been received
         self.error = None  # if the future receives an Exception, it is set here
         if store:
+            # the object's home PE, which tracks its locations, is the PE that
+            # created the future (its owner, as in Ray): store_id >> 32
             self.store_id = (self.src << 32) + self.fid
         else:
             self.store_id = 0
@@ -112,7 +118,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = ray.get_object_store()
+        obj_store = _object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_location(self.store_id)
     
@@ -121,7 +127,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = ray.get_object_store()
+        obj_store = _object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         return local_obj_store.lookup_object(self.store_id)
     
@@ -130,8 +136,8 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = ray.get_object_store()
-        obj_store[self.store_id % charm.numPes()].delete_remote_objects(self.store_id)
+        obj_store = _object_store()
+        obj_store[self.store_id >> 32].delete_remote_objects(self.store_id)
     
     def is_local(self):
         if not self.store:
@@ -144,7 +150,7 @@ class Future(object):
         if not self.store:
             raise ValueError("Operation not supported for future not"
                              " stored in the object store")
-        obj_store = ray.get_object_store()
+        obj_store = _object_store()
         local_obj_store = obj_store[charm.myPe()].ckLocalBranch()
         local_obj_store.create_object(self.store_id, obj)
 
@@ -155,8 +161,8 @@ class Future(object):
         if self._requested:
             return
         from .charm import charm
-        obj_store = ray.get_object_store()
-        obj_store[self.store_id % charm.numPes()].request_location_object(
+        obj_store = _object_store()
+        obj_store[self.store_id >> 32].request_location_object(
             self.store_id, charm.myPe())
         self._requested = True
 
@@ -322,7 +328,11 @@ class EntryMethodThreadManager(object):
         while fid in futures:
             fid = (fid % FIDMAXVAL) + 1
         self.lastfid = fid
-        f = Future(fid, gr, charm._myPe, num_vals, store=store)
+        if store:
+            from .ray.object_ref import ObjectRef
+            f = ObjectRef(fid, gr, charm._myPe, num_vals, store=store)
+        else:
+            f = Future(fid, gr, charm._myPe, num_vals, store=store)
         futures[fid] = f
         return f
 

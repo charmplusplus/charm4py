@@ -214,6 +214,7 @@ class Charm(object):
         if obj_id in self.future_get_buffer:
             local_f, fut = self.future_get_buffer.pop(obj_id)
             local_f.send(fut)
+        ray._object_local(obj_id)
 
     def check_send_buffer(self, obj_id):
         completed = self.send_buffer.check(obj_id)
@@ -630,6 +631,11 @@ class Charm(object):
                 entry_method.coro(PoolScheduler.startSingleTask)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
+
+        from .ray._hosts import _RayWorker, _ActorHost, _RayControl
+        self.register(_RayWorker, (GROUP,))
+        self.register(_ActorHost, (ARRAY,))
+        self.register(_RayControl, (ARRAY,))
 
         if self.options.profiling:
             self.internalChareTypes.update({SectionManager, CharmRemote,
