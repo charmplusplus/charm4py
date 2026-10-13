@@ -175,6 +175,21 @@ def test_pg_reservation_under_contention():
 
 
 @test
+def test_pg_concurrent_reservations_fill_the_cluster():
+    """Groups created back to back that exactly fill the cluster are all created:
+    a group whose chosen node filled up in the meantime must look elsewhere,
+    not wait for that node to free resources."""
+    n = len(nodes())
+    for _ in range(3):
+        groups = [placement_group([{'GPU': 1}]) for _ in range(n)]
+        ready, _ = ray.wait([g.ready() for g in groups], num_returns=n, timeout=20)
+        check(len(ready) == n, str(len(ready)) + ' of ' + str(n) + ' groups created')
+        for g in groups:
+            remove_placement_group(g)
+        check(eventually(lambda: ray.available_resources().get('GPU') == n))
+
+
+@test
 def test_named_actors_across_nodes():
     ids = nodes()
     actors = [Where.options(name='mn_' + str(i), namespace='mn', num_cpus=0,

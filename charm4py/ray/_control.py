@@ -101,6 +101,10 @@ class _Control(Chare):
         self.pgs = {}             # pg id -> record
         self.waiting = []         # ('actor', key) / ('pg', id), in arrival order
         self.retry_scheduled = False
+        # counts resources_freed notifications: an attempt that fails retries at
+        # once if one arrived while it was in flight (it found nothing waiting
+        # to retry, and the nodes have already forgotten this coordinator)
+        self.freed_epoch = 0
         # name shard
         self.names = {}           # name key -> (owner key or pg id, value)
         # node controller
@@ -354,40 +358,48 @@ class _Control(Chare):
             return
         rec['placing'] = True
         try:
-            candidates = self._candidates(rec)
-            if isinstance(candidates, str):
-                self._insert_dead(rec, ActorDiedError(actor_id=rec['meta']['actor_id'],
-                                                      error_msg=candidates))
-                return
-            meta = rec['meta']
-            pg_id, specs = rec.get('pg', (None, None))
-            spec = self._spec(meta, pg_id, specs)
-            me = api._charm().myPe()
-            for node_index, bundle_key in candidates:
-                placed = self.thisProxy[node_pe(node_index)].place_actor(
-                    meta['key'], meta['request'], bundle_key, spec, me, ret=True).get()
-                if placed == 'removed':
-                    self._insert_dead(rec, ActorDiedError(
-                        actor_id=meta['actor_id'], error_msg='The actor could not be '
-                        'scheduled: its placement group was removed.'))
-                    return
-                if placed is not None:
-                    if rec['state'] == 'KILLED':
-                        # killed while it was being placed
-                        self.actors_proxy[meta['key']].kill()
-                        self.thisProxy[node_pe(node_index)].release_actor(meta['key'])
-                        self._forget(rec)
-                        return
-                    rec.update(state='ALIVE', node=node_index, pe=placed[0])
-                    return
-            if rec['state'] == 'KILLED':
-                self._insert_dead(rec, ActorDiedError(
-                    actor_id=meta['actor_id'],
-                    error_msg=killed_message(meta['class_name'], meta['actor_id'])))
-                return
-            self.waiting.append(('actor', meta['key']))
+            while self._place_once(rec):
+                pass
         finally:
             rec['placing'] = False
+
+    def _place_once(self, rec):
+        """One placement attempt. Returns True to try again at once."""
+        epoch = self.freed_epoch
+        candidates = self._candidates(rec)
+        if isinstance(candidates, str):
+            self._insert_dead(rec, ActorDiedError(actor_id=rec['meta']['actor_id'],
+                                                  error_msg=candidates))
+            return
+        meta = rec['meta']
+        pg_id, specs = rec.get('pg', (None, None))
+        spec = self._spec(meta, pg_id, specs)
+        me = api._charm().myPe()
+        for node_index, bundle_key in candidates:
+            placed = self.thisProxy[node_pe(node_index)].place_actor(
+                meta['key'], meta['request'], bundle_key, spec, me, ret=True).get()
+            if placed == 'removed':
+                self._insert_dead(rec, ActorDiedError(
+                    actor_id=meta['actor_id'], error_msg='The actor could not be '
+                    'scheduled: its placement group was removed.'))
+                return
+            if placed is not None:
+                if rec['state'] == 'KILLED':
+                    # killed while it was being placed
+                    self.actors_proxy[meta['key']].kill()
+                    self.thisProxy[node_pe(node_index)].release_actor(meta['key'])
+                    self._forget(rec)
+                    return
+                rec.update(state='ALIVE', node=node_index, pe=placed[0])
+                return
+        if rec['state'] == 'KILLED':
+            self._insert_dead(rec, ActorDiedError(
+                actor_id=meta['actor_id'],
+                error_msg=killed_message(meta['class_name'], meta['actor_id'])))
+            return
+        if self.freed_epoch != epoch:
+            return True
+        self.waiting.append(('actor', meta['key']))
 
     def kill_actor(self, key):
         rec = self.actors.get(key)
@@ -425,6 +437,7 @@ class _Control(Chare):
     def resources_freed(self):
         """A node this coordinator waits on freed resources: retry, once per
         burst of notifications."""
+        self.freed_epoch += 1
         if not self.retry_scheduled:
             self.retry_scheduled = True
             self.thisProxy[api._charm().myPe()].retry_waiting()
@@ -478,29 +491,43 @@ class _Control(Chare):
             return
         pg['reserving'] = True
         try:
-            assignment = _assign_bundles(self._view(), pg['specs'], pg['strategy'])
-            me = api._charm().myPe()
-            if assignment is not None:
-                per_node = collections.defaultdict(list)
-                for index, node_index in enumerate(assignment):
-                    per_node[node_index].append((index, pg['specs'][index]))
-                replies = {n: self.thisProxy[node_pe(n)].reserve_bundles(
-                    pg['id'], items, me, ret=True) for n, items in per_node.items()}
-                reserved = [n for n, reply in replies.items() if reply.get()]
-                if len(reserved) == len(per_node) and pg['state'] == 'PENDING':
-                    for n in reserved:
-                        self.thisProxy[node_pe(n)].commit_bundles(pg['id'])
-                    pg['nodes'] = assignment
-                    pg['state'] = 'CREATED'
-                    self._pg_created(pg)
-                    return
-                for n in reserved:   # abort
-                    self.thisProxy[node_pe(n)].release_bundles(pg['id'], False)
-            if pg['state'] == 'PENDING':
-                # wait: every node will say when it frees resources (see _view)
-                self.waiting.append(('pg', pg['id']))
+            while self._reserve_once(pg):
+                pass
         finally:
             pg['reserving'] = False
+
+    def _reserve_once(self, pg):
+        """One reservation attempt. Returns True to try again at once."""
+        epoch = self.freed_epoch
+        assignment = _assign_bundles(self._view(), pg['specs'], pg['strategy'])
+        me = api._charm().myPe()
+        if assignment is not None:
+            per_node = collections.defaultdict(list)
+            for index, node_index in enumerate(assignment):
+                per_node[node_index].append((index, pg['specs'][index]))
+            replies = {n: self.thisProxy[node_pe(n)].reserve_bundles(
+                pg['id'], items, me, ret=True) for n, items in per_node.items()}
+            reserved = [n for n, reply in replies.items() if reply.get()]
+            if len(reserved) == len(per_node) and pg['state'] == 'PENDING':
+                for n in reserved:
+                    self.thisProxy[node_pe(n)].commit_bundles(pg['id'])
+                pg['nodes'] = assignment
+                pg['state'] = 'CREATED'
+                self._pg_created(pg)
+                return
+            for n in reserved:   # abort
+                self.thisProxy[node_pe(n)].release_bundles(pg['id'], False)
+            if pg['state'] == 'PENDING':
+                # a node refused: the view was stale (other groups reserved in
+                # the meantime), not necessarily full. Look again rather than
+                # wait for a node to free resources, which the nodes with room
+                # may never do.
+                return True
+        if pg['state'] == 'PENDING':
+            if self.freed_epoch != epoch:
+                return True
+            # wait: every node will say when it frees resources (see _view)
+            self.waiting.append(('pg', pg['id']))
 
     def _pg_created(self, pg):
         from .util.placement_group import PlacementGroup, PlacementGroupID
