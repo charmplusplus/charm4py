@@ -10,6 +10,9 @@
 # Environment: PYTHON (the venv's python), LCRUN; on a machine without GPUs set
 # VLLM_CPU_RAY=1 (tests/ray_compat/vllm_plugin) and VLLM_CPU_KVCACHE_SPACE=1.
 set -u
+# On one machine both backends register the node as 127.0.0.1, but vLLM takes
+# the default-route address as the DP master and then cannot find that node.
+export VLLM_HOST_IP=${VLLM_HOST_IP:-127.0.0.1}
 BACKEND=${1:-charm4py}
 PY=${PYTHON:-python}
 PORT=${PORT:-8765}

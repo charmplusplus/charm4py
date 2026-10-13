@@ -28,6 +28,26 @@ cd charm4py && CHARM4PY_CHARM_DIR=<charm> CHARM4PY_BUILD_TRIPLET=reconverse-linu
 export LCRUN=<charm>/reconverse-linux-x86_64-charm4py/_deps/lci-src/lcrun
 ```
 
+Linux issues the Mac never showed (found on Delta, glibc 2.34, GCC 14):
+
+- `libcharm.so` is built with `-ftls-model=initial-exec` and so pulls
+  libreconverse's thread-locals (about 23 KB, mostly `conds` in
+  `conv-conds.cpp`) into the static TLS block. Python loads it with `dlopen`,
+  and glibc's default reserve is too small: `libreconverse.so: cannot allocate
+  memory in static TLS block`, during `pip install` (setup.py loads it) and at
+  run time. Workaround: `export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536`
+  for the install and every run.
+- GCC 14 makes charmlib's pointer-type mismatches errors. Build with
+  `CC=gcc CXX=g++ CFLAGS="-Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"`
+  (on Cray systems the `cc` wrapper also works with these flags).
+- Keep the venv off slow parallel filesystems: torch and vLLM import tens of
+  thousands of files in every PE and worker process. On Delta, a venv on
+  HDD-backed Lustre did not finish `import numpy` in 280 s on a GPU node; pack
+  the env into a tarball and unpack it to node-local `/tmp` at job start
+  (about 11 s for 8 GB).
+- An aborting PE can hang the job and writes a core file (about 1 GB each) in
+  the working directory; use `ulimit -c 0` in batch scripts.
+
 ## 2. Layer checks (CPU only, minutes)
 
 ```bash
@@ -75,6 +95,20 @@ CHARM4PY_RAY_FAKE_NODES=3 python -m charmrun.start +p6 -m charm4py.ray.launch \
 
 `vllm_cycles.py` checks resources, objects and processes; on GPUs also watch
 `nvidia-smi` memory and `/dev/shm` between cycles.
+
+Results on Delta, one node with 4 A40s (2026-10-13; vLLM `7fe8fc8` wheel,
+torch 2.13 / CUDA 13.0, Charm++ `charm4py-reconverse-fixes` with Reconverse
+main `988a8b4`, `+p4`):
+
+| Check | Result |
+|---|---|
+| layer checks (contract at `+p1`/`+p4`/`+p8`, multinode, refcount, engine fork/spawn) | all pass |
+| GPU discovery (Slurm's `CUDA_VISIBLE_DEVICES`, restricted to `2,3`, unset/NVML) | 4 / 2 / 4 GPUs, physical IDs |
+| `vllm_generate.py` TP=1, TP=2 (NCCL), PP=2 | text identical to `mp` |
+| startup, warm caches: TP=1 / TP=2 / PP=2 | 15.0 / 16.9 / 57.7 s (`mp` TP=2: 9.6 s) |
+| `test_ray_v2_executor.py` | 23/23 (the CPU-only PP=2 failures do not occur) |
+| `vllm_cycles.py 100 2` | PASS; startup 15.6-16.8 s after a 26.8 s first cycle, PE memory flat, GPUs and `/dev/shm` empty after |
+| `vllm_serve_dp.sh charm4py` | PASS |
 
 ## 4. Multi-node (not tried yet)
 

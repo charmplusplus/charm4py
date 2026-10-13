@@ -1,6 +1,7 @@
 # Ray on Charm4py: progress and next steps
 
-Status as of 2026-10-09, branch `ray-dev` (last commit `beb8672`, not pushed).
+Status as of 2026-10-13, branch `ray-dev`. Steps 1-3 below are done on Delta
+(one node with 4 A40s); multi-node is next.
 Read this first in a new session; details are in `tests/ray_compat/README.md`
 (how it works, test results) and `tests/ray_compat/GPU_RUNBOOK.md` (build and
 check steps for a GPU machine). The research plan the work follows is
@@ -31,8 +32,12 @@ Everything below was verified on an M-series Mac (CPU only).
   fails the same way with vLLM's multiprocessing executor (a vLLM CPU bug). The
   OpenAI server with DP=2 on the Ray backend works; 25 create/generate/shutdown
   cycles leak nothing and keep startup flat.
-- **Not yet tried anywhere**: real GPUs (CUDA, NCCL between actor processes),
-  more than one physical node.
+- **vLLM on GPUs** (Delta, 4x A40, no plugin): TP=1, TP=2 (NCCL between actor
+  processes) and PP=2 give the same text as the `mp` executor; vLLM's executor
+  tests pass 23/23; 100 TP=2 cycles leak nothing with flat ~16 s startup; the
+  DP=2 OpenAI server works. Numbers and the Linux build issues (static TLS,
+  GCC 14, slow filesystems) are in `tests/ray_compat/GPU_RUNBOOK.md`.
+- **Not yet tried anywhere**: more than one physical node.
 
 ## How it works (short)
 
@@ -75,7 +80,8 @@ The Charm4py regression set (examples and `tests/`: futures, pool, channels,
 
 ## Next steps on the cluster
 
-In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands):
+In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands). Steps
+1-3 are done (2026-10-13); comparisons with real Ray were left for step 5.
 
 1. Build Charm++ (branch `charm4py-reconverse-fixes`, a `reconverse-linux-*`
    charm4py build, no tracing) and charm4py; run the contract suite, the
@@ -112,6 +118,7 @@ Gaps that may matter there (none is on vLLM's default path):
   `ray start` daemon: start it with `VLLM_CPU_RAY=1` already set.
 - Ray-backend DP on one machine needs `VLLM_HOST_IP=127.0.0.1` on both backends
   (vLLM takes the LAN address as the DP master; a local Ray node is 127.0.0.1).
+  `vllm_serve_dp.sh` now sets it unless it is already set.
 - On the CPU backend: `VLLM_CPU_KVCACHE_SPACE` limits memory use;
   `VLLM_CPU_OMP_THREADS_BIND=nobind` is needed for TP=2 with the mp executor.
 - Tracing builds of Charm++ write Projections files (`.sts`, `.sum`,
