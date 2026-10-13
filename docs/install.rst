@@ -123,16 +123,19 @@ Reconverse triplet, the build automatically uses a ``reconverse`` directory in
 the Charm++ source tree and reuses LCI sources from an existing build of the
 same triplet when either is present.
 
-Reconverse launches one Python interpreter per process. Point ``LCRUN`` (or
-``CHARM4PY_LCRUN``) to the LCI launcher, then use the normal Charm4py ``+pN``
-syntax::
+Reconverse launches one Python interpreter per process. Use the normal
+Charm4py ``+pN`` syntax::
 
-    $ export LCRUN=/path/to/lci/lcrun
     $ python -m charmrun.start +p2 examples/simple/hello_world.py
 
-The Charm4py launcher translates this to two ``lcrun`` processes and passes
-``+pe 2`` to Reconverse. The equivalent direct command is::
+The Charm4py launcher starts two processes on this machine, bootstrapped the
+way LCI's ``lcrun`` does, and passes ``+pe 2`` to Reconverse. Unlike
+``lcrun``, it stops the whole job as soon as one process fails. The equivalent
+``lcrun`` command is::
 
-    $ $LCRUN -n 2 python examples/simple/hello_world.py +pe 2
+    $ /path/to/lci/lcrun -n 2 python examples/simple/hello_world.py +pe 2
+
+Across several nodes, start the processes with the cluster's launcher (for
+example ``srun``) and pass the total PE count with ``+pe``.
 
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm

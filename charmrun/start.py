@@ -1,7 +1,6 @@
 import sys
 import os
 import os.path
-import shutil
 
 
 def executable_is_python(args):
@@ -101,6 +100,96 @@ def reconverse_args(args):
     return num_pes, translated
 
 
+def launch_reconverse(num_pes, args, grace=5.0):
+    """Starts the job's ``num_pes`` processes on this machine and waits for them.
+
+    This does what LCI's ``lcrun`` does (the same two bootstrap variables, one
+    process per PE), with one difference: when a process fails, the rest of the
+    job is stopped at once. lcrun waits for its processes one by one, so a PE
+    that aborts (for instance because a peer died: it calls CmiAbort) leaves the
+    others waiting for it until the job is killed from outside. Returns the
+    first failing process's exit code (128 + N for signal N), or 0."""
+    import signal
+    import subprocess
+    import time
+
+    cmd = ([sys.executable] if executable_is_python(args) else []) + list(args)
+    env = dict(os.environ)
+    # as lcrun: LCI's PMI takes the rank count from the environment and its
+    # peers from a file
+    env['LCT_PMI_BACKEND'] = 'file,local'
+    env['LCT_PMI_FILE_NRANKS'] = str(num_pes)
+
+    # the job gets a process group of its own, and SIGINT and SIGTERM sent to
+    # this process are passed on to all of it
+    group = [0]
+
+    def join_group():
+        os.setpgid(0, group[0])
+
+    procs = {}
+    try:
+        for _ in range(num_pes):
+            proc = subprocess.Popen(cmd, env=env, preexec_fn=join_group)
+            if not group[0]:
+                group[0] = proc.pid
+            try:
+                os.setpgid(proc.pid, group[0])   # whichever of us runs first
+            except OSError:
+                pass
+            procs[proc.pid] = proc
+    except OSError as error:
+        print('could not start', cmd[0] + ':', error)
+        if group[0]:
+            os.killpg(group[0], signal.SIGKILL)
+        return 1
+
+    def forward(signum, frame):
+        try:
+            os.killpg(group[0], signum)
+        except OSError:
+            pass
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, forward)
+
+    def exit_code(status):
+        if os.WIFSIGNALED(status):
+            return 128 + os.WTERMSIG(status)
+        return os.WEXITSTATUS(status)
+
+    result = 0
+    deadline = None      # set once the job is being stopped
+    while procs:
+        if deadline is None:
+            pid, status = os.waitpid(-1, 0)
+        else:
+            pid, status = os.waitpid(-1, os.WNOHANG)
+            if pid == 0:
+                if time.monotonic() > deadline:
+                    try:
+                        os.killpg(group[0], signal.SIGKILL)
+                    except OSError:
+                        pass
+                    deadline = float('inf')
+                time.sleep(0.05)
+                continue
+        proc = procs.pop(pid, None)
+        if proc is None:
+            continue
+        proc.returncode = code = exit_code(status)
+        if code != 0 and result == 0:
+            result = code
+            if procs:
+                print('charmrun: a process of the job exited with code %d; stopping the '
+                      'other %d' % (code, len(procs)), file=sys.stderr, flush=True)
+                try:
+                    os.killpg(group[0], signal.SIGTERM)
+                except OSError:
+                    pass
+                deadline = time.monotonic() + grace
+    return result
+
+
 def start(args=None):
     import subprocess
 
@@ -119,35 +208,7 @@ def start(args=None):
             print('Invalid Reconverse process count:', error)
             return 1
 
-        lcrun = os.environ.get('CHARM4PY_LCRUN', os.environ.get('LCRUN'))
-        if lcrun is None:
-            lcrun = shutil.which('lcrun')
-        if lcrun is None:
-            print('Reconverse requires lcrun. Set CHARM4PY_LCRUN or LCRUN '
-                  'to the lcrun executable.')
-            return 1
-
-        cmd = [lcrun, '-n', str(num_pes)]
-        if executable_is_python(args):
-            cmd.append(sys.executable)
-        cmd.extend(args)
-        try:
-            # the job gets a process group of its own, and SIGINT and SIGTERM
-            # sent to this process are passed on to all of it
-            proc = subprocess.Popen(cmd, start_new_session=True)
-        except FileNotFoundError:
-            print('lcrun executable not found:', lcrun)
-            return 1
-        import signal
-
-        def forward(signum, frame):
-            try:
-                os.killpg(proc.pid, signum)
-            except OSError:
-                pass
-        for signum in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(signum, forward)
-        return proc.wait()
+        return launch_reconverse(num_pes, args)
 
     if '++local' not in args and '++mpiexec' not in args and checkNodeListLocal(args):
         args.append('++local')
