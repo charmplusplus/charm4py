@@ -110,14 +110,47 @@ main `988a8b4`, `+p4`):
 | `vllm_cycles.py 100 2` | PASS; startup 15.6-16.8 s after a 26.8 s first cycle, PE memory flat, GPUs and `/dev/shm` empty after |
 | `vllm_serve_dp.sh charm4py` | PASS |
 
-## 4. Multi-node (not tried yet)
+## 4. Multi-node
 
-`charmrun.start` launches through `lcrun`, which is single-node. Several nodes
-need Reconverse started by Slurm with a PMI backend LCI supports (to be worked
-out), one host process per PE as now. Known limits: processes outside the job
-can connect only on PE 0's node (vLLM's engine process runs there); set
-`CHARM4PY_RAY_NODE_IP` (or `VLLM_HOST_IP`) when the default-route address is not
-the one the nodes reach each other by.
+`charmrun.start` launches through `lcrun`, which is single-node. Across nodes,
+start the launcher with `srun` directly (LCI bootstraps through Slurm's PMI),
+one process per PE as before, and pass the total PE count with `+pe`:
+
+```bash
+# in an allocation of 3 nodes, 2 tasks and 1 GPU per node; the env must be on every node
+export FI_CXI_RX_MATCH_MODE=hybrid       # Slingshot: CXI list-entry exhaustion otherwise
+export PMI_MAX_KVS_ENTRIES=1000          # see below
+srun --unbuffered --kill-on-bad-exit=1 -N 3 --ntasks-per-node=2 \
+    python -m charm4py.ray.launch tests/ray_compat/vllm_generate.py 2 +pe 6
+```
+
+- Cray PMI2 allows 24 key-value entries per job by default. LCI before
+  `06748025` (allgather bootstrap) publishes too many and every process aborts
+  with `_pmi2_add_kvs: The KVS data segment of 24 entries is not large enough`.
+  Reconverse main pins LCI `ca88ce2c`, which predates it; raise the limit as
+  above, or build with an LCI at `dfb924cf` or later.
+- `--unbuffered` matters: buffered output loses the fatal line and a failure
+  looks like a hang.
+- Do not unset `SLURM_NTASKS` here (single-node lcrun jobs inside an allocation
+  must, since LCI then waits for that many processes).
+
+Known limits: processes outside the job can connect only on PE 0's node (vLLM's
+engine process runs there); set `CHARM4PY_RAY_NODE_IP` (or `VLLM_HOST_IP`) when
+the default-route address is not the one the nodes reach each other by.
+
+Results on Delta, 3 nodes with 1 A40 each, 2 PEs per node (2026-10-13):
+
+| Check | Result |
+|---|---|
+| `multinode.py` | 8/8 |
+| `contract.py` | 53/58: the 5 GPU-accounting tests assume one node (`ray.init(num_gpus=2)` is per node, so the cluster has 6) |
+| GPU discovery | 3 GPUs, each actor gets physical ID 0 on its own node |
+| `vllm_generate.py` TP=2 across nodes / PP=2 across nodes | text identical to single-node `mp`; startup 29.3 / 14.6 s |
+| `vllm_cycles.py 20 2`, TP=2 across nodes | PASS; startup 14.6-14.9 s after a 28.7 s first cycle, all GPUs free and no objects after (the process check sees only the driver's node) |
+
+NCCL used its socket transport (`NET/Socket`, over `eth1`, `hsn0` and
+`hsn0.561`); the AWS OFI NCCL plugin (`module load aws-ofi-nccl`) would put it
+on Slingshot directly, which matters for performance, not correctness.
 
 ## What is measured where
 

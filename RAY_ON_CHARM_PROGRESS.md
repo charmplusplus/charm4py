@@ -1,7 +1,7 @@
 # Ray on Charm4py: progress and next steps
 
-Status as of 2026-10-13, branch `ray-dev`. Steps 1-3 below are done on Delta
-(one node with 4 A40s); multi-node is next.
+Status as of 2026-10-13, branch `ray-dev`. Steps 1-4 below are done on Delta
+(one node with 4 A40s; three nodes with one A40 each); step 5 is next.
 Read this first in a new session; details are in `tests/ray_compat/README.md`
 (how it works, test results) and `tests/ray_compat/GPU_RUNBOOK.md` (build and
 check steps for a GPU machine). The research plan the work follows is
@@ -37,7 +37,11 @@ Everything below was verified on an M-series Mac (CPU only).
   tests pass 23/23; 100 TP=2 cycles leak nothing with flat ~16 s startup; the
   DP=2 OpenAI server works. Numbers and the Linux build issues (static TLS,
   GCC 14, slow filesystems) are in `tests/ray_compat/GPU_RUNBOOK.md`.
-- **Not yet tried anywhere**: more than one physical node.
+- **Multi-node** (Delta, 3 nodes, Reconverse started by `srun`): the
+  multi-node control-plane tests pass 8/8 on real nodes, and vLLM TP=2 and
+  PP=2 spanning nodes give the same text; 20 cross-node TP=2 cycles leak
+  nothing. NCCL used sockets; the launch recipe and a Cray PMI limit are in
+  `tests/ray_compat/GPU_RUNBOOK.md` section 4.
 
 ## How it works (short)
 
@@ -81,7 +85,7 @@ The Charm4py regression set (examples and `tests/`: futures, pool, channels,
 ## Next steps on the cluster
 
 In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands). Steps
-1-3 are done (2026-10-13); comparisons with real Ray were left for step 5.
+1-4 are done (2026-10-13); comparisons with real Ray were left for step 5.
 
 1. Build Charm++ (branch `charm4py-reconverse-fixes`, a `reconverse-linux-*`
    charm4py build, no tracing) and charm4py; run the contract suite, the
