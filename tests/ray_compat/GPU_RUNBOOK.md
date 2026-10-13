@@ -153,9 +153,44 @@ Results on Delta, 3 nodes with 1 A40 each, 2 PEs per node (2026-10-13):
 | `vllm_generate.py` TP=2 across nodes / PP=2 across nodes | text identical to single-node `mp`; startup 29.3 / 14.6 s |
 | `vllm_cycles.py 20 2`, TP=2 across nodes | PASS; startup 14.6-14.9 s after a 28.7 s first cycle, all GPUs free and no objects after (the process check sees only the driver's node) |
 
-NCCL used its socket transport (`NET/Socket`, over `eth1`, `hsn0` and
-`hsn0.561`); the AWS OFI NCCL plugin (`module load aws-ofi-nccl`) would put it
-on Slingshot directly, which matters for performance, not correctness.
+NCCL uses its socket transport by default (`NET/Socket`, over `eth1`, `hsn0`
+and `hsn0.561`). On Delta, `module load aws-ofi-nccl/1.19.2` puts it on
+Slingshot (`NET/OFI Selected provider is cxi`); the module also preloads the
+system libfabric 2.3.1, which is the one LCI links, and charm4py runs unchanged
+with it loaded. All-reduce between two nodes, one A40 each (`nccl_bench`,
+torch.distributed, 20 iterations):
+
+| Message | Sockets | Plugin | Speedup |
+|---|---|---|---|
+| 1 MB | 1.08 GB/s | 6.71 GB/s | 6.2x |
+| 256 MB | 1.39 GB/s | 9.85 GB/s | 7.1x |
+
+vLLM TP=2 across nodes on charm4py.ray: startup 34.3 s with sockets, 15.6 s
+with the plugin (one run each); PP=2 14.8 s.
+
+### Real-Ray baseline on the same nodes
+
+Start Ray 2.56.1 inside the allocation, with the plugin loaded before
+`ray start` (Ray's workers inherit the daemon's environment), then run the
+driver on the head node:
+
+```bash
+H=<head node's address>      # the one Ray and vLLM pick: the route to 8.8.8.8
+srun --overlap -N1 -n1 -w <head> ray start --head --include-dashboard=false \
+    --node-ip-address=$H --port=6379 --num-cpus=2 --num-gpus=1 --block &
+srun --overlap -N2 --ntasks-per-node=1 -x <head> ray start --address=$H:6379 \
+    --num-cpus=2 --num-gpus=1 --block &     # --include-dashboard only with --head
+RAY_ADDRESS=$H:6379 python tests/ray_compat/vllm_generate.py 2
+srun --overlap -N3 --ntasks-per-node=1 ray stop --force
+```
+
+Results on 3 nodes with one A40 each (2026-10-13): vLLM TP=2 and PP=2 across
+nodes give the same text as `mp` and charm4py.ray (startup 37.5 s and 17.6 s,
+one run each, so not yet a comparison). `multinode.py` passes 7/8 on Ray:
+`test_actor_created_in_actor_prefers_its_node` expects a `num_cpus=0` actor
+created inside an actor to land on its parent's node, which charm4py.ray does
+but Ray did not here (it passed on the single-machine Ray cluster), so the test
+asserts more locality than Ray guarantees.
 
 ## What is measured where
 

@@ -119,16 +119,13 @@ continue with section 3; expected numbers are in its results table. Keep the
 venv on a local disk: torch and vLLM import tens of thousands of files in every
 process (on Delta's Lustre this took minutes per process).
 
-### Still running on Delta (2026-10-13)
+### Real-Ray baseline (done 2026-10-13)
 
-- Real-Ray baseline: a Ray 2.56.1 cluster started inside the Slurm allocation
-  (`ray start --head` on one node, `ray start --address=...` on the others),
-  running `multinode.py` and vLLM TP=2 / PP=2 across nodes. A first attempt
-  failed on a script bug (`--include-dashboard` is accepted only with
-  `--head`); the rerun was queued.
-- NCCL all-reduce over sockets between two nodes, for comparison with the
-  plugin. The first attempt never reached the rendezvous (rank 0 was not on
-  the master node); the rerun was queued.
+A Ray 2.56.1 cluster started inside the Slurm allocation runs vLLM TP=2 and
+PP=2 across three nodes with the same text as charm4py.ray; the recipe and
+results are in the runbook, section 4. Startup times so far are single runs
+and not a comparison. `multinode.py` passes 7/8 on real Ray: one test expects
+more locality than Ray guarantees (runbook).
 
 Delta's job scripts are in `/work/nvme/mzu/rao1/vllm_c4p/runs/` (environment
 tarball staged to node-local `/tmp`, `step3_vllm_gpu.sh`,
