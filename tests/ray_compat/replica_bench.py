@@ -42,7 +42,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 BACKEND = 'charm4py' if getattr(ray, '__charm4py__', False) else 'ray-' + ray.__version__
 PHASES = ('pg', 'actors', 'init', 'run')
-TIMEOUT = 600.0   # any single wait longer than this is reported as a failure
+TIMEOUT = 120.0   # any single wait longer than this is reported as a failure
 
 
 @ray.remote
