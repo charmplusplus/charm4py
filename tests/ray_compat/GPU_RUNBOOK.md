@@ -168,6 +168,35 @@ torch.distributed, 20 iterations):
 vLLM TP=2 across nodes on charm4py.ray: startup 34.3 s with sockets, 15.6 s
 with the plugin (one run each); PP=2 14.8 s.
 
+### Omni-Path (Stampede3)
+
+On Omni-Path (hfi1, libfabric 2.6), LCI works only over libfabric's verbs
+provider with RxM (or `tcp`); select it explicitly, since LCI's default is its
+own ibv backend:
+
+```bash
+export LCI_ATTR_BACKEND=ofi LCI_ATTR_OFI_PROVIDER_NAME="verbs;ofi_rxm" FI_PROVIDER=verbs,ofi_rxm
+srun --mpi=pmi2 --unbuffered --kill-on-bad-exit=1 -N 2 --ntasks-per-node=4 \
+    python -m charm4py.ray.launch --num-gpus 8 tests/ray_compat/multinode.py +pe 8
+```
+
+- LCI's default ibv backend aborts (`max_inline_data >= max_inject_size`:
+  hfi1 verbs reports an inline size of 0). With `LCI_ATTR_MAX_INJECT_SIZE=0`
+  it starts, but runs across nodes hung.
+- ofi/psm2 (with or without `PSM2_MULTI_EP=1`) aborts with `Invalid remote
+  handler (rhandler: 4294967295)` and psm2 connect timeouts; ofi/opx fails in
+  `fi_getinfo` (ENODATA).
+- Set `FI_PROVIDER` unconditionally: TACC's impi module exports
+  `FI_PROVIDER=opx`, which `sbatch --export=ALL` carries into the job.
+- Slurm's PMI2 (`--mpi=pmi2`) has no small KVS limit; `PMI_MAX_KVS_ENTRIES`
+  is not needed.
+- Stage the venv with `sbcast` and untar it on each node: 64 nodes untarring
+  one file from `$WORK` at once got EIO on some of them.
+
+Results on Stampede3 skx nodes (2026-10-13): `contract.py` 59/59 at 4 and 8
+PEs; `multinode.py` 10/10 on 3 real nodes and on 3 fake nodes; on 2 real nodes
+`contract.py` 53/58 (the 5 single-node GPU-accounting tests).
+
 ### Real-Ray baseline on the same nodes
 
 Start Ray 2.56.1 inside the allocation, with the plugin loaded before
