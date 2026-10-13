@@ -378,6 +378,16 @@ def test_large_results_owned_by_tasks():
 
 
 @test
+def test_many_timed_gets():
+    # each timeout stays scheduled until it would fire, long after its get
+    # returned; there must be no limit on how many are pending at once
+    for i in range(300):
+        check(ray.get(add.remote(i, 1), timeout=60) == i + 1)
+    ready, _ = ray.wait([add.remote(1, 1) for _ in range(200)], num_returns=200, timeout=60)
+    check(len(ready) == 200)
+
+
+@test
 def test_ref_args():
     check(ray.get(ident.remote(ray.put(5))) == 5)
     inner = ray.put(9)
