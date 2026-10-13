@@ -97,17 +97,14 @@ The Charm4py regression set (examples and `tests/`: futures, pool, channels,
 
 - charm4py: branch `ray-dev`; pull before starting (commits made on Delta are
   pushed by hand, so check that this file's latest changes are there).
-- Charm++: branch `charm4py-reconverse-fixes` of charmplusplus/charm, with two
-  changes made on Delta and **not yet committed** there:
-  1. the Reconverse submodule moved from `953eee9` to Reconverse main
-     `988a8b4` (`git -C contrib/reconverse checkout 988a8b4`);
-  2. no `-ftls-model=initial-exec` for the charm4py target. Without it, on
-     Linux, Python cannot load `libcharm.so` ("cannot allocate memory in static
-     TLS block"). In `cmake/detect-features-cxx.cmake` the condition becomes
-     `if(CMK_COMPILER_KNOWS_FTLS_MODEL AND NOT DISABLE_TLS AND NOT "${TARGET}" STREQUAL "charm4py")`.
-     Rebuild from clean after changing it, and check that `readelf -d
-     libcharm.so` shows no `STATIC_TLS` (runbook, section 1). macOS is not
-     affected.
+- Charm++: branch `charm4py-reconverse-fixes` of charmplusplus/charm at
+  `bc6d7a283` or later. That commit moves the Reconverse submodule to main
+  `988a8b4` and builds the charm4py target without `-ftls-model=initial-exec`;
+  without it, on Linux, Python cannot load `libcharm.so` ("cannot allocate
+  memory in static TLS block"). Run `git submodule update --init` after
+  checking it out. A build directory configured before that commit must be
+  rebuilt from clean; `readelf -d libcharm.so` must show no `STATIC_TLS`
+  (runbook, section 1). macOS is not affected.
 - vLLM `7fe8fc8`: install the per-commit wheel (runbook, section 1), Ray
   `2.56.1`, Python 3.12. The runbook lists the GCC 14 flags charm4py needs.
 
