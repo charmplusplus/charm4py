@@ -89,6 +89,19 @@ def test_actors_spill_to_other_nodes_and_wait():
 
 
 @test
+def test_spread_actors_use_every_node():
+    # vLLM's data-parallel engines (and bench managers) are SPREAD actors that
+    # need no resources; they must not all land on the creator's node
+    n = len(nodes())
+    actors = [Where.options(num_cpus=0, scheduling_strategy='SPREAD').remote()
+              for _ in range(2 * n)]
+    where = ray.get([a.node.remote() for a in actors], timeout=30)
+    check(len(set(where)) == n, 'SPREAD actors left nodes unused: ' + str(where))
+    for a in actors:
+        ray.kill(a)
+
+
+@test
 def test_node_affinity():
     ids = nodes()
     target = ids[-1]

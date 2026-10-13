@@ -105,6 +105,7 @@ class _Control(Chare):
         # once if one arrived while it was in flight (it found nothing waiting
         # to retry, and the nodes have already forgotten this coordinator)
         self.freed_epoch = 0
+        self.spread_next = 0      # node offset of this coordinator's next SPREAD actor
         # name shard
         self.names = {}           # name key -> (owner key or pg id, value)
         # node controller
@@ -344,6 +345,14 @@ class _Control(Chare):
             indices = [index] if index >= 0 else range(len(nodes))
             return [(nodes[i], (pg_id, i)) for i in indices]
         here = api._my_host()
+        if strategy == 'SPREAD':
+            # Ray spreads these over the nodes, best effort. Each coordinator
+            # deals its SPREAD actors round robin, starting with its own node;
+            # an actor keeps its starting node when it has to try again.
+            if 'spread_from' not in rec:
+                rec['spread_from'] = (here + self.spread_next) % len(api._nodes)
+                self.spread_next += 1
+            here = rec['spread_from']
         order = sorted(range(len(api._nodes)),
                        key=lambda n: ((n - here) % len(api._nodes)))
         if isinstance(strategy, NodeAffinitySchedulingStrategy):
