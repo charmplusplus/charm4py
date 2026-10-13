@@ -19,10 +19,12 @@ all of it in its GCS and asks raylets to grant leases).
 Placing an actor asks node controllers in turn (its own node first, as Ray's
 default policy prefers the local node); one that has room reserves it at once,
 so a placement never needs a global view. Creating a placement group reserves
-its bundles in two phases, involving only the nodes they go to: reserve on each
-(each node atomically), then commit; if any node refuses, the others are
-released. Work that does not fit yet waits at its coordinator, and node
-controllers tell the coordinators waiting on them when they free resources."""
+its bundles in two phases, involving only the nodes they go to: the coordinator
+picks them from its own view of the nodes (every reply corrects it; it asks
+every node only when that view has no room), reserves on each (each node
+atomically), then commits; if any node refuses, the others are released.
+Work that does not fit yet waits at its coordinator, and node controllers tell
+the coordinators waiting on them when they free resources."""
 
 import collections
 import uuid
@@ -36,6 +38,15 @@ from .exceptions import ActorDiedError, RaySystemError
 
 def _fits(avail, request):
     return all(avail.get(k, 0.0) + 1e-9 >= v for k, v in request.items())
+
+
+def _positive(avail):
+    return {k: v for k, v in avail.items() if v > 1e-9}
+
+
+def _add(avail, spec, sign=1):
+    for k, v in spec.items():
+        avail[k] = avail.get(k, 0.0) + sign * v
 
 
 def _id_order(device_id):
@@ -106,6 +117,11 @@ class _Control(Chare):
         # to retry, and the nodes have already forgotten this coordinator)
         self.freed_epoch = 0
         self.spread_next = 0      # node offset of this coordinator's next SPREAD actor
+        # placement groups: each node's available resources as this coordinator
+        # last heard them (None until the first reservation: then every node's
+        # total), and the resources of its reservations still in flight
+        self.view = None
+        self.inflight = None
         # name shard
         self.names = {}           # name key -> (owner key or pg id, value)
         # node controller
@@ -237,18 +253,19 @@ class _Control(Chare):
         node = self.node
         if watcher is not None:
             node['watchers'].add(watcher)
-        return (node['config']['node_id'],
-                {k: v for k, v in node['avail'].items() if v > 1e-9})
+        return (node['config']['node_id'], _positive(node['avail']))
 
     def reserve_bundles(self, pg_id, items, coordinator):
         """Phase one of placing a placement group: reserve these bundles
-        [(index, spec)] on this node, all or none. Returns True or False."""
+        [(index, spec)] on this node, all or none. Returns (reserved, the
+        node's available resources afterwards), which the coordinator keeps as
+        its view of this node."""
         node = self.node
         avail = dict(node['avail'])
         for _, spec in items:
             if not _fits(avail, spec):
                 node['watchers'].add(coordinator)
-                return False
+                return False, _positive(node['avail'])
             for k, v in spec.items():
                 avail[k] = avail.get(k, 0.0) - v
         for index, spec in items:
@@ -256,7 +273,7 @@ class _Control(Chare):
             node['bundles'][(pg_id, index)] = {
                 'spec': dict(spec), 'avail': dict(spec), 'ids': ids,
                 'all_ids': {k: list(v) for k, v in ids.items()}, 'committed': False}
-        return True
+        return True, _positive(node['avail'])
 
     def commit_bundles(self, pg_id):
         """Phase two: the whole placement group is reserved."""
@@ -506,37 +523,75 @@ class _Control(Chare):
             pg['reserving'] = False
 
     def _reserve_once(self, pg):
-        """One reservation attempt. Returns True to try again at once."""
+        """One reservation attempt. Returns True to try again at once.
+
+        The nodes are chosen from this coordinator's own view of them, less its
+        reservations in flight, so that groups reserved together do not all
+        pick the same node, and so that a reservation costs one message per
+        node it uses rather than a round of every node. The view starts as
+        every node's total and is corrected by each reply (a refusing node
+        says what it has). Only when the view says the group fits nowhere does
+        the coordinator ask every node, and it waits only if they agree."""
         epoch = self.freed_epoch
-        assignment = _assign_bundles(self._view(), pg['specs'], pg['strategy'])
         me = api._charm().myPe()
-        if assignment is not None:
-            per_node = collections.defaultdict(list)
-            for index, node_index in enumerate(assignment):
-                per_node[node_index].append((index, pg['specs'][index]))
-            replies = {n: self.thisProxy[node_pe(n)].reserve_bundles(
-                pg['id'], items, me, ret=True) for n, items in per_node.items()}
-            reserved = [n for n, reply in replies.items() if reply.get()]
-            if len(reserved) == len(per_node) and pg['state'] == 'PENDING':
-                for n in reserved:
-                    self.thisProxy[node_pe(n)].commit_bundles(pg['id'])
-                pg['nodes'] = assignment
-                pg['state'] = 'CREATED'
-                self._pg_created(pg)
+        nnodes = len(api._nodes)
+        if self.view is None:
+            self.view = [dict(n['Resources']) for n in api._nodes]
+            self.inflight = [{} for _ in range(nnodes)]
+        view = [dict(self.view[n]) for n in range(nnodes)]
+        for n in range(nnodes):
+            _add(view[n], self.inflight[n], -1)
+        assignment = _assign_bundles(view, pg['specs'], pg['strategy'], api._my_host())
+        if assignment is None:
+            # Ask every node. Reservations in flight are not subtracted here:
+            # they may already be counted by their node, and counting them
+            # twice could make this group wait for a release nobody will send.
+            self.view = self._view()
+            assignment = _assign_bundles(self.view, pg['specs'], pg['strategy'],
+                                         api._my_host())
+            if assignment is None:
+                if pg['state'] == 'PENDING':
+                    if self.freed_epoch != epoch:
+                        return True
+                    # wait: every node will say when it frees resources (see _view)
+                    self.waiting.append(('pg', pg['id']))
                 return
-            for n in reserved:   # abort
-                self.thisProxy[node_pe(n)].release_bundles(pg['id'], False)
-            if pg['state'] == 'PENDING':
-                # a node refused: the view was stale (other groups reserved in
-                # the meantime), not necessarily full. Look again rather than
-                # wait for a node to free resources, which the nodes with room
-                # may never do.
-                return True
+        per_node = collections.defaultdict(list)
+        for index, node_index in enumerate(assignment):
+            per_node[node_index].append((index, pg['specs'][index]))
+        for n, items in per_node.items():
+            for _, spec in items:
+                _add(self.inflight[n], spec)
+        replies = {n: self.thisProxy[node_pe(n)].reserve_bundles(
+            pg['id'], items, me, ret=True) for n, items in per_node.items()}
+        inflight = self.inflight
+        reserved = []
+        for n, reply in replies.items():
+            ok, avail = reply.get()
+            for _, spec in per_node[n]:
+                _add(inflight[n], spec, -1)
+            if self.view is not None:     # None: the runtime was reset meanwhile
+                self.view[n] = dict(avail)
+            if ok:
+                reserved.append(n)
+        if len(reserved) == len(per_node) and pg['state'] == 'PENDING':
+            for n in reserved:
+                self.thisProxy[node_pe(n)].commit_bundles(pg['id'])
+            pg['nodes'] = assignment
+            pg['state'] = 'CREATED'
+            self._pg_created(pg)
+            return
+        for n in reserved:   # abort
+            self.thisProxy[node_pe(n)].release_bundles(pg['id'], False)
+            if self.view is not None:
+                for _, spec in per_node[n]:
+                    _add(self.view[n], spec)
         if pg['state'] == 'PENDING':
-            if self.freed_epoch != epoch:
-                return True
-            # wait: every node will say when it frees resources (see _view)
-            self.waiting.append(('pg', pg['id']))
+            # a node refused: the view was stale (other groups reserved in the
+            # meantime), not necessarily full; the refusal corrected it. Look
+            # again rather than wait for a node to free resources, which the
+            # nodes with room may never do.
+            return True
 
     def _pg_created(self, pg):
         from .util.placement_group import PlacementGroup, PlacementGroupID
@@ -625,13 +680,13 @@ class _Control(Chare):
         return list(self.pgs[pg_id]['nodes'])
 
 
-def _assign_bundles(avail_by_node, specs, strategy):
+def _assign_bundles(avail_by_node, specs, strategy, first):
     """Node index for each bundle, given every node's available resources, or
-    None if they cannot all be placed now. Nodes are tried from the driver's
-    (PE 0's) on, as the centralized scheduler did."""
+    None if they cannot all be placed now. Nodes are tried from ``first`` on
+    (the coordinator's own node: the driver's, for groups the driver creates,
+    as the centralized scheduler did)."""
     avail = {i: dict(a) for i, a in enumerate(avail_by_node)}
-    driver = api._pe_host(0)
-    order = sorted(avail, key=lambda n: (n != driver, n))
+    order = sorted(avail, key=lambda n: ((n - first) % len(avail)))
 
     def place(i, node):
         if _fits(avail[node], specs[i]):
