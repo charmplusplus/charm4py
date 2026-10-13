@@ -1,11 +1,15 @@
 # Ray on Charm4py: progress and next steps
 
-Status as of 2026-10-13, branch `ray-dev`. Steps 1-4 below are done on Delta
-(one node with 4 A40s; three nodes with one A40 each); step 5 is next.
+Status as of 2026-10-13, branch `ray-dev`. Steps 1-4 of "Next steps" are done
+on Delta (NCSA; one node with 4 A40s, and three nodes with one A40 each); step 5
+(research measurements) is next. Work is being split across machines because
+Delta's GPU queue is slow for us (see "Handing work to another machine").
+
 Read this first in a new session; details are in `tests/ray_compat/README.md`
 (how it works, test results) and `tests/ray_compat/GPU_RUNBOOK.md` (build and
-check steps for a GPU machine). The research plan the work follows is
-`vllm_charm4py_research_plan.md` (on the Mac, `~/`; copy it over if needed).
+check steps for a GPU machine, Linux build issues, multi-node launch under
+Slurm, all measured numbers). The research plan is
+`vllm_charm4py_research_plan.md` in the repository root.
 
 ## Goal
 
@@ -40,8 +44,13 @@ Everything below was verified on an M-series Mac (CPU only).
 - **Multi-node** (Delta, 3 nodes, Reconverse started by `srun`): the
   multi-node control-plane tests pass 8/8 on real nodes, and vLLM TP=2 and
   PP=2 spanning nodes give the same text; 20 cross-node TP=2 cycles leak
-  nothing. NCCL used sockets; the launch recipe and a Cray PMI limit are in
+  nothing. The launch recipe and a Cray PMI limit are in
   `tests/ray_compat/GPU_RUNBOOK.md` section 4.
+- **NCCL network plugin** (Delta, `module load aws-ofi-nccl/1.19.2`): NCCL runs
+  over Slingshot (`NET/OFI Selected provider is cxi`), 9.8 GB/s all-reduce bus
+  bandwidth between two nodes at 256 MB; vLLM TP=2 across nodes still gives the
+  same text, and its startup drops from 34.3 s (sockets) to 15.6 s. Charm4py's
+  PEs run unchanged with the plugin's libfabric settings.
 
 ## How it works (short)
 
@@ -82,7 +91,84 @@ Main files: `charm4py/ray/api.py`, `_hosts.py` (PE-side chares), `_control.py`,
 The Charm4py regression set (examples and `tests/`: futures, pool, channels,
 ...) also passes; run it with `charmrun.start +p4` per file.
 
-## Next steps on the cluster
+## Handing work to another machine
+
+### What the code depends on, and what is not pushed yet
+
+- charm4py: branch `ray-dev`; pull before starting (commits made on Delta are
+  pushed by hand, so check that this file's latest changes are there).
+- Charm++: branch `charm4py-reconverse-fixes` of charmplusplus/charm, with two
+  changes made on Delta and **not yet committed** there:
+  1. the Reconverse submodule moved from `953eee9` to Reconverse main
+     `988a8b4` (`git -C contrib/reconverse checkout 988a8b4`);
+  2. no `-ftls-model=initial-exec` for the charm4py target. Without it, on
+     Linux, Python cannot load `libcharm.so` ("cannot allocate memory in static
+     TLS block"). In `cmake/detect-features-cxx.cmake` the condition becomes
+     `if(CMK_COMPILER_KNOWS_FTLS_MODEL AND NOT DISABLE_TLS AND NOT "${TARGET}" STREQUAL "charm4py")`.
+     Rebuild from clean after changing it, and check that `readelf -d
+     libcharm.so` shows no `STATIC_TLS` (runbook, section 1). macOS is not
+     affected.
+- vLLM `7fe8fc8`: install the per-commit wheel (runbook, section 1), Ray
+  `2.56.1`, Python 3.12. The runbook lists the GCC 14 flags charm4py needs.
+
+### Set up on a new Linux machine
+
+Follow `tests/ray_compat/GPU_RUNBOOK.md` sections 0-2, then run the layer
+checks (contract 58/58 at `+p4`; multinode with fake nodes 8/8). On a GPU node
+continue with section 3; expected numbers are in its results table. Keep the
+venv on a local disk: torch and vLLM import tens of thousands of files in every
+process (on Delta's Lustre this took minutes per process).
+
+### Still running on Delta (2026-10-13)
+
+- Real-Ray baseline: a Ray 2.56.1 cluster started inside the Slurm allocation
+  (`ray start --head` on one node, `ray start --address=...` on the others),
+  running `multinode.py` and vLLM TP=2 / PP=2 across nodes. A first attempt
+  failed on a script bug (`--include-dashboard` is accepted only with
+  `--head`); the rerun was queued.
+- NCCL all-reduce over sockets between two nodes, for comparison with the
+  plugin. The first attempt never reached the rendezvous (rank 0 was not on
+  the master node); the rerun was queued.
+
+Delta's job scripts are in `/work/nvme/mzu/rao1/vllm_c4p/runs/` (environment
+tarball staged to node-local `/tmp`, `step3_vllm_gpu.sh`,
+`step4_multinode.sh`, `step5_pre.sh`); they are site-specific and not in this
+repository.
+
+### Work that does not need Delta
+
+- **Step 5 harness** (any machine; CPU is enough to develop it): a
+  control-plane-only replica driver built on `test_fake_vllm_v2_lifecycle` in
+  `contract.py` (placement group, named GPU actors, the pending `run` ref,
+  `ray.wait` monitoring, kill), parameterized by replica count, with
+  per-phase timestamps (PG create to ready, actor creation, first call, kill to
+  detection, release). Run the same script on charm4py.ray and on Ray, as
+  `contract.py` does; `CHARM4PY_RAY_FAKE_NODES` and `ray_oracle_cluster()` in
+  `multinode.py` give several logical nodes on one machine.
+- **Failure detection and restart in charm4py.ray** (any machine): no dead PE
+  or node detection, no actor restarts; an abort on one PE can hang the job.
+  The failure-recovery hypothesis (H3 in the plan) cannot be measured until
+  this exists.
+- **Single-node PP=2 startup** (any machine with 2 GPUs): 57.7 s against
+  15.0-16.9 s for TP=1/TP=2 on one A40 node, but 14.6 s for PP=2 across nodes.
+  Unexplained.
+- **Steady-state serving overhead** (any machine with 2-4 GPUs): `vllm bench
+  serve` against the OpenAI server on the `mp` executor, real Ray and
+  charm4py.ray (TTFT, TPOT, throughput). Expected to show no difference; it
+  is the control for the other measurements (H4 in the plan).
+- **Reconverse's LCI pin**: Reconverse main fetches LCI `ca88ce2c`, which
+  predates LCI's allgather bootstrap (`06748025`, `dfb924cf`), so multi-node
+  runs under Cray PMI need `PMI_MAX_KVS_ENTRIES=1000`. Moving the pin removes
+  that. Kept as an environment variable for now (decided 2026-10-13).
+
+### Step 5 scope
+
+Not decided yet: the replica count, node count, and which hypothesis to
+measure first are open. Fractional GPUs are not supported
+(`_options.py`), so GPU runs have at most one replica per GPU; larger replica
+counts need the control-plane-only harness on CPU nodes.
+
+## Next steps
 
 In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands). Steps
 1-4 are done (2026-10-13); comparisons with real Ray were left for step 5.
@@ -97,8 +183,8 @@ In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands). Steps
    (NCCL), PP=2, against the `mp` executor and real Ray; then vLLM's executor
    tests, `vllm_cycles.py 100 2` (also watch `nvidia-smi` and `/dev/shm`), and
    `vllm_serve_dp.sh`.
-4. Multi-node: work out how to start Reconverse across nodes under Slurm (LCI
-   needs a PMI backend; `lcrun` is single-node), then TP and PP across nodes.
+4. Multi-node: start Reconverse across nodes under Slurm with `srun` directly
+   (`lcrun` is single-node; runbook section 4), then TP and PP across nodes.
 5. Research measurements: placement/startup latency and failure-detection time
    with many concurrent vLLM replicas, distributed control plane vs. real Ray.
    The centralized `_RayControl` was removed in `2348810`; it is in git history

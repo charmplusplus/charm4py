@@ -30,13 +30,18 @@ export LCRUN=<charm>/reconverse-linux-x86_64-charm4py/_deps/lci-src/lcrun
 
 Linux issues the Mac never showed (found on Delta, glibc 2.34, GCC 14):
 
-- `libcharm.so` is built with `-ftls-model=initial-exec` and so pulls
+- `libcharm.so` used to be built with `-ftls-model=initial-exec`, which pulls
   libreconverse's thread-locals (about 23 KB, mostly `conds` in
   `conv-conds.cpp`) into the static TLS block. Python loads it with `dlopen`,
   and glibc's default reserve is too small: `libreconverse.so: cannot allocate
   memory in static TLS block`, during `pip install` (setup.py loads it) and at
-  run time. Workaround: `export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536`
-  for the install and every run.
+  run time. Charm++ now leaves that flag out for the charm4py target
+  (`cmake/detect-features-cxx.cmake`); with an older Charm++ build, export
+  `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536` instead. After changing
+  the flag, rebuild from clean (`make clean` in the build directory): targets
+  compiled through `charmc` read its options from `conv-mach-opt.sh`, which
+  make does not track, and stale objects keep the initial-exec relocations.
+  `readelf -d libcharm.so` must show no `STATIC_TLS` flag.
 - GCC 14 makes charmlib's pointer-type mismatches errors. Build with
   `CC=gcc CXX=g++ CFLAGS="-Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"`
   (on Cray systems the `cc` wrapper also works with these flags).
