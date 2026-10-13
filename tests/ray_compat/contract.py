@@ -547,7 +547,16 @@ def test_named_actors():
     check(ray.get(same.get.remote()) == 2)
     raises(ValueError, ray.get_actor, 'contract_missing')
     ray.kill(c)
-    eventually(lambda: raises(ValueError, ray.get_actor, 'contract_named'), 10)
+
+    def name_released():
+        try:
+            ray.get_actor('contract_named')
+            return False
+        except ValueError:
+            return True
+    # ray.kill returns before the actor is gone (in Ray too): the name is
+    # released soon after, not necessarily before the next call
+    check(eventually(name_released, 10), 'the name is still taken after ray.kill')
 
 
 @test

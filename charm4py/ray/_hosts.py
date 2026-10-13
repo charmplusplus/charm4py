@@ -184,15 +184,20 @@ class _Link(object):
             gr = self.replies.pop(rid, None)
             if gr is not None:
                 api._charm().threadMgr.resumeThread(gr, payload)
-        elif kind == 'api':
+        elif kind in ('api', 'api_async'):
+            reply = kind == 'api'
             if isinstance(payload, Exception):
-                self.send('api_reply', rid, (False, RaySystemError(
-                    'this ray call could not be decoded: ' + repr(payload))))
+                if reply:
+                    self.send('api_reply', rid, (False, RaySystemError(
+                        'this ray call could not be decoded: ' + repr(payload))))
+                else:
+                    print('charm4py.ray: a ray call could not be decoded: ' + repr(payload),
+                          file=sys.stderr, flush=True)
                 return
             self.api_calls[rid] = payload
             # run it as a coroutine: it may block (ray.get)
             owner = self.owner
-            owner.thisProxy[owner.thisIndex].serve_api(self.id, rid)
+            owner.thisProxy[owner.thisIndex].serve_api(self.id, rid, reply)
         elif kind == 'release':
             if not isinstance(payload, Exception):
                 self.side.release(payload)
@@ -209,7 +214,7 @@ class _LinkOwner(object):
     """Serves the ray API calls of the owner's worker processes."""
 
     @coro
-    def serve_api(self, link_id, rid):
+    def serve_api(self, link_id, rid, reply_wanted=True):
         global _HOST_API
         if _HOST_API is None:
             _HOST_API = _host_api()
@@ -234,6 +239,12 @@ class _LinkOwner(object):
         finally:
             if blocking:
                 link.blocking -= 1
+        if not reply_wanted:
+            # nobody waits for it (call_async): an error can only be reported here
+            if not reply[0]:
+                print('charm4py.ray: ray.' + name + ' failed: ' + repr(reply[1]),
+                      file=sys.stderr, flush=True)
+            return
         if not link.alive:
             return
         try:

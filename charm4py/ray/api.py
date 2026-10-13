@@ -990,11 +990,15 @@ def kill(actor, *, no_restart=True):
         raise ValueError('ray.kill() only supported for actors. For tasks, try '
                          'ray.cancel(). Got: ' + str(type(actor)) + '.')
     _ensure_initialized()
+    # Like Ray's, this returns at once; the actor dies soon after. Calls made
+    # afterwards fail either way: they reach a dead actor, or the kill fails
+    # them.
     if _client is not None:
-        return _client.call('kill', actor, no_restart=no_restart)
+        _client.call_async('kill', actor, no_restart=no_restart)
+        return
     actor._mark_killed()
     # the actor's coordinator: the PE that created it
-    _ctl[actor._key[0]].kill_actor(actor._key, ret=True).get()
+    _ctl[actor._key[0]].kill_actor(actor._key)
 
 
 def get_actor(name, namespace=None):

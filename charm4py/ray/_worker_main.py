@@ -147,6 +147,17 @@ class _Channel(object):
             return reply[1]
         raise reply[1]
 
+    def call_async(self, api_name, /, *args, **kwargs):
+        """Runs ray.<api_name> on the host without waiting for it to finish
+        (ray.kill, which returns at once in Ray too). Calls made after it
+        through this connection are served after it."""
+        with self.calls_lock:
+            if self.closed:
+                raise _host_gone()
+            rid = self.next_rid
+            self.next_rid += 1
+        self.send('api_async', rid, (api_name, args, kwargs, self.current_job()))
+
     def opaque(self, value):
         return self.side.opaque(value)
 
