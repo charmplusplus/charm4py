@@ -173,22 +173,28 @@ What Delta found that applies there:
   and, when one exits nonzero, stops the rest and returns its code (`lcrun`
   hung instead). A PE killed under `failure_probe.py --kill pe` ends the job in
   3 s with exit 137. Across nodes, `srun --kill-on-bad-exit=1` does the same.
-- **First H3 numbers** (one Delta CPU node, 4 fake nodes, 8 replicas x tp=2,
-  2 crashed per round, 2 rounds, charm4py only): 0 errors; `detect` p50 4 ms,
-  `recover` p50 about 110 ms (`restart_pg` 2-3 ms, `restart_actors` about 90
-  ms). Ray's side of `--kill-mode sigkill --recover` has not run yet (a rerun
-  on Delta is queued).
-- **First H1 look** (same node, single runs, not yet a comparison): `actors`
-  p50 0.14 s on charm4py.ray against 2.1-2.3 s on Ray. Check how worker
-  processes are started on each side before reading anything into it.
+- **First H3 numbers** (one Delta GPU node used as a CPU node, 8 replicas x
+  tp=2 on 16 logical GPUs, 2 crashed per round, 2 rounds, p50; charm4py.ray on
+  4 fake nodes, Ray on one node; 0 errors on both):
+
+  | | detect | recover | restart_pg | restart_actors |
+  |---|---|---|---|---|
+  | charm4py.ray | 4 ms | 115 ms | 4 ms | 94 ms |
+  | Ray 2.56.1 | 8-9 ms | 1.22-1.35 s | 0.39-0.52 s | 1.21-1.33 s |
+
+  Single runs at one small size; recovery is mostly creating the new worker
+  actors.
+- **First H1 look** (same runs, not yet a comparison): `actors` p50 0.19 s on
+  charm4py.ray against 1.6-2.3 s on Ray. Check how worker processes are
+  started on each side before reading anything into it.
 - **Ray with logical GPUs on a GPU node** refuses to start ("Attempting to start
   raylet with 16 GPU, but CUDA_VISIBLE_DEVICES contains [0..3]"): unset
   `CUDA_VISIBLE_DEVICES` first.
-- **Unexplained Ray hang on Delta**: with `bench/replicas.py` on a 4-node Ray
-  cluster of CPU nodes, the 32 replica managers were created and the run then
-  made no progress for 15 minutes. Never debugged (the debug job did not get
-  to run); if `replica_bench.py` runs on a multi-node Ray cluster on Stampede3,
-  it was specific to Delta or to the old harness.
+- **Ray hang on Delta, not reproduced**: with `bench/replicas.py` on a 4-node
+  Ray cluster of CPU nodes, the 32 replica managers were created and the run
+  then made no progress for 15 minutes. `replica_bench.py` on a 2-node Ray
+  cluster (GPU nodes, 32 logical GPUs, 8 replicas) ran without errors. The
+  cause was not found; watch for it in the first multi-node Ray runs.
 - **Reconverse's LCI pin**: Reconverse main fetches LCI `ca88ce2c`, which
   predates LCI's allgather bootstrap (`06748025`, `dfb924cf`): each process
   publishes one PMI key per process per round, so Cray PMI's KVS needs
