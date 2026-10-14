@@ -129,38 +129,80 @@ tarball staged to node-local `/tmp`, `step3_vllm_gpu.sh`,
 `step4_multinode.sh`, `step5_pre.sh`); they are site-specific and not in this
 repository.
 
-### Work that does not need Delta
+### Step 5: status and who runs what (2026-10-14)
 
-- **Step 5 harness** (any machine; CPU is enough to develop it): a
-  control-plane-only replica driver built on `test_fake_vllm_v2_lifecycle` in
-  `contract.py` (placement group, named GPU actors, the pending `run` ref,
-  `ray.wait` monitoring, kill), parameterized by replica count, with
-  per-phase timestamps (PG create to ready, actor creation, first call, kill to
-  detection, release). Run the same script on charm4py.ray and on Ray, as
-  `contract.py` does; `CHARM4PY_RAY_FAKE_NODES` and `ray_oracle_cluster()` in
-  `multinode.py` give several logical nodes on one machine.
-- **Failure detection and restart in charm4py.ray** (any machine): no dead PE
-  or node detection, no actor restarts; an abort on one PE can hang the job.
-  The failure-recovery hypothesis (H3 in the plan) cannot be measured until
-  this exists.
-- **Single-node PP=2 startup** (any machine with 2 GPUs): 57.7 s against
-  15.0-16.9 s for TP=1/TP=2 on one A40 node, but 14.6 s for PP=2 across nodes.
-  Unexplained.
-- **Steady-state serving overhead** (any machine with 2-4 GPUs): `vllm bench
-  serve` against the OpenAI server on the `mp` executor, real Ray and
-  charm4py.ray (TTFT, TPOT, throughput). Expected to show no difference; it
-  is the control for the other measurements (H4 in the plan).
+Order (decided 2026-10-13): H4 (steady-state overhead, the control) first, then
+H1 (placement and startup at scale) and H3 (failure detection and recovery) in
+parallel; H2 is deferred. H1 and H3 use model-free replicas on logical GPUs.
+H3 measures recovery after a process crash; a dead PE ends the whole job (see
+below), and whether to tolerate node failures is not decided.
+
+**H4 is done** (Delta, one A40x4 node, Qwen/Qwen3-8B at TP=2, `vllm bench
+serve`, 400 random prompts of 512 in / 128 out, one repetition per point):
+
+| request rate | backend | req/s | median TTFT | median TPOT |
+|---|---|---|---|---|
+| 2/s | mp / ray / c4p | 1.98 / 1.98 / 1.98 | 96.1 / 97.3 / 96.8 ms | 17.95 / 17.97 / 17.99 ms |
+| 8/s | mp / ray / c4p | 7.64 / 7.64 / 7.64 | 58.1 / 58.7 / 58.4 ms | 19.72 / 19.73 / 19.74 ms |
+| unlimited | mp / ray / c4p | 26.94 / 26.84 / 26.83 | 1000 / 1173 / 1159 ms | 67.81 / 67.77 / 67.75 ms |
+
+charm4py.ray costs nothing measurable in steady state, as expected. At the
+unlimited rate the median TTFT is queueing (P99 is about 9.8 s on all three).
+
+**H1 and H3 move to Stampede3.** The harness is
+`tests/ray_compat/replica_bench.py` (`bench/replicas.py`, Delta's first
+version, is removed). One node, 4 fake nodes:
+
+    CHARM4PY_RAY_FAKE_NODES=4 python -m charmrun.start +p8 -m charm4py.ray.launch \
+        --num-gpus 4 tests/ray_compat/replica_bench.py --replicas 8 --tp 2 --rounds 3
+    ray start --head --num-cpus 8 --num-gpus 16
+    RAY_ADDRESS=auto python tests/ray_compat/replica_bench.py --replicas 8 --tp 2 --rounds 3
+
+For H3 add `--kill --kill-mode sigkill --kill-count 2 --recover`: each round,
+2 replicas lose a worker process to SIGKILL (sent by a helper actor on the
+worker's node, as a crash) and start again; the records gain `detect` (kill
+to the monitor's `ray.wait` returning), `recover` (kill to serving again) and
+`restart_pg/actors/init/run`. `--kill` alone uses `ray.kill`. Across nodes,
+start charm4py.ray with `srun --kill-on-bad-exit=1` and the total `+pe`
+(runbook section 4), and Ray as a cluster inside the allocation, one raylet
+per node with logical `--num-gpus`.
+
+What Delta found that applies there:
+
+- **Fail fast**: `charmrun.start` now starts the Reconverse processes itself
+  and, when one exits nonzero, stops the rest and returns its code (`lcrun`
+  hung instead). A PE killed under `failure_probe.py --kill pe` ends the job in
+  3 s with exit 137. Across nodes, `srun --kill-on-bad-exit=1` does the same.
+- **First H3 numbers** (one Delta CPU node, 4 fake nodes, 8 replicas x tp=2,
+  2 crashed per round, 2 rounds, charm4py only): 0 errors; `detect` p50 4 ms,
+  `recover` p50 about 110 ms (`restart_pg` 2-3 ms, `restart_actors` about 90
+  ms). Ray's side of `--kill-mode sigkill --recover` has not run yet (a rerun
+  on Delta is queued).
+- **First H1 look** (same node, single runs, not yet a comparison): `actors`
+  p50 0.14 s on charm4py.ray against 2.1-2.3 s on Ray. Check how worker
+  processes are started on each side before reading anything into it.
+- **Ray with logical GPUs on a GPU node** refuses to start ("Attempting to start
+  raylet with 16 GPU, but CUDA_VISIBLE_DEVICES contains [0..3]"): unset
+  `CUDA_VISIBLE_DEVICES` first.
+- **Unexplained Ray hang on Delta**: with `bench/replicas.py` on a 4-node Ray
+  cluster of CPU nodes, the 32 replica managers were created and the run then
+  made no progress for 15 minutes. Never debugged (the debug job did not get
+  to run); if `replica_bench.py` runs on a multi-node Ray cluster on Stampede3,
+  it was specific to Delta or to the old harness.
 - **Reconverse's LCI pin**: Reconverse main fetches LCI `ca88ce2c`, which
-  predates LCI's allgather bootstrap (`06748025`, `dfb924cf`), so multi-node
-  runs under Cray PMI need `PMI_MAX_KVS_ENTRIES=1000`. Moving the pin removes
-  that. Kept as an environment variable for now (decided 2026-10-13).
+  predates LCI's allgather bootstrap (`06748025`, `dfb924cf`): each process
+  publishes one PMI key per process per round, so Cray PMI's KVS needs
+  `PMI_MAX_KVS_ENTRIES` to grow with the square of the process count. Delta
+  needed 100000 at 32 processes on 4 nodes (1000 was too small). Moving the
+  pin removes that. Kept as an environment variable for now (decided
+  2026-10-13).
 
-### Step 5 scope
+Delta keeps the GPU runs: vLLM DP serving over 8 and 16 A40x4 nodes
+(preemptible, queued) with opt-125m and Qwen3-8B on Ray and charm4py.ray.
 
-Not decided yet: the replica count, node count, and which hypothesis to
-measure first are open. Fractional GPUs are not supported
-(`_options.py`), so GPU runs have at most one replica per GPU; larger replica
-counts need the control-plane-only harness on CPU nodes.
+Still open, any machine with 2 GPUs: **single-node PP=2 startup** takes 57.7 s
+against 15.0-16.9 s for TP=1/TP=2 on one A40 node, but 14.6 s for PP=2 across
+nodes.
 
 ## Next steps
 
@@ -188,8 +230,9 @@ Gaps that may matter there (none is on vLLM's default path):
 
 - Tasks are placed round-robin with no resource admission; tasks with
   `num_gpus` get no device IDs or `CUDA_VISIBLE_DEVICES`.
-- No restarts or retries, no detection of a dead node or PE (an abort on one PE
-  can hang the job), no `ray.cancel`, no `max_concurrency > 1` or async actors.
+- No restarts or retries and no recovery from a dead PE or node: the launcher
+  stops the whole job (`charmrun.start`, or `srun --kill-on-bad-exit=1`). No
+  `ray.cancel`, no `max_concurrency > 1` or async actors.
 - Processes outside the job can connect only on PE 0's node.
 - Each idle PE uses 10-18% of a core (polling).
 
