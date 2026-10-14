@@ -15,6 +15,8 @@ GPUs are logical: give each node N of them.
         tests/ray_compat/replica_bench.py --tp 2 --rounds 3 --kill
     # Ray: a running cluster whose nodes were started with --num-gpus 8
     RAY_ADDRESS=auto python tests/ray_compat/replica_bench.py --tp 2 --rounds 3 --kill
+    # H3: crash a worker process of 2 replicas per round and restart them
+    ... replica_bench.py --tp 2 --kill --kill-mode sigkill --kill-count 2 --recover
 
 Per-replica records go to --out as JSON lines; the last output line is a JSON
 summary. Phase times are seconds from the replica's start:
@@ -24,7 +26,12 @@ summary. Phase times are seconds from the replica's start:
     run     run refs issued (the replica is serving)
 and, measured from shared barriers rather than per replica:
     detect  ray.kill of one worker to ray.wait returning its run ref
-    release teardown start to all GPUs available again (one value per round)"""
+    release teardown start to all GPUs available again (one value per round)
+With --kill-mode sigkill the worker gets SIGKILL from a helper actor on its
+node, as a crash would, instead of ray.kill. With --recover the replica then
+tears itself down and starts again, as a restarted vLLM engine would:
+    recover          kill to serving again
+    restart_<phase>  the phases above, from the start of the restart"""
 
 import argparse
 import json
@@ -38,10 +45,12 @@ import traceback
 import ray
 from ray.util.placement_group import (placement_group, placement_group_table,
                                       remove_placement_group)
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+from ray.util.scheduling_strategies import (NodeAffinitySchedulingStrategy,
+                                            PlacementGroupSchedulingStrategy)
 
 BACKEND = 'charm4py' if getattr(ray, '__charm4py__', False) else 'ray-' + ray.__version__
 PHASES = ('pg', 'actors', 'init', 'run')
+RESTART = tuple('restart_' + ph for ph in PHASES)
 TIMEOUT = 120.0   # any single wait longer than this is reported as a failure
 
 
@@ -82,21 +91,42 @@ class FakeVllmWorker:
         time.sleep(seconds)
         return 'finished'
 
+    def pid(self):
+        return os.getpid()
+
+
+@ray.remote(num_cpus=0)
+class Killer:
+    """Sends SIGKILL to a process on its node."""
+
+    def ping(self):
+        return True
+
+    def kill(self, pid):
+        os.kill(pid, 9)
+        return True
+
 
 class Replica:
-    def __init__(self, rid, rnd, tp, driver_node):
+    def __init__(self, rid, rnd, tp, driver_node, want_pids=False):
         self.rid, self.rnd, self.tp, self.driver_node = rid, rnd, tp, driver_node
+        self.want_pids = want_pids   # for SIGKILL; asked before `run` occupies the workers
+        self.pids = []
         self.rec = {'replica': rid, 'round': rnd, 'error': None}
         self.pg = None
         self.workers = []
+        self.ids = []
         self.run_refs = []
+        self.gen = 0   # starts so far; a restart's workers get new names
 
-    def start(self):
+    def start(self, prefix=''):
         """Steps 3-9 of RayExecutorV2 startup (the plan's list); returns when
         the replica is serving."""
         t0 = time.perf_counter()
-        self.rec['t_start'] = time.time()
-        mark = lambda phase: self.rec.__setitem__(phase, time.perf_counter() - t0)
+        self.rec[prefix + 't_start'] = time.time()
+        mark = lambda phase: self.rec.__setitem__(prefix + phase, time.perf_counter() - t0)
+        self.workers, self.run_refs = [], []
+        self.gen += 1
 
         self.pg = placement_group([{'GPU': 1.0} for _ in range(self.tp)], strategy='PACK')
         ray.get(self.pg.ready(), timeout=TIMEOUT)
@@ -107,7 +137,8 @@ class Replica:
                                                         bundle_nodes[i], i))
         for rank, b in enumerate(bundles):
             self.workers.append(FakeVllmWorker.options(
-                name='bench_r%d_%d_w%d' % (self.rnd, self.rid, rank), num_cpus=0, num_gpus=1,
+                name='bench_r%d_%d_g%d_w%d' % (self.rnd, self.rid, self.gen, rank),
+                num_cpus=0, num_gpus=1,
                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                     placement_group=self.pg, placement_group_bundle_index=b),
                 runtime_env={'env_vars': {'BENCH_FAKE_VLLM': '1'}},
@@ -117,7 +148,8 @@ class Replica:
         ids = ray.get([w.get_node_and_physical_gpu_ids.remote() for w in self.workers],
                       timeout=TIMEOUT)
         mark('actors')
-        self.rec['nodes'] = len({node for node, _ in ids})
+        self.ids = ids
+        self.rec[prefix + 'nodes'] = len({node for node, _ in ids})
 
         init_method = ray.get(self.workers[0].create_dist_init_method.remote(),
                               timeout=TIMEOUT)
@@ -133,22 +165,35 @@ class Replica:
             raise RuntimeError('a worker is not READY: %s' % results)
         mark('init')
 
+        if self.want_pids:   # not part of RayExecutorV2: left out of the phase times
+            p0 = time.perf_counter()
+            self.pids = ray.get([w.pid.remote() for w in self.workers], timeout=TIMEOUT)
+            t0 += time.perf_counter() - p0
         self.run_refs = [w.run.remote(3600.0) for w in self.workers]
         done, _ = ray.wait(self.run_refs, num_returns=1, timeout=0)
         if done:
             raise RuntimeError('a run ref finished early')
         mark('run')
 
-    def kill_one(self):
-        """ray.kill one worker (not rank 0) and time how long the monitor's
-        ray.wait takes to see it."""
+    def kill_one(self, killers=None, recover=False):
+        """Kill one worker (not rank 0; ray.kill, or SIGKILL through the
+        Killer on its node when `killers` is given) and time how long the
+        monitor's ray.wait takes to see it; then, with `recover`, restart."""
         victim = self.tp - 1
         t0 = time.perf_counter()
-        ray.kill(self.workers[victim], no_restart=True)
+        if killers is not None:
+            ray.get(killers[self.ids[victim][0]].kill.remote(self.pids[victim]),
+                    timeout=TIMEOUT)
+        else:
+            ray.kill(self.workers[victim], no_restart=True)
         done, _ = ray.wait(self.run_refs, num_returns=1, timeout=TIMEOUT)
         self.rec['detect'] = time.perf_counter() - t0
         if done != [self.run_refs[victim]]:
             raise RuntimeError('ray.wait returned %r, expected the killed worker' % (done,))
+        if recover:
+            self.teardown()
+            self.start(prefix='restart_')
+            self.rec['recover'] = time.perf_counter() - t0
 
     def teardown(self):
         for w in self.workers:
@@ -206,6 +251,12 @@ def main(argv):
     p.add_argument('--rounds', type=int, default=3,
                    help='rounds; round 0 is warm-up and left out of the summary')
     p.add_argument('--kill', action='store_true', help='measure failure detection')
+    p.add_argument('--kill-mode', choices=('api', 'sigkill'), default='api',
+                   help='ray.kill, or SIGKILL of the worker process (a crash)')
+    p.add_argument('--kill-count', type=int, default=0,
+                   help='replicas that lose a worker per round (default: all)')
+    p.add_argument('--recover', action='store_true',
+                   help='with --kill, restart the replicas that lost a worker')
     p.add_argument('--out', default=None, help='per-replica JSON lines')
     p.add_argument('--tag', default='', help='free-form label copied into the summary')
     args = p.parse_args(argv)
@@ -225,15 +276,26 @@ def main(argv):
           (BACKEND, len(nodes), total_gpus, replicas, args.tp, args.rounds, t_init),
           flush=True)
 
+    killers = None
+    if args.kill and args.kill_mode == 'sigkill':
+        killers = {n['NodeID']: Killer.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
+            n['NodeID'], soft=False)).remote() for n in nodes}
+        ray.get([k.ping.remote() for k in killers.values()], timeout=TIMEOUT)
+    measured_phases = PHASES + (('detect',) if args.kill else ()) + \
+        (('recover',) + RESTART if args.kill and args.recover else ())
+
     out = open(args.out, 'a') if args.out else None
     records, rounds = [], []
     for rnd in range(args.rounds):
-        reps = [Replica(i, rnd, args.tp, driver_node) for i in range(replicas)]
+        reps = [Replica(i, rnd, args.tp, driver_node, want_pids=killers is not None)
+                for i in range(replicas)]
         makespan, errors = in_threads(Replica.start, reps)
         info = {'round': rnd, 'makespan': makespan, 'start_errors': len(errors)}
         live = [r for r in reps if r.rec['error'] is None]
         if args.kill and live:
-            info['kill_wall'], kill_errors = in_threads(Replica.kill_one, live)
+            victims = live[:args.kill_count] if args.kill_count else live
+            info['kill_wall'], kill_errors = in_threads(
+                lambda r: r.kill_one(killers, args.recover), victims)
             info['kill_errors'] = len(kill_errors)
         t0 = time.perf_counter()
         for r in reps:
@@ -256,7 +318,7 @@ def main(argv):
             rnd, makespan, '%.3fs' % info['release'] if info['release'] is not None
             else 'TIMEOUT', sum(1 for r in reps if r.rec['error']),
             ' '.join('%s p50 %.3f' % (ph, percentiles([r.rec.get(ph) for r in reps])['p50'])
-                     for ph in PHASES + (('detect',) if args.kill else ())
+                     for ph in measured_phases
                      if percentiles([r.rec.get(ph) for r in reps]))), flush=True)
         if released is None:
             print('resources were not released; stopping', flush=True)
@@ -268,7 +330,7 @@ def main(argv):
         'replicas': replicas, 'tp': args.tp, 'rounds': len(rounds), 'ray_init': t_init,
         'errors': sum(1 for r in records if r['error']),
         'phases': {ph: percentiles([r.get(ph) for r in measured])
-                   for ph in PHASES + ('detect',)},
+                   for ph in PHASES + ('detect', 'recover') + RESTART},
         'makespan': percentiles([i['makespan'] for i in rounds[1:]] or
                                 [i['makespan'] for i in rounds]),
         'release': percentiles([i['release'] for i in rounds[1:]] or
