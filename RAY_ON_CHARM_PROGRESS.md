@@ -210,6 +210,81 @@ Still open, any machine with 2 GPUs: **single-node PP=2 startup** takes 57.7 s
 against 15.0-16.9 s for TP=1/TP=2 on one A40 node, but 14.6 s for PP=2 across
 nodes.
 
+### Step 5 on Stampede3: H1 and H3 results (2026-10-14)
+
+Setup: TACC Stampede3 SKX nodes (48 cores, Omni-Path), charm4py.ray at 4 PEs
+per node over LCI with libfabric `verbs;ofi_rxm` (the only LCI provider that
+works on Omni-Path; runbook, "Omni-Path (Stampede3)"), Ray 2.56.1 as a cluster
+inside the same allocation, both backends in the same job on the same nodes.
+`replica_bench.py --tp 2 --rounds 6 --kill --kill-mode sigkill --kill-count 2
+--recover`, 8 logical GPUs per node (4 replicas per node), venv staged to
+node-local `/tmp`. One job per node count, 5 measured rounds each; 0 errors on
+every run. An H3 run also records the H1 startup phases, so one sweep gives
+both. p50:
+
+| nodes | replicas | makespan c4p / Ray | pg c4p / Ray | actors c4p / Ray | detect c4p / Ray | recover c4p / Ray | restart_pg c4p / Ray |
+|---|---|---|---|---|---|---|---|
+| 1 | 4 | 0.47 / 2.43 s | 8 / 4 ms | 0.45 / 2.42 s | 4 / 8 ms | 0.45 / 2.49 s | 4 / 184 ms |
+| 2 | 8 | 0.51 / 2.50 s | 16 / 7 ms | 0.47 / 2.47 s | 4 / 7 ms | 0.45 / 3.38 s | 4 / 1077 ms |
+| 4 | 16 | 0.60 / 2.65 s | 36 / 14 ms | 0.53 / 2.47 s | 6 / 7 ms | 0.45 / 3.18 s | 5 / 901 ms |
+| 8 | 32 | 0.79 / 2.67 s | 88 / 33 ms | 0.65 / 2.47 s | 5 / 7 ms | 0.48 / 3.18 s | 6 / 836 ms |
+| 16 | 64 | 1.03 / 2.71 s | 98 / 57 ms | 0.77 / 2.49 s | 6 / 7 ms | 0.47 / 3.02 s | 6 / 724 ms |
+| 32 | 128 | 1.69 / 2.80 s | 213 / 125 ms | 1.16 / 2.53 s | 7 / 8 ms | 0.47 / 2.84 s | 8 / 558 ms |
+| 64 | 256 | 3.10 / 4.47 s | 545 / 324 ms | 2.03 / 4.08 s | 10 / 10 ms | 0.47 / 2.75 s | 13 / 463 ms |
+
+What the numbers say:
+
+- **Startup (H1)**: charm4py.ray reaches serving first at every size, but the
+  lead shrinks from 5x at 1 node to 1.4x at 64. The lead is worker-process
+  startup, not the control plane: Ray creates placement groups faster at every
+  size.
+- **The startup gap is like for like.** charm4py.ray never starts workers
+  ahead of time (one `subprocess.Popen` per actor, `_proc.py`). Ray prestarts
+  about one idle worker per CPU, and an actor without a `runtime_env` reuses
+  one (10-30 ms), but an actor with one gets a new process (2.0-2.1 s on SKX;
+  `import ray` alone is 1.0 s, against 0.4 s for charm4py's worker). vLLM's
+  `RayExecutorV2._build_runtime_env` always sets `env_vars` on CUDA and ROCm
+  (`ray_noset_device_env_vars`), so vLLM's workers, like the harness's, never
+  reuse a prestarted Ray worker.
+- **Crash recovery (H3)**: detection is the same on both (4-10 ms). charm4py.ray
+  is serving again in 0.45-0.48 s at every size; Ray takes 2.5-3.4 s, of which
+  0.2-1.1 s is re-reserving the placement group right after the teardown, and
+  the rest is starting the new workers.
+- **charm4py.ray's own scaling cost**: the `init` phase (three rounds of actor calls
+  per replica, made from the driver's threads) grows with the number of
+  replicas, not nodes: 13 ms for 4 replicas, 0.27 s for 128 replicas on 4
+  nodes (64 logical GPUs per node), 0.33 s for 128 on 32 nodes, 0.75 s for 256
+  on 64; Ray's stays near 3 ms. Every call from the driver process is two
+  synchronous round trips through PE 0 (`.remote()` is
+  `_client.call('_invoke')`, `ray.get` is `_client.call('_get_stored')`), where
+  Ray's `.remote()` returns at once and the call goes straight to the actor.
+  py-spy at 128 replicas on 4 nodes, with `+CmiSleepOnIdle` so that idle time
+  is not counted as busy: PE 0 is 66-97% busy during startup; the driver uses
+  23-45% of a core and spends most of its samples waiting for PE 0. 13-17% of
+  PE 0's samples are dill pickling the Charm messages that forward the calls:
+  charm4py pickles every message with dill (`charmlib_cython.pyx`), whose
+  `Pickler` is a subclass of Python's pure-Python pickler, not the C one. Most
+  of the rest is serving the driver's API calls and polling worker sockets.
+  Not fixed yet; candidates: try the C pickler first and fall back to dill; make
+  the driver's `.remote()` asynchronous (refs minted on the driver's side, as
+  `ray.kill` already is); spread a driver's calls over the PEs of its node
+  instead of PE 0 alone.
+- **Delta's multi-node Ray hang** did not occur on Ray clusters of 2-64 nodes.
+- The sweep cost about 32 SUs (Stampede3 charges 15 minutes minimum per job;
+  each job took 1-4 minutes).
+
+Also on Stampede3:
+
+- **Idle PEs spin at 100% of a core each** on Linux SKX (4 idle PEs: about
+  407%). Reconverse branch `sleep-on-idle` (`4989e9f`, not merged, pin not
+  moved) adds `+CmiSleepOnIdle`: 11-14% for 4 idle PEs, with kill detection,
+  `replica_bench.py` and `contract.py` (59/59) unchanged. H1 at 4 nodes was the
+  same with and without it (makespan 0.58-0.59 s); it matters where worker
+  processes compete with PEs for cores.
+- **Stalls that look like hangs** on a first launch were cold reads of the venv
+  from `$WORK` (a PE blocked in `read()` inside `site`); staging the venv to
+  `/tmp` removes them.
+
 ## Next steps
 
 In this order (`tests/ray_compat/GPU_RUNBOOK.md` has the commands). Steps
