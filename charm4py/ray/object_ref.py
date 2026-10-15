@@ -7,12 +7,21 @@ and hash equal, and they print their ID the way ``ray.ObjectRef`` does -- and
 reference counting: the object is freed once no ObjectRef for it exists in any
 process (see _refs.py)."""
 
+import functools
+
 from ..threads import Future
 from . import _refs
 
 # True in worker processes, where references are inert stand-ins (see _ipc.py)
 # that are neither counted nor pickled through Charm4py.
 INERT = False
+
+
+def _on_pickle_discarded(fn):
+    global _on_pickle_discarded
+    from charm4py.charmlib.charmlib_cython import on_pickle_discarded
+    _on_pickle_discarded = on_pickle_discarded
+    on_pickle_discarded(fn)
 
 
 def _my_pe():
@@ -55,6 +64,7 @@ class ObjectRef(Future):
             raise TypeError('an ObjectRef in a worker process is pickled by its '
                             'channel (see charm4py/ray/_ipc.py)')
         _refs.sent(self.store_id)
+        _on_pickle_discarded(functools.partial(_refs.unsent, self.store_id))
         return (self.store_id, _my_pe())
 
     def __setstate__(self, state):

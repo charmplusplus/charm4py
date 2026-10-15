@@ -27,12 +27,83 @@ import sys
 if PY_MAJOR_VERSION < 3:
   from cPickle import dumps, loads
 else:
-  from dill  import dumps, loads
+  import pickle as _pickle
   import dill
   # Pickle classes and functions that are importable by name, like pickle does
   # (by value, a __main__ class arrives as a different class object, which
   # breaks isinstance and super()); dill still serializes what is not.
   dill.settings['byref'] = True
+  import io
+  import types
+  _dill_dumps = dill.dumps
+  _dill_loads = dill.loads
+
+  def _by_name(obj):
+    """Whether pickle finds obj again by its module and qualified name."""
+    module = getattr(obj, '__module__', None)
+    qualname = getattr(obj, '__qualname__', None)
+    if module is None or not isinstance(qualname, str) or '<' in qualname:
+      return False
+    found = sys.modules.get(module)
+    try:
+      for part in qualname.split('.'):
+        found = getattr(found, part)
+    except AttributeError:
+      return False
+    return found is obj
+
+  class _Pickler(_pickle.Pickler):
+    """The C pickler. dill's is Python's pure-Python one, slow enough to
+    dominate a busy PE, so it only pickles, by value, the functions and
+    classes pickle cannot find by name, and functions from __main__ (dill sends
+    those by value: one defined interactively may exist on one PE only)."""
+
+    def __init__(self, buf, protocol):
+      _pickle.Pickler.__init__(self, buf, protocol)
+      self.dill_protocol = protocol
+
+    def reducer_override(self, obj):
+      if type(obj) is types.FunctionType:
+        if obj.__module__ != '__main__' and _by_name(obj):
+          return NotImplemented
+      elif not isinstance(obj, type) or _by_name(obj):
+        return NotImplemented
+      return (_dill_loads, (_dill_dumps(obj, self.dill_protocol),))
+
+  # undo lists for the pickles being made (see on_pickle_discarded)
+  _pickle_undo = []
+
+  def on_pickle_discarded(fn):
+    """Has dumps call fn if the pickle being made is thrown away (the C pickler
+    failed partway, and dill pickles the object again): for an object whose
+    pickling has a side effect, such as counting a reference as sent."""
+    if _pickle_undo:
+      _pickle_undo[-1].append(fn)
+
+  def dumps(obj, protocol=None):
+    buf = io.BytesIO()
+    undo = []
+    _pickle_undo.append(undo)
+    try:
+      _Pickler(buf, protocol).dump(obj)
+      return buf.getvalue()
+    except Exception:
+      pass
+    finally:
+      _pickle_undo.pop()
+    for fn in reversed(undo):
+      fn()
+    return _dill_dumps(obj, protocol)
+
+  # What dumps makes, the C unpickler reads; dill's unpickler is only needed
+  # for a whole message dill pickled (some of its by-value pickles name
+  # __builtin__.__main__, which only dill resolves), and those fail at the
+  # name lookup.
+  def loads(data):
+    try:
+      return _pickle.loads(data)
+    except Exception:
+      return _dill_loads(data)
 
 IF HAVE_NUMPY:
   import  numpy as np

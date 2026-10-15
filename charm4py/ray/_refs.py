@@ -47,6 +47,13 @@ def sent(obj_id):
     _children[obj_id] += 1
 
 
+def unsent(obj_id):
+    """A pickle that counted a copy as sent was thrown away (see
+    charmlib_cython.on_pickle_discarded)."""
+    _children[obj_id] -= 1
+    _maybe_release(obj_id)
+
+
 def received(obj_id, sender):
     """A copy sent by PE ``sender`` was unpickled here."""
     me = _charm().myPe()
