@@ -210,7 +210,7 @@ Still open, any machine with 2 GPUs: **single-node PP=2 startup** takes 57.7 s
 against 15.0-16.9 s for TP=1/TP=2 on one A40 node, but 14.6 s for PP=2 across
 nodes.
 
-### Step 5 on Stampede3: H1 and H3 results (2026-10-14)
+### Step 5 on Stampede3: H1 and H3 results (2026-10-15)
 
 Setup: TACC Stampede3 SKX nodes (48 cores, Omni-Path), charm4py.ray at 4 PEs
 per node over LCI with libfabric `verbs;ofi_rxm` (the only LCI provider that
@@ -220,24 +220,28 @@ inside the same allocation, both backends in the same job on the same nodes.
 --recover`, 8 logical GPUs per node (4 replicas per node), venv staged to
 node-local `/tmp`. One job per node count, 5 measured rounds each; 0 errors on
 every run. An H3 run also records the H1 startup phases, so one sweep gives
-both. p50:
+both. charm4py at `c90332f` (C pickler, below); at 64 nodes the two charm4py
+runs of the job are given as a range. p50:
 
 | nodes | replicas | makespan c4p / Ray | pg c4p / Ray | actors c4p / Ray | detect c4p / Ray | recover c4p / Ray | restart_pg c4p / Ray |
 |---|---|---|---|---|---|---|---|
-| 1 | 4 | 0.47 / 2.43 s | 8 / 4 ms | 0.45 / 2.42 s | 4 / 8 ms | 0.45 / 2.49 s | 4 / 184 ms |
-| 2 | 8 | 0.51 / 2.50 s | 16 / 7 ms | 0.47 / 2.47 s | 4 / 7 ms | 0.45 / 3.38 s | 4 / 1077 ms |
-| 4 | 16 | 0.60 / 2.65 s | 36 / 14 ms | 0.53 / 2.47 s | 6 / 7 ms | 0.45 / 3.18 s | 5 / 901 ms |
-| 8 | 32 | 0.79 / 2.67 s | 88 / 33 ms | 0.65 / 2.47 s | 5 / 7 ms | 0.48 / 3.18 s | 6 / 836 ms |
-| 16 | 64 | 1.03 / 2.71 s | 98 / 57 ms | 0.77 / 2.49 s | 6 / 7 ms | 0.47 / 3.02 s | 6 / 724 ms |
-| 32 | 128 | 1.69 / 2.80 s | 213 / 125 ms | 1.16 / 2.53 s | 7 / 8 ms | 0.47 / 2.84 s | 8 / 558 ms |
-| 64 | 256 | 3.10 / 4.47 s | 545 / 324 ms | 2.03 / 4.08 s | 10 / 10 ms | 0.47 / 2.75 s | 13 / 463 ms |
+| 1 | 4 | 0.44 / 2.43 s | 4 / 4 ms | 0.43 / 2.42 s | 4 / 8 ms | 0.44 / 2.48 s | 2 / 168 ms |
+| 2 | 8 | 0.47 / 2.48 s | 9 / 7 ms | 0.44 / 2.43 s | 3 / 7 ms | 0.44 / 2.48 s | 2 / 174 ms |
+| 4 | 16 | 0.50 / 2.68 s | 18 / 14 ms | 0.47 / 2.45 s | 4 / 7 ms | 0.44 / 3.21 s | 3 / 746 ms |
+| 8 | 32 | 0.59 / 2.69 s | 41 / 30 ms | 0.52 / 2.48 s | 4 / 7 ms | 0.44 / 3.13 s | 3 / 875 ms |
+| 16 | 64 | 0.76 / 2.71 s | 53 / 59 ms | 0.61 / 2.49 s | 5 / 7 ms | 0.46 / 3.06 s | 4 / 781 ms |
+| 32 | 128 | 1.05 / 2.79 s | 111 / 128 ms | 0.76 / 2.54 s | 5 / 8 ms | 0.45 / 2.77 s | 4 / 426 ms |
+| 64 | 256 | 1.73 / 4.38 s | 320 / 293 ms | 1.18-1.19 / 3.83 s | 7 / 10 ms | 0.46 / 2.87 s | 5-6 / 554 ms |
+
+Before `c90332f` (2026-10-14, same setup) charm4py's makespan was 0.47, 0.51,
+0.60, 0.79, 1.03, 1.69 and 3.10 s at 1-64 nodes, and its placement groups took
+545 ms at 64 nodes; Ray's numbers were the same within run-to-run variation.
 
 What the numbers say:
 
-- **Startup (H1)**: charm4py.ray reaches serving first at every size, but the
-  lead shrinks from 5x at 1 node to 1.4x at 64. The lead is worker-process
-  startup, not the control plane: Ray creates placement groups faster at every
-  size.
+- **Startup (H1)**: charm4py.ray reaches serving first at every size: 5.5x
+  ahead of Ray at 1 node, 2.5x at 64. Most of the lead is worker-process
+  startup; placement groups now take about as long on both.
 - **The startup gap is like for like.** charm4py.ray never starts workers
   ahead of time (one `subprocess.Popen` per actor, `_proc.py`). Ray prestarts
   about one idle worker per CPU, and an actor without a `runtime_env` reuses
@@ -246,32 +250,37 @@ What the numbers say:
   `RayExecutorV2._build_runtime_env` always sets `env_vars` on CUDA and ROCm
   (`ray_noset_device_env_vars`), so vLLM's workers, like the harness's, never
   reuse a prestarted Ray worker.
-- **Crash recovery (H3)**: detection is the same on both (4-10 ms). charm4py.ray
-  is serving again in 0.45-0.48 s at every size; Ray takes 2.5-3.4 s, of which
-  0.2-1.1 s is re-reserving the placement group right after the teardown, and
-  the rest is starting the new workers.
-- **charm4py.ray's own scaling cost**: the `init` phase (three rounds of actor calls
-  per replica, made from the driver's threads) grows with the number of
-  replicas, not nodes: 13 ms for 4 replicas, 0.27 s for 128 replicas on 4
-  nodes (64 logical GPUs per node), 0.33 s for 128 on 32 nodes, 0.75 s for 256
-  on 64; Ray's stays near 3 ms. Every call from the driver process is two
-  synchronous round trips through PE 0 (`.remote()` is
+- **Crash recovery (H3)**: detection is close (3-7 ms against 7-10 ms).
+  charm4py.ray is serving again in 0.44-0.46 s at every size; Ray takes
+  2.5-3.2 s, of which 0.2-0.9 s is re-reserving the placement group right after
+  the teardown, and the rest is starting the new workers.
+- **charm4py.ray's own scaling cost**: the `init` phase (three rounds of actor
+  calls per replica, made from the driver's threads) grows with the number of
+  replicas, not nodes (0.27 s for 128 replicas on 4 nodes, 0.33 s for 128 on
+  32, before `c90332f`); Ray's stays near 3 ms. Every call from the driver
+  process is two synchronous round trips through PE 0 (`.remote()` is
   `_client.call('_invoke')`, `ray.get` is `_client.call('_get_stored')`), where
   Ray's `.remote()` returns at once and the call goes straight to the actor.
   py-spy at 128 replicas on 4 nodes, with `+CmiSleepOnIdle` so that idle time
-  is not counted as busy: PE 0 is 66-97% busy during startup; the driver uses
-  23-45% of a core and spends most of its samples waiting for PE 0. 13-17% of
-  PE 0's samples are dill pickling the Charm messages that forward the calls:
-  charm4py pickles every message with dill (`charmlib_cython.pyx`), whose
-  `Pickler` is a subclass of Python's pure-Python pickler, not the C one. Most
-  of the rest is serving the driver's API calls and polling worker sockets.
-  Not fixed yet; candidates: try the C pickler first and fall back to dill; make
-  the driver's `.remote()` asynchronous (refs minted on the driver's side, as
-  `ray.kill` already is); spread a driver's calls over the PEs of its node
-  instead of PE 0 alone.
+  is not counted as busy: PE 0 was 66-97% busy during startup, and 13-17% of
+  its samples were dill pickling the Charm messages that forward the calls
+  (dill's `Pickler` is Python's pure-Python one). `c90332f` pickles messages
+  with the C pickler and gives dill only what needs it; at 64 nodes the `init`
+  phase went from 0.75 s to 0.39 s and placement groups from 545 ms to 320 ms.
+  What remains is PE 0 serving every call of the driver. Making the driver's
+  `.remote()` not wait for PE 0 (spare references sent ahead by the host) was
+  tried and did not help: 1.76-1.81 s makespan at 64 nodes against 1.73 s
+  without it, and no change at 128 replicas on 4 nodes. Not committed; the
+  patch is on Stampede3 at `~/c4p_runs/async_invoke_and_diag.patch`. Spreading
+  a driver's calls over its node's PEs is the remaining candidate.
 - **Delta's multi-node Ray hang** did not occur on Ray clusters of 2-64 nodes.
-- The sweep cost about 32 SUs (Stampede3 charges 15 minutes minimum per job;
-  each job took 1-4 minutes).
+- **A PE can segfault at shutdown**, after the benchmark has finished and
+  printed its summary (1 of the 23 charm4py runs in the two sweeps, at 1
+  node); charm4py's own test suite showed the same with dill before
+  `c90332f` (2 of 82 tests in one run, none in two later runs). Not
+  investigated.
+- Each sweep cost about 32-35 SUs (Stampede3 charges 15 minutes minimum per
+  job; each job took 1-5 minutes).
 
 Also on Stampede3:
 
