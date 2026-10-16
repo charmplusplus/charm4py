@@ -276,9 +276,28 @@ What the numbers say:
 - **Delta's multi-node Ray hang** did not occur on Ray clusters of 2-64 nodes.
 - **A PE can segfault at shutdown**, after the benchmark has finished and
   printed its summary (1 of the 23 charm4py runs in the two sweeps, at 1
-  node); charm4py's own test suite showed the same with dill before
-  `c90332f` (2 of 82 tests in one run, none in two later runs). Not
-  investigated.
+  node; 2 of 82 tests in one run of charm4py's own test suite). This is
+  libfabric, not charm4py: every core has the same stack, `ConverseExit` ->
+  `CommBackendLCI2::exit` -> `lci::free_device` -> `rxm_ep_close` ->
+  `rxm_freeall_conns` -> `rxm_flush_msg_cq` -> `rxm_free_rx_buf` -> `fi_recv`,
+  in a single-threaded process after the exit barrier. Two tests looped on
+  one node, several runs at a time:
+
+  | libfabric, provider | runs | segfaults at exit |
+  |---|---|---|
+  | system 2.6.0a1, `verbs;ofi_rxm` | 2990 | 486 (16%) |
+  | system 2.6.0a1, `tcp;ofi_rxm` | 1680 | 0 |
+  | 2.7.0, `verbs;ofi_rxm` | 2541 | 0 |
+
+  2.7.0's release notes fix "the msg_ep use-after-free at connection
+  teardown" in RxM. The 2.7.0 runs include 1128 started 6 at a time, which
+  did not hang (3 runs in an earlier job did hang once at startup, with no
+  output; not seen again). 2.7.0 is built in `$WORK/libfabric-2.7.0` (only
+  the verbs, rxm, tcp and shm providers; `libhwloc.so.15` copied in) and
+  selected with `LD_LIBRARY_PATH` plus an empty `FI_PROVIDER_PATH`; LCI loads
+  `libfabric.so.1` by soname, so nothing is rebuilt. `step5_h1.slurm` uses it
+  by default (`LIBFABRIC=sys` for the system one). The H1/H3 numbers above
+  were measured with the system 2.6.0a1.
 - Each sweep cost about 32-35 SUs (Stampede3 charges 15 minutes minimum per
   job; each job took 1-5 minutes).
 
