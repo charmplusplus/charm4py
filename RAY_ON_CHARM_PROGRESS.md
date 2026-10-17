@@ -295,9 +295,13 @@ What the numbers say:
   output; not seen again). 2.7.0 is built in `$WORK/libfabric-2.7.0` (only
   the verbs, rxm, tcp and shm providers; `libhwloc.so.15` copied in) and
   selected with `LD_LIBRARY_PATH` plus an empty `FI_PROVIDER_PATH`; LCI loads
-  `libfabric.so.1` by soname, so nothing is rebuilt. `step5_h1.slurm` uses it
-  by default (`LIBFABRIC=sys` for the system one). The H1/H3 numbers above
-  were measured with the system 2.6.0a1.
+  `libfabric.so.1` by soname, so nothing is rebuilt. `step5_h1.slurm` stages it to
+  each node's `/tmp` and uses it by default (`LIBFABRIC=sys`, or `+sysfab` on
+  a backend, for the system one; read from `$WORK`, the first launch of a job
+  stalled for 2+ minutes). The H1/H3 numbers above were measured with the
+  system 2.6.0a1; across nodes 2.7.0 gives the same, H3 with two runs each
+  in one job: makespan p50 0.48/0.49 s against 0.47/0.47 s at 2 nodes and
+  1.72/1.82 s against 1.75/1.72 s at 64 nodes, recovery 0.45-0.46 s on both.
 - Each sweep cost about 32-35 SUs (Stampede3 charges 15 minutes minimum per
   job; each job took 1-5 minutes).
 
