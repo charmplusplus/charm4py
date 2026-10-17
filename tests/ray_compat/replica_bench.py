@@ -31,7 +31,21 @@ With --kill-mode sigkill the worker gets SIGKILL from a helper actor on its
 node, as a crash would, instead of ray.kill. With --recover the replica then
 tears itself down and starts again, as a restarted vLLM engine would:
     recover          kill to serving again
-    restart_<phase>  the phases above, from the start of the restart"""
+    restart_<phase>  the phases above, from the start of the restart
+
+With --engine-actors each replica is laid out as vLLM lays out a data-parallel
+rank with the Ray backend (CoreEngineActorManager): the driver reserves a
+STRICT_PACK group pinned to one node (`--tp` GPU bundles and a CPU bundle for
+the engine) and creates an engine actor in the CPU bundle, passing it the
+group; the engine runs the executor -- workers and their startup calls, then
+the kill, its detection and the teardown of its workers -- so those Ray calls
+come from the engine's process, not the driver. Driver threads only reserve,
+create engines and wait for them. Phases keep their meaning (seconds from the
+replica's start, now including the engine's start) and add
+    engine  the engine actor began its executor
+A restart is a new engine in a new group, as a restarted DP rank would be.
+Under charm4py.ray start the launcher with --num-cpus (one CPU per replica's
+engine), as Ray nodes are."""
 
 import argparse
 import json
@@ -49,7 +63,7 @@ from ray.util.scheduling_strategies import (NodeAffinitySchedulingStrategy,
                                             PlacementGroupSchedulingStrategy)
 
 BACKEND = 'charm4py' if getattr(ray, '__charm4py__', False) else 'ray-' + ray.__version__
-PHASES = ('pg', 'actors', 'init', 'run')
+PHASES = ('pg', 'engine', 'actors', 'init', 'run')
 RESTART = tuple('restart_' + ph for ph in PHASES)
 TIMEOUT = 120.0   # any single wait longer than this is reported as a failure
 
@@ -108,9 +122,11 @@ class Killer:
 
 
 class Replica:
-    def __init__(self, rid, rnd, tp, driver_node, want_pids=False):
+    def __init__(self, rid, rnd, tp, driver_node, want_pids=False, engine_ip=None):
         self.rid, self.rnd, self.tp, self.driver_node = rid, rnd, tp, driver_node
         self.want_pids = want_pids   # for SIGKILL; asked before `run` occupies the workers
+        self.engine_ip = engine_ip   # --engine-actors: the node this replica's group is pinned to
+        self.engine = None
         self.pids = []
         self.rec = {'replica': rid, 'round': rnd, 'error': None}
         self.pg = None
@@ -122,16 +138,50 @@ class Replica:
     def start(self, prefix=''):
         """Steps 3-9 of RayExecutorV2 startup (the plan's list); returns when
         the replica is serving."""
-        t0 = time.perf_counter()
+        if self.engine_ip is not None:
+            return self._start_engine(prefix)
+        clock = [time.perf_counter()]   # phase times are from clock[0]
         self.rec[prefix + 't_start'] = time.time()
-        mark = lambda phase: self.rec.__setitem__(prefix + phase, time.perf_counter() - t0)
-        self.workers, self.run_refs = [], []
         self.gen += 1
 
         self.pg = placement_group([{'GPU': 1.0} for _ in range(self.tp)], strategy='PACK')
         ray.get(self.pg.ready(), timeout=TIMEOUT)
-        mark('pg')
+        self.rec[prefix + 'pg'] = time.perf_counter() - clock[0]
+        self._start_workers(clock, prefix)
 
+    def _start_engine(self, prefix):
+        """--engine-actors: the group and the engine, from the driver; the
+        engine starts the workers."""
+        t0 = time.perf_counter()
+        self.rec[prefix + 't_start'] = time.time()
+        self.gen += 1
+        pin = {'node:' + self.engine_ip: 0.001}
+        self.pg = placement_group([dict(pin, GPU=1.0) for _ in range(self.tp)] +
+                                  [dict(pin, CPU=1.0)], strategy='STRICT_PACK')
+        ray.get(self.pg.ready(), timeout=TIMEOUT)
+        self.rec[prefix + 'pg'] = time.perf_counter() - t0
+        self.engine = FakeEngineCore.options(
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=self.pg, placement_group_bundle_index=self.tp),
+            runtime_env={'env_vars': {'BENCH_FAKE_VLLM': '1'}},
+        ).remote(self.rid, self.rnd, self.tp, self.gen, self.want_pids, self.pg)
+        done = ray.get(self.engine.wait_for_init.remote(), timeout=TIMEOUT)
+        if done['error']:
+            raise RuntimeError('engine: ' + done['error'])
+        # the engine's phases are from its own start; it began `took` seconds
+        # before the reply reached this thread
+        began = time.perf_counter() - t0 - done['took']
+        self.rec[prefix + 'engine'] = began
+        for ph in ('actors', 'init', 'run'):
+            self.rec[prefix + ph] = began + done['rec'][ph]
+        self.rec[prefix + 'nodes'] = done['rec']['nodes']
+
+    def _start_workers(self, clock, prefix=''):
+        """The executor's part: workers in self.pg's GPU bundles, their four
+        rounds of startup calls, a pending `run` ref per worker. Phase times
+        are from clock[0]."""
+        mark = lambda phase: self.rec.__setitem__(prefix + phase, time.perf_counter() - clock[0])
+        self.workers, self.run_refs = [], []
         bundle_nodes = placement_group_table(self.pg)['bundles_to_node_id']
         bundles = sorted(range(self.tp), key=lambda i: (bundle_nodes[i] != self.driver_node,
                                                         bundle_nodes[i], i))
@@ -168,7 +218,7 @@ class Replica:
         if self.want_pids:   # not part of RayExecutorV2: left out of the phase times
             p0 = time.perf_counter()
             self.pids = ray.get([w.pid.remote() for w in self.workers], timeout=TIMEOUT)
-            t0 += time.perf_counter() - p0
+            clock[0] += time.perf_counter() - p0
         self.run_refs = [w.run.remote(3600.0) for w in self.workers]
         done, _ = ray.wait(self.run_refs, num_returns=1, timeout=0)
         if done:
@@ -179,8 +229,19 @@ class Replica:
         """Kill one worker (not rank 0; ray.kill, or SIGKILL through the
         Killer on its node when `killers` is given) and time how long the
         monitor's ray.wait takes to see it; then, with `recover`, restart."""
-        victim = self.tp - 1
         t0 = time.perf_counter()
+        if self.engine is not None:
+            # the engine kills its worker and detects it
+            done = ray.get(self.engine.kill_one.remote(killers), timeout=TIMEOUT)
+            if done['error']:
+                raise RuntimeError('engine: ' + done['error'])
+            self.rec['detect'] = done['detect']
+            if recover:
+                self.teardown()
+                self.start(prefix='restart_')
+                self.rec['recover'] = time.perf_counter() - t0
+            return
+        victim = self.tp - 1
         if killers is not None:
             ray.get(killers[self.ids[victim][0]].kill.remote(self.pids[victim]),
                     timeout=TIMEOUT)
@@ -196,10 +257,45 @@ class Replica:
             self.rec['recover'] = time.perf_counter() - t0
 
     def teardown(self):
+        if self.engine is not None:
+            # removing the group kills the workers in it too
+            ray.kill(self.engine)
+            self.engine = None
         for w in self.workers:
             ray.kill(w)
         if self.pg is not None:
             remove_placement_group(self.pg)
+
+
+@ray.remote
+class FakeEngineCore:
+    """vLLM's DPEngineCoreActor without a model, for --engine-actors: its
+    __init__ builds the executor (Replica._start_workers) in the placement
+    group the driver passes it, as vLLM passes the group in the config."""
+
+    def __init__(self, rid, rnd, tp, gen, want_pids, pg):
+        self.t0 = time.perf_counter()
+        node = ray.get_runtime_context().get_node_id()
+        self.rep = Replica(rid, rnd, tp, node, want_pids=want_pids)
+        self.rep.gen, self.rep.pg = gen, pg
+        self.error = None
+        try:
+            self.rep._start_workers([self.t0])
+        except Exception as e:
+            self.error = '%s: %s' % (type(e).__name__, str(e)[:300])
+
+    def wait_for_init(self):
+        """The executor's phase times (from this engine's start) and how long
+        ago it started."""
+        rec = {k: self.rep.rec.get(k) for k in ('actors', 'init', 'run', 'nodes')}
+        return {'error': self.error, 'rec': rec, 'took': time.perf_counter() - self.t0}
+
+    def kill_one(self, killers):
+        try:
+            self.rep.kill_one(killers)
+        except Exception as e:
+            return {'error': '%s: %s' % (type(e).__name__, str(e)[:300])}
+        return {'error': None, 'detect': self.rep.rec['detect']}
 
 
 def in_threads(fn, items):
@@ -257,6 +353,9 @@ def main(argv):
                    help='replicas that lose a worker per round (default: all)')
     p.add_argument('--recover', action='store_true',
                    help='with --kill, restart the replicas that lost a worker')
+    p.add_argument('--engine-actors', action='store_true',
+                   help='lay replicas out as vLLM data-parallel ranks: an engine actor '
+                        'per replica runs its executor (see the module docstring)')
     p.add_argument('--out', default=None, help='per-replica JSON lines')
     p.add_argument('--tag', default='', help='free-form label copied into the summary')
     args = p.parse_args(argv)
@@ -272,9 +371,20 @@ def main(argv):
               (replicas * args.tp, replicas, args.tp, total_gpus), flush=True)
         return 2
     driver_node = ray.get_runtime_context().get_node_id()
-    print('%s: %d nodes, %d GPUs, %d replicas x tp=%d, %d rounds, ray.init %.2fs' %
-          (BACKEND, len(nodes), total_gpus, replicas, args.tp, args.rounds, t_init),
-          flush=True)
+    engine_ips = [None] * replicas
+    if args.engine_actors:
+        # as CoreEngineActorManager.create_dp_placement_groups: whole ranks per
+        # node, the driver's node first
+        engine_ips = [n['NodeManagerAddress']
+                      for n in sorted(nodes, key=lambda n: n['NodeID'] != driver_node)
+                      for _ in range(int(n['Resources'].get('GPU', 0)) // args.tp)]
+        if len(engine_ips) < replicas:
+            print('only %d replicas of tp=%d fit whole on a node' % (len(engine_ips), args.tp),
+                  flush=True)
+            return 2
+    print('%s: %d nodes, %d GPUs, %d replicas x tp=%d, %d rounds, ray.init %.2fs%s' %
+          (BACKEND, len(nodes), total_gpus, replicas, args.tp, args.rounds, t_init,
+           ', engine actors' if args.engine_actors else ''), flush=True)
 
     killers = None
     if args.kill and args.kill_mode == 'sigkill':
@@ -287,7 +397,8 @@ def main(argv):
     out = open(args.out, 'a') if args.out else None
     records, rounds = [], []
     for rnd in range(args.rounds):
-        reps = [Replica(i, rnd, args.tp, driver_node, want_pids=killers is not None)
+        reps = [Replica(i, rnd, args.tp, driver_node, want_pids=killers is not None,
+                        engine_ip=engine_ips[i])
                 for i in range(replicas)]
         makespan, errors = in_threads(Replica.start, reps)
         info = {'round': rnd, 'makespan': makespan, 'start_errors': len(errors)}
@@ -327,6 +438,7 @@ def main(argv):
     measured = [r for r in records if r['round'] > 0] or records
     summary = {
         'backend': BACKEND, 'tag': args.tag, 'nodes': len(nodes), 'gpus': total_gpus,
+        'engine_actors': args.engine_actors,
         'replicas': replicas, 'tp': args.tp, 'rounds': len(rounds), 'ray_init': t_init,
         'errors': sum(1 for r in records if r['error']),
         'phases': {ph: percentiles([r.get(ph) for r in measured])

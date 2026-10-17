@@ -271,8 +271,37 @@ What the numbers say:
   `.remote()` not wait for PE 0 (spare references sent ahead by the host) was
   tried and did not help: 1.76-1.81 s makespan at 64 nodes against 1.73 s
   without it, and no change at 128 replicas on 4 nodes. Not committed; the
-  patch is on Stampede3 at `~/c4p_runs/async_invoke_and_diag.patch`. Spreading
-  a driver's calls over its node's PEs is the remaining candidate.
+  patch is on Stampede3 at `~/c4p_runs/async_invoke_and_diag.patch`.
+- **The PE 0 funnel is the harness's, not vLLM's.** `replica_bench.py` runs
+  every replica's executor in a driver thread, so PE 0 serves all of their
+  calls. vLLM with data parallelism on Ray does not: `CoreEngineActorManager`
+  reserves a node-pinned `STRICT_PACK` group per rank and starts an engine
+  actor in it, and the engine builds the executor, so the executor's calls are
+  served by the engine's own PE. `--engine-actors` lays the benchmark out that
+  way (H3, 256 replicas on 16 nodes of 32 logical GPUs, which reproduces the
+  64-node driver-mode numbers: makespan 1.63-1.65 s there against 1.72 s at
+  64 nodes). p50:
+
+  | | charm4py driver mode | charm4py engine actors | Ray engine actors |
+  |---|---|---|---|
+  | makespan | 1.63-1.65 s | 1.33-1.35 s | 8.11 s |
+  | workers created (after the engine, or the group) | 0.90 s | 0.47-0.49 s | 3.83 s |
+  | startup calls (`init` after `actors`) | 0.36 s | 6 ms | 2 ms |
+  | recover | 0.44-0.45 s | 0.86-0.88 s | 5.10 s |
+
+  With engine actors charm4py's worker creation and startup calls cost the
+  same at 256 replicas as at 8 (0.44 s and 6 ms on 2 nodes), although the
+  engine adds a process start in series (0.43 s on 2 nodes; Ray's 2.3 s);
+  what still grows is the driver's own part, 256 groups and engines through
+  PE 0 (`pg` 0.009 -> 0.22 s, the engine's start 0.42 -> 0.56 s after it).
+  Recovery restarts the whole rank (group, engine, workers), as a restarted
+  DP rank would, hence twice driver mode's. Caveat: 32 logical GPUs per node
+  put 48 Python processes on each 48-core node; Ray's process starts slow
+  down under that (engine 2.3 -> 3.0 s, workers 2.4 -> 3.8 s from 2 nodes of
+  8), charm4py's do not, so Ray's 8.11 s overstates what 64 nodes of 8 would
+  give. Spreading the driver's calls over its node's PEs (refs and actor-call
+  order are per link, so it is not small) would only help single-driver
+  workloads; not pursued.
 - **Delta's multi-node Ray hang** did not occur on Ray clusters of 2-64 nodes.
 - **A PE can segfault at shutdown**, after the benchmark has finished and
   printed its summary (1 of the 23 charm4py runs in the two sweeps, at 1
