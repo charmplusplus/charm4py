@@ -302,6 +302,25 @@ What the numbers say:
   give. Spreading the driver's calls over its node's PEs (refs and actor-call
   order are per link, so it is not small) would only help single-driver
   workloads; not pursued.
+- **Engine actors at 64 nodes** (2026-10-20, job 3620559, tag `n64_eng`, 8
+  logical GPUs per node, 256 replicas, charm4py twice and Ray once in the same
+  job, 0 errors). p50:
+
+  | | charm4py | Ray |
+  |---|---|---|
+  | makespan | 1.57 / 1.47 s | 5.59 s |
+  | startup (`init`) | 1.38 / 1.35 s | 5.11 s |
+  | engines started | 0.91 / 0.88 s | 2.72 s |
+  | recover | 0.91 s | 5.54 s |
+  | `pg` | 0.36 / 0.35 s (p99 0.39) | 0.38 s (p99 0.86) |
+
+  charm4py is 3.6x faster than Ray in vLLM's DP layout at 512 GPUs, and
+  engine actors cut its makespan from 1.73 s (driver mode, `n64_h3fix`) to
+  1.47-1.57 s. They make Ray slower (4.38 -> 5.59 s): every replica pays one
+  more actor process start. The 16-node proxy gave charm4py's number (1.33 s)
+  but not Ray's (8.11 s; see the caveat above), so Ray comparisons need real
+  node counts. The first charm4py run took 89 s to its first output because
+  the staged venv was read from a cold `$WORK`; the second took 8 s.
 - **Delta's multi-node Ray hang** did not occur on Ray clusters of 2-64 nodes.
 - **A PE can segfault at shutdown**, after the benchmark has finished and
   printed its summary (1 of the 23 charm4py runs in the two sweeps, at 1
@@ -374,7 +393,14 @@ Gaps that may matter there (none is on vLLM's default path):
   `num_gpus` get no device IDs or `CUDA_VISIBLE_DEVICES`.
 - No restarts or retries and no recovery from a dead PE or node: the launcher
   stops the whole job (`charmrun.start`, or `srun --kill-on-bad-exit=1`). No
-  `ray.cancel`, no `max_concurrency > 1` or async actors.
+  `ray.cancel`, no `max_concurrency > 1` or async actors. Measured on
+  Stampede3 (2026-10-19): a SIGKILLed node hangs the whole job over both
+  `tcp` and `verbs;ofi_rxm`, because Reconverse's LCI2 backend
+  (`comm_backend_lci2.cpp`, `issueAm`) retries a send to a dead peer forever
+  and has no error path; a SIGSTOPped node leaves the others serving, with
+  calls to it timing out. Surviving node loss needs that loop to give up and
+  report the peer, then charm4py to mark its actors dead (as Ray does);
+  checkpoint/restart does not fit (it restarts the whole job).
 - Processes outside the job can connect only on PE 0's node.
 - Each idle PE uses 10-18% of a core (polling).
 
