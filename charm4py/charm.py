@@ -105,6 +105,7 @@ class Charm(object):
         self.section_counter = 0
         self.rebuildFuncs = (rebuildByteArray, rebuildArray, rebuildNumpyArray)
         self.sched_tagpool = set(range(1, 128))  # pool of tags for scheduling callables
+        self.sched_next_tag = 128  # the pool grows from here when every tag is in use
         self.sched_callables = {}  # tag -> (callable, args)
 
         self.options = Options()
@@ -888,7 +889,13 @@ class Charm(object):
             del proxy.creation_future
 
     def scheduleCallableAfter(self, callable_obj, secs, args=[]):
-        tag = self.sched_tagpool.pop()
+        if self.sched_tagpool:
+            tag = self.sched_tagpool.pop()
+        else:
+            # every tag is held by a callable that has not run yet (a long
+            # timeout holds its tag until it fires): add one instead of failing
+            tag = self.sched_next_tag
+            self.sched_next_tag += 1
         self.sched_callables[tag] = (callable_obj, args)
         self.lib.scheduleTagAfter(tag, secs * 1000)
 
