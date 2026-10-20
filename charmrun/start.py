@@ -100,7 +100,36 @@ def reconverse_args(args):
     return num_pes, translated
 
 
+def prepare_file_pmi_dir():
+    """Creates the shared rendezvous directory that LCI's file PMI uses when it
+    does not know LCT_PMI_FILE_DIR (LCI before uiuc-hpc/lci#203):
+    ~/.tmp/lct_pmi_file-<SLURM_JOBID, or 0>/. Every rank creates it when it is
+    missing, and when the ranks of a job race to create it the job can fail to
+    start or hang (3 of 10 launches on a fresh directory, none of 30 with it
+    created first)."""
+    import re
+    jobid = re.match(r'\d*', os.environ.get('SLURM_JOBID', '')).group()
+    home = os.environ.get('HOME', os.path.expanduser('~'))
+    path = os.path.join(home, '.tmp', 'lct_pmi_file-' + str(int(jobid or 0)))
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        pass   # the ranks will try, and report it
+
+
 def launch_reconverse(num_pes, args, grace=5.0):
+    """Runs a Reconverse job of ``num_pes`` processes on this machine (see
+    _launch_reconverse), with a file-PMI rendezvous directory of its own."""
+    import shutil
+    import tempfile
+    pmi_dir = tempfile.mkdtemp(prefix='lct-pmi-file.')
+    try:
+        return _launch_reconverse(num_pes, args, grace, pmi_dir)
+    finally:
+        shutil.rmtree(pmi_dir, ignore_errors=True)
+
+
+def _launch_reconverse(num_pes, args, grace, pmi_dir):
     """Starts the job's ``num_pes`` processes on this machine and waits for them.
 
     This does what LCI's ``lcrun`` does (the same two bootstrap variables, one
@@ -119,6 +148,11 @@ def launch_reconverse(num_pes, args, grace=5.0):
     # peers from a file
     env['LCT_PMI_BACKEND'] = 'file,local'
     env['LCT_PMI_FILE_NRANKS'] = str(num_pes)
+    # LCI meets in LCT_PMI_FILE_DIR when it is set (uiuc-hpc/lci#203), as
+    # lcrun now gives each job; older LCI uses one shared directory per host
+    env['LCT_PMI_FILE_DIR'] = pmi_dir
+    if num_pes > 1:
+        prepare_file_pmi_dir()
 
     # the job gets a process group of its own, and SIGINT and SIGTERM sent to
     # this process are passed on to all of it
