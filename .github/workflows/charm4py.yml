@@ -46,3 +46,57 @@ jobs:
           # needed for param server
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
           python auto_test.py
+
+  # Charm4py on Charm++ with Reconverse (Charm++'s recharm line), over LCI.
+  reconverse:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triplet: reconverse-linux-x86_64
+          - os: macos-latest  # Apple Silicon
+            triplet: reconverse-darwin-arm8
+      fail-fast: false
+    env:
+      # The Charm++ ref to build. charmplusplus/charm#4063 makes the charm4py
+      # target build and load on Reconverse; switch this to recharm once it
+      # is merged.
+      CHARM_REF: charm4py-reconverse-support
+      # As Charm++'s reconverse CI: LCI takes the first provider libfabric
+      # offers, and on some hosted runners that is a hardware provider that
+      # fails to start. Hosted runners have no fabric to test anyway.
+      FI_PROVIDER: tcp
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full repo for 'git describe' used by setup.py
+      - name: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update && sudo apt-get install -y cmake libfabric-dev
+          else
+            brew install libfabric
+          fi
+          pip install setuptools cython greenlet numpy torch torchvision filelock matplotlib
+      - name: Build Charm++ (Reconverse)/Charm4py
+        run: |
+          # Reconverse is the contrib/reconverse submodule
+          git clone --branch "$CHARM_REF" --recurse-submodules https://github.com/charmplusplus/charm charm_src/charm
+          export CHARM4PY_BUILD_TRIPLET=${{ matrix.triplet }}
+          export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
+          export CHARM_BUILD_PROCESSES=4
+          pip install -e .
+      - name: Run auto_test.py
+        run: |
+          export PYTHONPATH="$PWD"
+          export CHARM4PY_TEST_NUM_PROCESSES=2
+          # needed for param server
+          export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+          python auto_test.py
