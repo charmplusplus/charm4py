@@ -117,7 +117,13 @@ def test_actor_created_in_actor_prefers_its_node():
     parent = Where.options(num_cpus=0, scheduling_strategy=NodeAffinitySchedulingStrategy(
         ids[1], soft=False)).remote()
     child_node, child = ray.get(parent.spawn.remote(num_cpus=0), timeout=30)
-    check(child_node == ids[1], 'local first: ' + str((child_node, ids[1])))
+    if getattr(ray, '__charm4py__', False):
+        check(child_node == ids[1], 'local first: ' + str((child_node, ids[1])))
+    else:
+        # Ray does not promise the caller's node for an actor without resources
+        # (it lands elsewhere in some runs); vLLM does not rely on it, since
+        # its workers are placed through placement groups
+        check(child_node in ids, 'placed on a live node: ' + str(child_node))
     ray.kill(child)
     ray.kill(parent)
 
