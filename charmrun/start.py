@@ -132,12 +132,12 @@ def launch_reconverse(num_pes, args, grace=5.0):
 def _launch_reconverse(num_pes, args, grace, pmi_dir):
     """Starts the job's ``num_pes`` processes on this machine and waits for them.
 
-    This does what LCI's ``lcrun`` does (the same two bootstrap variables, one
-    process per PE), with one difference: when a process fails, the rest of the
-    job is stopped at once. lcrun waits for its processes one by one, so a PE
-    that aborts (for instance because a peer died: it calls CmiAbort) leaves the
-    others waiting for it until the job is killed from outside. Returns the
-    first failing process's exit code (128 + N for signal N), or 0."""
+    This does what LCI's ``lcrun`` does (the same bootstrap variables, one
+    process per PE, and the rest of the job stopped when a process fails), so
+    that a Charm4py installation can start jobs without lcrun, which is a
+    script in LCI's source tree. Processes still running ``grace`` seconds
+    after that SIGTERM are killed. Returns the first failing process's exit
+    code (128 + N for signal N), or 0."""
     import signal
     import subprocess
     import time

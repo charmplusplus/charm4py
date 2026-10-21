@@ -128,6 +128,13 @@ before building::
 
 A Reconverse build fetches LCI unless ``CHARM4PY_LCI_DIR`` is set or an earlier
 build of the same triplet left LCI sources in ``<triplet>/_deps/lci-src``.
+Either way it builds LCI from source, and the LCI that Reconverse pins needs
+CMake 3.21 or newer and Python 3.8 or newer for that. With an older CMake,
+configure fails with "C_STANDARD is set to invalid value '17'"; when CMake
+finds only an older Python, it fails with "Cannot find source file
+.../src/binding/generated/binding.cpp". If a system's defaults are older,
+load a newer Python module, or install a recent CMake with
+``pip install cmake``.
 
 An installed Charm4py does not need the Charm++ build directory: the build
 copies ``libcharm`` and the Reconverse and LCI libraries it uses into the
@@ -141,9 +148,10 @@ Charm4py ``+pN`` syntax::
     $ python -m charmrun.start +p2 examples/simple/hello_world.py
 
 The Charm4py launcher starts two processes on this machine, bootstrapped the
-way LCI's ``lcrun`` does, and passes ``+pe 2`` to Reconverse. Unlike
-``lcrun``, it stops the whole job as soon as one process fails. The equivalent
-``lcrun`` command is::
+way LCI's ``lcrun`` does, and passes ``+pe 2`` to Reconverse. As ``lcrun``
+does, it stops the whole job when one process fails. ``lcrun`` is a script in
+LCI's source tree, so it is not part of a Charm4py installation; the
+equivalent ``lcrun`` command is::
 
     $ /path/to/lci/lcrun -n 2 python examples/simple/hello_world.py +pe 2
 
