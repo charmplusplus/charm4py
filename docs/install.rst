@@ -94,4 +94,68 @@ For example, to use Charm4Py with MPI, build the Charm backend as follows::
 Check the Charm++ documentation to identify the correct os and architecture command 
 to pass into the build command. 
 
+Using an external Charm++ source tree
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, Charm4py builds the Charm++ sources in ``charm_src/charm``. The source
+tree, build triplet, and build output directory can instead be selected with
+environment variables:
+
+* ``CHARM4PY_CHARM_DIR`` is the path to the Charm++ source tree.
+* ``CHARM4PY_BUILD_TRIPLET`` overrides the automatically selected build triplet.
+* ``CHARM4PY_CHARM_BUILD_DIR`` selects a separate Charm++ build directory. This
+  directory may contain an existing ``charm4py`` build or may be a new directory
+  that Charm4py will ask the Charm++ build system to create.
+* ``CHARM4PY_LCI_DIR`` optionally selects a local LCI source tree for a
+  Reconverse build, avoiding a network fetch.
+
+For example, to install Charm4py using a Reconverse build on an Apple Silicon Mac::
+
+    $ CHARM4PY_CHARM_DIR=/path/to/charm \
+      CHARM4PY_BUILD_TRIPLET=reconverse-darwin-arm8 \
+      CHARM4PY_CHARM_BUILD_DIR=/path/to/charm/reconverse-darwin-arm8-charm4py \
+      pip install .
+
+Use a distinct ``CHARM4PY_CHARM_BUILD_DIR`` if the triplet has already been built
+with the ``charm++`` target. The ``charm4py`` target has a different CMake
+configuration because it produces the shared ``libcharm`` library.
+
+Reconverse triplets need a Charm++ tree with Reconverse support (the ``recharm``
+branch), where Reconverse is the ``contrib/reconverse`` submodule. Initialize it
+before building::
+
+    $ git -C /path/to/charm submodule update --init contrib/reconverse
+
+A Reconverse build fetches LCI unless ``CHARM4PY_LCI_DIR`` is set or an earlier
+build of the same triplet left LCI sources in ``<triplet>/_deps/lci-src``.
+Either way it builds LCI from source, and the LCI that Reconverse pins needs
+CMake 3.21 or newer and Python 3.8 or newer for that. With an older CMake,
+configure fails with "C_STANDARD is set to invalid value '17'"; when CMake
+finds only an older Python, it fails with "Cannot find source file
+.../src/binding/generated/binding.cpp". If a system's defaults are older,
+load a newer Python module, or install a recent CMake with
+``pip install cmake``.
+
+An installed Charm4py does not need the Charm++ build directory: the build
+copies ``libcharm`` and the Reconverse and LCI libraries it uses into the
+package and makes them find each other there. On Linux this uses
+``patchelf``, which pip installs for the build; with
+``--no-build-isolation``, install it first (``pip install patchelf``).
+
+Reconverse launches one Python interpreter per process. Use the normal
+Charm4py ``+pN`` syntax::
+
+    $ python -m charmrun.start +p2 examples/simple/hello_world.py
+
+The Charm4py launcher starts two processes on this machine, bootstrapped the
+way LCI's ``lcrun`` does, and passes ``+pe 2`` to Reconverse. As ``lcrun``
+does, it stops the whole job when one process fails. ``lcrun`` is a script in
+LCI's source tree, so it is not part of a Charm4py installation; the
+equivalent ``lcrun`` command is::
+
+    $ /path/to/lci/lcrun -n 2 python examples/simple/hello_world.py +pe 2
+
+Across several nodes, start the processes with the cluster's launcher (for
+example ``srun``) and pass the total PE count with ``+pe``.
+
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm

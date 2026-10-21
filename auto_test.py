@@ -34,6 +34,14 @@ TIMEOUT = 120  # timeout for each test (in seconds)
 CHARM_QUIET_AFTER_NUM_TESTS = 5
 
 commonArgs = ['++local']
+# Reconverse builds have no charmrun binary: charmrun.start launches their
+# processes itself (and drops ++local; other ++ options would reach the program)
+if os.path.isfile('charmrun/charmrun'):
+    launcher = ['charmrun/charmrun']
+    reconverse = False
+else:
+    launcher = [sys.executable, '-m', 'charmrun.start']
+    reconverse = True
 default_num_processes = int(os.environ.get('CHARM4PY_TEST_NUM_PROCESSES', 4))
 
 try:
@@ -70,9 +78,10 @@ for test in tests:
             if version < test.get('requires_py_version', -1):
                 continue
             additionalArgs = []
-            if num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs:
+            if (num_tests >= CHARM_QUIET_AFTER_NUM_TESTS and '++quiet' not in commonArgs
+                    and not reconverse):
                 additionalArgs.append('++quiet')
-            cmd = ['charmrun/charmrun']
+            cmd = list(launcher)
             if test.get('prefix'):
                 cmd += [test['prefix']]
             if not test.get('interactive', False):
@@ -94,7 +103,13 @@ for test in tests:
                 rc = p.wait(TIMEOUT)
             except subprocess.TimeoutExpired:
                 print("Timeout (" + str(TIMEOUT) + " secs) expired when running " + test['path'] + ", Killing process")
-                p.kill()
+                # charmrun.start passes SIGTERM on to the job's processes; a
+                # SIGKILL would leave them running
+                p.terminate()
+                try:
+                    p.wait(15)
+                except subprocess.TimeoutExpired:
+                    p.kill()
                 rc = -1
             if rc != 0:
                 print("ERROR running test " + test['path'] + " with " + python)
