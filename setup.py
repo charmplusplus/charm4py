@@ -203,6 +203,97 @@ def prepare_darwin_libraries(charm_build_dir):
     return bundled_runtime_paths
 
 
+def prepare_linux_libraries(charm_build_dir):
+    """Make a Charm++/Reconverse build relocatable with Charm4py.
+
+    libcharm.so of a Reconverse build needs Reconverse and LCI libraries from
+    the build's lib directory (libreconverse.so, liblci.so, liblct.so, and
+    liblci-ucx.so for liblci.so), which it finds through a RUNPATH naming that
+    directory. As on macOS, each one is copied under a Charm4py name, and
+    libcharm.so and the copies find each other through $ORIGIN, so an
+    installed Charm4py no longer needs the build tree. The names also keep
+    another Reconverse or LCI on LD_LIBRARY_PATH, which takes precedence over
+    RUNPATH, from being loaded instead."""
+    patchelf = shutil.which('patchelf')
+    if patchelf is None:
+        raise DistutilsSetupError(
+            'patchelf is required to package a Reconverse build '
+            '(pip install patchelf)')
+
+    def patchelf_output(*args):
+        return subprocess.check_output([patchelf] + list(args), text=True)
+
+    library_dir = os.path.join(charm_build_dir, 'lib')
+    libcharm_path = os.path.join(library_dir, libcharm_filename)
+    prefix = 'libcharm4py_'
+
+    def original_name(name):
+        # a dependency renamed by an earlier run
+        if name.startswith(prefix):
+            return 'lib' + name[len(prefix):]
+        return name
+
+    def bundled_name(name):
+        return prefix + name[len('lib'):]
+
+    def is_runtime_library(name):
+        return (name != libcharm_filename and
+                os.path.isfile(os.path.join(library_dir, name)))
+
+    # the build's libraries that libcharm.so needs, directly or not
+    runtime_names = []
+    to_visit = [libcharm_path]
+    while to_visit:
+        for name in patchelf_output('--print-needed', to_visit.pop()).split():
+            name = original_name(name)
+            if is_runtime_library(name) and name not in runtime_names:
+                runtime_names.append(name)
+                to_visit.append(os.path.join(library_dir, name))
+
+    real_library_dir = os.path.realpath(library_dir)
+
+    def relink(source_path, target_path, soname=None):
+        """Writes source_path to target_path with the bundled dependency
+        names and $ORIGIN, changing nothing when it is already so. The result
+        is renamed into place: setup.py loads libcharm (check_libcharm_version)
+        and runs this more than once, and rewriting a library that is mapped
+        crashes the process."""
+        commands = []
+        if soname is not None:
+            commands.append(['--set-soname', soname])
+        for name in patchelf_output('--print-needed', source_path).split():
+            if (original_name(name) in runtime_names and
+                    name != bundled_name(original_name(name))):
+                commands.append(['--replace-needed', name,
+                                 bundled_name(original_name(name))])
+        # $ORIGIN in place of the build directory; other entries (for
+        # instance PMIx's directory for liblct.so) stay
+        old_rpath = patchelf_output('--print-rpath', source_path).strip()
+        kept = [entry for entry in old_rpath.split(':')
+                if entry and entry != '$ORIGIN' and
+                os.path.realpath(entry) != real_library_dir]
+        new_rpath = ':'.join(['$ORIGIN'] + kept)
+        if new_rpath != old_rpath:
+            commands.append(['--set-rpath', new_rpath])
+        if not commands and source_path == target_path:
+            return
+        temporary_path = target_path + '.tmp'
+        shutil.copy2(source_path, temporary_path)
+        for command in commands:
+            subprocess.check_call([patchelf] + command + [temporary_path])
+        os.replace(temporary_path, target_path)
+
+    bundled_runtime_paths = []
+    for name in runtime_names:
+        bundled_path = os.path.join(library_dir, bundled_name(name))
+        relink(os.path.join(library_dir, name), bundled_path,
+               soname=bundled_name(name))
+        bundled_runtime_paths.append(bundled_path)
+    relink(libcharm_path, libcharm_path)
+
+    return bundled_runtime_paths
+
+
 def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
 
     configured_triple = get_build_triple(build_mpi)
@@ -291,6 +382,11 @@ def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
             runtime_lib_src_paths = prepare_darwin_libraries(charm_build_dir)
         except subprocess.CalledProcessError as error:
             raise DistutilsSetupError('install_name_tool error') from error
+    elif system == 'linux' and is_reconverse_build:
+        try:
+            runtime_lib_src_paths = prepare_linux_libraries(charm_build_dir)
+        except subprocess.CalledProcessError as error:
+            raise DistutilsSetupError('patchelf error') from error
 
     # verify that the version of charm++ that was built is same or greater than the
     # one required by charm4py
@@ -302,15 +398,14 @@ def build_libcharm(charm_src_dir, charm_build_dir, build_dir):
         for output_dir in lib_output_dirs:
             log.info('copying ' + os.path.relpath(source_path) + ' to ' + os.path.relpath(output_dir))
             shutil.copy(source_path, output_dir)
-    bundled_runtime_names = [
-        'libcharm4py_reconverse.dylib', 'libcharm4py_lci.dylib',
-        'libcharm4py_lct.dylib']
-    if not runtime_lib_src_paths:
-        for output_dir in lib_output_dirs:
-            for filename in bundled_runtime_names:
-                stale_path = os.path.join(output_dir, filename)
-                if os.path.isfile(stale_path):
-                    os.unlink(stale_path)
+    # runtime libraries bundled for an earlier build that this one lacks
+    bundled_runtime_names = {os.path.basename(path)
+                             for path in runtime_lib_src_paths}
+    for output_dir in lib_output_dirs:
+        for filename in os.listdir(output_dir):
+            if (filename.startswith('libcharm4py_') and
+                    filename not in bundled_runtime_names):
+                os.unlink(os.path.join(output_dir, filename))
     if packaged_libcharm_filename != libcharm_filename:
         for output_dir in lib_output_dirs:
             packaged_path = os.path.join(output_dir,

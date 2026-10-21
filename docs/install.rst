@@ -129,6 +129,12 @@ before building::
 A Reconverse build fetches LCI unless ``CHARM4PY_LCI_DIR`` is set or an earlier
 build of the same triplet left LCI sources in ``<triplet>/_deps/lci-src``.
 
+An installed Charm4py does not need the Charm++ build directory: the build
+copies ``libcharm`` and the Reconverse and LCI libraries it uses into the
+package and makes them find each other there. On Linux this uses
+``patchelf``, which pip installs for the build; with
+``--no-build-isolation``, install it first (``pip install patchelf``).
+
 Reconverse launches one Python interpreter per process. Use the normal
 Charm4py ``+pN`` syntax::
 

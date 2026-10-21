@@ -91,10 +91,16 @@ jobs:
           export CHARM4PY_BUILD_TRIPLET=${{ matrix.triplet }}
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=4
-          pip install -e .
-      - name: Run auto_test.py
+          pip install .
+      - name: Run auto_test.py on the installed package
         run: |
-          export PYTHONPATH="$PWD"
+          # An installed Charm4py must not need the Charm++ build tree:
+          # remove it, and run the tests outside the source tree so that
+          # they import the installed package.
+          rm -rf charm_src/charm build
+          mkdir "$RUNNER_TEMP/c4p_test"
+          cp -r auto_test.py test_config.json tests examples "$RUNNER_TEMP/c4p_test/"
+          cd "$RUNNER_TEMP/c4p_test"
           export CHARM4PY_TEST_NUM_PROCESSES=2
           # needed for param server
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES

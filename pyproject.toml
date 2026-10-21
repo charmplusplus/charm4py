@@ -1,5 +1,11 @@
 [build-system]
-requires = ["setuptools>=43.0.0", "cython>=3.0.0", "numpy>=1.10.0"]
+requires = [
+    "setuptools>=43.0.0",
+    "cython>=3.0.0",
+    "numpy>=1.10.0",
+    # makes Reconverse builds relocatable on Linux (setup.py)
+    "patchelf; sys_platform == 'linux'",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
