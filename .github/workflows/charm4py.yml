@@ -60,10 +60,9 @@ jobs:
             triplet: reconverse-darwin-arm8
       fail-fast: false
     env:
-      # The Charm++ ref to build. charmplusplus/charm#4063 makes the charm4py
-      # target build and load on Reconverse; switch this to recharm once it
-      # is merged.
-      CHARM_REF: charm4py-reconverse-support
+      # The Charm++ ref to build: recharm has Reconverse as the
+      # contrib/reconverse submodule.
+      CHARM_REF: recharm
       # As Charm++'s reconverse CI: LCI takes the first provider libfabric
       # offers, and on some hosted runners that is a hardware provider that
       # fails to start. Hosted runners have no fabric to test anyway.
