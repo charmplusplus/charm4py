@@ -163,7 +163,13 @@ class Future(object):
         # keep track of how many PEs this future is being sent to
         self.num_borrowers += 1
         if self.store:
-            charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
+            # print("Getting state for id", self.store_id, "at borrow depth", self.borrow_depth, "num borrowers", self.num_borrowers, "on pe", charm.myPe())
+            #in the case where one pe has 2 instances of futures with matching store ids and borrow depths
+            if (self.store_id, self.borrow_depth) in charm.threadMgr.borrowed_futures:
+                if charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] is not self:
+                    charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)].num_borrowers += 1
+            else:
+                charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
         return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe())
 
     def __setstate__(self, state):
@@ -173,6 +179,7 @@ class Future(object):
             self.store_id = (self.src << 32) + self.fid
         else:
             self.store_id = 0
+        # print("Setting state for id", self.store_id, "on pe", charm.myPe(), "at depth", self.borrow_depth)
         self._requested = False
         self.num_borrowers = 0
 
@@ -180,11 +187,11 @@ class Future(object):
         if self.store:
             if self.parent == None and self.num_borrowers == 0:
                 # This is the owner, delete the object from the object store
-                #print("Deleting owner", self.store_id)
+                # print("Deleting owner", self.store_id)
                 self.delete_object()
             else:
                 # this is a borrower, notify its parent of the deletion
-                #print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
+                # print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent, "at depth", self.borrow_depth)
                 charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.borrow_depth - 1)
 
 
