@@ -25,6 +25,7 @@ class Compute(object):
 
 def main(args):
     ray.init()
+    assert ray.is_initialized()
     # create 3 instances of MyChare, distributed among cores by the runtime
     arr = [Compute.remote(i) for i in range(4)]
     
@@ -43,6 +44,9 @@ def main(args):
     while len(not_ready) > 0:
         ready, not_ready = ray.wait(not_ready)
         print("Fetched value: ", ray.get(ready))
+    
+    ray.shutdown()
+    assert not ray.is_initialized()
 
     exit()
 

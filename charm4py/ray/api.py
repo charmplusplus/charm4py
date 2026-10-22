@@ -10,6 +10,13 @@ def init():
     charm.thisProxy.updateGlobals({'object_store' : object_store,},
                                   awaitable=True, module_name='charm4py.ray.api').get()
 
+def is_initialized():
+    # if the object store exists, ray is initialized
+    if 'object_store' in globals():
+        return True
+    else:
+        return False
+
 
 def get_object_store():
     global object_store
@@ -104,3 +111,7 @@ def put(obj):
     fut = charm.threadMgr.createFuture(store=True)
     fut.create_object(obj)
     return fut
+
+def shutdown():
+    global object_store
+    del object_store
