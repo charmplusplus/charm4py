@@ -34,7 +34,10 @@ jobs:
           pip install setuptools cython cffi greenlet numpy torch torchvision filelock matplotlib
       - name: Build Charm++/Charm4py
         run: |
-          git clone https://github.com/charmplusplus/charm charm_src/charm
+          # classic Converse (netlrts and the other machine layers) is on
+          # Charm++'s classic branch; the default branch, recharm, builds
+          # only Reconverse triplets (the reconverse job below)
+          git clone --branch classic https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=8
           export CHARM4PY_BUILD_CFFI=1

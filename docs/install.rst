@@ -41,7 +41,12 @@ The first step is to clone the Charm4py repository from Git::
 
 Next, clone the Charm++ repo into charm_src::
 
-    $ git clone https://github.com/charmplusplus/charm.git charm_src/charm
+    $ git clone --branch classic https://github.com/charmplusplus/charm.git charm_src/charm
+
+The ``classic`` branch has the classic Converse machine layers (``netlrts``,
+``mpi`` and the others) that the default build and the commands below use.
+Charm++'s default branch, ``recharm``, builds only Reconverse triplets (see
+`Using an external Charm++ source tree`_).
 
 Once this is done, there are two ways to build Charm4py. The first is to simply run the installation
 from the Charm4py root. This method will use the default Charm++ backend::
