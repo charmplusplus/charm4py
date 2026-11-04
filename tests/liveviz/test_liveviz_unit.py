@@ -197,6 +197,16 @@ class TestByteImage(unittest.TestCase):
             img = lv.ByteImage.from_contributions([(d, 0, 0, 2, 3, 2, 3)], False)
             self.assertEqual(img.data, want, repr(d))
 
+    def test_small_and_unsigned_int_dtypes_clip(self):
+        # the clip bound must fit the dtype: NumPy 2.0 raises OverflowError
+        # for np.clip(int8_array, 0, 255)
+        cases = [(np.array([-5, 100, 127, 0], dtype=np.int8), [0, 100, 127, 0]),
+                 (np.array([300, 5, 0, 65535], dtype=np.uint16), [255, 5, 0, 255]),
+                 (np.array([2 ** 63, 5, 0, 1], dtype=np.uint64), [255, 5, 0, 1])]
+        for d, want in cases:
+            img = lv.ByteImage.from_contributions([(d, 0, 0, 2, 2, 2, 2)], False)
+            self.assertEqual(img.data, bytes(want), repr(d))
+
     def test_list_in_range(self):
         raw = list(range(2 * 3 * 3))
         img = lv.ByteImage.from_contributions([(raw, 1, 1, 2, 3, 4, 5)], True)
@@ -303,7 +313,9 @@ class TestEncodeReply(unittest.TestCase):
             for ctype in (2, 7, -1):
                 req = lv.ImageRequest.from_bytes(v2(32, 16, ctype, 0))
                 self.assertEqual(lv.encode_reply(self.image(False), req), b'')
-        self.assertIn('compressionType 7', err.getvalue())
+        # one warning, naming the first unrecognized type
+        self.assertEqual(err.getvalue().count('WARNING'), 1)
+        self.assertIn('compressionType 2', err.getvalue())
 
 
 def contribs_for(value, w=4, h=2):
@@ -385,8 +397,10 @@ class TestGroup(unittest.TestCase):
             fake_charm.handlers['lvImage'](v1(2 ** 31 - 1, 2 ** 31 - 1))
             fake_charm.handlers['lvImage'](v1(4, 2))
             g.send(contribs_for(3))
-            g.send(contribs_for(4))
-        self.assertEqual(fake_charm.delayed, {1: b'', 2: bytes([4] * 24)})
+        # answered at once, before the callback runs or anything is queued
+        self.assertEqual(fake_charm.replies, [b''])
+        self.assertEqual(fake_charm.delayed, {1: bytes([3] * 24)})
+        self.assertEqual([(r.width, r.height) for r in self.callbacks], [(4, 2)])
         self.assertIn('pixel limit', err.getvalue())
 
     def test_reply_failure_still_answers(self):
@@ -424,6 +438,45 @@ class TestGroup(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             fake_charm.handlers['lvImage'](v1(100000, 100000))
         self.assertEqual(fake_charm.replies, [b''])
+        self.assertEqual(len(g.images), 1)          # the frame is not used up
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        self.assertEqual(fake_charm.replies, [b'', bytes([5] * 24)])
+
+    def test_poll_oversized_request_first(self):
+        # an oversized request is not queued, so it cannot take the next frame
+        g = self.make(True)
+        with redirect_stderr(io.StringIO()):
+            fake_charm.handlers['lvImage'](v1(100000, 100000))
+        g.send(contribs_for(6))
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        self.assertEqual(fake_charm.replies, [b'', bytes([6] * 24)])
+        self.assertEqual((fake_charm.delayed, len(g.requests), len(g.images)), ({}, 0, 0))
+
+    def test_unrequested_push_image_not_assembled(self):
+        g = self.make(False)
+        saved = lv.ByteImage.from_contributions
+        def fail(*args, **kw):
+            raise AssertionError('assembled an image nobody asked for')
+        lv.ByteImage.from_contributions = fail
+        lv._warned.clear()
+        try:
+            with redirect_stderr(io.StringIO()):
+                g.send(contribs_for(1))
+        finally:
+            lv.ByteImage.from_contributions = saved
+
+    def test_warnings_are_one_time(self):
+        # keyed on the kind of problem, not on values a client controls
+        g = self.make(True)
+        g.send(contribs_for(1))
+        lv._warned.clear()
+        err = io.StringIO()
+        with redirect_stderr(err):
+            for ctype in range(3, 53):
+                g.send(contribs_for(1))
+                fake_charm.handlers['lvImage'](v2(4, 2, ctype, 0))
+        self.assertEqual(err.getvalue().count('unrecognized'), 1)
+        self.assertEqual(len(lv._warned), 1)
 
     def test_poll_image_first(self):
         g = self.make(True)

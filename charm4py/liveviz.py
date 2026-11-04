@@ -157,12 +157,13 @@ def encode_reply(image, request):
       out = io.BytesIO()
       pil.save(out, format='JPEG', quality=quality)
     except Exception as e:
-      _warn_once(('jpegfail', str(e)), 'JPEG compression of a %dx%d image failed '
-                 '(%s); sending an empty reply' % (image.width, image.height, e))
+      _warn_once('jpegfail', 'JPEG compression of a %dx%d image failed '
+                 '(%s); sending an empty reply (reported once)'
+                 % (image.width, image.height, e))
       return b''
     return out.getvalue()
-  _warn_once(('ctype', ctype), 'ignoring liveViz client\'s unrecognized '
-             'compressionType %d (sending empty replies)' % ctype)
+  _warn_once('ctype', 'ignoring liveViz client\'s unrecognized '
+             'compressionType %d (sending empty replies; reported once)' % ctype)
   return b''
 
 @register
@@ -181,28 +182,34 @@ class LiveVizGroup(Chare):
       self.images = deque()
 
   @staticmethod
+  def _too_large(request):
+    if max(request.width, 0) * max(request.height, 0) <= MAX_REPLY_PIXELS:
+      return False
+    _warn_once('toolarge', 'liveViz client requested a %dx%d image, more than '
+               'the %d pixel limit; sending an empty reply (reported once)'
+               % (request.width, request.height, MAX_REPLY_PIXELS))
+    return True
+
+  @staticmethod
   def _reply_bytes(image, request):
-    """The reply to request, or b'' if the request is too large or building
-    the reply fails: every request must get exactly one reply."""
+    """The reply to request, or b'' if building it fails: every request
+    must get exactly one reply. (Oversized requests never get here; the
+    handler answers them before queueing them or asking for an image.)"""
     width, height = max(request.width, 0), max(request.height, 0)
-    if width * height > MAX_REPLY_PIXELS:
-      _warn_once('toolarge', 'liveViz client requested a %dx%d image, more than '
-                 'the %d pixel limit; sending an empty reply'
-                 % (request.width, request.height, MAX_REPLY_PIXELS))
-      return b''
     try:
       output = ByteImage.with_image_in_corner(image, width, height)
       return encode_reply(output, request)
     except Exception as e:
-      _warn_once(('replyfail', type(e).__name__), 'building the reply to a %dx%d '
-                 'image request failed (%r); sending an empty reply'
+      _warn_once('replyfail', 'building the reply to a %dx%d image request '
+                 'failed (%r); sending an empty reply (reported once)'
                  % (request.width, request.height, e))
       return b''
 
   def send(self, result):
     if len(self.requests) > 0:
-      # Array reductions complete in the order they were started, so in push
-      # mode the oldest pending request is the one this image answers.
+      # Reductions of one array complete in the order they were started, so
+      # in push mode the oldest pending request is the one this image answers
+      # (if the app deposits once per request, from one array; see the docs).
       req, delayed = self.requests.popleft()
       reply = b''
       try:
@@ -212,15 +219,19 @@ class LiveVizGroup(Chare):
         # answer the token even if assembling the image raised
         charm.CcsSendDelayedReply(delayed, reply)
       return
-    image = ByteImage.from_contributions(result, LiveViz.cfg.isColor)
-    if self.poll:
-      self.images.append(image)
-    else:
+    if not self.poll:
       _warn_once('unrequested', 'push-mode image arrived with no pending '
                  'request; dropping it')
+      return
+    self.images.append(ByteImage.from_contributions(result, LiveViz.cfg.isColor))
 
   def image_handler(self, msg):
     request = ImageRequest.from_bytes(msg)
+    if self._too_large(request):
+      # Answer now, before the request is queued (poll mode would spend the
+      # next frame on it) or the app is asked to render it (push mode).
+      charm.CcsSendReply(b'')
+      return
     if self.poll:
       if len(self.images) > 0:
         # _reply_bytes answers b'' rather than raising
@@ -267,8 +278,8 @@ class ByteImage:
 
   @staticmethod
   def _pixels(data, width, height, bytes_per_pixel):
-    """data as a (height, width, bytes_per_pixel) uint8 array. data is a
-    bytes-like object, or a NumPy array or list/tuple of numbers, whose
+    """data as a (height, width, bytes_per_pixel) uint8 array. data is
+    bytes or bytearray, or a NumPy array or list/tuple of numbers, whose
     values are clipped to 0..255 (NaN becomes 0) rather than wrapped. Missing
     trailing bytes are zero (as if those pixels were not drawn); extra
     bytes are ignored."""
@@ -280,7 +291,8 @@ class ByteImage:
         if flat.dtype == np.bool_:
           flat = flat.astype(np.uint8)
         elif np.issubdtype(flat.dtype, np.integer):
-          flat = np.clip(flat, 0, 255).astype(np.uint8)
+          # the bound must fit the dtype (NumPy 2.0 rejects 255 for int8)
+          flat = np.clip(flat, 0, min(255, np.iinfo(flat.dtype).max)).astype(np.uint8)
         elif np.issubdtype(flat.dtype, np.floating):
           flat = np.clip(np.nan_to_num(flat, nan=0.0), 0, 255).astype(np.uint8)
         else:

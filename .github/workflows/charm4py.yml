@@ -42,6 +42,8 @@ jobs:
           export CHARM_BUILD_PROCESSES=8
           export CHARM4PY_BUILD_CFFI=1
           pip install -e .
+      - name: Run liveViz unit tests
+        run: python -m unittest tests/liveviz/test_liveviz_unit.py
       - name: Run auto_test.py
         run: |
           export PYTHONPATH="$PWD"
@@ -95,6 +97,9 @@ jobs:
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
           export CHARM_BUILD_PROCESSES=4
           pip install .
+      - name: Run liveViz unit tests
+        # in the source tree: they load charm4py/liveviz.py from it
+        run: python -m unittest tests/liveviz/test_liveviz_unit.py
       - name: Run auto_test.py on the installed package
         run: |
           # An installed Charm4py must not need the Charm++ build tree:
