@@ -14,7 +14,7 @@ Then, from a client (appSpector shell 'steer', or ccsio.steer):
     set_color 40 200 255    stripe color
     state                   steps done and every chare's parameters (ret=True gather)
     slow 5                  sleeps 5 s in a coroutine: PE 0 keeps answering other requests meanwhile
-    eval steps              only with steer.init(allow_eval=True) and ++server-auth
+    eval steps              only with steer.init(allow_eval=True) and ++server-auth KEYFILE with a level-0 key
 
 Optional argument: run time in seconds (default 600), then the program exits.
 """
@@ -147,7 +147,7 @@ def main(args):
     run_secs = float(args[1]) if len(args) > 1 else 600.0
     tiles = Array(Tile, dims=(NX, NY))
     Chare(Images, onPE=0)
-    steer.init(allow_eval=True, verbose=True)     # eval only if the job also has ++server-auth
+    steer.init(allow_eval=True, verbose=True)     # eval only with ++server-auth KEYFILE holding a level-0 key
     print("steer_demo: %dx%d image, %d chares; CCS handlers lvConfig, lvImage, c4pSteer ready" % (W, H, NX * NY))
     t_end = time.time() + run_secs
     while time.time() < t_end:
