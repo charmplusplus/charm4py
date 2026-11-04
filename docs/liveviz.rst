@@ -67,7 +67,8 @@ graphics fashion) is stored at array offset “x+y*width”.
 If the image is gray-scale (as determined by liveVizConfig, below), each
 pixel is represented by one byte. If the image is color, each pixel is
 represented by 3 consecutive bytes representing red, green, and blue
-intensity.
+intensity. "data" may be any bytes-like object, or a NumPy array or list
+of numbers; values outside 0..255 are clipped (not wrapped).
 
 liveViz Initialization
 ----------------------
@@ -104,8 +105,14 @@ o, minZ, maxZ). Clients using the version 2 request format can ask for a
 JPEG-compressed reply (compression_type 1, at compression_quality); the
 server compresses with Pillow if it is installed, and otherwise (or for an
 unknown compression type) sends an empty reply and prints a warning once,
-like a C++ liveViz server built without libjpeg. Each request gets its own
-reply, also when several clients ask at the same time.
+like a C++ liveViz server built without libjpeg. Run-length compression
+(compression_type 2, which C++ liveViz supports) is not implemented and is
+also answered with an empty reply. Each request gets its own reply, also when
+several clients ask at the same time: requests are answered in the order they
+arrived, so the callback must lead to exactly one deposit per request. If the
+callback raises, that request is answered with an empty reply. Requests for
+images larger than 64 Mpixel (liveviz.MAX_REPLY_PIXELS) are answered with an
+empty reply and a warning.
 
 Poll Mode
 ---------

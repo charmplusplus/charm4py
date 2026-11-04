@@ -44,6 +44,12 @@ class Config:
 COMPRESSION_NONE = 0
 COMPRESSION_JPEG = 1
 
+# Largest reply image (width * height) the server will build: 64 Mpixel, e.g.
+# 8192x8192, is 192 MB of RGB. Larger requests (a corrupt or hostile client
+# asking for 2^31 x 2^31) get an empty reply and a warning instead of
+# exhausting PE 0's memory.
+MAX_REPLY_PIXELS = 64 * 1024 * 1024
+
 _warned = set()
 
 def _warn_once(key, message):
@@ -176,17 +182,38 @@ class LiveVizGroup(Chare):
 
   @staticmethod
   def _reply_bytes(image, request):
-    output = ByteImage.with_image_in_corner(image, request.width, request.height)
-    return encode_reply(output, request)
+    """The reply to request, or b'' if the request is too large or building
+    the reply fails: every request must get exactly one reply."""
+    width, height = max(request.width, 0), max(request.height, 0)
+    if width * height > MAX_REPLY_PIXELS:
+      _warn_once('toolarge', 'liveViz client requested a %dx%d image, more than '
+                 'the %d pixel limit; sending an empty reply'
+                 % (request.width, request.height, MAX_REPLY_PIXELS))
+      return b''
+    try:
+      output = ByteImage.with_image_in_corner(image, width, height)
+      return encode_reply(output, request)
+    except Exception as e:
+      _warn_once(('replyfail', type(e).__name__), 'building the reply to a %dx%d '
+                 'image request failed (%r); sending an empty reply'
+                 % (request.width, request.height, e))
+      return b''
 
   def send(self, result):
-    image = ByteImage.from_contributions(result, LiveViz.cfg.isColor)
     if len(self.requests) > 0:
       # Array reductions complete in the order they were started, so in push
       # mode the oldest pending request is the one this image answers.
       req, delayed = self.requests.popleft()
-      charm.CcsSendDelayedReply(delayed, self._reply_bytes(image, req))
-    elif self.poll:
+      reply = b''
+      try:
+        reply = self._reply_bytes(
+          ByteImage.from_contributions(result, LiveViz.cfg.isColor), req)
+      finally:
+        # answer the token even if assembling the image raised
+        charm.CcsSendDelayedReply(delayed, reply)
+      return
+    image = ByteImage.from_contributions(result, LiveViz.cfg.isColor)
+    if self.poll:
       self.images.append(image)
     else:
       _warn_once('unrequested', 'push-mode image arrived with no pending '
@@ -196,14 +223,26 @@ class LiveVizGroup(Chare):
     request = ImageRequest.from_bytes(msg)
     if self.poll:
       if len(self.images) > 0:
+        # _reply_bytes answers b'' rather than raising
         charm.CcsSendReply(self._reply_bytes(self.images.popleft(), request))
       else:
         self.requests.append((request, charm.CcsDelayReply()))
     else:
       # Delay the reply before asking for the image, as liveViz0 does, and
       # queue it so overlapping requests each get their own image.
-      self.requests.append((request, charm.CcsDelayReply()))
-      self.callback(request)
+      entry = (request, charm.CcsDelayReply())
+      self.requests.append(entry)
+      try:
+        self.callback(request)
+      except BaseException:
+        # No image is coming for this request: unqueue it (or every later
+        # image would answer the request before its own) and answer it empty.
+        for i, queued in enumerate(self.requests):
+          if queued is entry:
+            del self.requests[i]
+            break
+        charm.CcsSendDelayedReply(entry[1], b'')
+        raise
 
 class ByteImage:
   def __init__(self, data=None, width=0, height=0, is_color=True):
@@ -228,13 +267,31 @@ class ByteImage:
 
   @staticmethod
   def _pixels(data, width, height, bytes_per_pixel):
-    """data as a (height, width, bytes_per_pixel) uint8 array. Missing
+    """data as a (height, width, bytes_per_pixel) uint8 array. data is a
+    bytes-like object, or a NumPy array or list/tuple of numbers, whose
+    values are clipped to 0..255 (NaN becomes 0) rather than wrapped. Missing
     trailing bytes are zero (as if those pixels were not drawn); extra
     bytes are ignored."""
+    if isinstance(data, (list, tuple)):
+      data = np.asarray(data)
     if isinstance(data, np.ndarray):
-      flat = data.reshape(-1).astype(np.uint8, copy=False)
+      flat = data.reshape(-1)
+      if flat.dtype != np.uint8:
+        if flat.dtype == np.bool_:
+          flat = flat.astype(np.uint8)
+        elif np.issubdtype(flat.dtype, np.integer):
+          flat = np.clip(flat, 0, 255).astype(np.uint8)
+        elif np.issubdtype(flat.dtype, np.floating):
+          flat = np.clip(np.nan_to_num(flat, nan=0.0), 0, 255).astype(np.uint8)
+        else:
+          raise TypeError('liveViz image data must be bytes-like or an array of '
+                          'real numbers, not an array of %s' % flat.dtype)
     else:
-      flat = np.frombuffer(data, dtype=np.uint8)
+      try:
+        flat = np.frombuffer(data, dtype=np.uint8)
+      except TypeError:
+        raise TypeError('liveViz image data must be bytes-like or an array of '
+                        'real numbers, not %s' % type(data).__name__) from None
     n = width * height * bytes_per_pixel
     if flat.size < n:
       flat = np.concatenate((flat, np.zeros(n - flat.size, dtype=np.uint8)))

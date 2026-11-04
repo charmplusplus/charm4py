@@ -186,6 +186,29 @@ class TestByteImage(unittest.TestCase):
             img = lv.ByteImage.from_contributions([(d, 1, 1, 2, 3, 4, 5)], True)
             self.assertEqual(img.data, reference_composite([(raw.tobytes(), 1, 1, 2, 3, 4, 5)], True))
 
+    def test_out_of_range_values_clip(self):
+        # 300 must not wrap to 44, nor -5 to 251
+        want = bytes([255, 0, 7, 255, 0, 128])
+        for d in (np.array([300, -5, 7, 1000, -1, 128], dtype=np.int64),
+                  np.array([300.0, -5.5, 7.9, np.inf, np.nan, 128.0]),
+                  np.array([300, -5, 7, 1000, -1, 128], dtype=np.int16),
+                  [300, -5, 7, 1000, -1, 128], (300, -5, 7, 1000, -1, 128),
+                  [300.0, -5.0, 7.0, 1e9, -1e9, 128.0]):
+            img = lv.ByteImage.from_contributions([(d, 0, 0, 2, 3, 2, 3)], False)
+            self.assertEqual(img.data, want, repr(d))
+
+    def test_list_in_range(self):
+        raw = list(range(2 * 3 * 3))
+        img = lv.ByteImage.from_contributions([(raw, 1, 1, 2, 3, 4, 5)], True)
+        self.assertEqual(img.data, reference_composite([(bytes(raw), 1, 1, 2, 3, 4, 5)], True))
+        img = lv.ByteImage.from_contributions([(np.ones(4, dtype=bool), 0, 0, 2, 2, 2, 2)], False)
+        self.assertEqual(img.data, bytes([1] * 4))
+
+    def test_bad_data_type(self):
+        for d in ('abcd', 1234, ['a', 'b', 'c', 'd'], np.array([1j, 2, 3, 4]), [object()] * 4):
+            with self.assertRaises(TypeError, msg=repr(d)):
+                lv.ByteImage.from_contributions([(d, 0, 0, 2, 2, 2, 2)], False)
+
     def test_short_data_padded(self):
         self.check([(bytes([9] * 7), 0, 0, 3, 3, 3, 3)], False)
 
@@ -335,6 +358,72 @@ class TestGroup(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             g.send(contribs_for(3))
         self.assertEqual((fake_charm.delayed, fake_charm.replies), ({}, []))
+
+    def test_push_callback_raises(self):
+        # A raising callback must not leave its request queued: the next
+        # image would answer it, and every later reply would be off by one.
+        g = self.make(False)
+
+        def callback(request):
+            if request.width == 99:
+                raise RuntimeError('boom')
+            self.callbacks.append(request)
+        g.callback = callback
+        with self.assertRaises(RuntimeError):
+            fake_charm.handlers['lvImage'](v1(99, 1))
+        self.assertEqual(fake_charm.delayed, {1: b''})
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        g.send(contribs_for(7))
+        self.assertEqual(fake_charm.delayed, {1: b'', 2: bytes([7] * 24)})
+        self.assertEqual(len(g.requests), 0)
+
+    def test_push_oversized_request(self):
+        g = self.make(False)
+        lv._warned.clear()
+        err = io.StringIO()
+        with redirect_stderr(err):
+            fake_charm.handlers['lvImage'](v1(2 ** 31 - 1, 2 ** 31 - 1))
+            fake_charm.handlers['lvImage'](v1(4, 2))
+            g.send(contribs_for(3))
+            g.send(contribs_for(4))
+        self.assertEqual(fake_charm.delayed, {1: b'', 2: bytes([4] * 24)})
+        self.assertIn('pixel limit', err.getvalue())
+
+    def test_reply_failure_still_answers(self):
+        # if building a reply raises (e.g. MemoryError), the token still
+        # gets an empty reply and the queue stays in step
+        g = self.make(False)
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        saved = lv.ByteImage.with_image_in_corner
+        def fail(*args):
+            raise MemoryError()
+        lv.ByteImage.with_image_in_corner = fail
+        lv._warned.clear()
+        err = io.StringIO()
+        try:
+            with redirect_stderr(err):
+                g.send(contribs_for(1))
+        finally:
+            lv.ByteImage.with_image_in_corner = saved
+        g.send(contribs_for(2))
+        self.assertEqual(fake_charm.delayed, {1: b'', 2: bytes([2] * 24)})
+        self.assertIn('MemoryError', err.getvalue())
+
+    def test_assembly_failure_still_answers(self):
+        g = self.make(False)
+        fake_charm.handlers['lvImage'](v1(4, 2))
+        with self.assertRaises(TypeError):
+            g.send([('not bytes', 0, 0, 2, 4, 2, 4)])
+        self.assertEqual(fake_charm.delayed, {1: b''})
+        self.assertEqual(len(g.requests), 0)
+
+    def test_poll_oversized_request(self):
+        g = self.make(True)
+        g.send(contribs_for(5))
+        with redirect_stderr(io.StringIO()):
+            fake_charm.handlers['lvImage'](v1(100000, 100000))
+        self.assertEqual(fake_charm.replies, [b''])
 
     def test_poll_image_first(self):
         g = self.make(True)
