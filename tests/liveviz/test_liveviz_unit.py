@@ -258,6 +258,7 @@ class TestEncodeReply(unittest.TestCase):
         saved = sys.modules.get('PIL')
         sys.modules['PIL'] = None   # makes "from PIL import Image" raise ImportError
         lv._warned.clear()
+        lv._pil_image = None        # forget the cached module
         err = io.StringIO()
         try:
             with redirect_stderr(err):
@@ -269,6 +270,7 @@ class TestEncodeReply(unittest.TestCase):
                 sys.modules.pop('PIL', None)
             else:
                 sys.modules['PIL'] = saved
+            lv._pil_image = None
         self.assertEqual(err.getvalue().count('WARNING'), 1)   # warned once
 
     def test_unknown_compression(self):

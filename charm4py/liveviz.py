@@ -1,6 +1,7 @@
 from .charm import charm, Chare, register
 from dataclasses import dataclass, field
 from collections import deque
+import io
 import struct
 import sys
 from itertools import chain
@@ -114,6 +115,20 @@ class ImageRequest:
       req.minZ, req.maxZ = struct.unpack_from(">dd", data, offset)
     return req
 
+_pil_image = None
+
+def _pillow():
+  """Pillow's Image module (imported and its JPEG encoder loaded once), or
+  None when Pillow is not installed."""
+  global _pil_image
+  if _pil_image is None:
+    try:
+      from PIL import Image, JpegImagePlugin  # noqa: F401
+      _pil_image = Image
+    except ImportError:
+      _pil_image = False
+  return _pil_image or None
+
 def encode_reply(image, request):
   """The lvImage reply for an image already sized to the request, as
   liveViz0Deposit does it: raw pixels, a JPEG stream, or nothing for an
@@ -122,13 +137,11 @@ def encode_reply(image, request):
   if ctype == COMPRESSION_NONE:
     return image.to_binary()
   if ctype == COMPRESSION_JPEG:
-    try:
-      from PIL import Image
-    except ImportError:
+    Image = _pillow()
+    if Image is None:
       _warn_once('jpeg', 'JPEG image requested but Pillow is not installed; '
                  'sending empty replies (install Pillow to enable JPEG)')
       return b''
-    import io
     mode = 'RGB' if image.is_color else 'L'
     # libjpeg's jpeg_set_quality clamps the quality to 1..100 the same way
     quality = min(max(request.compression_quality, 1), 100)
@@ -153,6 +166,9 @@ class LiveVizGroup(Chare):
     self.callback = cb
     self.poll = poll
     charm.CcsRegisterHandler("lvImage", self.image_handler)
+    # Importing Pillow can take seconds on a cold parallel file system: do it
+    # now rather than while the first JPEG client waits.
+    _pillow()
     # (request, delayed reply token) waiting for an image, oldest first
     self.requests = deque()
     if poll:
