@@ -41,6 +41,7 @@ to the largest supercomputers.
    sections
    pool
    liveviz
+   steer
    rules
    gpus
 
