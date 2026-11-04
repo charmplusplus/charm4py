@@ -97,7 +97,7 @@ def reference_composite(contribs, is_color):
                     s = (y * lw + x) * bpp + c
                     v = data[s] if s < len(data) else 0
                     d = (gy * tw + gx) * bpp + c
-                    out[d] = (out[d] + v) % 256
+                    out[d] = min(out[d] + v, 255)
     return bytes(out)
 
 
@@ -169,13 +169,13 @@ class TestByteImage(unittest.TestCase):
         img = self.check(contribs, True)
         self.assertEqual((img.width, img.height, img.bytes_per_pixel), (15, 8, 3))
 
-    def test_grey_and_overlap_wraps(self):
+    def test_grey_and_overlap_saturates(self):
         a = bytes([200] * 16)
         b = bytes([100] * 16)
         img = self.check([(a, 0, 0, 4, 4, 6, 6), (b, 2, 2, 4, 4, 6, 6)], False)
         px = np.frombuffer(img.data, np.uint8).reshape(6, 6)
         self.assertEqual(px[0, 0], 200)
-        self.assertEqual(px[3, 3], (200 + 100) % 256)
+        self.assertEqual(px[3, 3], 255)
         self.assertEqual(px[5, 5], 100)
         self.assertEqual(px[0, 5], 0)
 

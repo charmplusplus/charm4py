@@ -53,8 +53,8 @@ Here, “local_width” and “local_height” are the size, in pixels, of this 
 element’s portion of the image, contributed in data (described
 below). This will show up on the client’s assembled image at 0-based
 pixel (start_x,start_y). LiveViz combines image chunks by adding
-overlapping pixel values modulo 256 (unlike C++ liveViz, which saturates at
-255), and clips any part of a chunk that falls outside the global image.
+overlapping pixel values, saturating at 255 (as C++ liveViz does), and
+clips any part of a chunk that falls outside the global image.
 
 Format of deposit image
 -----------------------

@@ -247,8 +247,9 @@ class ByteImage:
   def from_contributions(cls, contribs, is_color=True):
     """
     Create a ByteImage from multiple contributions, positioning each
-    contribution at the right location. Overlapping pixel values are added
-    modulo 256; parts of a contribution outside the image are clipped.
+    contribution at the right location. Overlapping pixel values are added,
+    saturating at 255 like C++ liveViz; parts of a contribution outside the
+    image are clipped.
 
     Args:
         contribs (list): List of tuples with format
@@ -273,8 +274,10 @@ class ByteImage:
       if x0 >= x1 or y0 >= y1:
         continue
       src = cls._pixels(data, local_width, local_height, bytes_per_pixel)
-      # uint8 addition wraps, i.e. adds modulo 256
-      buffer[y0:y1, x0:x1] += src[y0 - starty:y1 - starty, x0 - startx:x1 - startx]
+      # saturating add, like C++ liveViz's sum_image_data
+      dst = buffer[y0:y1, x0:x1]
+      add = src[y0 - starty:y1 - starty, x0 - startx:x1 - startx]
+      np.add(dst, np.minimum(add, 255 - dst), out=dst)
 
     return cls(buffer.tobytes(), total_width, total_height, is_color)
 
