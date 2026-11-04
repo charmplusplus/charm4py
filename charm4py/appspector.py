@@ -25,8 +25,46 @@ calls (message unpickling included), idle time is the rest of the wall
 time; time in C++ outside them (reductions, the scheduler) counts as idle.
 Nothing is sent anywhere until a client asks: a request to PE 0 broadcasts
 to the group, every PE contributes its cumulative counters and a gather
-reduction brings them back to PE 0, which replies. The group's own work is
-not counted. Without serve() nothing is wrapped and nothing costs anything.
+reduction brings them back to PE 0, which replies. The group's own work
+(its entry methods and its gather timer) is not counted. Without serve()
+nothing is wrapped and nothing costs anything.
+
+Calling serve(). It must be called on PE 0 (anywhere else it raises
+Charm4PyError). Calling it again in the same process, also after the
+module is reloaded, does nothing and returns the same proxy. The functions
+are wrapped once per process: a second AppSpectorLoads group (created by
+hand) refuses to construct with Charm4PyError instead of timing every call
+twice.
+
+Requests. A gather that has not come back after GATHER_TIMEOUT seconds (a
+PE that does not answer) is given up: the requests waiting on it are
+answered from the newest gather PE 0 has (ObjLoads), or with the "nothing
+yet" reply (SumDetail, or ObjLoads with no gather yet), and the next
+request starts a new gather. A gather that arrives late updates the data
+but does not answer those requests again. A SumDetail request is answered
+from the gather an ObjLoads request just made only if that gather is less
+than FRESH_SECONDS old; otherwise it makes its own.
+
+What is not attributed, or attributed coarsely:
+
+  - The mainchare's constructor runs in buildMainchare, which is not
+    wrapped, and serve() is called from it: its time before serve()
+    returns is idle.
+  - A migrated array element starts again from 0 on its new PE (the time
+    it ran on the old PE is not carried along); unpickling it and its
+    migrated() method are charged to it under the entry method of the
+    constructor (the runtime delivers it as a constructor message).
+  - Entry methods that charm4py invokes from inside another chare's call
+    (a when-condition's queue flushed by a different message, ray futures
+    released by the object store, a group handing a message on to local
+    objects) are charged to the chare and entry method of that outer call;
+    only broadcasts and section deliveries (recvArrayBcast, the section
+    manager group) are split per receiving chare.
+  - ('g', gid) and ('c', cid) counters are kept while the group or chare
+    exists on the PE (charm.groups, charm.chares). charm4py never removes
+    groups or chares from those tables, so the counters are bounded by the
+    runtime's own tables and are not capped: dropping one would make a
+    client that takes differences of replies see a bogus jump.
 
 CCS handlers on PE 0 (reply formats in charm4py.loadfmt, the same as
 Charm++'s trace-utilization handlers, so clients decode them unchanged):
@@ -49,22 +87,31 @@ OBJLOADS_HANDLER = "charm4py ObjLoads"
 SUMDETAIL_HANDLER = "charm4py SumDetail"
 STS_HANDLER = "charm4py SumDetail sts"
 
+GATHER_TIMEOUT = 5.0    # seconds PE 0 waits for a gather before giving up on it
+FRESH_SECONDS = 1.5     # SumDetail may reuse an ObjLoads gather younger than this
+
 _clock = time.perf_counter
-_group = None
 
 
 def serve():
     """Start measuring on every PE and answer load requests on PE 0. Call
-    once, on one PE, after charm.start (from main). From a coroutine (main
-    is one) it returns once every PE measures and the handlers are
-    registered. Returns the group's proxy."""
-    global _group
-    if _group is None:
+    on PE 0 after charm.start (from main); on another PE it raises
+    Charm4PyError. From a coroutine (main is one) it returns once every PE
+    measures and the handlers are registered. Returns the group's proxy;
+    a second call returns the same proxy and does nothing else."""
+    from .charm import Charm4PyError
+    if charm.myPe() != 0:
+        raise Charm4PyError('appspector.serve() must be called on PE 0, not on PE %d'
+                            % charm.myPe())
+    # kept on the charm object, not in this module, so that a reloaded
+    # module does not create a second group
+    proxy = getattr(charm, '_appspector_proxy', None)
+    if proxy is None:
         from .chare import Group
-        _group = Group(AppSpectorLoads)
-        if hasattr(_group, 'creation_future'):
-            charm.awaitCreation(_group)
-    return _group
+        proxy = charm._appspector_proxy = Group(AppSpectorLoads)
+        if hasattr(proxy, 'creation_future'):
+            charm.awaitCreation(proxy)
+    return proxy
 
 
 def _objkey(obj):
@@ -95,6 +142,7 @@ class Tracker(object):
         self.skip = frozenset(skip_gids)        # groups not to measure (our own)
         self.fanout = frozenset(fanout_gids)    # groups that deliver to other chares
         self.originals = {}
+        self.quiet = None   # callables of this object run by triggerCallable are not measured
 
     def _drop_stale(self):
         # On the main greenlet every open frame was opened on it, unless a
@@ -140,7 +188,13 @@ class Tracker(object):
     def install(self, c, tm):
         """Wrap the dispatch functions of charm c and thread manager tm (as
         instance attributes, so the Cython layer, which looks them up on
-        every message, calls the wrappers)."""
+        every message, calls the wrappers). Once per process: if c is
+        already wrapped it raises Charm4PyError."""
+        if getattr(c, '_appspector_tracker', None) is not None:
+            from .charm import Charm4PyError
+            raise Charm4PyError('charm4py.appspector is already measuring in this process '
+                                '(use appspector.serve(), once, on PE 0)')
+        c._appspector_tracker = self
         run, st, skip, fanout = self.run, self.stack, self.skip, self.fanout
         o = self.originals
         for name in ('recvArrayMsg', 'recvGroupMsg', 'recvChareMsg', 'recvArrayBcast',
@@ -170,7 +224,14 @@ class Tracker(object):
                 return run(_objkey(obj), ep, _o, (obj, ep, header, args, ret_fut))
             return _o(obj, ep, header, args, ret_fut)
 
+        callables = getattr(c, 'sched_callables', {})
+
         def triggerCallable(tag, _o=o['triggerCallable']):
+            quiet = self.quiet
+            if quiet is not None:
+                cb = callables.get(tag)
+                if cb is not None and getattr(cb[0], '__self__', None) is quiet:
+                    return _o(tag)
             return run(None, loadfmt.TIMER_EP, _o, (tag,))
 
         def resumeThread(gr, arg, _o=o['resumeThread']):
@@ -194,10 +255,12 @@ class Tracker(object):
         tm.resumeThread = resumeThread
         tm.pauseThread = pauseThread
 
-    def snapshot(self, pe, arrays):
+    def snapshot(self, pe, arrays, groups, chares):
         """(pe, wall now, elapsed, idle, objs, eps) with objs as
-        loadfmt.encode_objloads wants them. Array elements that are no
-        longer on this PE (migrated, deleted) are forgotten."""
+        loadfmt.encode_objloads wants them. arrays, groups, chares: the
+        chares that exist on this PE (charm.arrays, charm.groups,
+        charm.chares); the counters of the others (array elements migrated
+        away or deleted, groups and chares that are gone) are forgotten."""
         elapsed = _clock() - self.start
         objs = []
         for key, secs in list(self.objs.items()):
@@ -209,12 +272,114 @@ class Tracker(object):
                     continue
                 objs.append((key[1], loadfmt.obj_id(key[2]), secs, True))
             elif kind == 'g':
+                if key[1] not in groups:
+                    del self.objs[key]
+                    continue
                 objs.append((key[1], pe, secs, False))
             else:
                 cid = key[1]
-                objs.append((-1, loadfmt.chare_obj_id(cid) if cid else 0, secs, False))
+                if cid is None or cid not in chares:
+                    del self.objs[key]
+                    continue
+                objs.append((-1, loadfmt.chare_obj_id(cid), secs, False))
         idle = max(0.0, elapsed - self.busy)
         return (pe, time.time(), elapsed, idle, objs, dict(self.eps))
+
+
+class Requests(object):
+    """PE 0: the CCS requests and the gathers that answer them. No charm
+    calls of its own (they are passed in), so it can be tested alone.
+
+    start_gather(gen) asks every PE for a snapshot; gathered(items) must
+    then be called with the gather, items = [(gen, snapshot), ...].
+    delay_reply() returns a token, send_delayed(token, bytes) and
+    send_reply(bytes) answer, schedule(fn, secs, args) runs fn(*args) later.
+    """
+
+    def __init__(self, num_pes, start_gather, delay_reply, send_delayed, send_reply,
+                 schedule, clock=_clock, timeout=GATHER_TIMEOUT, fresh=FRESH_SECONDS):
+        self.num_pes = num_pes
+        self.start_gather = start_gather
+        self.delay_reply = delay_reply
+        self.send_delayed = send_delayed
+        self.send_reply = send_reply
+        self.schedule = schedule
+        self.clock = clock
+        self.timeout = timeout
+        self.fresh = fresh
+        self.gen = 0             # number of the newest gather started
+        self.gathering = False   # gather self.gen is outstanding
+        self.waiting = []        # (kind, token) until it is back or timed out
+        self.last = None         # the newest gather, one snapshot per PE
+        self.last_t = None       # when it arrived (clock())
+        self.ep_prev = None      # {pe: (now, eps)} at the last SumDetail reply
+        self.ep_fresh = False    # self.last has not been used for SumDetail yet
+
+    def request(self, kind):
+        """kind 'obj' or 'ep': answer once a gather started now is back."""
+        self.waiting.append((kind, self.delay_reply()))
+        if not self.gathering:
+            self.gathering = True
+            self.gen += 1
+            gen = self.gen
+            self.schedule(self.timed_out, self.timeout, [gen])
+            self.start_gather(gen)
+
+    def sumdetail(self):
+        # A viewer asks for objects and then for entry methods each second:
+        # the second request is answered from the gather the first one made,
+        # if that is recent.
+        if self.ep_fresh and self.clock() - self.last_t < self.fresh:
+            self.send_reply(self.reply('ep'))
+        else:
+            self.request('ep')
+
+    def gathered(self, items):
+        # Reductions arrive in order and each PE contributes to them in
+        # order, so every gather is newer, PE by PE, than the one before,
+        # even one that comes after its timeout. Broadcasts may overtake
+        # each other: a gather answers the outstanding requests only if
+        # every PE made its snapshot for the newest gather (or later).
+        self.last = [snap for _, snap in items]
+        self.last_t = self.clock()
+        self.ep_fresh = True
+        gen = min(g for g, _ in items) if items else 0
+        if self.gathering and gen >= self.gen:
+            self.gathering = False
+            self._answer(False)
+
+    def timed_out(self, gen):
+        if self.gathering and gen == self.gen:
+            self.gathering = False
+            self._answer(True)
+
+    def _answer(self, timed_out):
+        waiting, self.waiting = self.waiting, []
+        ep_msg = None
+        for kind, token in waiting:
+            if kind == 'obj':
+                msg = self.reply('obj')
+            else:
+                # every SumDetail request of this gather gets the same interval
+                if ep_msg is None:
+                    if timed_out and not self.ep_fresh:
+                        ep_msg = loadfmt.encode_sumdetail(self.num_pes, [])
+                    else:
+                        ep_msg = self.reply('ep')
+                msg = ep_msg
+            self.send_delayed(token, msg)
+
+    def reply(self, kind):
+        if kind == 'obj':
+            return loadfmt.encode_objloads(p[:5] for p in (self.last or ()))
+        if self.last is None:
+            return loadfmt.encode_sumdetail(self.num_pes, [])
+        cur = {p[0]: (p[1], p[5]) for p in self.last}
+        prev, self.ep_prev, self.ep_fresh = self.ep_prev, cur, False
+        if prev is None:
+            return loadfmt.encode_sumdetail(self.num_pes, [])
+        return loadfmt.encode_sumdetail(self.num_pes,
+                                        [loadfmt.ep_percentages(prev, cur, self.num_pes)])
 
 
 @register
@@ -226,58 +391,35 @@ class AppSpectorLoads(Chare):
         fanout = [gid for gid, g in charm.groups.items() if isinstance(g, SectionManager)]
         self.tracker = Tracker(charm.threadMgr.main_gr, skip_gids=[mygid], fanout_gids=fanout)
         self.tracker.install(charm, charm.threadMgr)
-        self.waiting = []        # PE 0: (kind, delayed reply) until the gather is back
-        self.gathering = False
-        self.last = None         # PE 0: the newest gather, one tuple per PE
-        self.ep_prev = None      # PE 0: {pe: (now, eps)} at the last SumDetail reply
-        self.ep_fresh = False    # a gather arrived since the last SumDetail reply
+        self.requests = None
         if charm.myPe() == 0:
+            self.requests = Requests(charm.numPes(), self._start_gather, charm.CcsDelayReply,
+                                     charm.CcsSendDelayedReply, charm.CcsSendReply,
+                                     charm.scheduleCallableAfter)
+            self.tracker.quiet = self.requests
             charm.CcsRegisterHandler(OBJLOADS_HANDLER, self._objloads_handler)
             charm.CcsRegisterHandler(SUMDETAIL_HANDLER, self._sumdetail_handler)
             charm.CcsRegisterHandler(STS_HANDLER, self._sts_handler)
 
     # -- every PE ----------------------------------------------------------
 
-    def report(self):
-        self.reduce(self.thisProxy[0].gathered,
-                    self.tracker.snapshot(charm.myPe(), charm.arrays), charm.reducers.gather)
+    def report(self, gen=0):
+        snap = self.tracker.snapshot(charm.myPe(), charm.arrays, charm.groups, charm.chares)
+        self.reduce(self.thisProxy[0].gathered, (gen, snap), charm.reducers.gather)
 
     # -- PE 0 --------------------------------------------------------------
 
-    def _request(self, kind):
-        self.waiting.append((kind, charm.CcsDelayReply()))
-        if not self.gathering:
-            self.gathering = True
-            self.thisProxy.report()
+    def _start_gather(self, gen):
+        self.thisProxy.report(gen)
 
-    def gathered(self, pes):
-        self.gathering = False
-        self.last = pes
-        self.ep_fresh = True
-        waiting, self.waiting = self.waiting, []
-        for kind, token in waiting:
-            charm.CcsSendDelayedReply(token, self._reply(kind))
-
-    def _reply(self, kind):
-        if kind == 'obj':
-            return loadfmt.encode_objloads(p[:5] for p in self.last)
-        cur = {p[0]: (p[1], p[5]) for p in self.last}
-        prev, self.ep_prev, self.ep_fresh = self.ep_prev, cur, False
-        if prev is None:
-            return loadfmt.encode_sumdetail(charm.numPes(), [])
-        return loadfmt.encode_sumdetail(charm.numPes(),
-                                        [loadfmt.ep_percentages(prev, cur, charm.numPes())])
+    def gathered(self, items):
+        self.requests.gathered(items)
 
     def _objloads_handler(self, data):
-        self._request('obj')
+        self.requests.request('obj')
 
     def _sumdetail_handler(self, data):
-        # A viewer asks for objects and then for entry methods each second:
-        # the second request is answered from the gather the first one made.
-        if self.ep_fresh:
-            charm.CcsSendReply(self._reply('ep'))
-        else:
-            self._request('ep')
+        self.requests.sumdetail()
 
     def _sts_handler(self, data):
         names = {}

@@ -5,10 +5,16 @@ Element i of an array spins (i + 1) * 2 ms per step, called by broadcast
 resumes after a future (time after a resume charged to its entry method).
 Then a gather is taken the way a CCS request takes it and checked.
 """
+import os
 import struct
+import sys
 import time
 
-from charm4py import charm, Chare, Array, Reducer, coro, appspector, loadfmt
+from charm4py import charm, Chare, Array, Group, Reducer, coro, appspector, loadfmt
+from charm4py.charm import Charm4PyError
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import state     # the parts that need no running job
 
 UNIT = 0.002
 STEPS = 20
@@ -33,32 +39,32 @@ class Elem(Chare):
         self.reduce(done, None, Reducer.nop)
 
 
-def test_format():
-    assert loadfmt.obj_id((7,)) == 7
-    assert loadfmt.obj_id((1, 2)) == (1 << 32) | 2
-    assert loadfmt.obj_id(('a', 1)) == loadfmt.obj_id(('a', 1))
-    data = loadfmt.encode_objloads([(1, 10.0, 5.0, 2.0, [(3, 4, 1.5, True)])])
-    assert struct.unpack('<iidddiQidB', data) == (1, 1, 10.0, 5.0, 2.0, 1, 4, 3, 1.5, 1)
-    items = loadfmt.ep_percentages({0: (0.0, {5: 0.0}), 1: (0.0, {})},
-                                   {0: (1.0, {5: 0.5}), 1: (1.0, {5: 0.25})}, 2)
-    assert items == [(5, 37.5)], items
-    assert loadfmt.encode_sumdetail(2, [items]) == struct.pack('<iihhB', 1, 2, 1, 5, 94)
-    assert loadfmt.encode_sumdetail(2, []) == struct.pack('<i', 0)
-    assert 'ENTRY CHARE 9 "A.b" 0 0' in loadfmt.sts_text({9: 'A.b'})
+class Probe(Chare):
+
+    def serve_here(self):
+        try:
+            appspector.serve()
+        except Charm4PyError:
+            return True
+        return False
 
 
 def gather(proxy):
-    local = charm.groups[proxy.gid]
-    local.last = None
-    proxy.report()
-    while local.last is None:
+    # the way a request gathers, without a CCS client
+    r = charm.groups[proxy.gid].requests
+    r.last = None
+    r.gen += 1
+    proxy.report(r.gen)
+    while r.last is None:
         charm.sleep(0.01)
-    return local.last
+    return r.last
 
 
 def main(args):
-    test_format()
+    state.run()
     proxy = appspector.serve()
+    assert appspector.serve() is proxy       # a second call does nothing
+    assert Group(Probe)[1].serve_here(ret=True).get()   # refused on PE 1
     n = charm.numPes() * 2
     elems = Array(Elem, n)
     charm.awaitCreation(elems)
@@ -69,6 +75,14 @@ def main(args):
     elems.resumed(STEPS, done)
     done.get()
     after = gather(proxy)
+    # the gather timer through the wrapped triggerCallable (a stale gather
+    # number: does nothing) is not charged as load
+    r = charm.groups[proxy.gid].requests
+    timer_before = r.last[0][5].get(loadfmt.TIMER_EP, 0.0)
+    charm.scheduleCallableAfter(r.timed_out, 0.01, [0])
+    charm.sleep(0.05)
+    assert not r.gathering and not r.waiting
+    assert charm.groups[proxy.gid].tracker.eps.get(loadfmt.TIMER_EP, 0.0) <= timer_before + 0.04
     names = {ep: '%s.%s' % (em.C.__name__, em.name) for ep, em in charm.entryMethods.items()}
     # a class has one entry method per collection type it is registered for
     ep_work = {ep for ep, nm in names.items() if nm == 'Elem.work'}
