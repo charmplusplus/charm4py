@@ -316,5 +316,9 @@
     {
         "path": "examples/ray/mandelbrot/mandelbrot.py",
         "args": "100 100 10 10"
+    },
+    {
+        "force_min_processes": 2,
+        "path": "tests/appspector/loads.py"
     }
 ]
