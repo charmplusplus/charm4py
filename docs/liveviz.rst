@@ -52,8 +52,9 @@ the image. This entry method has following structure:
 Here, “local_width” and “local_height” are the size, in pixels, of this array
 element’s portion of the image, contributed in data (described
 below). This will show up on the client’s assembled image at 0-based
-pixel (start_x,start_y). LiveViz combines image chunks by doing a saturating sum of
-overlapping pixel values.
+pixel (start_x,start_y). LiveViz combines image chunks by adding
+overlapping pixel values modulo 256 (unlike C++ liveViz, which saturates at
+255), and clips any part of a chunk that falls outside the global image.
 
 Format of deposit image
 -----------------------
@@ -93,6 +94,18 @@ The liveviz.Config parameters are:
    client application. If set to True, the client will repeatedly
    request for images. When set to False the client will only request
    for images when its window is resized and needs to be updated. This also defaults to True.
+
+Image requests and compression
+------------------------------
+
+The entry method receives the client's request (liveviz.ImageRequest) with
+its width, height and request_type, and, for 3D clients, the view (x, y, z,
+o, minZ, maxZ). Clients using the version 2 request format can ask for a
+JPEG-compressed reply (compression_type 1, at compression_quality); the
+server compresses with Pillow if it is installed, and otherwise (or for an
+unknown compression type) sends an empty reply and prints a warning once,
+like a C++ liveViz server built without libjpeg. Each request gets its own
+reply, also when several clients ask at the same time.
 
 Poll Mode
 ---------
