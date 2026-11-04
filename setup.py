@@ -585,13 +585,21 @@ if sys.version_info[0] >= 3:
             cobject_extra_args=["-Wl,-rpath,$ORIGIN/.libs"]
             
     cudaBuild = os.environ.get('CHARM_EXTRA_BUILD_OPTS', '').find('cuda') != -1
+
+    # GCC 14 makes these two warnings errors by default; the generated Cython
+    # code and charm's headers trigger them (charm4py calls functions charm
+    # does not declare in its exported headers), so keep them warnings.
+    ext_compile_args = []
+    if os.name != 'nt':
+        ext_compile_args = ['-Wno-error=incompatible-pointer-types',
+                            '-Wno-error=implicit-function-declaration']
     
     extensions.extend(cythonize(setuptools.Extension('charm4py.charmlib.charmlib_cython',
                             sources=['charm4py/charmlib/charmlib_cython.pyx'],
                             include_dirs=[os.path.join(charm_build_dir, 'include')] + my_include_dirs,
                             library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                             libraries=["charm"],
-                            extra_compile_args=[],
+                            extra_compile_args=ext_compile_args,
                             extra_link_args=extra_link_args,
                             ), compile_time_env={'HAVE_NUMPY': haveNumpy,
                                                  'HAVE_CUDA_BUILD': cudaBuild}))
@@ -601,7 +609,7 @@ if sys.version_info[0] >= 3:
                             include_dirs=[os.path.join(charm_build_dir, 'include')] + my_include_dirs,
                             library_dirs=[os.path.join(os.getcwd(), 'charm4py', '.libs')],
                             libraries=["charm"],
-                            extra_compile_args=[],
+                            extra_compile_args=ext_compile_args,
                             extra_link_args=cobject_extra_args,
                             ), compile_time_env={'HAVE_NUMPY': haveNumpy,
                                                  'HAVE_CUDA_BUILD': cudaBuild}))
