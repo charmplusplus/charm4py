@@ -1,6 +1,7 @@
 """charm4py.appspector without a running job: the reply formats, the
-per-PE counters (pruning, install once) and PE 0's request state (gather
-timeout, late gathers, freshness of a gather reused for SumDetail).
+per-PE counters (pruning, install once, section deliveries) and PE 0's
+request state (gather timeout, late gathers, freshness of a gather reused
+for SumDetail).
 
     python tests/appspector/state.py
 
@@ -97,6 +98,49 @@ class Clock(object):
 
     def __call__(self):
         return self.t
+
+
+def test_section_fanout():
+    # A section message reaches the section manager group (gid 3), whose
+    # entry method hands it on to each member: each member's call must be
+    # charged to that member, the manager keeping only its own time.
+    class Proxy(object):
+        def __init__(self, **ids):
+            self.__dict__.update(ids)
+
+    class Obj(object):
+        def __init__(self, proxy, index=None):
+            self.thisProxy, self.thisIndex = proxy, index
+
+    clock = Clock()
+    manager = Obj(Proxy(gid=3))
+    members = [Obj(Proxy(aid=5), (i,)) for i in range(3)]
+
+    class SectionCharm(FakeCharm):
+        def recvGroupMsg(self, gid, ep, msg, dcopy_start):
+            self.invokeEntryMethod(manager, ep, None, ())     # as charm.recvGroupMsg
+        def invokeEntryMethod(self, obj, ep, header, args, ret_fut=False):
+            if obj is manager:                                 # SectionManager.sendToSection
+                clock.t += 0.001
+                for m in members:
+                    self.invokeEntryMethod(m, 8, None, ())
+            else:                                              # a member's entry method
+                clock.t += 0.01 * (obj.thisIndex[0] + 1)
+
+    saved = appspector._clock
+    appspector._clock = clock
+    try:
+        c = SectionCharm()
+        t = appspector.Tracker(getcurrent(), fanout_gids=[3])
+        t.install(c, FakeThreads())
+        c.recvGroupMsg(3, 7, b'', 0)
+    finally:
+        appspector._clock = saved
+    want = {('a', 5, (0,)): 0.01, ('a', 5, (1,)): 0.02, ('a', 5, (2,)): 0.03, ('g', 3): 0.001}
+    assert set(t.objs) == set(want), t.objs
+    assert all(abs(t.objs[k] - v) < 1e-9 for k, v in want.items()), t.objs
+    assert abs(t.eps[8] - 0.06) < 1e-9 and abs(t.eps[7] - 0.001) < 1e-9, t.eps
+    assert abs(t.busy - 0.061) < 1e-9, t.busy
 
 
 class Harness(object):
@@ -224,6 +268,7 @@ def run():
     test_format()
     test_snapshot_prunes()
     test_install_once()
+    test_section_fanout()
     test_gather_and_reuse()
     test_freshness()
     test_timeout_and_late_gather()

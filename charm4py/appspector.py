@@ -196,6 +196,7 @@ class Tracker(object):
                                 '(use appspector.serve(), once, on PE 0)')
         c._appspector_tracker = self
         run, st, skip, fanout = self.run, self.stack, self.skip, self.fanout
+        fanout_keys = frozenset(('g', gid) for gid in fanout)
         o = self.originals
         for name in ('recvArrayMsg', 'recvGroupMsg', 'recvChareMsg', 'recvArrayBcast',
                      'invokeEntryMethod', 'triggerCallable'):
@@ -220,7 +221,10 @@ class Tracker(object):
             return run(None, ep, _o, (aid, indexes, ep, msg, dcopy_start))
 
         def invokeEntryMethod(obj, ep, header, args, ret_fut=False, _o=o['invokeEntryMethod']):
-            if st and st[-1][0] is None:        # a broadcast or section delivery
+            # inside a broadcast (key None), or inside the section manager
+            # handing a section message on to its members: the call is the
+            # receiving chare's, not the frame's
+            if st and (st[-1][0] is None or st[-1][0] in fanout_keys):
                 return run(_objkey(obj), ep, _o, (obj, ep, header, args, ret_fut))
             return _o(obj, ep, header, args, ret_fut)
 
