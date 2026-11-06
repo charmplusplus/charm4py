@@ -52,8 +52,9 @@ the image. This entry method has following structure:
 Here, “local_width” and “local_height” are the size, in pixels, of this array
 element’s portion of the image, contributed in data (described
 below). This will show up on the client’s assembled image at 0-based
-pixel (start_x,start_y). LiveViz combines image chunks by doing a saturating sum of
-overlapping pixel values.
+pixel (start_x,start_y). LiveViz combines image chunks by adding
+overlapping pixel values, saturating at 255 (as C++ liveViz does), and
+clips any part of a chunk that falls outside the global image.
 
 Format of deposit image
 -----------------------
@@ -66,7 +67,10 @@ graphics fashion) is stored at array offset “x+y*width”.
 If the image is gray-scale (as determined by liveVizConfig, below), each
 pixel is represented by one byte. If the image is color, each pixel is
 represented by 3 consecutive bytes representing red, green, and blue
-intensity.
+intensity. "data" may be bytes or bytearray, or a NumPy array or list of
+numbers; values outside 0..255 are clipped (not wrapped). (A memoryview
+cannot be deposited, since deposits are pickled, and an ``array.array`` is
+read as its raw bytes.)
 
 liveViz Initialization
 ----------------------
@@ -93,6 +97,26 @@ The liveviz.Config parameters are:
    client application. If set to True, the client will repeatedly
    request for images. When set to False the client will only request
    for images when its window is resized and needs to be updated. This also defaults to True.
+
+Image requests and compression
+------------------------------
+
+The entry method receives the client's request (liveviz.ImageRequest) with
+its width, height and request_type, and, for 3D clients, the view (x, y, z,
+o, minZ, maxZ). Clients using the version 2 request format can ask for a
+JPEG-compressed reply (compression_type 1, at compression_quality); the
+server compresses with Pillow if it is installed, and otherwise (or for an
+unknown compression type) sends an empty reply and prints a warning once,
+like a C++ liveViz server built without libjpeg. Run-length compression
+(compression_type 2, which C++ liveViz supports) is not implemented and is
+also answered with an empty reply. Each request gets its own reply, also when
+several clients ask at the same time: requests are answered in the order they
+arrived, so the callback must lead to exactly one deposit per request, from
+one array (reductions of different arrays or sections are not ordered with
+respect to each other). If the callback raises, that request is answered with
+an empty reply. Requests for images larger than 64 Mpixel
+(liveviz.MAX_REPLY_PIXELS) are answered at once with an empty reply and a
+warning, without calling the callback or using a poll-mode image.
 
 Poll Mode
 ---------
