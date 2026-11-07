@@ -13,20 +13,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.10", "3.12", "3.14"]
-        # macos-13 is x86_64, macos-14 is arm64
-        os: [ubuntu-latest, macos-14, macos-15, macos-26]
-        exclude:
-          - os: macos-26
-            python-version: "3.14"
+        # oldest supported, a middle one, newest
+        python-version: ["3.10", "3.13", "3.15"]
+        # the macOS runners are arm64 with 3 cores; Linux runners have 4
+        os: [ubuntu-26.04, macos-15, macos-26]
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Need full repo for 'git describe' used by setup.py
       - name: setup-python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -39,12 +37,17 @@ jobs:
           # only Reconverse triplets (the reconverse job below)
           git clone --branch classic https://github.com/charmplusplus/charm charm_src/charm
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-          export CHARM_BUILD_PROCESSES=8
+          export CHARM_BUILD_PROCESSES=$(getconf _NPROCESSORS_ONLN)   # one per core
           export CHARM4PY_BUILD_CFFI=1
           pip install -e .
+      - name: Run liveViz unit tests
+        run: python -m unittest tests/liveviz/test_liveviz_unit.py
       - name: Run auto_test.py
         run: |
           export PYTHONPATH="$PWD"
+          # most tests ask for 4 processes (test_config.json) and need them:
+          # on macOS that is 4 PEs on 3 cores, which classic Converse
+          # handles (the test step takes about 2 minutes there)
           export CHARM4PY_TEST_NUM_PROCESSES=2
           # needed for param server
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
@@ -53,13 +56,16 @@ jobs:
   # Charm4py on Charm++ with Reconverse (Charm++'s recharm line), over LCI.
   reconverse:
     runs-on: ${{ matrix.os }}
+    # On the macOS runners every test launch takes about 36 s, with 2 PEs
+    # as with 4, so it is not the 3 cores (cause not found yet; about 1 s on
+    # Linux and on a Mac laptop): the test step takes about 50 minutes there.
     timeout-minutes: 90
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-26.04
             triplet: reconverse-linux-x86_64
-          - os: macos-latest  # Apple Silicon
+          - os: macos-26  # Apple Silicon, 3 cores
             triplet: reconverse-darwin-arm8
       fail-fast: false
     env:
@@ -72,13 +78,13 @@ jobs:
       FI_PROVIDER: tcp
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Need full repo for 'git describe' used by setup.py
       - name: setup-python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install dependencies
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
@@ -93,8 +99,11 @@ jobs:
           git clone --branch "$CHARM_REF" --recurse-submodules https://github.com/charmplusplus/charm charm_src/charm
           export CHARM4PY_BUILD_TRIPLET=${{ matrix.triplet }}
           export CHARM_EXTRA_BUILD_OPTS="--enable-error-checking"
-          export CHARM_BUILD_PROCESSES=4
+          export CHARM_BUILD_PROCESSES=$(getconf _NPROCESSORS_ONLN)   # one per core
           pip install .
+      - name: Run liveViz unit tests
+        # in the source tree: they load charm4py/liveviz.py from it
+        run: python -m unittest tests/liveviz/test_liveviz_unit.py
       - name: Run auto_test.py on the installed package
         run: |
           # An installed Charm4py must not need the Charm++ build tree:

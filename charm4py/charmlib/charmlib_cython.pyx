@@ -525,7 +525,7 @@ class CharmLib(object):
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
     # TODO: do we want to track/free these pointers?
-    cdef char** c1 = to_cstring_array(self.emNames)
+    cdef const char** c1 = <const char**>to_cstring_array(self.emNames)
     CkRegisterMainChareExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
@@ -534,7 +534,7 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
-    cdef char** c1 = to_cstring_array(self.emNames)
+    cdef const char** c1 = <const char**>to_cstring_array(self.emNames)
     CkRegisterGroupExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
@@ -543,7 +543,7 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
-    cdef char** c1 = to_cstring_array(self.emNames)
+    cdef const char** c1 = <const char**>to_cstring_array(self.emNames)
 
     CkRegisterSectionManagerExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
@@ -553,7 +553,7 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
-    cdef char** c1 = to_cstring_array(self.emNames)
+    cdef const char** c1 = <const char**>to_cstring_array(self.emNames)
     CkRegisterArrayMapExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
     return chareIdx, startEpIdx
@@ -562,7 +562,7 @@ class CharmLib(object):
     self.chareNames.append(name.encode())
     cdef int chareIdx, startEpIdx
     self.emNames += [name.encode() for name in entryMethodNames]
-    cdef char** c1 = to_cstring_array(self.emNames)
+    cdef const char** c1 = <const char**>to_cstring_array(self.emNames)
     CkRegisterArrayExt(self.chareNames[-1], c1, self.emStart, numEntryMethods, &chareIdx, &startEpIdx)
     self.emStart = len(self.emNames)
     return chareIdx, startEpIdx

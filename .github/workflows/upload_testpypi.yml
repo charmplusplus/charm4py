@@ -11,7 +11,7 @@ on:
 jobs:
   publish_test:
     name: Publish Python 🐍 distribution 📦 to TestPyPI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     environment:
       name: testpypi
@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Download all the dists
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v28
         with:
           # download all the wheels
           path: unmerged
