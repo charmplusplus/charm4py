@@ -78,6 +78,9 @@ def load_steer():
             obj.__init__(*args)
             return types.SimpleNamespace(obj=obj)   # a "proxy": no second __init__
 
+        def setMigratable(self, migratable):
+            self.migratable = migratable
+
     charm_mod.charm = fake
     charm_mod.Chare = Chare
     charm_mod.register = lambda C: C
@@ -166,6 +169,11 @@ class SteerTests(unittest.TestCase):
             s.expose(3, "three")
         s.unexpose("cee")
         self.assertNotIn("cee", s.exposed())
+
+    def test_agent_not_migratable(self):
+        # its CCS handler and reply tokens belong to PE 0's process
+        self.start()
+        self.assertIs(self.steer._agent.obj.migratable, False)
 
     def test_list(self):
         def set_rate(rate: float, clamp=True):

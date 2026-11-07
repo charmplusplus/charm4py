@@ -444,6 +444,9 @@ class SteerAgent(Chare):
     namespace = None            # eval globals; None: __main__'s
 
     def __init__(self, allow_eval, verbose, max_inflight=MAX_INFLIGHT, timeout=None):
+        # a load balancer must not move it: the CCS handler and the
+        # delayed-reply tokens belong to PE 0's process
+        self.setMigratable(False)
         self.verbose = verbose
         self.max_inflight = max_inflight
         self.timeout = timeout
