@@ -20,7 +20,8 @@ from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARE, CHARM_TYPES
 from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare
 from .chare import (CKDYN_MAINCHARE, CKDYN_CHARE, CKDYN_GROUP, CKDYN_NODEGROUP,
-                    CKDYN_ARRAY, CKDYN_ARRAYMAP, CKDYN_EP_THREADED, CKDYN_PUP_MIGRATE)
+                    CKDYN_ARRAY, CKDYN_ARRAYMAP, CKDYN_EP_THREADED, CKDYN_PUP_MIGRATE,
+                    CKDYN_PUP_SIZING)
 from . import entry_method
 from . import threads
 from .threads import Future, LocalFuture, LocalMultiFuture
@@ -415,22 +416,37 @@ class Charm(object):
         return self.redMgr.reducers_by_id[rid](values)
 
     def _pack(self, obj, reason):
-        """ pickled obj for migration or checkpoint; None refuses (a coroutine of obj is suspended) """
-        if reason == CKDYN_PUP_MIGRATE and obj._nsuspended > 0:
-            return None
+        """ pickled obj for migration or checkpoint; None refuses (a coroutine of obj is
+            suspended). reason may include CKDYN_PUP_SIZING: the bytes of a sizing pass
+            are kept on obj and returned by the packing pass that follows. A sizing
+            pass can also run alone (AtSync under +MetaLB sizes every element), so it
+            never refuses and changes nothing else; the element leaves charm.arrays in
+            _destruct, when the runtime deletes it after it has migrated. """
+        sizing = reason & CKDYN_PUP_SIZING
+        why = reason & 0xff
+        d = obj.__dict__
+        cached = d.pop('_ckdyn_packed', None)
+        if why == CKDYN_PUP_MIGRATE and obj._nsuspended > 0:
+            if not sizing:
+                return None
+            # sizing alone, or the sizing pass of a migration that the packing pass
+            # refuses: report the size only
+        elif not sizing and cached is not None and cached[0] == why:
+            return cached[1]
         if hasattr(obj, '__channels__'):
             assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
-        target = obj.__dict__.pop('_ckdyn_target', None)
+        target = d.pop('_ckdyn_target', None)
         try:
             data = cPickle.dumps(obj, self.options.pickle_protocol)
+        except Exception as e:
+            raise Charm4PyError('cannot pickle ' + type(obj).__name__ + str(getattr(obj, 'thisIndex', '')) +
+                                (' for migration' if why == CKDYN_PUP_MIGRATE else ' for a checkpoint') +
+                                ': ' + type(e).__name__ + ': ' + str(e)) from e
         finally:
             if target is not None:
                 obj._ckdyn_target = target
-        if reason == CKDYN_PUP_MIGRATE and target is not None and target.kind == CKDYN_ARRAY:
-            elems = self.arrays.get(target.aid)
-            index = tuple(target.index)
-            if elems is not None and elems.get(index) is obj:
-                del elems[index]
+        if sizing and not (why == CKDYN_PUP_MIGRATE and obj._nsuspended > 0):
+            d['_ckdyn_packed'] = (why, data)
         return data
 
     def _unpack(self, target, reason, data):

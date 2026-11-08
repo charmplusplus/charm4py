@@ -1469,22 +1469,28 @@ void h_destruct(void *, void *handle) {
   Py_DECREF(obj);
 }
 
+// Every call goes to charm._pack with the full reason (CKDYN_PUP_SIZING included).
+// The Python side keeps the bytes of a sizing pass on the object and returns them on
+// the packing pass that follows, after checking again that the object may be packed:
+// a sizing pass also runs alone (AtSync under +MetaLB sizes every element with a
+// migration pupper), so neither the refusal nor the cached bytes may depend on it.
+// tls.packed holds the bytes only from this call to h_pack.
 size_t h_pack_size(void *, void *handle, int reason) {
   Gil g;
+  PyObject *ro = PyLong_FromLong(reason);
+  PyObject *data = ro ? call(c_pack, {(PyObject *)handle, ro}) : nullptr;
+  Py_XDECREF(ro);
+  if (!data) hook_abort("charm._pack");
+  if (data == Py_None) { Py_DECREF(data); return CKDYN_PACK_REFUSED; }
+  if (!PyBytes_Check(data)) { Py_DECREF(data); PyErr_SetString(PyExc_TypeError, "charm._pack must return bytes or None"); hook_abort("charm._pack"); }
+  size_t n = (size_t)PyBytes_GET_SIZE(data);
   auto it = tls.packed.find(handle);
-  if ((reason & CKDYN_PUP_SIZING) || it == tls.packed.end()) {
-    PyObject *ro = PyLong_FromLong(reason & 0xff);
-    PyObject *data = ro ? call(c_pack, {(PyObject *)handle, ro}) : nullptr;
-    Py_XDECREF(ro);
-    if (!data) hook_abort("charm._pack");
-    if (data == Py_None) { Py_DECREF(data); return CKDYN_PACK_REFUSED; }
-    if (!PyBytes_Check(data)) { Py_DECREF(data); PyErr_SetString(PyExc_TypeError, "charm._pack must return bytes or None"); hook_abort("charm._pack"); }
-    it = tls.packed.find(handle);
-    if (it != tls.packed.end()) { Py_DECREF(it->second); it->second = data; }
-    else tls.packed.emplace(handle, data);
-    return (size_t)PyBytes_GET_SIZE(data);
-  }
-  return (size_t)PyBytes_GET_SIZE(it->second);
+  if (reason & CKDYN_PUP_SIZING) {   // the packing pass asks again; keep nothing here
+    if (it != tls.packed.end()) { Py_DECREF(it->second); tls.packed.erase(it); }
+    Py_DECREF(data);
+  } else if (it != tls.packed.end()) { Py_DECREF(it->second); it->second = data; }
+  else tls.packed.emplace(handle, data);
+  return n;
 }
 
 void h_pack(void *bd, void *handle, int reason, void *buf, size_t len) {
