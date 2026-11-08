@@ -14,15 +14,19 @@ stacked by the chares that ran on it (by PE, PE grid) and the utilization by
 Python entry method over time.
 
 How it measures. serve() creates a group whose constructor, on every PE,
-wraps the few functions through which the Charm++ runtime hands work to
-Python (charm.recvArrayMsg, recvGroupMsg, recvChareMsg, recvArrayBcast,
-invokeEntryMethod, triggerCallable, and the coroutine resume/pause of the
-thread manager). Each wrapped call is timed with time.perf_counter() and its
-exclusive time is charged to the chare it ran on and to its entry method;
-time a coroutine runs after a resume is charged to the chare and entry
-method it was started in. Busy time of a PE is the time spent inside these
-calls (message unpickling included), idle time is the rest of the wall
-time; time in C++ outside them (reductions, the scheduler) counts as idle.
+gives the binding a meter (charm4py._ckdyn.set_meter): the binding calls
+Tracker.enter before, and Tracker.leave after, every delivery of an entry
+method (each element of an array broadcast and each member of a section
+separately), every construction and every unpacking of a migrated element.
+It also wraps charm.triggerCallable (timers) and the coroutine resume/pause
+of the thread manager. Each such call is timed with time.perf_counter() and
+its exclusive time is charged to the chare it ran on and to its entry
+method; time a coroutine runs after a resume is charged to the chare and
+entry method it was started in. Busy time of a PE is the time spent inside
+these calls (argument conversion included), idle time is the rest of the
+wall time; time in C++ outside them (reductions, the scheduler) counts as
+idle. This is a measurement of its own, not the load balancer's database:
+CkDyn has no call that reads an object's load from that database.
 Nothing is sent anywhere until a client asks: a request to PE 0 broadcasts
 to the group, every PE contributes its cumulative counters and a gather
 reduction brings them back to PE 0, which replies. The group's own work
@@ -47,19 +51,17 @@ than FRESH_SECONDS old; otherwise it makes its own.
 
 What is not attributed, or attributed coarsely:
 
-  - The mainchare's constructor runs in buildMainchare, which is not
-    wrapped, and serve() is called from it: its time before serve()
-    returns is idle.
+  - The mainchare's constructor is not measured, and serve() is called
+    from it: its time before serve() returns is idle.
   - A migrated array element starts again from 0 on its new PE (the time
     it ran on the old PE is not carried along); unpickling it and its
-    migrated() method are charged to it under the entry method of the
-    constructor (the runtime delivers it as a constructor message).
+    migrated() method are charged to it with no entry method.
   - Entry methods that charm4py invokes from inside another chare's call
     (a when-condition's queue flushed by a different message, ray futures
-    released by the object store, a group handing a message on to local
-    objects) are charged to the chare and entry method of that outer call;
-    only broadcasts and section deliveries (recvArrayBcast, the section
-    manager group) are split per receiving chare.
+    released by the object store) are charged to the chare and entry
+    method of that outer call. Converting the arguments of an array
+    broadcast, done once for all local elements, is charged to the entry
+    method and to no chare.
   - ('g', gid) and ('c', cid) counters are kept while the group or chare
     exists on the PE (charm.groups, charm.chares). charm4py never removes
     groups or chares from those tables, so the counters are bounded by the
@@ -131,7 +133,7 @@ class Tracker(object):
     """Per-PE accounting: exclusive seconds per chare and per entry method,
     busy seconds of the PE, from a stack of timed calls."""
 
-    def __init__(self, main_gr, skip_gids=(), fanout_gids=()):
+    def __init__(self, main_gr, skip_gids=()):
         self.start = _clock()
         self.busy = 0.0
         self.objs = {}      # internal key -> seconds
@@ -139,8 +141,7 @@ class Tracker(object):
         # frames: [key, ep, t0, child seconds, greenlet, dropped]
         self.stack = []
         self.main_gr = main_gr
-        self.skip = frozenset(skip_gids)        # groups not to measure (our own)
-        self.fanout = frozenset(fanout_gids)    # groups that deliver to other chares
+        self.skip = frozenset(('g', gid) for gid in skip_gids)   # groups not to measure (our own)
         self.originals = {}
         self.quiet = None   # callables of this object run by triggerCallable are not measured
 
@@ -153,80 +154,86 @@ class Tracker(object):
         while st and st[-1][4] is not main:
             st.pop()[5] = True
 
-    def run(self, key, ep, fn, args):
+    def enter(self, obj, ep):
+        """Open a frame for a call on chare obj (None: not known yet, or no
+        chare) running entry method ep (< 0 or None: none); the binding calls
+        it before each delivery. Returns the frame for leave(), or None when
+        the call is not measured (our own group)."""
+        key = None
+        if obj is not None:
+            key = _objkey(obj)
+            if key in self.skip:
+                return None
+        if ep is not None and ep < 0:
+            ep = None
         st = self.stack
         gr = getcurrent()
         if gr is self.main_gr and st and st[-1][4] is not gr:
             self._drop_stale()
         fr = [key, ep, 0.0, 0.0, gr, False]
         st.append(fr)
-        fr[2] = t0 = _clock()
+        fr[2] = _clock()
+        return fr
+
+    def leave(self, fr, obj=None):
+        """Close frame fr; obj, if given, is the chare the call turned out
+        to be on (a construction, an unpacking)."""
+        if fr is None:
+            return
+        dt = _clock() - fr[2]
+        if fr[0] is None and obj is not None:
+            fr[0] = _objkey(obj)
+            if fr[0] in self.skip:
+                fr[0] = None
+        if fr[5]:
+            return
+        st = self.stack
+        if st and st[-1] is fr:
+            st.pop()
+        else:
+            try:
+                st.remove(fr)
+            except ValueError:
+                pass
+            if getcurrent() is self.main_gr:
+                self._drop_stale()
+        if st:
+            st[-1][3] += dt
+        else:
+            self.busy += dt
+        ex = dt - fr[3]
+        key, ep = fr[0], fr[1]
+        if key is not None:
+            self.objs[key] = self.objs.get(key, 0.0) + ex
+        if ep is not None:
+            self.eps[ep] = self.eps.get(ep, 0.0) + ex
+
+    def run(self, key, ep, fn, args):
+        """fn(*args) in a frame charged to internal key and entry ep."""
+        fr = self.enter(None, ep)
+        fr[0] = key
         try:
             return fn(*args)
         finally:
-            dt = _clock() - t0
-            if not fr[5]:
-                if st and st[-1] is fr:
-                    st.pop()
-                else:
-                    try:
-                        st.remove(fr)
-                    except ValueError:
-                        pass
-                    if getcurrent() is self.main_gr:
-                        self._drop_stale()
-                if st:
-                    st[-1][3] += dt
-                else:
-                    self.busy += dt
-                ex = dt - fr[3]
-                if key is not None:
-                    self.objs[key] = self.objs.get(key, 0.0) + ex
-                if ep is not None:
-                    self.eps[ep] = self.eps.get(ep, 0.0) + ex
+            self.leave(fr)
 
-    def install(self, c, tm):
-        """Wrap the dispatch functions of charm c and thread manager tm (as
-        instance attributes, so the Cython layer, which looks them up on
-        every message, calls the wrappers). Once per process: if c is
-        already wrapped it raises Charm4PyError."""
+    def install(self, c, tm, set_meter):
+        """Measure on this PE: set_meter(enter, leave) gives the binding
+        this tracker's enter and leave (charm4py._ckdyn.set_meter), and
+        charm c's triggerCallable and thread manager tm's resumeThread and
+        pauseThread are wrapped (as instance attributes, which the binding
+        and threads.py look up at each call while a meter is set). Once per
+        process: if c is already measured it raises Charm4PyError."""
         if getattr(c, '_appspector_tracker', None) is not None:
             from .charm import Charm4PyError
             raise Charm4PyError('charm4py.appspector is already measuring in this process '
                                 '(use appspector.serve(), once, on PE 0)')
         c._appspector_tracker = self
-        run, st, skip, fanout = self.run, self.stack, self.skip, self.fanout
-        fanout_keys = frozenset(('g', gid) for gid in fanout)
+        run, st = self.run, self.stack
         o = self.originals
-        for name in ('recvArrayMsg', 'recvGroupMsg', 'recvChareMsg', 'recvArrayBcast',
-                     'invokeEntryMethod', 'triggerCallable'):
-            o[name] = getattr(c, name)
+        o['triggerCallable'] = getattr(c, 'triggerCallable')
         for name in ('resumeThread', 'pauseThread'):
             o[name] = getattr(tm, name)
-
-        def recvArrayMsg(aid, index, ep, msg, dcopy_start, _o=o['recvArrayMsg']):
-            return run(('a', aid, index), ep, _o, (aid, index, ep, msg, dcopy_start))
-
-        def recvGroupMsg(gid, ep, msg, dcopy_start, _o=o['recvGroupMsg']):
-            if gid in skip:
-                return _o(gid, ep, msg, dcopy_start)
-            return run(None if gid in fanout else ('g', gid), ep, _o, (gid, ep, msg, dcopy_start))
-
-        def recvChareMsg(chare_id, ep, msg, dcopy_start, _o=o['recvChareMsg']):
-            return run(('c', chare_id), ep, _o, (chare_id, ep, msg, dcopy_start))
-
-        def recvArrayBcast(aid, indexes, ep, msg, dcopy_start, _o=o['recvArrayBcast']):
-            # unpickling is charged to the entry method only; each element's
-            # call is charged to it by invokeEntryMethod below
-            return run(None, ep, _o, (aid, indexes, ep, msg, dcopy_start))
-
-        def invokeEntryMethod(obj, ep, header, args, ret_fut=False, _o=o['invokeEntryMethod']):
-            # inside a broadcast (key None), or inside the section manager
-            # handing a section message on to its members: the call is the
-            # receiving chare's, not the frame's
-            if st and (st[-1][0] is None or st[-1][0] in fanout_keys):
-                return run(_objkey(obj), ep, _o, (obj, ep, header, args, ret_fut))
-            return _o(obj, ep, header, args, ret_fut)
 
         callables = getattr(c, 'sched_callables', {})
 
@@ -251,13 +258,10 @@ class Tracker(object):
                 getcurrent()._appspector = (fr[0], fr[1])
             return _o()
 
-        for name, fn in (('recvArrayMsg', recvArrayMsg), ('recvGroupMsg', recvGroupMsg),
-                         ('recvChareMsg', recvChareMsg), ('recvArrayBcast', recvArrayBcast),
-                         ('invokeEntryMethod', invokeEntryMethod),
-                         ('triggerCallable', triggerCallable)):
-            setattr(c, name, fn)
+        c.triggerCallable = triggerCallable
         tm.resumeThread = resumeThread
         tm.pauseThread = pauseThread
+        set_meter(self.enter, self.leave)
 
     def snapshot(self, pe, arrays, groups, chares):
         """(pe, wall now, elapsed, idle, objs, eps) with objs as
@@ -390,10 +394,10 @@ class Requests(object):
 class AppSpectorLoads(Chare):
 
     def __init__(self):
+        from . import _ckdyn
         mygid = self.thisProxy.gid
-        fanout = []  # section relay groups: none until sections return (step 4b)
-        self.tracker = Tracker(charm.threadMgr.main_gr, skip_gids=[mygid], fanout_gids=fanout)
-        self.tracker.install(charm, charm.threadMgr)
+        self.tracker = Tracker(charm.threadMgr.main_gr, skip_gids=[mygid])
+        self.tracker.install(charm, charm.threadMgr, _ckdyn.set_meter)
         self.requests = None
         if charm.myPe() == 0:
             self.requests = Requests(charm.numPes(), self._start_gather, charm.CcsDelayReply,

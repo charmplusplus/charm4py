@@ -1,5 +1,5 @@
 """charm4py.appspector without a running job: the reply formats, the
-per-PE counters (pruning, install once, section deliveries) and PE 0's
+per-PE counters (pruning, install once, nested and broadcast deliveries) and PE 0's
 request state (gather timeout, late gathers, freshness of a gather reused
 for SumDetail).
 
@@ -48,13 +48,6 @@ def test_snapshot_prunes():
 class FakeCharm(object):
     def __init__(self):
         self.sched_callables = {}
-        self.calls = []
-
-    def recvArrayMsg(self, *a): self.calls.append('a')
-    def recvGroupMsg(self, *a): self.calls.append('g')
-    def recvChareMsg(self, *a): self.calls.append('c')
-    def recvArrayBcast(self, *a): self.calls.append('b')
-    def invokeEntryMethod(self, *a, **k): self.calls.append('i')
 
     def triggerCallable(self, tag):
         cb, args = self.sched_callables.pop(tag)
@@ -66,19 +59,45 @@ class FakeThreads(object):
     def pauseThread(self): pass
 
 
+class Proxy(object):
+    def __init__(self, **ids):
+        self.__dict__.update(ids)
+
+
+class Obj(object):
+    def __init__(self, proxy, index=None):
+        self.thisProxy, self.thisIndex = proxy, index
+
+
+class Meter(object):
+    """Stands in for the binding: deliver() brackets a call with the
+    tracker's enter and leave, as _ckdyn's deliver hooks do."""
+    def __init__(self):
+        self.enter = self.leave = None
+
+    def set(self, enter, leave):
+        self.enter, self.leave = enter, leave
+
+    def deliver(self, obj, ep, fn=None):
+        fr = self.enter(obj, ep)
+        if fn is not None:
+            fn()
+        self.leave(fr, None)
+
+
 def test_install_once():
-    c, tm = FakeCharm(), FakeThreads()
+    c, tm, m = FakeCharm(), FakeThreads(), Meter()
     t = appspector.Tracker(getcurrent(), skip_gids=[9])
-    t.install(c, tm)
+    t.install(c, tm, m.set)
     try:
-        appspector.Tracker(getcurrent()).install(c, tm)
+        appspector.Tracker(getcurrent()).install(c, tm, m.set)
     except Charm4PyError:
         pass
     else:
         raise AssertionError('second install did not raise')
-    c.recvGroupMsg(4, 7, b'', 0)
-    c.recvGroupMsg(9, 7, b'', 0)      # our own group: not measured
-    assert c.calls == ['g', 'g'] and set(t.objs) == {('g', 4)} and set(t.eps) == {7}
+    m.deliver(Obj(Proxy(gid=4)), 7)
+    m.deliver(Obj(Proxy(gid=9)), 7)      # our own group: not measured
+    assert set(t.objs) == {('g', 4)} and set(t.eps) == {7}
 
     class Owner(object):
         def fire(self, out):
@@ -100,47 +119,43 @@ class Clock(object):
         return self.t
 
 
-def test_section_fanout():
-    # A section message reaches the section manager group (gid 3), whose
-    # entry method hands it on to each member: each member's call must be
-    # charged to that member, the manager keeping only its own time.
-    class Proxy(object):
-        def __init__(self, **ids):
-            self.__dict__.update(ids)
-
-    class Obj(object):
-        def __init__(self, proxy, index=None):
-            self.thisProxy, self.thisIndex = proxy, index
-
+def test_nested_and_broadcast():
+    # An array broadcast: the binding converts the arguments once in a frame
+    # with no chare (entry 7), then delivers to each element in a frame of its
+    # own; one element's call delivers an inline call to a group (entry 8).
+    # Each call's exclusive time goes to its chare; the PE's busy time is the
+    # outer frame's.
     clock = Clock()
-    manager = Obj(Proxy(gid=3))
-    members = [Obj(Proxy(aid=5), (i,)) for i in range(3)]
-
-    class SectionCharm(FakeCharm):
-        def recvGroupMsg(self, gid, ep, msg, dcopy_start):
-            self.invokeEntryMethod(manager, ep, None, ())     # as charm.recvGroupMsg
-        def invokeEntryMethod(self, obj, ep, header, args, ret_fut=False):
-            if obj is manager:                                 # SectionManager.sendToSection
-                clock.t += 0.001
-                for m in members:
-                    self.invokeEntryMethod(m, 8, None, ())
-            else:                                              # a member's entry method
-                clock.t += 0.01 * (obj.thisIndex[0] + 1)
-
+    elems = [Obj(Proxy(aid=5), (i,)) for i in range(3)]
+    grp = Obj(Proxy(gid=3))
     saved = appspector._clock
     appspector._clock = clock
     try:
-        c = SectionCharm()
-        t = appspector.Tracker(getcurrent(), fanout_gids=[3])
-        t.install(c, FakeThreads())
-        c.recvGroupMsg(3, 7, b'', 0)
+        m = Meter()
+        t = appspector.Tracker(getcurrent())
+        t.install(FakeCharm(), FakeThreads(), m.set)
+        outer = m.enter(None, 7)
+        clock.t += 0.001                    # argument conversion
+        for e in elems:
+            def body(e=e):
+                clock.t += 0.01 * (e.thisIndex[0] + 1)
+                if e.thisIndex[0] == 1:
+                    m.deliver(grp, 8, lambda: setattr(clock, 't', clock.t + 0.005))
+            m.deliver(e, 7, body)
+        m.leave(outer, None)
+        # a construction: the chare is known only when it returns
+        fr = m.enter(None, 9)
+        clock.t += 0.002
+        m.leave(fr, Obj(Proxy(aid=5), (3,)))
     finally:
         appspector._clock = saved
-    want = {('a', 5, (0,)): 0.01, ('a', 5, (1,)): 0.02, ('a', 5, (2,)): 0.03, ('g', 3): 0.001}
+    want = {('a', 5, (0,)): 0.01, ('a', 5, (1,)): 0.02, ('a', 5, (2,)): 0.03, ('g', 3): 0.005,
+            ('a', 5, (3,)): 0.002}
     assert set(t.objs) == set(want), t.objs
     assert all(abs(t.objs[k] - v) < 1e-9 for k, v in want.items()), t.objs
-    assert abs(t.eps[8] - 0.06) < 1e-9 and abs(t.eps[7] - 0.001) < 1e-9, t.eps
-    assert abs(t.busy - 0.061) < 1e-9, t.busy
+    assert abs(t.eps[7] - 0.061) < 1e-9 and abs(t.eps[8] - 0.005) < 1e-9, t.eps
+    assert abs(t.eps[9] - 0.002) < 1e-9, t.eps
+    assert abs(t.busy - 0.068) < 1e-9, t.busy
 
 
 class Harness(object):
@@ -268,7 +283,7 @@ def run():
     test_format()
     test_snapshot_prunes()
     test_install_once()
-    test_section_fanout()
+    test_nested_and_broadcast()
     test_gather_and_reuse()
     test_freshness()
     test_timeout_and_late_gather()
