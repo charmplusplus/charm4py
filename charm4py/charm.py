@@ -332,6 +332,10 @@ class Charm(object):
             index = _ckdyn.my_node() if kind == CKDYN_NODEGROUP else None
             Group.initMember(obj, target.gid, index)
             super(em.C, obj).__init__()  # call Chare class __init__ first
+            if b'constrained' in header:
+                # Group(C, onPEs=...): thisProxy becomes the group section proxy
+                # when this branch joins it (_section_joined)
+                obj._constrained = True
             self.groups[target.gid] = obj
         elif kind == CKDYN_ARRAY:
             if self.options.profiling:

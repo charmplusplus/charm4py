@@ -445,19 +445,34 @@ def update_globals_proxy_method_gen(ep):
 def group_ckNew_gen(C):
     @classmethod    # make ckNew a class (not instance) method of proxy
     def group_ckNew(cls, args, onPEs):
+        if onPEs is not None:
+            return group_ckNew_constrained(cls, C, args, onPEs)
         flags, future = 0, None
         if not charm.threadMgr.isMainThread() and ArrayMap not in C.mro():
             future = charm.Future()
             flags = CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST  # the constructors contribute to it
-        pes = None
-        if onPEs is not None:
-            pes = [int(pe) for pe in onPEs]  # constrained group
-        gid = _ckdyn.create_group(C.idx[GROUP], tuple(args), flags, future, pes)
+        gid = _ckdyn.create_group(C.idx[GROUP], tuple(args), flags, future, None)
         proxy = cls(gid)
         if future is not None:
             proxy.creation_future = future
         return proxy
     return group_ckNew
+
+def group_ckNew_constrained(cls, C, args, onPEs):
+    """ Group(C, onPEs=pes): a group whose branches exist on pes only (CkDyn
+        CONSTRAINED), plus a group section over pes, whose proxy is returned and
+        becomes the thisProxy of every branch (Charm._section_joined). Called from a
+        coroutine: returns when every branch has been constructed and has joined
+        the section (the section's done callback). """
+    charm._require_coroutine('Group(C, onPEs=...)')
+    pes = sorted({int(pe) for pe in onPEs})
+    if len(pes) == 0:
+        raise Charm4PyError('Group(C, onPEs=...): onPEs is empty')
+    gid = _ckdyn.create_group(C.idx[GROUP], tuple(args), 0, None, pes)
+    done = charm.Future()
+    sid = _ckdyn.section_create_group(gid, pes, 0, done)
+    done.get()
+    return cls(gid)._as_section(sid)
 
 def group_proxy_localbranch(proxy):
     return charm.groups[proxy.gid]
