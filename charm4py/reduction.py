@@ -3,10 +3,6 @@ from functools import reduce
 import operator as op
 from itertools import chain
 import sys
-if sys.version_info[0] < 3:
-    import cPickle
-else:
-    import pickle as cPickle
 try:
     import numpy as np
     haveNumpy = True
@@ -21,19 +17,32 @@ except ImportError:
     np = NumpyDummyModule()
 
 
+from . import _ckdyn
+
 # identifiers for Charm internal reducers
 (SUM, PRODUCT, MAX, MIN, AND, OR, XOR) = range(7)
 
-NUM_C_TYPES = 13
-# Set of integer identifiers for C types used with internal reducers
-(C_BOOL, C_CHAR, C_SHORT, C_INT, C_LONG, C_LONG_LONG,
- C_UCHAR, C_USHORT, C_UINT, C_ULONG, C_ULONG_LONG,
- C_FLOAT, C_DOUBLE) = range(NUM_C_TYPES)
+# CKDYN_ELEM_* element kinds (ckdyn.h)
+(ELEM_NONE, ELEM_I8, ELEM_I16, ELEM_I32, ELEM_I64,
+ ELEM_U8, ELEM_U16, ELEM_U32, ELEM_U64,
+ ELEM_F16, ELEM_F32, ELEM_F64, ELEM_C64, ELEM_C128,
+ ELEM_BOOL, ELEM_BYTE) = range(16)
+NUM_ELEMS = 16
 
-# map names of C types (as they appear in CkReductionTypesExt) to their identifiers
-c_typename_to_id = {'char': C_CHAR, 'short': C_SHORT, 'int': C_INT, 'long': C_LONG, 'long_long': C_LONG_LONG,
-                    'uchar': C_UCHAR, 'ushort': C_USHORT, 'uint': C_UINT, 'ulong': C_ULONG, 'ulong_long': C_ULONG_LONG,
-                    'float': C_FLOAT, 'double': C_DOUBLE, 'bool': C_BOOL}
+# numpy dtype name of each element kind that numpy and the built-in reducers share
+elem_to_numpy = {ELEM_I8: 'int8', ELEM_I16: 'int16', ELEM_I32: 'int32', ELEM_I64: 'int64',
+                 ELEM_U8: 'uint8', ELEM_U16: 'uint16', ELEM_U32: 'uint32', ELEM_U64: 'uint64',
+                 ELEM_F16: 'float16', ELEM_F32: 'float32', ELEM_F64: 'float64',
+                 ELEM_C64: 'complex64', ELEM_C128: 'complex128', ELEM_BOOL: 'bool'}
+
+# array.array typecode of each element kind (used when numpy is absent)
+elem_to_typecode = {ELEM_I8: 'b', ELEM_I16: 'h', ELEM_I32: 'i', ELEM_I64: 'q',
+                    ELEM_U8: 'B', ELEM_U16: 'H', ELEM_U32: 'I', ELEM_U64: 'Q',
+                    ELEM_F32: 'f', ELEM_F64: 'd', ELEM_BOOL: 'b'}
+
+# reducer name prefix in CkDynReducers() -> op
+_op_names = {'sum': SUM, 'product': PRODUCT, 'max': MAX, 'min': MIN,
+             'logical_and': AND, 'logical_or': OR, 'logical_xor': XOR}
 
 
 def _useNumpyForReduction(contribs):
@@ -152,9 +161,16 @@ def gather_postprocess(contrib):
     return [tup[1] for tup in contrib]
 
 
+class _NopReducer(object):
+    """ the nop reducer (a sentinel) """
+    def __repr__(self):
+        return 'Reducer.nop'
+
+
 class ReducerContainer(object):
 
     def __init__(self, charm):
+        self._by_id = []  # reducer id -> function, in registration order
         self.addReducer(_sum)
         self.addReducer(_product)
         self.addReducer(_max)
@@ -165,7 +181,7 @@ class ReducerContainer(object):
         self.addReducer(_bcast_exc_reducer)
         self.addReducer(gather, pre=gather_preprocess, post=gather_postprocess)
 
-        self.nop     = charm.ReducerType.nop
+        self.nop     = _NopReducer()
         self.sum     = (SUM,     self._sum)     # (internal op code, python reducer)
         self.product = (PRODUCT, self._product)
         self.max     = (MAX,     self._max)
@@ -186,6 +202,10 @@ class ReducerContainer(object):
         if post is not None:
             func.hasPostprocess = True
             func.postprocess = post
+        # the id travels in the contribution; every process registers its
+        # reducers in the same order, so ids agree
+        func._rid = len(self._by_id)
+        self._by_id.append(func)
         setattr(self, func.__name__, func)
 
 
@@ -196,156 +216,121 @@ class ReductionManager(object):
     def __init__(self, charm, reducers):
         self.charm = charm
         self.reducers = reducers
+        self._foreign_type = None
         self.populateConversionTables()
 
-    def populateConversionTables(self):
-        # `red_table[op][c_type]` maps to `charm_reducer_type`, where:
-        #     - op is the identifier for internal reducer (SUM, PRODUCT, MAX or INT)
-        #     - c_type is identifier for C type (C_CHAR, C_SHORT, etc)
-        #     - charm_reducer_type is value for internal reducer type as they appear in CkReductionTypesExt
-        self.red_table = [[]] * 7
-        self.red_table[SUM]     = [0] * NUM_C_TYPES
-        self.red_table[PRODUCT] = [0] * NUM_C_TYPES
-        self.red_table[MAX]     = [0] * NUM_C_TYPES
-        self.red_table[MIN]     = [0] * NUM_C_TYPES
-        self.red_table[AND]     = [0] * NUM_C_TYPES
-        self.red_table[OR]      = [0] * NUM_C_TYPES
-        self.red_table[XOR]     = [0] * NUM_C_TYPES
+    @property
+    def reducers_by_id(self):
+        return self.reducers._by_id
 
-        fields = self.charm.lib.getReductionTypesFields()  # get names of fields in CkReductionTypesExt
-        maxFieldVal = max([getattr(self.charm.ReducerType, f) for f in fields])
-        # charm_reducer_to_ctype maps the values in CkReductionTypesExt to C type identifier
-        self.charm_reducer_to_ctype = [None] * (maxFieldVal + 1)
-        for f in fields:
-            if f == 'nop':
+    @property
+    def foreign_type(self):
+        # CkDyn registers the foreign reducer when the runtime starts
+        if self._foreign_type is None:
+            self._foreign_type = _ckdyn.foreign_reducer_type()
+        return self._foreign_type
+
+    def populateConversionTables(self):
+        # red_table[op][elem] is the Charm++ reducer type for the built-in op
+        # on elements of kind elem, or None
+        self.red_table = [[None] * NUM_ELEMS for _ in range(7)]
+        self.nop_type = None
+        for name, rtype, elem in _ckdyn.reducers():
+            if name == 'nop':
+                self.nop_type = rtype
                 continue
-            elif f == 'external_py':
-                op, c_type_str = None, 'char'
-            elif f.startswith('logical'):
-                op, c_type_str = f.split('_')[1:]
-            else:
-                op, c_type_str = f.split('_', 1)        # e.g. from 'sum_long' extracts 'sum' and 'long'
-            ctype_code = c_typename_to_id[c_type_str]   # e.g. map 'long' to C_LONG
-            f_val = getattr(self.charm.ReducerType, f)  # value of the field in CkReductionTypesExt
-            # print(f, "ctype_code", ctype_code, "f_val=", f_val)
-            self.charm_reducer_to_ctype[f_val] = ctype_code
-            if   op == 'sum':     self.red_table[SUM][ctype_code] = f_val
-            elif op == 'product': self.red_table[PRODUCT][ctype_code] = f_val
-            elif op == 'max':     self.red_table[MAX][ctype_code] = f_val
-            elif op == 'min':     self.red_table[MIN][ctype_code] = f_val
-            elif op == 'and':     self.red_table[AND][ctype_code] = f_val
-            elif op == 'or':      self.red_table[OR][ctype_code] = f_val
-            elif op == 'xor':     self.red_table[XOR][ctype_code] = f_val
+            op = None
+            for prefix, op_id in _op_names.items():
+                if name == prefix or name.startswith(prefix + '_'):
+                    op = op_id
+                    break
+            if op is None:
+                continue
+            if op in (AND, OR, XOR) and name not in (prefix, prefix + '_int', prefix + '_bool'):
+                continue
+            if self.red_table[op][elem] is None:  # when two names share an elem, the first wins
+                self.red_table[op][elem] = rtype
+        assert self.nop_type is not None, 'CkDyn has no nop reducer'
 
         # ------ numpy data types ------
         if haveNumpy:
-            # map numpy data types to internal reduction C code identifier
-            self.numpy_type_map = {'bool': C_BOOL, 'int8': C_CHAR, 'int16': C_SHORT,
-                                   'int32': C_INT, 'int64': C_LONG, 'uint8': C_UCHAR,
-                                   'uint16': C_USHORT, 'uint32': C_UINT, 'uint64': C_ULONG,
-                                   #'float16': ?
-                                   'float32': C_FLOAT, 'float64': C_DOUBLE}
-            if np.dtype('int64').itemsize > self.charm.lib.sizeof(C_LONG):
-                self.numpy_type_map['int64']  = C_LONG_LONG
-                self.numpy_type_map['uint64'] = C_ULONG_LONG
-
-            # verify that mapping is correct
-            for dt, c_type in self.numpy_type_map.items():
-                assert np.dtype(dt).itemsize == self.charm.lib.sizeof(c_type)
-
-            self.rev_np_array_type_map = [None] * NUM_C_TYPES
-            reverse_lookup = {v: k for k, v in self.numpy_type_map.items()}
-            for c_type in range(NUM_C_TYPES):
-                if c_type in reverse_lookup:
-                    self.rev_np_array_type_map[c_type] = reverse_lookup[c_type]
-            if self.rev_np_array_type_map[C_LONG] is None:
-                self.rev_np_array_type_map[C_LONG] = np.int_().dtype.name
-                self.rev_np_array_type_map[C_ULONG] = np.uint().dtype.name
-                assert np.dtype('int_').itemsize == self.charm.lib.sizeof(C_LONG)
-                assert np.dtype('uint').itemsize == self.charm.lib.sizeof(C_ULONG)
-            if self.rev_np_array_type_map[C_LONG_LONG] is None:
-                self.rev_np_array_type_map[C_LONG_LONG] = np.longlong().dtype.name
-                self.rev_np_array_type_map[C_ULONG_LONG] = np.ulonglong().dtype.name
-                assert np.dtype('longlong').itemsize == self.charm.lib.sizeof(C_LONG_LONG)
-                assert np.dtype('ulonglong').itemsize == self.charm.lib.sizeof(C_ULONG_LONG)
+            # map numpy data types to element kinds
+            self.numpy_type_map = {'bool': ELEM_BOOL, 'int8': ELEM_I8, 'int16': ELEM_I16,
+                                   'int32': ELEM_I32, 'int64': ELEM_I64, 'uint8': ELEM_U8,
+                                   'uint16': ELEM_U16, 'uint32': ELEM_U32, 'uint64': ELEM_U64,
+                                   'float16': ELEM_F16, 'float32': ELEM_F32, 'float64': ELEM_F64,
+                                   'complex64': ELEM_C64, 'complex128': ELEM_C128}
 
         # ------ array.array data types ------
-
-        # map array.array data types to internal reduction C code identifier
-        self.array_type_map = {'b': C_CHAR, 'B': C_UCHAR, 'h': C_SHORT, 'H': C_USHORT,
-                               'i': C_INT, 'I': C_UINT, 'l': C_LONG, 'L': C_ULONG,
-                               'f': C_FLOAT, 'd': C_DOUBLE}
-        if sys.version_info >= (3, 3, 0):
-            self.array_type_map['q'] = C_LONG_LONG
-            self.array_type_map['Q'] = C_ULONG_LONG
-
-        # verify that mapping is correct
-        for dt, c_type in self.array_type_map.items():
-            assert array.array(dt).itemsize == self.charm.lib.sizeof(c_type)
-
-        self.rev_array_type_map = ['b', 'b', 'h', 'i', 'l', 'q', 'B', 'H', 'I', 'L', 'Q', 'f', 'd']
-        assert len(self.rev_array_type_map) == NUM_C_TYPES
+        self.array_type_map = {}
+        for tc, elem in (('b', ELEM_I8), ('B', ELEM_U8), ('h', ELEM_I16), ('H', ELEM_U16),
+                         ('f', ELEM_F32), ('d', ELEM_F64)):
+            self.array_type_map[tc] = elem
+        for tc in ('i', 'l', 'q'):
+            self.array_type_map[tc] = {1: ELEM_I8, 2: ELEM_I16, 4: ELEM_I32, 8: ELEM_I64}[array.array(tc).itemsize]
+        for tc in ('I', 'L', 'Q'):
+            self.array_type_map[tc] = {1: ELEM_U8, 2: ELEM_U16, 4: ELEM_U32, 8: ELEM_U64}[array.array(tc).itemsize]
 
         # ------ python data types ------
-
-        # map python types to internal reduction C code identifier
-        self.python_type_map = {float: C_DOUBLE, bool: C_BOOL}
-        if self.charm.lib.sizeof(C_LONG) >= 8:
-            self.python_type_map[int] = C_LONG
-        else:
-            self.python_type_map[int] = C_LONG_LONG
-            assert self.charm.lib.sizeof(C_LONG_LONG) >= 8
+        self.python_type_map = {int: ELEM_I64, float: ELEM_F64, bool: ELEM_BOOL}
         if haveNumpy:
             # this is a bit of a hack
-            self.python_type_map[np.bool_] = C_BOOL
+            self.python_type_map[np.bool_] = ELEM_BOOL
 
-    # return Charm internal reducer type code and data ready to be sent to Charm
+    def _to_buffer(self, data, elem):
+        """ a Python scalar or a list of them as a contiguous buffer of elem """
+        if not isinstance(data, (list, tuple)):
+            data = [data]
+        if haveNumpy:
+            return np.array(data, dtype=elem_to_numpy[elem])
+        return array.array(elem_to_typecode[elem], data)
+
+    # return (Charm++ reducer type, data ready for _ckdyn.contribute)
     def prepare(self, data, reducer, contributor):
-        if (reducer is None) or (reducer == self.reducers.nop):
-            return (self.reducers.nop, None, None)
+        if (reducer is None) or (reducer is self.reducers.nop):
+            return (self.nop_type, None)
 
+        rtype = None
         if type(reducer) == tuple:
             op, py_red_func = reducer
             pyReducer = None
             dt = type(data)
             if isinstance(data, np.ndarray) or isinstance(data, np.number):
-                if not data.dtype.hasobject:
-                    c_type = self.numpy_type_map[data.dtype.name]
-                    charm_reducer_type = self.red_table[op][c_type]
+                if not data.dtype.hasobject and data.dtype.name in self.numpy_type_map:
+                    rtype = self.red_table[op][self.numpy_type_map[data.dtype.name]]
+                    data = np.ascontiguousarray(data)
                 else:
                     pyReducer = py_red_func
             elif dt == array.array:
-                c_type = self.array_type_map[data.typecode]
-                charm_reducer_type = self.red_table[op][c_type]
+                rtype = self.red_table[op][self.array_type_map[data.typecode]]
             else:
                 try:
-                    c_type = self.python_type_map[dt]
-                    charm_reducer_type = self.red_table[op][c_type]
-                    data = [data]
+                    elem = self.python_type_map[dt]
+                    rtype = self.red_table[op][elem]
+                    data = self._to_buffer(data, elem)
                 except:
                     try:
                         t0 = type(data[0])
-                        c_type = self.python_type_map[t0]
-                        charm_reducer_type = self.red_table[op][c_type]
-                        for elem in data:
-                            if type(elem) != t0:
+                        elem = self.python_type_map[t0]
+                        rtype = self.red_table[op][elem]
+                        for x in data:
+                            if type(x) != t0:
                                 pyReducer = py_red_func
                                 break
+                        if pyReducer is None:
+                            data = self._to_buffer(data, elem)
                     except:
                         pyReducer = py_red_func
         else:
             pyReducer = reducer
 
         if pyReducer is None:
-            assert charm_reducer_type > 0, 'Could not find a valid reducer. Check that datatype matches the operator'
-            return (charm_reducer_type, data, c_type)
+            assert rtype is not None, 'Could not find a valid reducer. Check that datatype matches the operator'
+            return (rtype, data)
         else:
-            if not hasattr(pyReducer, 'hasPreprocess'):
+            if not hasattr(pyReducer, '_rid'):
                 from .charm import Charm4PyError
                 raise Charm4PyError('Invalid reducer ' + str(reducer) + '. Reducers must be functions registered with addReducer')
             if pyReducer.hasPreprocess:
                 data = pyReducer.preprocess(data, contributor)
-            rednMsg = ({b"custom_reducer": pyReducer.__name__}, [data])
-            # data for custom reducers is a custom reduction msg
-            data = cPickle.dumps(rednMsg, self.charm.options.pickle_protocol)
-            return (self.charm.ReducerType.external_py, data, C_CHAR)
+            return (self.foreign_type, (pyReducer._rid, data))

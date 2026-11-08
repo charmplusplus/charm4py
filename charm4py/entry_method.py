@@ -1,7 +1,9 @@
 from . import wait
+from . import _ckdyn
 from time import time
 import sys
-from greenlet import greenlet, getcurrent
+from greenlet import getcurrent
+_spawn = _ckdyn.spawn
 
 
 class EntryMethod(object):
@@ -41,6 +43,7 @@ class EntryMethod(object):
         # set last entry method executed (note that 'last_em_exec' won't
         # necessarily always coincide with the currently running entry method)
         charm.last_em_exec = self
+        charm._last_ep_mark = _ckdyn.last_ep()  # what last_ep() was when last_em_exec was set
         try:
             #print(args)
             if ret_fut:
@@ -49,14 +52,8 @@ class EntryMethod(object):
             ret = getattr(obj, self.name)(*args)
             if ret_fut and not (ret is None):
                 fut.create_object(ret)
-        except SystemExit:
-            exit_code = sys.exc_info()[1].code
-            if exit_code is None:
-                exit_code = 0
-            if not isinstance(exit_code, int):
-                print(exit_code)
-                exit_code = 1
-            charm.exit(exit_code)
+        except SystemExit as e:
+            charm.exit(exit_code(e))
         except Exception as e:
             charm.process_em_exc(e, obj, header)
             return
@@ -92,32 +89,54 @@ class EntryMethod(object):
         if exception is not None:
             raise exception
 
-    def _run_th(self, obj, header, args, ret_fut=False):
-        gr = greenlet(self._run)
+    def _run_coro(self, obj, header, args, ret_fut):
+        """ the task a pooled worker greenlet runs for a coroutine entry method """
+        gr = getcurrent()
         gr.obj = obj
         gr.notify = self.thread_notify
+        try:
+            self._run(obj, header, args, ret_fut)
+        finally:
+            # the pooled greenlet is reused: do not keep obj alive
+            gr.obj = None
+            gr.notify = None
+
+    def _run_coro_prof(self, obj, header, args, ret_fut):
+        gr = getcurrent()
+        gr.obj = obj
+        gr.notify = self.thread_notify
+        gr.em_callstack = [self]
+        try:
+            self._run(obj, header, args, ret_fut)
+        finally:
+            gr.obj = None
+            gr.notify = None
+
+    def _run_th(self, obj, header, args, ret_fut=False):
+        """ run entry method of the given object on a worker greenlet (_ckdyn.spawn) """
         obj._numthreads += 1
-        gr.switch(obj, header, args, ret_fut=ret_fut)
-        if gr.dead:
+        try:
+            done = _spawn(self._run_coro, obj, header, args, ret_fut)
+        except BaseException:
+            obj._numthreads -= 1
+            raise
+        if done:
             obj._numthreads -= 1
 
     def _run_th_prof(self, obj, header, args, ret_fut=False):
         ems = getcurrent().em_callstack
         if len(ems) > 0:
             ems[-1].stopMeasuringTime()
-        gr = greenlet(self._run)
-        gr.obj = obj
-        gr.notify = self.thread_notify
-        gr.em_callstack = [self]
         self.startMeasuringTime()
         obj._numthreads += 1
         exception = None
         try:
-            gr.switch(obj, header, args, ret_fut=ret_fut)
+            done = _ckdyn.spawn(self._run_coro_prof, obj, header, args, ret_fut)
         except Exception as e:
             exception = e
-        if gr.dead:
-            obj._numthreads -= 1
+            done = True
+        if done:
+            _thread_finished(obj)
         self.stopMeasuringTime()
         if len(ems) > 0:
             ems[-1].startMeasuringTime()
@@ -176,6 +195,31 @@ def when(cond_str):
         func.when_cond = wait.parse_cond_str(cond_str, func.__module__, method_args)
         return func
     return _when
+
+
+def exit_code(e):
+    """ the process exit code for a SystemExit raised by an entry method """
+    code = e.code
+    if code is None:
+        code = 0
+    if not isinstance(code, int):
+        print(code)
+        code = 1
+    return code
+
+
+def _thread_finished(obj):
+    """ a coroutine of obj finished """
+    obj._numthreads -= 1
+
+
+def entry(**attrs):
+    """ Entry-method attributes (expedited, inline, immediate, notrace,
+        exclusive). Recorded on the function; Charm4py does not use them yet. """
+    def _entry(func):
+        func._ck_entry_attrs = dict(attrs)
+        return func
+    return _entry
 
 
 def coro(func):

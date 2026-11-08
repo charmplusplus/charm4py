@@ -390,9 +390,8 @@ class Requests(object):
 class AppSpectorLoads(Chare):
 
     def __init__(self):
-        from .sections import SectionManager
         mygid = self.thisProxy.gid
-        fanout = [gid for gid, g in charm.groups.items() if isinstance(g, SectionManager)]
+        fanout = []  # section relay groups: none until sections return (step 4b)
         self.tracker = Tracker(charm.threadMgr.main_gr, skip_gids=[mygid], fanout_gids=fanout)
         self.tracker.install(charm, charm.threadMgr)
         self.requests = None
