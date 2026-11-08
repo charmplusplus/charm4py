@@ -1,0 +1,12 @@
+# The Charm++ source that `pip install` builds libcharm from when neither
+# CHARM4PY_CHARM_BUILD_DIR nor CHARM4PY_CHARM_DIR is set (tools/build_charm.py).
+# Format: one "key value" pair per line; '#' starts a comment.
+#
+# The pin is the tip of Charm++'s ckdyn-dev branch, which carries CkDyn
+# (ckdyn.h, the layer this package binds to). When ckdyn-dev merges into
+# recharm, the pin moves to a recharm commit and `branch` to recharm.
+# Reconverse is the contrib/reconverse submodule at whatever commit this
+# Charm++ commit records.
+repository https://github.com/charmplusplus/charm.git
+branch ckdyn-dev
+commit 454f5eb10ffdcf857227fa9685f226bd151c4616

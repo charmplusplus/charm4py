@@ -10,7 +10,7 @@ copied first and the copies are relinked.
 
 usage: bundle_libs.py --charm-build-dir DIR --out DIR [--also DIR ...]
 
-On macOS:   libcharm.dylib -> libcharm4py.dylib (and libcharm.dylib), install
+On macOS:   libcharm.dylib -> libcharm4py.dylib, install
             name @rpath/libcharm4py.dylib; libreconverse/liblci/liblct ->
             libcharm4py_*.dylib with @loader_path install names, and every
             reference between them rewritten to @loader_path/<bundled name>.
@@ -91,9 +91,10 @@ def darwin(library_dir, out):
         final = os.path.join(out, os.path.basename(path))
         os.replace(path, final)
         produced.append(final)
-    # the old package also carried libcharm.dylib under its own name
-    shutil.copy2(os.path.join(out, 'libcharm4py.dylib'), os.path.join(out, 'libcharm.dylib'))
-    produced.append(os.path.join(out, 'libcharm.dylib'))
+    # (the 1.x package also carried a copy named libcharm.dylib; nothing loads it now)
+    stale = os.path.join(out, 'libcharm.dylib')
+    if os.path.isfile(stale):
+        os.unlink(stale)
     shutil.rmtree(tmp_dir, ignore_errors=True)
     return produced, bool(present)
 

@@ -52,7 +52,7 @@ charmrun = 'charmrun.start:start'
 
 [tool.scikit-build]
 minimum-version = "0.10"
-cmake.version = ">=3.18"
+cmake.version = ">=3.21"
 build-dir = "build/{wheel_tag}"
 build.verbose = true
 wheel.packages = ["charm4py", "charmrun"]
@@ -68,9 +68,12 @@ wheel.exclude = [
     "charm4py/__pycache__/**",
 ]
 editable.mode = "redirect"
-sdist.exclude = ["build", "charm4py/.libs", "charm4py/charmlib"]
+# build/ also holds the Charm++ clone and build of tools/build_charm.py
+sdist.exclude = ["build", "charm4py/.libs", "charm4py/charmlib", "dist", "wheelhouse",
+                 "venv*", "*.ckpt", "*.ckpt.*", "/*.png", "output"]
 
 [[tool.scikit-build.generate]]
 path = "charm4py/_version.py"
 template = "version='${version}'\n"
 location = "source"
+

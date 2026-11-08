@@ -10,18 +10,24 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # ---- libcharm --------------------------------------------------------------
+# CHARM4PY_CHARM_BUILD_DIR: an existing Charm++ charm4py build (developers).
+# Otherwise tools/build_charm.py finds or builds one: in CHARM4PY_CHARM_DIR when
+# that is set, else in a clone of the commit pinned in charm_version.txt.
 set(CHARM4PY_CHARM_BUILD_DIR "$ENV{CHARM4PY_CHARM_BUILD_DIR}" CACHE PATH
     "Charm++ build directory (lib/libcharm.*, include/ckdyn.h)")
+find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
 if(NOT CHARM4PY_CHARM_BUILD_DIR)
-  if(DEFINED ENV{CHARM4PY_CHARM_DIR})
-    message(FATAL_ERROR
-      "CHARM4PY_CHARM_BUILD_DIR is not set. Building Charm++ from here is not supported yet: "
-      "in $ENV{CHARM4PY_CHARM_DIR} run\n"
-      "  ./build charm4py <triplet> -j8 --with-production --disable-fortran --with-refnum-type=\"unsigned int\"\n"
-      "and set CHARM4PY_CHARM_BUILD_DIR to the resulting build directory.")
-  else()
-    message(FATAL_ERROR "Set CHARM4PY_CHARM_BUILD_DIR to a Charm++ charm4py build directory.")
+  set(_result "${CMAKE_CURRENT_BINARY_DIR}/charm_build_dir.txt")
+  execute_process(COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_charm.py"
+                          --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --result "${_result}"
+                  RESULT_VARIABLE rc)
+  if(rc)
+    message(FATAL_ERROR "tools/build_charm.py could not provide a Charm++ build (see its output above)")
   endif()
+  file(READ "${_result}" _charm_build)
+  # not cached: a later configure runs build_charm.py again, which reuses the build
+  set(CHARM4PY_CHARM_BUILD_DIR "${_charm_build}")
+  message(STATUS "Charm++ build: ${CHARM4PY_CHARM_BUILD_DIR}")
 endif()
 get_filename_component(CHARM_BUILD "${CHARM4PY_CHARM_BUILD_DIR}" ABSOLUTE)
 if(NOT EXISTS "${CHARM_BUILD}/include/ckdyn.h")
@@ -38,8 +44,7 @@ if(NOT EXISTS "${LIBCHARM_SRC}")
   message(FATAL_ERROR "${LIBCHARM_SRC} not found")
 endif()
 
-# ---- Python, nanobind, numpy, greenlet ---------------------------------------
-find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
+# ---- nanobind, numpy, greenlet -----------------------------------------------
 execute_process(COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
                 OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
 find_package(nanobind CONFIG REQUIRED)
