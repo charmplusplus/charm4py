@@ -183,15 +183,6 @@ then this section is a placeholder.
 Known issues
 ------------
 
-* **CCS requests crash a process of a wheel or of a default source build.**
-  The Reconverse commit that ``charm_version.txt`` selects calls a CCS handler
-  registered through ``CcsRegisterHandlerFn`` the wrong way in a ``charm4py``
-  build, and the fix (Reconverse branch ``ccs-fn-dispatch``) is not merged
-  upstream yet. This affects everything that serves CCS: ``++server`` with
-  ``charm4py.liveviz``, ``charm4py.appspector`` and ``charm4py.steer``. Until
-  the fix is merged and the pin moves, use a Charm++ tree whose
-  ``contrib/reconverse`` has the fix (`Building against your own Charm++
-  build`_).
 * The pin in ``charm_version.txt`` is a commit of Charm++'s ``ckdyn-dev``
   branch; it moves to a ``recharm`` commit when CkDyn is merged there.
 * No free-threaded (``3.13t``) wheels yet, and no multi-PE processes (step 7

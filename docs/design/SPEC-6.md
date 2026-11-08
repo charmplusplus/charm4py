@@ -124,11 +124,11 @@ to `N` processes with `+pe N`, and starts them itself with LCI's file PMI
 
 ## 6. Known issues
 
-- **CCS crashes a process in every build from the pin.** The fix (reconverse
-  `ee47fb6`, "CCS: in the CMK_CHARM4PY build, call a CcsRegisterHandlerFn handler
-  directly", local branch `ccs-fn-dispatch`) is not pushed. liveViz, appspector and
-  steer need a Charm++ tree with that commit (`CHARM4PY_CHARM_DIR`). Noted in
-  `docs/install.rst`, "Known issues".
+- **CCS crash, resolved 2026-11-08 14:08 PST.** The reconverse fix `ee47fb6` (branch
+  `ccs-fn-dispatch`) is pushed to charmplusplus/reconverse; ckdyn-dev `44b27e6c8` records
+  it as the submodule commit and `charm_version.txt` pins that commit, so wheels and
+  default source builds now carry the fix. The branch becomes a reconverse pull request
+  when speculative mode ends.
 - No tracing in wheels (section 2, item 1).
 - No CUDA/HIP wheels; the source recipe is step 3's (placeholder in `install.rst`).
 - macOS x86_64: no Reconverse triplet, no wheel.
