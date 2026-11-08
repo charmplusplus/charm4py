@@ -321,5 +321,13 @@
     {
         "force_min_processes": 2,
         "path": "tests/appspector/loads.py"
+    },
+    {
+        "path": "tests/thin/zerocopy.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/thin/device.py"
     }
 ]

@@ -50,6 +50,14 @@ try:
 except:
     numbaInstalled = False
 
+# device tests need cupy and a CUDA or HIP build of Charm++
+try:
+    import cupy
+    from charm4py import _ckdyn
+    deviceSupport = bool(_ckdyn.has_device_support())
+except Exception:
+    deviceSupport = False
+
 # search for python executables
 python_implementations = set()   # python implementations can also be added here manually
 searchForPython(python_implementations)
@@ -66,6 +74,8 @@ for test in tests:
         if test['condition'] == 'numbaInstalled' and not numbaInstalled:
             continue
         if test['condition'] == 'not numbaInstalled' and numbaInstalled:
+            continue
+        if test['condition'] == 'deviceSupport' and not deviceSupport:
             continue
     if 'timeout_override' in test:
         TIMEOUT = test['timeout_override']
