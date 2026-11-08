@@ -47,6 +47,16 @@ jobs:
         run: |
           export CHARM_BUILD_PROCESSES=$(getconf _NPROCESSORS_ONLN)
           python -m pip install -v dist/charm4py-*.tar.gz
+      - name: Install the test dependencies
+        run: |
+          # examples/ray/parameter_server.py needs torch, torchvision, filelock;
+          # the CPU-only torch on Linux (the default one carries CUDA)
+          if [ "$RUNNER_OS" = Linux ]; then
+            python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          else
+            python -m pip install torch torchvision
+          fi
+          python -m pip install filelock matplotlib
       - name: Run the tests on the installed package
         run: |
           # outside the source tree, so that the tests import the installed package
