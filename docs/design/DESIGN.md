@@ -1931,6 +1931,16 @@ and reductions on `thisProxy` reach only the listed PEs, which is the current co
 (sections/constrained_groups.py). The `cons` tuple protocol between `group_ckNew` and
 `SectionManager.createGroupSectionDown` (chare.py:544-569, sections.py:57-99) goes.
 
+Status 2026-11-08, step 4b implemented on `thin` (docs/design/SPEC-4b.md, which lists
+the protocol and eight differences from this section, each kept). The main ones:
+`split`, `combine`, slicing and `Group(C, onPEs=...)` must be called from a coroutine
+and return when every member has joined (the `done` callbacks), so no member sees a
+user message before `section_joined`; the vote entry is the reserved `Chare` method
+`_sectionVote_`; in a constrained group `thisProxy` becomes the section proxy right
+after the constructor, when the branch joins the section; a built-in reduction result
+relayed to a section entry is recognized by its one BUFFER slot of `ndim` 0 with tag 0,
+so the binding tags a 0-dimensional numpy argument (`TAG_ND0`).
+
 ### 5.3 Reductions in Python
 
 `Reducer.sum/product/max/min/logical_*` stay tuples of `(op, python_fn)`;
