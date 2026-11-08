@@ -126,6 +126,10 @@ struct PeState {
   struct CoroRec { CkDynTarget t; int ep; uint64_t id; };
   std::unordered_map<PyObject *, CoroRec> coros;
   uint64_t next_coro_id = 1;
+  // Load measurement for charm4py.appspector (set_meter): enter(obj, ep) -> frame
+  // is called before a delivery, construction or unpacking and leave(frame, obj)
+  // after it; NULL when nothing measures (the common case: one test per delivery).
+  PyObject *meter_enter = nullptr, *meter_leave = nullptr;   // strong
 };
 thread_local PeState tls;
 
@@ -1264,6 +1268,29 @@ MethodEntry &method_or_abort(int ep) {
   return g_methods[ep];
 }
 
+// appspector's meter (PeState::meter_enter/leave). meter_enter returns the frame
+// (a new reference) or NULL when no meter is set; obj may be NULL (not known yet:
+// a constructor or an unpacked element, given to meter_leave instead; or a
+// broadcast's argument conversion, charged to no chare). ep < 0: no entry method.
+PyObject *meter_enter(PyObject *obj, int ep) {
+  if (!tls.meter_enter) return nullptr;
+  PyObject *epo = PyLong_FromLong(ep);
+  PyObject *fr = epo ? call(tls.meter_enter, {obj ? obj : Py_None, epo}) : nullptr;
+  Py_XDECREF(epo);
+  if (!fr) hook_abort("the appspector meter (enter)");
+  return fr;
+}
+
+void meter_leave(PyObject *fr, PyObject *obj) {   // steals fr
+  if (!fr) return;
+  if (tls.meter_leave) {
+    PyObject *r = call(tls.meter_leave, {fr, obj ? obj : Py_None});
+    if (!r) hook_abort("the appspector meter (leave)");
+    Py_DECREF(r);
+  }
+  Py_DECREF(fr);
+}
+
 // Flush obj's wait queues after an entry ran (auto_flush_wait_queues), as
 // charm.invokeEntryMethod does on the slow path.
 void flush_after(PyObject *obj, int ep) {
@@ -1353,6 +1380,7 @@ void deliver_one(PyObject *obj, int ep, uint32_t ep_flags, const CkDynMsgView *v
 
 void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const CkDynMsgView *v) {
   Gil g;
+  PyObject *fr = meter_enter((PyObject *)handle, ep);
   try {
     uint16_t f = v->hdr ? v->hdr->flags : 0;
     RecvCtx ctx(v, true, !(f & CKDYN_MSG_BCAST) && v->kind != CKDYN_MSGKIND_MCAST);
@@ -1365,10 +1393,12 @@ void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const 
     cpp_exc_to_python();
     hook_abort("deliver");
   }
+  meter_leave(fr, nullptr);
 }
 
 void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep_flags, const CkDynMsgView *v) {
   Gil g;
+  PyObject *fr = meter_enter(nullptr, ep);   // the conversion: charged to the entry method only
   try {
     RecvCtx ctx(v, true, false);
     ObjVec args;
@@ -1378,15 +1408,18 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
       PyObject *obj = (PyObject *)handles[i];
       if (!obj) continue;
       CkDynTarget t = target_of(obj);
+      PyObject *efr = meter_enter(obj, ep);
       CkDynCallstackPush(&t);
       deliver_one(obj, ep, ep_flags, v, args, block);
       CkDynCallstackPop(&t);
+      meter_leave(efr, nullptr);
     }
     Py_XDECREF(block);
   } catch (...) {
     cpp_exc_to_python();
     hook_abort("deliver_many");
   }
+  meter_leave(fr, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -1434,6 +1467,7 @@ void h_mainchare(void *, void **handle_out, const CkDynTarget *t, int argc, char
 
 void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
   Gil g;
+  PyObject *fr = meter_enter(nullptr, v->hdr ? v->hdr->ep : -1);
   try {
     bool p2p = (t->kind == CKDYN_CHARE);
     RecvCtx ctx(v, true, p2p);
@@ -1449,6 +1483,7 @@ void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
     PyObject *obj = call(c_construct, {tg, epo, header, lst});
     Py_DECREF(header); Py_DECREF(lst); Py_DECREF(tg); Py_DECREF(epo);
     if (!obj) hook_abort("charm._construct");
+    meter_leave(fr, obj);
     return obj;
   } catch (...) {
     cpp_exc_to_python();
@@ -1514,6 +1549,7 @@ void h_pack(void *bd, void *handle, int reason, void *buf, size_t len) {
 
 void *h_unpack(void *, const CkDynTarget *t, int reason, const void *buf, size_t len) {
   Gil g;
+  PyObject *fr = meter_enter(nullptr, -1);
   PyObject *tg = make_target(*t);
   PyObject *ro = PyLong_FromLong(reason);
   PyObject *mv = PyMemoryView_FromMemory((char *)buf, (Py_ssize_t)len, PyBUF_READ);
@@ -1535,6 +1571,7 @@ void *h_unpack(void *, const CkDynTarget *t, int reason, const void *buf, size_t
     else Py_DECREF(tg2);
   }
   if (!obj) hook_abort("charm._unpack");
+  meter_leave(fr, obj);
   return obj;
 }
 
@@ -1679,8 +1716,11 @@ void ccs_handler(void *, const char *name, const void *data, int len) {
 void call_after_fn(void *arg, double) {
   Gil g;
   PyObject *t = PyLong_FromLong((long)(intptr_t)arg);
-  PyObject *r = (t && c_triggerCallable) ? call(c_triggerCallable, {t}) : nullptr;
-  Py_XDECREF(t);
+  // while a meter is set, through charm.triggerCallable as looked up now, so that
+  // appspector's wrapper of it (an instance attribute) times the callable
+  PyObject *fn = tls.meter_enter ? PyObject_GetAttrString(g_charm, "triggerCallable") : Py_XNewRef(c_triggerCallable);
+  PyObject *r = (t && fn) ? call(fn, {t}) : nullptr;
+  Py_XDECREF(t); Py_XDECREF(fn);
   if (!r) hook_abort("charm.triggerCallable");
   Py_DECREF(r);
 }
@@ -1787,10 +1827,14 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
   std::vector<PyObject *> full;   // borrowed
   PyObject *const *pos = args;
   size_t npos = (size_t)nargs;
-  if (nuser > 0 || is_ray) {
+  if (nkw > 0 || is_ray) {
     full.assign(args, args + nargs);
-    if (nuser > 0) {
-      std::vector<bool> used((size_t)nkw, false);
+    std::vector<bool> used((size_t)nkw, false);
+    if (nkw > 0 && nargs < pm->argcount) {
+      // Missing positional parameters come from the keywords by name, then from the
+      // defaults. A reserved keyword (ret, awaitable, is_ray) also fills a parameter
+      // of the same name, as in charm4py 1.x: PoolScheduler.start(..., is_ray=False)
+      // receives the is_ray that Pool.map_async passes.
       Py_ssize_t ndef = PyTuple_GET_SIZE(pm->defaults);
       for (int i = (int)nargs; i < pm->argcount; i++) {
         PyObject *an = PyTuple_GET_ITEM(pm->argnames, i);
@@ -1807,14 +1851,14 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
         }
         full.push_back(val);
       }
-      for (Py_ssize_t k = 0; k < nkw; k++) {
-        PyObject *name = PyTuple_GET_ITEM(kwnames, k);
-        if (used[k] || PyUnicode_Compare(name, s_ret) == 0 || PyUnicode_Compare(name, s_awaitable) == 0 ||
-            PyUnicode_Compare(name, s_is_ray) == 0)
-          continue;
-        PyErr_Format(PyExc_TypeError, "%U got an unexpected keyword argument '%U'", pm->qualname, name);
-        return nullptr;
-      }
+    }
+    for (Py_ssize_t k = 0; nuser > 0 && k < nkw; k++) {
+      PyObject *name = PyTuple_GET_ITEM(kwnames, k);
+      if (used[k] || PyUnicode_Compare(name, s_ret) == 0 || PyUnicode_Compare(name, s_awaitable) == 0 ||
+          PyUnicode_Compare(name, s_is_ray) == 0)
+        continue;
+      PyErr_Format(PyExc_TypeError, "%U got an unexpected keyword argument '%U'", pm->qualname, name);
+      return nullptr;
     }
   }
   PyObject *future = nullptr, *ray_future = nullptr;
@@ -1830,7 +1874,7 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
     if (!ray_future) { Py_XDECREF(future); return nullptr; }
     full.push_back(ray_future);
   }
-  if (!full.empty() || nuser > 0 || is_ray) { pos = full.data(); npos = full.size(); }
+  if (nkw > 0 || is_ray) { pos = full.data(); npos = full.size(); }
   ProxyObject *p = (ProxyObject *)proxy;
   uint16_t flags = 0;
   if (is_ray) flags |= CKDYN_MSG_RAY;
@@ -2927,6 +2971,14 @@ NB_MODULE(_ckdyn, m) {
   m.def("migrate", [](nb::handle obj, int pe) { CkDynTarget t = target_of(obj.ptr()); CkDynMigrateMe(&t, pe); });
   m.def("set_obj_load", [](nb::handle obj, double secs) { CkDynTarget t = target_of(obj.ptr()); CkDynSetObjLoad(&t, secs); });
   m.def("lb_instrument", [](bool on) { CkDynLBInstrument(on ? 1 : 0); });
+  // appspector: enter(obj_or_None, ep) -> frame before each delivery, construction and
+  // unpacking on this PE, leave(frame, obj_or_None) after it; set_meter(None, None) stops
+  m.def("set_meter", [](nb::handle enter, nb::handle leave) {
+    bool on = !enter.is_none();
+    if (on != !leave.is_none()) throw nb::value_error("set_meter: give both callables or neither");
+    Py_XSETREF(tls.meter_enter, on ? Py_NewRef(enter.ptr()) : nullptr);
+    Py_XSETREF(tls.meter_leave, on ? Py_NewRef(leave.ptr()) : nullptr);
+  }, nb::arg("enter").none(), nb::arg("leave").none());
   m.def("has_lb", []() { return CkDynHasLB() != 0; });
   m.def("callstack_push", [](nb::handle obj) { CkDynTarget t = target_of(obj.ptr()); CkDynCallstackPush(&t); });
   m.def("callstack_pop", [](nb::handle obj) { CkDynTarget t = target_of(obj.ptr()); CkDynCallstackPop(&t); });
