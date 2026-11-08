@@ -1379,7 +1379,7 @@ Every symbol under `CMK_CHARM4PY` (surveys/survey-ext-api.md Tables A to C):
 | `CkHapiAddCallback` | generalized | `CkDynHapiAddCallback` with a `CkCallback` |
 | `CkTrace*UserEvent` wrappers | kept, renamed | `CkDynTrace*` |
 | `_registerTreeLB`, trace registration in `_initCharm` (init.C:1598-1614) | generalized | a module-registration list run when no charmc moduleinit is linked (6.1) |
-| late registration (register.C:48, 213) | generalized | `CkDynAllowLateRegistration` |
+| late registration (register.C:48, 213) | generalized | `CkDynAllowLateRegistration`; done in 5a (charm `ckdyn-dev` ed2c83e38): register.C accepts late registration at run time between `_registerLateBegin`/`_registerLateEnd`, which `CkDynRegisterClassLate` calls, in every build; a `CMK_CHARM4PY` build still accepts it always, for the Ext API |
 | `CcsRegisterHandlerExt` and the charm4py CCS layout (reconverse conv-ccs.cpp:36-57, 101-106) | generalized | `CkDynCcsRegister(name, fn)`: the handler receives `(const char *name, const void *data, int len)`; the 32-byte name field layout goes. This part is a reconverse pull request, not a charm one |
 | `DEVICE_RECV_TYPE_CHARM4PY` (cmirdmautils.h:23; reconverse include/cmirdmautils.h:70) | deleted | unused; one charm and one reconverse change |
 | `LBTurnInstrumentOn/Off`, topology and `Ccd*` functions | kept | general API, called directly |
@@ -1396,6 +1396,11 @@ general:
    ordinary Charm++ program (duplicate symbol `_createTraces`, found in step 0,
    BENCHMARKS.md deviation 3). With a weak default definition in init.C, one build
    serves the C++ test binding, the Python binding and plain Charm++ programs.
+   Done in 5a for `_createTraces` (a weak empty definition in every build; the
+   tracing one stays under `CMK_CHARM4PY && CMK_TRACE_ENABLED`) and for the
+   registration hook (`CkDynCallRegisterHook` runs in every build: in place of
+   `CkRegisterMainModule` under `CMK_CHARM4PY`, after it otherwise).
+   `CkRegisterMainModule` and `_registerExternalModules` are not weak yet.
 3. The `CMK_CHARM4PY` macro survives only for build-system matters (shared library,
    TLS model, 6.1) and is renamed `CMK_LIBCHARM_SHARED`.
 4. `CkSendMsgInline` prepares the envelope unconditionally (ck.C:1833-1840), the fix
