@@ -1,6 +1,6 @@
 # Task: run the 1.x examples on the thin charm4py (branch `thin`)
 
-Owner: Ben (Zonghang) Wu (GitHub login to be added). Mentor: Kale. Written 2026-11-08.
+Owner: Ben (Zonghang) Wu (GitHub `Falconas11`). Mentor: Kale. Written 2026-11-08.
 
 ## Goal
 
@@ -49,7 +49,7 @@ are expected and still worth recording precisely.
 
 ## Filing
 
-One issue per distinct failure against charm4py, title starting with `[thin]`, body:
+One issue per distinct failure against charmplusplus/charm4py, title starting with `[thin]`, assigned to `Falconas11`, body:
 example, command, process count, output tail, and whether 1.x passes. Link the issues
 from the status table. Group duplicates (same traceback) into one issue.
 
