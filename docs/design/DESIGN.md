@@ -2300,6 +2300,20 @@ fallback.
 checked on Delta, documentation (`docs/install.rst`, `gpus.rst`). Gate: `pip install
 charm4py` from the built wheel on a clean virtualenv runs `examples/simple/hello_world.py`
 and auto_test (2); the CI matrix from 6.3 is green.
+Status 2026-11-08, step 6: gate met on `thin` against `ckdyn-dev` 454f5eb10
+(docs/design/SPEC-6.md). `pip install .` without `CHARM4PY_CHARM_BUILD_DIR` clones the
+Charm++ commit of `charm_version.txt` and builds the reconverse `charm4py` target with
+32-bit refnums (`tools/build_charm.py`); the environment-variable paths are unchanged.
+Wheels: cibuildwheel, CPython 3.11-3.13, manylinux_2_28 x86_64 and aarch64 and macOS 14+
+arm64, each with a libfabric built with only its TCP-based providers. A local macOS
+wheel installed into a clean venv runs hello_world at +p1/+p2 and all 83 auto_test
+tests at 2 processes; CI run 42516684727 (beb171a) has the sdist install and test jobs
+(ubuntu-latest, macos-15) and the three wheel jobs. Deviations from 6.1-6.3: wheels are
+built without `--enable-tracing` (a tracing libcharm writes trace files on every run),
+and `tools/bundle_libs.py` stays for wheels. Known issue: CCS requests crash a build
+from the pin until the reconverse `ccs-fn-dispatch` fix is merged. The macOS runners
+take about 36 s per job launch (as in the 1.x reconverse job), so the macOS test job
+takes about 55 minutes.
 
 **Step 7: extensions that the design enables.** In any order, each with its own test:
 `NodeGroup` in the Python API; `@entry` attributes and priorities; zero-copy numpy
