@@ -2235,6 +2235,28 @@ mode, and the single-process multi-PE configuration (`+pe 2` in one process
 segfaults in about one run in eight inside the worker greenlet; that configuration
 is step 7 and the GIL rule of 4.4 is not yet enforced, review F14).
 
+Status 2026-11-08, step 4c: gate met on `thin` against `ckdyn-dev` c81fbeecc
+(docs/design/SPEC-4c.md; logs/gate-4c). `migration/test_migrate` (GreedyRefineLB, and
+RotateLB), `migration/test_nonmigratables`, `migration/chare_migration` and
+`examples/particle` (GreedyRefineLB, and RotateLB) pass at `lcrun -n 2` and `-n 4`,
+with every particle cell moved in every RotateLB period; new tests
+`thin/atsync_in_coroutine` (F9: an element whose coroutine calls `AtSync` and returns
+is migrated; an element with a suspended coroutine is skipped by the balancer and
+`migrate()` raises; F10: 3000 `AtSync`/`resumeFromSync` iterations without a balancer
+do not nest; `@when` queues survive the move) and `thin/sections_migrate` (section and
+combined-section reductions across RotateLB moves, 5.4 item 10) pass at both counts;
+`thin/checkpoint_restart` passes at one and two processes; the 4a and 4b gates show no
+regression. Changes: the sizing-to-packing cache moved into `charm._pack`, which also
+no longer removes the element from `charm.arrays` (`_destruct` does), so a sizing pass
+alone (`AtSync` under `+MetaLB`) neither refuses nor changes state; a non-picklable
+attribute aborts with the class and index named; `Chare.__init__` is called directly
+before a user constructor. Found outside the binding: an element moved by
+`migrate()` that then calls `AtSync` hangs the next balancing step at two processes,
+also in plain C++ (SPEC-4c.md 6). The checkpoint test of the gate is
+`thin/checkpoint_restart`, written in the 4a follow-ups, in place of the planned
+`checkpoint/restart.py`. Long-lived received numpy views were measured (SPEC-4c.md 7):
+no stall, memory grows by the retained messages.
+
 **Step 5 (charm PR): delete the Ext API.** Remove every `CMK_CHARM4PY` block listed in
 3.15, rename the macro, restore the C++ section callback, update `README.charm4py` and
 the internals chapter. Gate: charm CI; the thin charm4py's auto_test against the
