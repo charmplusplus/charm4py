@@ -1958,6 +1958,7 @@ PyObject *getattr_or_null(PyObject *o, const char *name) {
 void set_hooks() {
   memset(&g_hooks, 0, sizeof g_hooks);
   g_hooks.version = CKDYN_API_VERSION;
+  g_hooks.size = (uint32_t)sizeof(CkDynHooks);
   g_hooks.global = nullptr;
   g_hooks.register_classes = h_register_classes;
   g_hooks.construct = h_construct;
@@ -1980,8 +1981,9 @@ void set_hooks() {
 }
 
 void mod_init(nb::handle charm, nb::handle options, nb::handle future_type, nb::handle remote_fut, nb::handle coll_type) {
-  if (CkDynApiVersion() != 1)
-    throw CkDynError("libcharm has CkDyn API version " + std::to_string(CkDynApiVersion()) + ", this binding needs 1");
+  if (CkDynApiVersion() != CKDYN_API_VERSION)
+    throw CkDynError("libcharm has CkDyn API version " + std::to_string(CkDynApiVersion()) + ", this binding needs " +
+                     std::to_string(CKDYN_API_VERSION));
   if (CkDynRefnumBytes() != 4)
     throw CkDynError("libcharm was built with a " + std::to_string(CkDynRefnumBytes()) +
                      "-byte reference number; charm4py needs REFNUM_TYPE=\"unsigned int\" (4 bytes)");
