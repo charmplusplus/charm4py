@@ -13,7 +13,10 @@
 //  - an array.array is a BUFFER slot with tag TAG_ARRAY | (typecode << 8)
 //    (CkDynBufDesc cannot set the slot's reserved field);
 //  - a PROXY slot of a proxy without an element (a broadcast proxy) has
-//    pe_or_node = -1 (group kinds) or u.array.ndims = -1 - ndims (arrays).
+//    pe_or_node = -1 (group kinds) or u.array.ndims = -1 - ndims (arrays);
+//  - a 0-dimensional numpy array is a BUFFER slot with tag TAG_ND0, so that a
+//    BUFFER slot with ndim 0 and tag 0 in a section message is known to be a
+//    built-in reduction result relayed to a section entry (SPEC-4b 3).
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -54,7 +57,7 @@ enum : uint16_t {
   PYMSG_REDRESULT = 1u << 12,
   PYMSG_SINGLE    = 1u << 13,
 };
-enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3 };
+enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4 };
 const int PICKLE_PROTOCOL = 5;
 
 struct CkDynError : std::runtime_error {
@@ -129,7 +132,8 @@ thread_local PeState tls;
 PyObject *g_charm = nullptr, *g_options = nullptr;
 PyObject *c_registerMainModule, *c_construct, *c_mainchare, *c_invoke, *c_process_exception,
     *c_deposit_future, *c_reduce_foreign, *c_pack, *c_unpack, *c_pack_readonlies, *c_recvReadOnly,
-    *c_map_proc_num, *c_resume_from_sync, *c_destruct, *c_triggerCallable, *c_callHandler, *c_error;
+    *c_map_proc_num, *c_resume_from_sync, *c_destruct, *c_triggerCallable, *c_callHandler, *c_error,
+    *c_section_joined;
 PyObject *g_Future_type = nullptr, *g_remote_future = nullptr, *g_CollFuture_type = nullptr;
 std::unordered_map<int, PyObject *> g_pm_name;   // ep -> proxy method name (BoundProxyMethod pickling)
 PyObject *g_dumps, *g_loads, *g_array_type, *g_format_exception;
@@ -137,7 +141,8 @@ PyObject *g_DONE, *g_EXC, *g_worker_main, *g_empty_tuple;
 PyObject *s_cond_next, *s_flush, *s_ckdyn_target, *s_src, *s_fid, *s_store, *s_append, *s_frombytes,
     *s_ret, *s_awaitable, *s_is_ray, *s_Future, *s_createFuture, *s_name, *s_kw_protocol_cb,
     *s_kw_buffers, *s_kw_store;
-PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single, *k_refnum;
+PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single, *k_refnum,
+    *k_sid, *k_constrained;
 
 bool g_profiling = false, g_copy_arrays = false, g_auto_flush = true, g_in_register = false, g_started = false;
 CkDynHooks g_hooks;
@@ -435,7 +440,29 @@ struct ProxyObject {
   PyObject_HEAD
   CkDynTarget t;
   int has_elem;
+  int issec;            // a section proxy: sends go to the section sid (SPEC-4b 2)
+  CkDynSectionID sid;   // valid when issec
 };
+
+PyObject *sid_to_bytes(const CkDynSectionID &sid) {
+  return PyBytes_FromStringAndSize((const char *)&sid, (Py_ssize_t)sizeof sid);
+}
+
+// A section id from its 16 bytes; false with a Python error set.
+bool sid_from_obj(PyObject *o, CkDynSectionID *out) {
+  if (!PyBytes_Check(o) || PyBytes_GET_SIZE(o) != (Py_ssize_t)sizeof(CkDynSectionID)) {
+    PyErr_SetString(PyExc_TypeError, "a section id is a bytes object of 16 bytes (proxy.section[1])");
+    return false;
+  }
+  memcpy(out, PyBytes_AS_STRING(o), sizeof *out);
+  return true;
+}
+
+CkDynSectionID sid_of(nb::handle h) {
+  CkDynSectionID sid;
+  if (!sid_from_obj(h.ptr(), &sid)) throw nb::python_error();
+  return sid;
+}
 
 PyTypeObject ProxyType = {PyVarObject_HEAD_INIT(nullptr, 0)};
 
@@ -453,6 +480,7 @@ int proxy_init(PyObject *self, PyObject *args, PyObject *kwds) {
     }
     p->t = tw->t;
     p->has_elem = 1;
+    p->issec = 0;
     return 0;
   }
   int kind, id, ndims = 0, chare_idx = -1;
@@ -476,6 +504,7 @@ int proxy_init(PyObject *self, PyObject *args, PyObject *kwds) {
     return -1;
   }
   p->has_elem = 0;
+  p->issec = 0;
   return 0;
 }
 
@@ -492,6 +521,7 @@ PyObject *proxy_alloc(PyObject *cls, const CkDynTarget &t, bool has_elem) {
   ProxyObject *p = (ProxyObject *)o;
   p->t = t;
   p->has_elem = has_elem ? 1 : 0;
+  p->issec = 0;
   return o;
 }
 
@@ -532,8 +562,15 @@ PyObject *proxy_get_elemIdx(PyObject *self, void *) {
   if (p->t.kind == CKDYN_ARRAY) return p->has_elem ? index_tuple(p->t.u.array.index, p->t.u.array.ndims) : PyTuple_New(0);
   Py_RETURN_NONE;
 }
-PyObject *proxy_get_issec(PyObject *, void *) { Py_RETURN_FALSE; }
-PyObject *proxy_get_section(PyObject *, void *) { Py_RETURN_NONE; }
+PyObject *proxy_get_issec(PyObject *self, void *) { return PyBool_FromLong(((ProxyObject *)self)->issec); }
+// (root_pe, sid_bytes), the tuple shape of charm4py 1.x (tests use proxy.section[1] as a key)
+PyObject *proxy_get_section(PyObject *self, void *) {
+  ProxyObject *p = (ProxyObject *)self;
+  if (!p->issec) Py_RETURN_NONE;
+  PyObject *b = sid_to_bytes(p->sid);
+  if (!b) return nullptr;
+  return Py_BuildValue("(iN)", (int)p->sid.root_pe, b);
+}
 PyObject *proxy_get_target(PyObject *self, void *) { return make_target(((ProxyObject *)self)->t); }
 PyObject *proxy_get_has_elem(PyObject *self, void *) { return PyBool_FromLong(((ProxyObject *)self)->has_elem); }
 PyObject *proxy_get_kind(PyObject *self, void *) { return PyLong_FromLong(((ProxyObject *)self)->t.kind); }
@@ -569,6 +606,25 @@ PyObject *proxy_set_index(PyObject *self, PyObject *arg) {
   Py_RETURN_NONE;
 }
 
+// _as_section(sid_bytes): a section proxy of the same class over the collection of self
+PyObject *proxy_as_section(PyObject *self, PyObject *arg) {
+  ProxyObject *p = (ProxyObject *)self;
+  if (!is_group_kind(p->t.kind) && p->t.kind != CKDYN_ARRAY) {
+    PyErr_SetString(PyExc_TypeError, "_as_section on a proxy that is not a group or array proxy");
+    return nullptr;
+  }
+  CkDynSectionID sid;
+  if (!sid_from_obj(arg, &sid)) return nullptr;
+  CkDynTarget t = p->t;
+  if (is_group_kind(t.kind)) t.u.group.pe_or_node = -1;
+  else memset(t.u.array.index, 0, sizeof t.u.array.index);
+  PyObject *o = proxy_alloc((PyObject *)Py_TYPE(self), t, false);
+  if (!o) return nullptr;
+  ((ProxyObject *)o)->issec = 1;
+  ((ProxyObject *)o)->sid = sid;
+  return o;
+}
+
 PyObject *proxy_clear_elem(PyObject *self, PyObject *) {
   ProxyObject *p = (ProxyObject *)self;
   if (is_group_kind(p->t.kind)) p->t.u.group.pe_or_node = -1;
@@ -580,35 +636,57 @@ PyObject *proxy_clear_elem(PyObject *self, PyObject *) {
 
 PyObject *proxy_getstate(PyObject *self, PyObject *) {
   ProxyObject *p = (ProxyObject *)self;
+  if (p->issec)
+    return Py_BuildValue("(y#iy#)", (const char *)&p->t, (Py_ssize_t)sizeof p->t, p->has_elem,
+                         (const char *)&p->sid, (Py_ssize_t)sizeof p->sid);
   return Py_BuildValue("(y#i)", (const char *)&p->t, (Py_ssize_t)sizeof p->t, p->has_elem);
 }
 
 PyObject *proxy_setstate(PyObject *self, PyObject *state) {
   ProxyObject *p = (ProxyObject *)self;
-  const char *buf; Py_ssize_t len; int has;
-  if (!PyArg_ParseTuple(state, "y#i", &buf, &len, &has)) return nullptr;
-  if (len != (Py_ssize_t)sizeof p->t) { PyErr_SetString(PyExc_ValueError, "Proxy state of the wrong size"); return nullptr; }
+  const char *buf, *sbuf = nullptr; Py_ssize_t len, slen = 0; int has;
+  if (!PyArg_ParseTuple(state, "y#i|y#", &buf, &len, &has, &sbuf, &slen)) return nullptr;
+  if (len != (Py_ssize_t)sizeof p->t || (sbuf && slen != (Py_ssize_t)sizeof p->sid)) {
+    PyErr_SetString(PyExc_ValueError, "Proxy state of the wrong size");
+    return nullptr;
+  }
   memcpy(&p->t, buf, sizeof p->t);
   p->has_elem = has;
+  p->issec = sbuf != nullptr;
+  if (sbuf) memcpy(&p->sid, sbuf, sizeof p->sid);
   Py_RETURN_NONE;
 }
 
 PyObject *proxy_richcompare(PyObject *a, PyObject *b, int op) {
   if ((op != Py_EQ && op != Py_NE) || !is_proxy(b)) Py_RETURN_NOTIMPLEMENTED;
   ProxyObject *x = (ProxyObject *)a, *y = (ProxyObject *)b;
-  bool eq = x->has_elem == y->has_elem && target_eq(x->t, y->t);
+  bool eq;
+  if (x->issec || y->issec) eq = x->issec && y->issec && memcmp(&x->sid, &y->sid, sizeof x->sid) == 0;
+  else eq = x->has_elem == y->has_elem && target_eq(x->t, y->t);
   if (eq == (op == Py_EQ)) Py_RETURN_TRUE;
   Py_RETURN_FALSE;
 }
 
 Py_hash_t proxy_hash(PyObject *self) {
   ProxyObject *p = (ProxyObject *)self;
-  Py_hash_t h = target_hash(p->t) ^ (Py_hash_t)p->has_elem;
+  Py_hash_t h;
+  if (p->issec) {
+    uint64_t x = 1469598103934665603ull;
+    const unsigned char *b = (const unsigned char *)&p->sid;
+    for (size_t i = 0; i < sizeof p->sid; i++) x = (x ^ b[i]) * 1099511628211ull;
+    h = (Py_hash_t)x;
+  } else {
+    h = target_hash(p->t) ^ (Py_hash_t)p->has_elem;
+  }
   return h == -1 ? -2 : h;
 }
 
 PyObject *proxy_repr(PyObject *self) {
   ProxyObject *p = (ProxyObject *)self;
+  if (p->issec)
+    return PyUnicode_FromFormat("<%s kind=%d chare_idx=%d section=(root %d, index %d, coll %d, gen %d)>", Py_TYPE(self)->tp_name,
+                                (int)p->t.kind, p->t.chare_idx, (int)p->sid.root_pe, (int)p->sid.idx, (int)p->sid.coll_id,
+                                (int)p->sid.gen);
   PyObject *e = proxy_get_elemIdx(self, nullptr);
   PyObject *r = PyUnicode_FromFormat("<%s kind=%d chare_idx=%d elem=%R>", Py_TYPE(self)->tp_name, (int)p->t.kind, p->t.chare_idx, e);
   Py_XDECREF(e);
@@ -633,6 +711,7 @@ PyMethodDef proxy_methods[] = {
     {"_set_elem", (PyCFunction)proxy_set_elem, METH_O, nullptr},
     {"_set_index", (PyCFunction)proxy_set_index, METH_O, nullptr},
     {"_clear_elem", (PyCFunction)proxy_clear_elem, METH_NOARGS, nullptr},
+    {"_as_section", (PyCFunction)proxy_as_section, METH_O, nullptr},
     {"__getstate__", (PyCFunction)proxy_getstate, METH_NOARGS, nullptr},
     {"__setstate__", (PyCFunction)proxy_setstate, METH_O, nullptr},
     {"_from_target", (PyCFunction)proxy_from_target, METH_O | METH_CLASS, nullptr},
@@ -738,7 +817,7 @@ struct Packer {
     d.elem = (uint8_t)elem;
     d.ndim = (uint8_t)ndim;
     d.bflags = fortran ? CKDYN_BUF_FORTRAN : 0;
-    d.tag = 0;
+    d.tag = ndim == 0 ? TAG_ND0 : 0;
     d.shape = ndim ? shape : nullptr;
     d.strides = nullptr;
     CkDynMsgAddBuffer(b, &d);
@@ -809,7 +888,7 @@ struct Packer {
       CkDynMsgAddFuture(b, pe, fid);
       return true;
     }
-    if (PyObject_TypeCheck(o, &ProxyType)) {
+    if (PyObject_TypeCheck(o, &ProxyType) && !((ProxyObject *)o)->issec) {   // a section proxy is pickled
       ProxyObject *p = (ProxyObject *)o;
       CkDynTarget t = p->t;
       if (!p->has_elem) {
@@ -1066,6 +1145,16 @@ bool view_args(RecvCtx &ctx, ObjVec &out, PyObject **block) {
   }
   if (v->kind == CKDYN_MSGKIND_SYS || v->nslots == 0) return true;
   uint16_t flags = v->hdr ? v->hdr->flags : 0;
+  if (v->kind == CKDYN_MSGKIND_MCAST && flags == 0 && v->nslots == 1 && v->slots[0].type == CKDYN_SLOT_BUFFER &&
+      v->slots[0].ndim == 0 && v->slots[0].tag == 0 && v->slots[0].bflags == 0) {
+    // a built-in reduction result relayed to a section entry (a SECTION callback): converted as a
+    // REDRESULT view is (a user's 0-dimensional array has tag TAG_ND0)
+    bool empty;
+    PyObject *val = redresult_value(ctx, &empty);
+    if (!val) return false;
+    if (empty) Py_DECREF(val); else out.push(val);
+    return true;
+  }
   int start = 0, end = v->nslots;
   const CkDynSlot *sl = v->slots;
   if ((flags & CKDYN_MSG_BLOCK) && sl[0].type == CKDYN_SLOT_FUTURE) {
@@ -1142,6 +1231,12 @@ PyObject *make_header(const CkDynMsgView *v, PyObject *block) {
     Py_XDECREF(rid);
   }
   if (f & PYMSG_SINGLE) ok &= PyDict_SetItem(h, k_single, Py_True) == 0;
+  if (f & CKDYN_MSG_CONSTRAINED) ok &= PyDict_SetItem(h, k_constrained, Py_True) == 0;
+  if (v->section) {   // a section delivery: the section id, for contributions of a ret/awaitable send
+    PyObject *sb = sid_to_bytes(*v->section);
+    ok &= sb && PyDict_SetItem(h, k_sid, sb) == 0;
+    Py_XDECREF(sb);
+  }
   if (!ok) { Py_DECREF(h); return nullptr; }
   return h;
 }
@@ -1260,7 +1355,7 @@ void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const 
   Gil g;
   try {
     uint16_t f = v->hdr ? v->hdr->flags : 0;
-    RecvCtx ctx(v, true, !(f & CKDYN_MSG_BCAST));
+    RecvCtx ctx(v, true, !(f & CKDYN_MSG_BCAST) && v->kind != CKDYN_MSGKIND_MCAST);
     ObjVec args;
     PyObject *block = nullptr;
     if (!view_args(ctx, args, &block)) hook_abort("deliver (converting arguments)");
@@ -1523,6 +1618,18 @@ void h_future(void *, int, uint32_t id, const CkDynMsgView *v) {
   }
 }
 
+// A member received its section's creation multicast (inside CkDyn's init
+// entry, before its "done" contribution): charm._section_joined(obj, sid_bytes).
+void h_section_joined(void *, void *handle, const CkDynSectionID *sid) {
+  Gil g;
+  if (!c_section_joined) return;
+  PyObject *b = sid_to_bytes(*sid);
+  PyObject *r = b ? call(c_section_joined, {(PyObject *)handle, b}) : nullptr;
+  Py_XDECREF(b);
+  if (!r) hook_abort("charm._section_joined");
+  Py_DECREF(r);
+}
+
 int h_map_proc_num(void *, void *handle, int aid, int ndims, const int *index) {
   Gil g;
   PyObject *a = PyLong_FromLong(aid);
@@ -1593,8 +1700,34 @@ bool is_bcast_proxy(const ProxyObject *p) {
 }
 
 // Build and send; returns false with a Python error set.
+// A send to a section proxy: a CkDynMcastMsg through CkDynSendSection. BCAST
+// is set only with a block future (the members then contribute to it over the
+// section, EntryMethod._run), so a plain section send keeps flags 0 and the
+// receivers' fast path.
+bool do_send_section(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16_t flags, PyObject *block_future) {
+  bool block = block_future && block_future != Py_None;
+  if (block) flags |= CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST;
+  else flags &= (uint16_t)~(CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST | CKDYN_MSG_BCASTRET);
+  BuilderGuard bg(CkDynMsgBegin((int)nargs + 2, 64, 0, 0, -1));
+  CkDynMsgSetFlags(bg.b, flags);
+  if (block) {
+    int pe; uint32_t fid;
+    if (!future_ids(block_future, &pe, &fid)) return false;
+    CkDynMsgAddFuture(bg.b, pe, fid);
+  }
+  Packer pk(bg.b);
+  for (size_t i = 0; i < nargs; i++)
+    if (!pk.add(args[i])) return false;
+  if (!pk.finish()) return false;
+  CkDynMcastMsg *m = CkDynMsgFinishMcast(bg.b, ep);
+  bg.b = nullptr;
+  CkDynSendSection(&p->sid, ep, m, nullptr);
+  return true;
+}
+
 bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16_t flags, PyObject *block_future,
              bool caller_flags = false) {
+  if (p->issec) return do_send_section(p, ep, args, nargs, flags, block_future);
   if (is_bcast_proxy(p)) flags |= CKDYN_MSG_BCAST;
   else if (!caller_flags) flags &= (uint16_t)~CKDYN_MSG_BCASTRET;
   if (block_future && block_future != Py_None) flags |= CKDYN_MSG_BLOCK;
@@ -1841,6 +1974,13 @@ CkDynCallback callback_from(nb::handle h) {
   if (PyObject_TypeCheck(o, &BPMType)) {
     BPMObject *b = (BPMObject *)o;
     ProxyObject *p = (ProxyObject *)b->proxy;
+    if (p->issec) {   // an entry multicast to the section (relayed by CkDynMgr)
+      cb.kind = CKDYN_CB_SECTION;
+      cb.t = p->t;
+      cb.sid = p->sid;
+      cb.ep = b->pm->ep;
+      return cb;
+    }
     cb.kind = CKDYN_CB_TARGET;
     cb.t = p->t;
     cb.ep = b->pm->ep;
@@ -2055,7 +2195,7 @@ void set_hooks() {
   g_hooks.unpack_readonly = h_unpack_readonly;
   g_hooks.reduce = h_reduce;
   g_hooks.future = h_future;
-  g_hooks.section_joined = nullptr;
+  g_hooks.section_joined = h_section_joined;
   g_hooks.map_proc_num = h_map_proc_num;
   g_hooks.resume_from_sync = h_resume_from_sync;
   g_hooks.error = h_error;
@@ -2089,6 +2229,7 @@ void mod_init(nb::handle charm, nb::handle options, nb::handle future_type, nb::
   LOOKUP(c_triggerCallable, "triggerCallable");
   LOOKUP(c_callHandler, "callHandler");
   LOOKUP(c_error, "_error");
+  LOOKUP(c_section_joined, "_section_joined");
 #undef LOOKUP
   if (future_type.is_none() || remote_fut.is_none()) {
     nb::module_ th = nb::module_::import_("charm4py.threads");
@@ -2322,9 +2463,15 @@ void mod_destroy_element(int aid, nb::handle index) {
   CkDynArrayDestroyElement(aid, (int)iv.size(), iv.data());
 }
 
-void mod_contribute(nb::handle obj, nb::handle data, int rtype, nb::handle target) {
+// Contribute data (SPEC-4a 2.7 contribute) to a whole-collection reduction,
+// or, when sid is given, to a section reduction (CkDynContributeSection).
+void contribute_any(nb::handle obj, nb::handle data, int rtype, nb::handle target, const CkDynSectionID *sid) {
   CkDynTarget me = target_of(obj.ptr());
   CkDynCallback cb = callback_from(target);
+  auto contribute = [sid](const CkDynTarget *m, const CkDynRedData *rd, const CkDynCallback *c) {
+    if (sid) CkDynContributeSection(m, sid, rd, c);
+    else CkDynContribute(m, rd, c);
+  };
   CkDynRedData d;
   memset(&d, 0, sizeof d);
   d.type = rtype;
@@ -2342,20 +2489,65 @@ void mod_contribute(nb::handle obj, nb::handle data, int rtype, nb::handle targe
     uint32_t len = 0;
     d.data = CkDynMsgPayload(m, &len);
     d.len = len;
-    CkDynContribute(&me, &d, &cb);
+    contribute(&me, &d, &cb);
     CkDynMsgFree(m);
     return;
   }
   if (data.is_none()) {
-    CkDynContribute(&me, &d, &cb);
+    contribute(&me, &d, &cb);
     return;
   }
   Py_buffer v;
   if (PyObject_GetBuffer(data.ptr(), &v, PyBUF_ANY_CONTIGUOUS) < 0) throw_py();
   d.data = v.buf;
   d.len = (uint32_t)v.len;
-  CkDynContribute(&me, &d, &cb);
+  contribute(&me, &d, &cb);
   PyBuffer_Release(&v);
+}
+
+void mod_contribute(nb::handle obj, nb::handle data, int rtype, nb::handle target) {
+  contribute_any(obj, data, rtype, target, nullptr);
+}
+
+void mod_contribute_section(nb::handle obj, nb::handle sid, nb::handle data, int rtype, nb::handle target) {
+  CkDynSectionID s = sid_of(sid);
+  contribute_any(obj, data, rtype, target, &s);
+}
+
+// Sections (SPEC-4b 2). Creation runs on this PE, which becomes the root; the
+// returned id is valid at once, and `done` (a Future, a Callback or None)
+// receives an empty reduction when every member has joined.
+nb::bytes sid_result(const CkDynSectionID &sid) {
+  return nb::steal<nb::bytes>(sid_to_bytes(sid));
+}
+
+nb::bytes mod_section_create_array(int aid, int ndims, nb::handle indices, int bfactor, nb::handle done) {
+  std::vector<int> iv = int_list(indices);
+  if (ndims < 1 || ndims > CKDYN_MAX_DIMS) throw nb::value_error("section_create_array: ndims must be 1 to 6");
+  if (iv.empty() || iv.size() % (size_t)ndims) throw nb::value_error("section_create_array: indices must hold nelems * ndims ints, nelems >= 1");
+  CkDynCallback cb = callback_from(done);
+  CkDynSectionID sid;
+  CkDynSectionCreateArray(aid, (int)(iv.size() / ndims), ndims, iv.data(), bfactor, &cb, &sid);
+  return sid_result(sid);
+}
+
+nb::bytes mod_section_create_group(int gid, nb::handle pes, int bfactor, nb::handle done) {
+  std::vector<int> pv = int_list(pes);
+  if (pv.empty()) throw nb::value_error("section_create_group: no PEs");
+  CkDynCallback cb = callback_from(done);
+  CkDynSectionID sid;
+  CkDynSectionCreateGroup(gid, (int)pv.size(), pv.data(), bfactor, &cb, &sid);
+  return sid_result(sid);
+}
+
+nb::bytes mod_section_combine(nb::handle sids, nb::handle done) {
+  std::vector<CkDynSectionID> parts;
+  for (nb::handle h : sids) parts.push_back(sid_of(h));
+  if (parts.size() < 1) throw nb::value_error("section_combine: no sections");
+  CkDynCallback cb = callback_from(done);
+  CkDynSectionID sid;
+  CkDynSectionCombine((int)parts.size(), parts.data(), &cb, &sid);
+  return sid_result(sid);
 }
 
 nb::list mod_reducers() {
@@ -2442,6 +2634,8 @@ NB_MODULE(_ckdyn, m) {
   k_custom_reducer = PyBytes_FromString("custom_reducer");
   k_single = PyBytes_FromString("single");
   k_refnum = PyBytes_FromString("refnum");
+  k_sid = PyBytes_FromString("sid");
+  k_constrained = PyBytes_FromString("constrained");
 
   nb::module_ pickle = nb::module_::import_("pickle");
   g_dumps = nb::object(pickle.attr("dumps")).release().ptr();
@@ -2588,6 +2782,10 @@ NB_MODULE(_ckdyn, m) {
       .def_prop_ro("pe", [](const CallbackW &w) { return w.cb.pe; })
       .def_prop_ro("id", [](const CallbackW &w) { return w.cb.id; })
       .def_prop_ro("refnum", [](const CallbackW &w) { return w.cb.refnum; })
+      .def_prop_ro("sid", [](const CallbackW &w) -> nb::object {
+        if (w.cb.kind != CKDYN_CB_SECTION) return nb::none();
+        return nb::steal(sid_to_bytes(w.cb.sid));
+      })
       .def_prop_ro("target_", [](const CallbackW &w) { return nb::steal(make_target(w.cb.t)); })
       .def("__getstate__", [](const CallbackW &w) { return nb::bytes((const char *)&w.cb, sizeof w.cb); })
       .def("__setstate__", [](CallbackW &w, nb::bytes b) {
@@ -2625,6 +2823,7 @@ NB_MODULE(_ckdyn, m) {
   m.attr("PE_ANY") = (int)CKDYN_PE_ANY;
   m.attr("CB_TARGET") = (int)CKDYN_CB_TARGET;
   m.attr("CB_FUTURE") = (int)CKDYN_CB_FUTURE;
+  m.attr("CB_SECTION") = (int)CKDYN_CB_SECTION;
   m.attr("CB_IGNORE") = (int)CKDYN_CB_IGNORE;
   m.attr("CB_EXIT") = (int)CKDYN_CB_EXIT;
   m.attr("ELEM_I8") = (int)CKDYN_ELEM_I8;
@@ -2695,6 +2894,23 @@ NB_MODULE(_ckdyn, m) {
   m.def("array_done_inserting", [](int aid) { CkDynArrayDoneInserting(aid); });
   m.def("destroy_element", &mod_destroy_element);
   m.def("contribute", &mod_contribute, nb::arg("obj"), nb::arg("data").none(), nb::arg("reducer_type"), nb::arg("target"));
+  m.def("contribute_section", &mod_contribute_section, nb::arg("obj"), nb::arg("sid"), nb::arg("data").none(),
+        nb::arg("reducer_type"), nb::arg("target"));
+  m.def("section_create_array", &mod_section_create_array, nb::arg("aid"), nb::arg("ndims"), nb::arg("indices"),
+        nb::arg("bfactor") = 0, nb::arg("done").none() = nb::none());
+  m.def("section_create_group", &mod_section_create_group, nb::arg("gid"), nb::arg("pes"), nb::arg("bfactor") = 0,
+        nb::arg("done").none() = nb::none());
+  m.def("section_combine", &mod_section_combine, nb::arg("sids"), nb::arg("done").none() = nb::none());
+  m.def("section_delete", [](nb::handle sid) { CkDynSectionID s = sid_of(sid); CkDynSectionDelete(&s); });
+  m.def("section_redno", [](nb::handle obj, nb::handle sid) {
+    CkDynTarget t = target_of(obj.ptr());
+    CkDynSectionID s = sid_of(sid);
+    return CkDynSectionRedNo(&t, &s);
+  });
+  m.def("section_info", [](nb::handle sid) {   // (root_pe, idx, coll_id, kind, gen)
+    CkDynSectionID s = sid_of(sid);
+    return nb::make_tuple((int)s.root_pe, (int)s.idx, (int)s.coll_id, (int)s.kind, (int)s.gen);
+  });
   m.def("reducers", &mod_reducers);
   m.def("foreign_reducer_type", []() { return CkDynForeignReducerType(); });
   m.def("reduction_number", [](nb::handle obj) { CkDynTarget t = target_of(obj.ptr()); return CkDynGetReductionNumber(&t); });
