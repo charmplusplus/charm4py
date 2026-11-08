@@ -356,8 +356,8 @@ nodes. numba-cuda 0.30.4 is incompatible with numpy 2.5 (outside this project).
   entry-method path (DEVICE slots, this step) is the Python form of `nocopydevice` and
   already gives GPU-to-GPU transfers, RDMA between nodes.
 - Untested: the `+gpushm` IPC path between processes on one node; the 64 MB BUFFER
-  slowdown between nodes; hapitest's memory growth is an upstream charm issue to file
-  when Kale lifts speculative mode (evidence above).
+  slowdown between nodes; hapitest's memory growth is charm issue #4197 (filed 2026-11-08 15:35 PST
+  at Kale's request; the recharm session was told).
 - The weekly Delta gate (`tools/delta/scrontab.txt`) waits for Kale to install the line.
   Its dependencies `$WS/torch-cuda` (CUDA torch, 4.2 GB) and `$WS/numpy-compat` (numpy
   2.4.6 for numba-cuda) stay in the Delta workspace.
