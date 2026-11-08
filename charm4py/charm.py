@@ -291,7 +291,7 @@ class Charm(object):
         obj = object.__new__(em.C)  # create object but don't call __init__
         obj._ckdyn_target = target
         Mainchare.initMember(obj, target)
-        super(em.C, obj).__init__()  # call Chare class __init__ first
+        Chare.__init__(obj)  # Chare state first; super(em.C, obj) would be a parent user class
         if self.entry_func is not None:
             assert isinstance(obj, chare.DefaultMainchare)
             obj.main = self.entry_func
@@ -331,7 +331,7 @@ class Charm(object):
                 self.activeChares.add((em.C, Group))
             index = _ckdyn.my_node() if kind == CKDYN_NODEGROUP else None
             Group.initMember(obj, target.gid, index)
-            super(em.C, obj).__init__()  # call Chare class __init__ first
+            Chare.__init__(obj)  # Chare state first; super(em.C, obj) would be a parent user class
             if b'constrained' in header:
                 # Group(C, onPEs=...): thisProxy becomes the group section proxy
                 # when this branch joins it (_section_joined)
@@ -342,13 +342,13 @@ class Charm(object):
                 self.activeChares.add((em.C, Array))
             index = tuple(target.index)
             Array.initMember(obj, target.aid, index, single=(b'single' in header))
-            super(em.C, obj).__init__()
+            Chare.__init__(obj)
             self.arrays[target.aid][index] = obj
         elif kind == CKDYN_CHARE:
             if self.options.profiling:
                 self.activeChares.add((em.C, SingletonChare))
             SingletonChare.initMember(obj, target)
-            super(em.C, obj).__init__()
+            Chare.__init__(obj)
             self.chares[target.cid] = obj
         else:
             raise Charm4PyError('Cannot construct a chare of CkDyn kind ' + str(kind))
