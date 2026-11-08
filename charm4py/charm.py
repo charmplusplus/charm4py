@@ -18,7 +18,7 @@ import traceback
 from . import _ckdyn
 from . import chare
 from .chare import MAINCHARE, GROUP, ARRAY, CHARE, CHARM_TYPES
-from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare, SECTIONS_ERROR
+from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare
 from .chare import (CKDYN_MAINCHARE, CKDYN_CHARE, CKDYN_GROUP, CKDYN_NODEGROUP,
                     CKDYN_ARRAY, CKDYN_ARRAYMAP, CKDYN_EP_THREADED, CKDYN_PUP_MIGRATE)
 from . import entry_method
@@ -739,18 +739,126 @@ class Charm(object):
         _ckdyn.init(self, self.options)
         _ckdyn.start(sys.argv)
 
-    # Charm class contribute function used by Array and Group for reductions
+    # Charm class contribute function used by Array, Group and sections for reductions.
+    # 'section' is a section proxy or a section id (proxy.section[1]); a branch of a
+    # constrained group contributes to its group section when section is None.
     def contribute(self, data, reducer, target, chare, section=None):
-        if section is not None or chare.thisProxy.issec:
-            raise NotImplementedError(SECTIONS_ERROR)
+        if section is None and chare.thisProxy.issec:
+            section = chare.thisProxy
         rtype, data = self.redMgr.prepare(data, reducer, chare)
-        _ckdyn.contribute(chare, data, rtype, target)
+        if section is None:
+            _ckdyn.contribute(chare, data, rtype, target)
+        else:
+            sid = self._section_id(section)
+            if sid not in chare.__dict__.get('_sections', ()):
+                raise Charm4PyError('Section reduction by ' + chare.__class__.__name__ + str(chare.thisIndex) +
+                                    ', which is not a member of the section')
+            _ckdyn.contribute_section(chare, sid, data, rtype, target)
+
+    # ---------------- sections (SPEC-4b.md) ----------------
+
+    def _section_id(self, section):
+        """ the 16-byte section id of a section proxy, or section itself if it is one """
+        if isinstance(section, bytes):
+            return section
+        if getattr(section, 'issec', False):
+            return section.section[1]
+        raise TypeError('expected a section proxy or a section id, got ' + repr(section))
+
+    def _require_coroutine(self, what):
+        if self.threadMgr.isMainThread():
+            raise Charm4PyError(what + ' must be called from a coroutine: it waits until '
+                                'every member has joined the new section(s)')
+
+    def _create_section(self, proxy, members, done):
+        """ Create one section on this PE (its root) from members, a list of
+            (gid, pe) or (aid, index); returns the section id. Members from several
+            arrays (the split of a combined section) become one section per array,
+            combined. """
+        if proxy._kind == CKDYN_GROUP:
+            gid = members[0][0]
+            return _ckdyn.section_create_group(gid, sorted({pe for _, pe in members}), 0, done)
+        by_aid = {}
+        for aid, index in members:
+            by_aid.setdefault(aid, []).append(index)
+        parts = []
+        for aid, indices in by_aid.items():
+            ndims = len(indices[0])
+            flat = [i for index in indices for i in index]
+            parts.append((aid, ndims, flat))
+        if len(parts) == 1:
+            aid, ndims, flat = parts[0]
+            return _ckdyn.section_create_array(aid, ndims, flat, 0, done)
+        sids = [_ckdyn.section_create_array(aid, ndims, flat, 0, None) for aid, ndims, flat in parts]
+        return _ckdyn.section_combine(sids, done)
+
+    def split(self, proxy, numsections, section_func=None, elems=None, slicing=None):
+        """ Split a group, an array or a section into numsections sections; returns the
+            list of section proxies. Membership is given by section_func(obj) (a section
+            number, a list of them, or a negative number for none), by elems (one list
+            of indices or PEs per section), by slicing (one slice per dimension; one
+            section), or, with none of them, every member is in the one section.
+            Must be called from a coroutine: it returns when every member of every new
+            section has joined it, so sends to the returned proxies are safe at once. """
+        if (not isinstance(proxy, _ckdyn.Proxy) or proxy._kind not in (CKDYN_GROUP, CKDYN_ARRAY)
+                or proxy._has_elem):
+            raise Charm4PyError('charm.split: expected a group, array or section proxy (not an element proxy)')
+        self._require_coroutine('charm.split')
+        if elems is not None:
+            if numsections == 1 and not isinstance(elems[0], list) and not isinstance(elems[0], set):
+                elems = [elems]
+            if len(elems) != numsections:
+                raise Charm4PyError('charm.split: elems has ' + str(len(elems)) + ' lists for ' +
+                                    str(numsections) + ' sections')
+        members = [[] for _ in range(numsections)]
+        if proxy._kind == CKDYN_GROUP and not proxy.issec and elems is not None:
+            # the members of a group section are PEs: no vote needed
+            for n, pes in enumerate(elems):
+                members[n] = [(proxy.gid, int(pe)) for pe in pes]
+        else:
+            # every member of the collection or section says which sections it is in
+            f = self.Future()
+            proxy._sectionVote_(numsections, section_func, slicing, elems, f,
+                                proxy if proxy.issec else None)
+            for coll_id, index, secs in f.get():
+                for n in secs:
+                    members[n].append((coll_id, index))
+        for n, m in enumerate(members):
+            if len(m) == 0:
+                raise Charm4PyError('charm.split: section ' + str(n) + ' has no members')
+        done = self.Future(numsections)
+        sids = [self._create_section(proxy, m, done) for m in members]
+        done.get()
+        return [proxy._as_section(sid) for sid in sids]
 
     def combine(self, *proxies):
-        raise NotImplementedError(SECTIONS_ERROR)
-
-    def split(self, proxy, numsections, section_func=None, elems=None, slicing=None, cons=None):
-        raise NotImplementedError(SECTIONS_ERROR)
+        """ The union of array sections and arrays of one chare class with one index
+            dimension count, as a new section (each element once); returns its proxy.
+            Group sections cannot be combined (TypeError): a combined section is a
+            Charm++ multi-array section. Must be called from a coroutine. """
+        if len(proxies) == 0:
+            raise Charm4PyError('charm.combine: no proxies')
+        first = proxies[0]
+        for p in proxies:
+            if not isinstance(p, _ckdyn.Proxy) or p._kind != CKDYN_ARRAY or p._has_elem:
+                raise TypeError('charm.combine accepts array sections and arrays only, got ' + repr(p) +
+                                ' (group sections cannot be combined)')
+            if type(p) is not type(first):
+                raise TypeError('charm.combine: the arrays must be of one chare class (' +
+                                type(first).__name__ + ', ' + type(p).__name__ + ')')
+            if p.ndims != first.ndims:
+                raise TypeError('charm.combine: the arrays must have one index dimension count (' +
+                                str(first.ndims) + ', ' + str(p.ndims) + ')')
+        self._require_coroutine('charm.combine')
+        sids = []
+        for p in proxies:
+            if not p.issec:
+                p = self.split(p, 1)[0]  # the whole array as a section
+            sids.append(p.section[1])
+        done = self.Future()
+        sid = _ckdyn.section_combine(sids, done)
+        done.get()
+        return first._as_section(sid)
 
     def startQD(self, callback):
         _ckdyn.start_qd(callback)

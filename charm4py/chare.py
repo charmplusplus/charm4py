@@ -2,7 +2,6 @@ from . import wait
 from charm4py import ray
 import sys
 from greenlet import getcurrent
-from collections import defaultdict
 from . import _ckdyn
 
 # A Chare class defined by a user can be used in 4 ways: (1) as a Mainchare, (2) to form Groups,
@@ -47,8 +46,6 @@ CKDYN_PUP_CHECKPOINT = _const('CKDYN_PUP_CHECKPOINT', 2)
  CKDYN_ELEM_F16, CKDYN_ELEM_F32, CKDYN_ELEM_F64,
  CKDYN_ELEM_C64, CKDYN_ELEM_C128,
  CKDYN_ELEM_BOOL, CKDYN_ELEM_BYTE) = range(16)
-
-SECTIONS_ERROR = 'sections: step 4b'
 
 
 class Chare(object):
@@ -174,6 +171,34 @@ class Chare(object):
     def __getRedNo__(self):
         return _ckdyn.reduction_number(self)
 
+    def _sectionVote_(self, numsections, section_func, slicing, elems, f, secproxy):  # entry method
+        """ charm.split: report the sections (numbered 0 to numsections - 1) this
+            member belongs to, as (collection id, index, [section numbers]) gathered
+            to the future f """
+        if section_func is not None:
+            secs = section_func(self)
+            if isinstance(secs, int):
+                secs = [] if secs < 0 else [secs]
+        elif slicing is not None:
+            index = self.thisIndex if isinstance(self.thisIndex, tuple) else (self.thisIndex,)
+            secs = [0]
+            for i, sl in enumerate(slicing):
+                step = 1 if sl.step is None else sl.step
+                start = 0 if sl.start is None else sl.start
+                if index[i] not in range(start, sl.stop, step):
+                    secs = []
+                    break
+        elif elems is not None:
+            secs = [n for n, e in enumerate(elems) if self.thisIndex in e]
+        else:
+            secs = [0]  # every member
+        secs = sorted(set(secs))
+        assert len(secs) <= numsections, 'Element ' + str(self.thisIndex) + \
+                                         ' participates in more sections than were specified'
+        proxy = self.thisProxy
+        coll_id = proxy.aid if proxy._kind == CKDYN_ARRAY else proxy.gid
+        charm.contribute((coll_id, self.thisIndex, secs), Reducer.gather, f, self, secproxy)
+
     def __addThreadEventSubscriber__(self, target, args):
         self._thread_notify_target = target
         self._thread_notify_data = args
@@ -231,7 +256,7 @@ method_restrictions = {
     'reserved': {'__flush_wait_queues__',
                  '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
                  'AtSync', 'migrate', 'setMigratable',
-                 '_coll_future_deposit_result', '__getRedNo__',
+                 '_coll_future_deposit_result', '__getRedNo__', '_sectionVote_',
                  '__addThreadEventSubscriber__',
                  '__initchannelattrs__', '__findPendingChannel__',
                  '_channelConnect__', '_channelRecv__'},
@@ -356,7 +381,16 @@ def group_proxy_ctor(proxy, gid):
 
 def group_proxy_elem(proxy, pe):  # group proxy [] overload method
     if isinstance(pe, slice):
-        raise NotImplementedError(SECTIONS_ERROR)
+        # a group section (charm.split: called from a coroutine)
+        start, stop, step = pe.start, pe.stop, pe.step
+        if start is None:
+            start = 0
+        if stop is None:
+            stop = charm.numPes()
+        if step is None:
+            step = 1
+        return charm.split(proxy, 1, elems=[list(range(start, stop, step))])[0]
+    # an element of the group (also from a group section proxy)
     proxy_clone = proxy.__class__(proxy.gid)
     proxy_clone._set_elem(pe)
     return proxy_clone
@@ -476,15 +510,21 @@ def array_proxy_ctor(proxy, aid, ndims):
 
 def array_proxy_elem(proxy, idx):  # array proxy [] overload method
     ndims = proxy.ndims
+    isslice = True
     if type(idx) == int:
         idx = (idx,)
+        isslice = False
     elif type(idx) == slice:
-        raise NotImplementedError(SECTIONS_ERROR)
+        idx = (idx,)
     idx = tuple(idx)
     assert len(idx) == ndims, "Dimensions of index " + str(idx) + " don't match array dimensions"
-    for i in idx:
-        if isinstance(i, slice):
-            raise NotImplementedError(SECTIONS_ERROR)
+    if isslice and isinstance(idx[0], slice):
+        # an array section (charm.split: called from a coroutine)
+        for _slice in idx:
+            assert _slice.start is not None and _slice.stop is not None, 'Must specify start and stop indexes for array slicing'
+        return charm.split(proxy, 1, slicing=idx)[0]
+    if proxy.issec and _ckdyn.section_info(proxy.section[1])[2] == -1:
+        raise Charm4PyError('element access on a combined section proxy (its elements belong to several arrays)')
     proxy_clone = proxy.__class__(proxy.aid, ndims)
     proxy_clone._set_index(idx)
     return proxy_clone
