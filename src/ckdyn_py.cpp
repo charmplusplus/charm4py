@@ -85,6 +85,7 @@ struct ClassEntry {
   int first_ep = -1;
   int nentries = 0;
   PyObject *proxy_class = nullptr;
+  bool nozc = false;      // the class sets _ckdyn_no_zerocopy: arrays sent to it are copied (pool workers)
 };
 std::vector<MethodEntry> g_methods;                 // indexed by Charm++ ep
 std::vector<ClassEntry> g_classes;                  // indexed by chare index
@@ -130,6 +131,8 @@ struct PeState {
   // is called before a delivery, construction or unpacking and leave(frame, obj)
   // after it; NULL when nothing measures (the common case: one test per delivery).
   PyObject *meter_enter = nullptr, *meter_leave = nullptr;   // strong
+  // NCPY and DEVICE slots this PE has sent, and their done functions run (zerocopy_counts)
+  uint64_t zc_sent = 0, zc_done = 0;
 };
 thread_local PeState tls;
 
@@ -778,12 +781,170 @@ bool future_ids(PyObject *f, int *pe, uint32_t *fid) {
   return true;
 }
 
+PyObject *getattr_or_null(PyObject *o, const char *name);
+
+// The done function of an NCPY or DEVICE slot: the source object (one
+// reference, taken when the slot was added) may be released. CkDyn calls it
+// from the scheduler of the sending PE.
+void obj_done(void *arg) {
+  if (!Py_IsInitialized()) return;
+  Gil g;
+  tls.zc_done++;
+  Py_DECREF((PyObject *)arg);
+}
+
+// charm.options.zerocopy_threshold, read when a message is packed.
+long long zerocopy_threshold() {
+  long long t = 1 << 20;
+  PyObject *v = g_options ? getattr_or_null(g_options, "zerocopy_threshold") : nullptr;
+  if (v) {
+    long long x = PyLong_AsLongLong(v);
+    if (x == -1 && PyErr_Occurred()) PyErr_Clear(); else t = x;
+    Py_DECREF(v);
+  }
+  PyErr_Clear();
+  return t;
+}
+
+// typestr of __cuda_array_interface__ <-> CKDYN_ELEM_*
+int typestr_elem(const char *ts) {
+  if (!ts || !ts[0] || !ts[1]) return -1;
+  if (ts[0] == '>') return -1;   // big-endian data
+  char k = ts[1];
+  int sz = atoi(ts + 2);
+  switch (k) {
+    case 'b': return sz == 1 ? CKDYN_ELEM_BOOL : -1;
+    case 'i': return sz == 1 ? CKDYN_ELEM_I8 : sz == 2 ? CKDYN_ELEM_I16 : sz == 4 ? CKDYN_ELEM_I32 : sz == 8 ? CKDYN_ELEM_I64 : -1;
+    case 'u': return sz == 1 ? CKDYN_ELEM_U8 : sz == 2 ? CKDYN_ELEM_U16 : sz == 4 ? CKDYN_ELEM_U32 : sz == 8 ? CKDYN_ELEM_U64 : -1;
+    case 'f': return sz == 2 ? CKDYN_ELEM_F16 : sz == 4 ? CKDYN_ELEM_F32 : sz == 8 ? CKDYN_ELEM_F64 : -1;
+    case 'c': return sz == 8 ? CKDYN_ELEM_C64 : sz == 16 ? CKDYN_ELEM_C128 : -1;
+    default: return -1;
+  }
+}
+
+const char *elem_typestr(int elem) {
+  switch (elem) {
+    case CKDYN_ELEM_I8: return "|i1";
+    case CKDYN_ELEM_I16: return "<i2";
+    case CKDYN_ELEM_I32: return "<i4";
+    case CKDYN_ELEM_I64: return "<i8";
+    case CKDYN_ELEM_U16: return "<u2";
+    case CKDYN_ELEM_U32: return "<u4";
+    case CKDYN_ELEM_U64: return "<u8";
+    case CKDYN_ELEM_F16: return "<f2";
+    case CKDYN_ELEM_F32: return "<f4";
+    case CKDYN_ELEM_F64: return "<f8";
+    case CKDYN_ELEM_C64: return "<c8";
+    case CKDYN_ELEM_C128: return "<c16";
+    case CKDYN_ELEM_BOOL: return "|b1";
+    default: return "|u1";
+  }
+}
+
+// The device ordinal of a cupy array (.device.id), a torch tensor
+// (.device.index) or a numba device array (.device_id is absent; 0).
+int device_ordinal(PyObject *o) {
+  int dev = 0;
+  PyObject *d = getattr_or_null(o, "device");
+  if (d) {
+    PyObject *v = PyLong_Check(d) ? Py_NewRef(d) : getattr_or_null(d, "id");
+    if (!v) v = getattr_or_null(d, "index");
+    if (v && PyLong_Check(v)) dev = (int)PyLong_AsLong(v);
+    Py_XDECREF(v);
+    Py_DECREF(d);
+  }
+  PyErr_Clear();
+  return dev;
+}
+
 struct Packer {
   CkDynMsgBuilder *b;
   PyObject *pickled = nullptr;   // list of values for the tail
   KeepAlive keep;                // BUFFER sources: the Packer must outlive CkDynMsgFinish/Abandon
+  // NCPY and DEVICE slots are allowed: a point-to-point send or a future value,
+  // not a broadcast, section, reduction, constructor or Ray/pool task (SPEC-3 4)
+  bool zc_ok = false;
+  bool device_dest_known = true;   // false: a singleton chare whose PE is not known yet
+  long long zc_thr = -1;
   explicit Packer(CkDynMsgBuilder *b_) : b(b_) {}
   ~Packer() { Py_XDECREF(pickled); keep.release(); }
+
+  long long threshold() {
+    if (zc_thr < 0) zc_thr = zerocopy_threshold();
+    return zc_thr;
+  }
+
+  // An object with __cuda_array_interface__ (cai: the interface dict).
+  bool add_device(PyObject *o, PyObject *cai) {
+    if (!CkDynHasDeviceSupport()) {
+      PyErr_SetString(PyExc_TypeError, "device arrays need a CUDA or HIP build of Charm++");
+      return false;
+    }
+    if (!zc_ok) return pickle(o);   // copied through the pickled tail, as in charm4py 1.x
+    if (!device_dest_known) {
+      PyErr_SetString(PyExc_TypeError, "a device array cannot be sent to a chare whose PE is not known yet");
+      return false;
+    }
+    if (!PyDict_Check(cai)) { PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ is not a dict"); return false; }
+    PyObject *shape = PyDict_GetItemString(cai, "shape");       // borrowed
+    PyObject *typestr = PyDict_GetItemString(cai, "typestr");
+    PyObject *data = PyDict_GetItemString(cai, "data");
+    PyObject *strides = PyDict_GetItemString(cai, "strides");
+    PyObject *stream = PyDict_GetItemString(cai, "stream");
+    if (!shape || !PyTuple_Check(shape) || !typestr || !PyUnicode_Check(typestr) || !data || !PyTuple_Check(data) ||
+        PyTuple_GET_SIZE(data) < 1) {
+      PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ without shape, typestr or data");
+      return false;
+    }
+    int elem = typestr_elem(PyUnicode_AsUTF8(typestr));
+    if (elem < 0) { PyErr_Format(PyExc_TypeError, "device array of type %U is not supported", typestr); return false; }
+    Py_ssize_t ndim = PyTuple_GET_SIZE(shape);
+    if (ndim > CKDYN_MAX_BUF_DIMS) { PyErr_SetString(PyExc_ValueError, "device array with too many dimensions"); return false; }
+    int64_t sh[CKDYN_MAX_BUF_DIMS];
+    uint64_t n = 1;
+    for (Py_ssize_t i = 0; i < ndim; i++) {
+      sh[i] = PyLong_AsLongLong(PyTuple_GET_ITEM(shape, i));
+      if (sh[i] == -1 && PyErr_Occurred()) return false;
+      n *= (uint64_t)sh[i];
+    }
+    uint64_t isz = elem_size(elem);
+    if (strides && strides != Py_None) {   // must be the C-contiguous strides
+      if (!PyTuple_Check(strides) || PyTuple_GET_SIZE(strides) != ndim) {
+        PyErr_SetString(PyExc_TypeError, "device array strides do not match its shape");
+        return false;
+      }
+      int64_t expect = (int64_t)isz;
+      for (Py_ssize_t i = ndim - 1; i >= 0; i--) {
+        long long st = PyLong_AsLongLong(PyTuple_GET_ITEM(strides, i));
+        if (st == -1 && PyErr_Occurred()) return false;
+        if (sh[i] > 1 && st != expect) {
+          PyErr_SetString(PyExc_TypeError, "device arrays must be C-contiguous to be sent");
+          return false;
+        }
+        expect *= sh[i];
+      }
+    }
+    unsigned long long ptr = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(data, 0));
+    if (ptr == (unsigned long long)-1 && PyErr_Occurred()) return false;
+    uint64_t st = 0;
+    if (stream && stream != Py_None) {
+      st = PyLong_AsUnsignedLongLong(stream);
+      if (st == (uint64_t)-1 && PyErr_Occurred()) return false;
+    }
+    if (n * isz > 0xffffffffull) { PyErr_SetString(PyExc_ValueError, "device array argument of 4 GB or more"); return false; }
+    CkDynDevDesc d;
+    memset(&d, 0, sizeof d);
+    d.ptr = (const void *)(uintptr_t)ptr;
+    d.len = n * isz;
+    d.elem = (uint8_t)elem;
+    d.ndim = (uint8_t)ndim;
+    d.device = device_ordinal(o);
+    d.stream = st;
+    d.shape = ndim ? sh : nullptr;
+    CkDynMsgAddDevice(b, &d, obj_done, Py_NewRef(o));   // the reference goes to obj_done
+    tls.zc_sent++;
+    return true;
+  }
 
   bool pickle(PyObject *o) {
     if (!pickled && !(pickled = PyList_New(0))) return false;
@@ -824,8 +985,14 @@ struct Packer {
     d.tag = ndim == 0 ? TAG_ND0 : 0;
     d.shape = ndim ? shape : nullptr;
     d.strides = nullptr;
+    PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
+    if (zc_ok && ndim > 0 && (long long)nbytes >= threshold()) {
+      CkDynMsgAddNcpy(b, &d, obj_done, src);   // released by obj_done once the data has left
+      tls.zc_sent++;
+      return true;
+    }
     CkDynMsgAddBuffer(b, &d);
-    keep.objs.push_back(c != a ? (PyObject *)c : Py_NewRef(o));   // c's reference moves to keep
+    keep.objs.push_back(src);
     return true;
   }
 
@@ -902,6 +1069,13 @@ struct Packer {
       CkDynMsgAddProxy(b, &t);
       return true;
     }
+    PyObject *cai = getattr_or_null(o, "__cuda_array_interface__");
+    if (cai) {
+      bool ok = add_device(o, cai);
+      Py_DECREF(cai);
+      return ok;
+    }
+    PyErr_Clear();
     return pickle(o);
   }
 
@@ -1034,6 +1208,37 @@ PyObject *proxy_from_slot(const CkDynMsgView *v, int i) {
   return proxy_alloc(cls, t, has);
 }
 
+// ---------------------------------------------------------------------------
+// DeviceBuffer: a received DEVICE slot. Holds the message (its device memory
+// is freed with the message's last release) and exposes it through
+// __cuda_array_interface__ version 3, so cupy.asarray, torch.as_tensor and
+// numba.cuda.as_cuda_array use it without a copy.
+
+struct DeviceBufferW {
+  nb::object ref;            // MsgRef
+  uintptr_t ptr = 0;
+  uint64_t nbytes = 0;
+  int device = 0;
+  int elem = 0;
+  std::vector<int64_t> shape;
+};
+
+PyObject *device_buffer(RecvCtx &ctx, int i) {
+  const CkDynSlot &s = ctx.v->slots[i];
+  const int64_t *shape = nullptr;
+  const void *p = CkDynViewBufferPtr(ctx.v, i, &shape);
+  PyObject *ref = ctx.ref();
+  if (!ref) return nullptr;
+  DeviceBufferW w;
+  w.ref = nb::borrow(ref);
+  w.ptr = (uintptr_t)p;
+  w.nbytes = s.len;
+  w.device = (int)s.reserved;
+  w.elem = s.elem;
+  w.shape.assign(shape, shape + s.ndim);
+  return nb::cast(std::move(w)).release().ptr();
+}
+
 PyObject *slot_value(RecvCtx &ctx, int i) {
   const CkDynMsgView *v = ctx.v;
   const CkDynSlot &s = v->slots[i];
@@ -1048,10 +1253,13 @@ PyObject *slot_value(RecvCtx &ctx, int i) {
       if (s.tag == TAG_STR) return PyUnicode_DecodeUTF8(p, (Py_ssize_t)s.len, "strict");
       return PyBytes_FromStringAndSize(p, (Py_ssize_t)s.len);
     }
+    case CKDYN_SLOT_DEVICE:
+      return device_buffer(ctx, i);
+    case CKDYN_SLOT_NCPY:
     case CKDYN_SLOT_BUFFER: {
       const int64_t *shape = nullptr;
       const void *p = CkDynViewBufferPtr(v, i, &shape);
-      if ((s.tag & 0xff) == TAG_ARRAY) {
+      if (s.type == CKDYN_SLOT_BUFFER && (s.tag & 0xff) == TAG_ARRAY) {
         char tc[2] = {(char)(s.tag >> 8), 0};
         PyObject *tcs = PyUnicode_FromString(tc);
         PyObject *arr = tcs ? call(g_array_type, {tcs}) : nullptr;
@@ -1789,6 +1997,12 @@ bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16
     CkDynMsgAddFuture(bg.b, pe, fid);
   }
   Packer pk(bg.b);   // declared after bg: destroyed first, after Finish or before Abandon
+  {
+    int ci = p->t.chare_idx;
+    bool nozc = ci >= 0 && (size_t)ci < g_classes.size() && g_classes[ci].nozc;
+    pk.zc_ok = !(flags & (CKDYN_MSG_BCAST | CKDYN_MSG_RAY)) && !nozc;
+    pk.device_dest_known = !(p->t.kind == CKDYN_CHARE && p->t.u.chare.pe < 0);
+  }
   for (size_t i = 0; i < nargs; i++)
     if (!pk.add(args[i])) return false;
   if (!pk.finish()) return false;
@@ -2378,6 +2592,12 @@ nb::tuple mod_register_class(nb::handle cls, int kind, int ndims, nb::list entri
   ce.kind = kind;
   ce.first_ep = first_ep;
   ce.nentries = (int)n;
+  {
+    PyObject *nz = getattr_or_null(cls.ptr(), "_ckdyn_no_zerocopy");
+    ce.nozc = nz && PyObject_IsTrue(nz) > 0;
+    Py_XDECREF(nz);
+    PyErr_Clear();
+  }
   return nb::make_tuple(idx, first_ep);
 }
 
@@ -2611,6 +2831,7 @@ nb::list mod_reducers() {
 void mod_future_set(int pe, uint32_t fid, nb::handle value) {
   BuilderGuard bg(CkDynMsgBegin(2, 64, 0, 0, -1));
   Packer pk(bg.b);
+  pk.zc_ok = true;
   if (!pk.add(value.ptr()) || !pk.finish()) throw_py();
   CkDynMsg *m = bg.finish(0);
   CkDynFutureSet(pe, fid, m);
@@ -2811,6 +3032,36 @@ NB_MODULE(_ckdyn, m) {
         return std::string(buf);
       });
 
+  // DeviceBuffer
+  nb::class_<DeviceBufferW>(m, "DeviceBuffer")
+      .def_prop_ro("__cuda_array_interface__", [](const DeviceBufferW &d) {
+        nb::list sh;
+        for (int64_t x : d.shape) sh.append(nb::int_(x));
+        nb::dict r;
+        r["shape"] = nb::tuple(sh);
+        r["typestr"] = nb::str(elem_typestr(d.elem));
+        r["data"] = nb::make_tuple(nb::int_((unsigned long long)d.ptr), false);
+        r["strides"] = nb::none();
+        r["version"] = 3;
+        r["stream"] = nb::none();
+        return r;
+      })
+      .def_prop_ro("device", [](const DeviceBufferW &d) { return d.device; })
+      .def_prop_ro("nbytes", [](const DeviceBufferW &d) { return (unsigned long long)d.nbytes; })
+      .def_prop_ro("shape", [](const DeviceBufferW &d) {
+        nb::list sh;
+        for (int64_t x : d.shape) sh.append(nb::int_(x));
+        return nb::tuple(sh);
+      })
+      .def_prop_ro("typestr", [](const DeviceBufferW &d) { return std::string(elem_typestr(d.elem)); })
+      .def_prop_ro("ptr", [](const DeviceBufferW &d) { return (unsigned long long)d.ptr; })
+      .def("__repr__", [](const DeviceBufferW &d) {
+        std::string sh;
+        for (size_t i = 0; i < d.shape.size(); i++) sh += (i ? ", " : "") + std::to_string(d.shape[i]);
+        if (d.shape.size() == 1) sh += ",";
+        return "DeviceBuffer(shape=(" + sh + "), typestr='" + elem_typestr(d.elem) + "', device=" + std::to_string(d.device) + ")";
+      });
+
   // Callback
   nb::class_<CallbackW>(m, "Callback")
       .def_static("target", [](nb::handle bpm, uint32_t refnum) {
@@ -2901,6 +3152,8 @@ NB_MODULE(_ckdyn, m) {
   m.def("api_version", []() { return CkDynApiVersion(); });
   m.def("refnum_bytes", []() { return CkDynRefnumBytes(); });
   m.def("has_device_support", []() { return CkDynHasDeviceSupport() != 0; });
+  // (NCPY and DEVICE slots sent from this PE, their done functions run so far)
+  m.def("zerocopy_counts", []() { return nb::make_tuple((unsigned long long)tls.zc_sent, (unsigned long long)tls.zc_done); });
   m.def("my_pe", []() { return CkDynMyPe(); });
   m.def("num_pes", []() { return CkDynNumPes(); });
   m.def("my_node", []() { return CkDynMyNode(); });

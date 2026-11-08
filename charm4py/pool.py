@@ -89,6 +89,9 @@ class Job(object):
 
 class PoolScheduler(Chare):
 
+    # task payloads and results are copied into messages, not sent zero-copy (SPEC-3 4)
+    _ckdyn_no_zerocopy = True
+
     def __init__(self):
         self.workers = None
         self.idle_workers = set(range(1, charm.numPes()))
@@ -306,6 +309,8 @@ class PoolScheduler(Chare):
 
 @register
 class Worker(Chare):
+
+    _ckdyn_no_zerocopy = True
 
     def __init__(self, scheduler):
         self.scheduler = scheduler
