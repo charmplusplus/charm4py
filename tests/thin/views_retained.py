@@ -14,6 +14,7 @@ receiver's resident set size (current and peak) before and after.
 from charm4py import charm, Chare, Group, Future
 import numpy as np
 import resource
+import sys
 import subprocess
 import os
 import time
@@ -29,7 +30,9 @@ def rss_mb():
 
 
 def peak_mb():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)   # bytes on macOS
+    # ru_maxrss is in bytes on macOS and in kilobytes on Linux
+    r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return r / (1024.0 * 1024.0) if sys.platform == 'darwin' else r / 1024.0
 
 
 class G(Chare):
