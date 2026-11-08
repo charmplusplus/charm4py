@@ -108,6 +108,13 @@ explicit `__flush_wait_queues__()`, as in 1.x.
   Reproduction: logs/gate-4c/cxx-repro/mig.C (`lcrun -n 2 ./mig 1 +pe 2
   +balancer RotateLB`; argument 0, no manual migration, passes). Not a CkDyn
   defect; atsync_in_coroutine.py avoids the pattern.
+  Update 2026-11-08 14:15 PST: fixed on charm branch `treelb-unordered-arrival`
+  (7192d2281 on recharm 16f27646b), issue charm #4195. Cause: TreeLB counted every
+  arrival as a migration it ordered, so a `migrateMe` arrival corrupted its per-step
+  count. Fix: `CkLocMgr::emigrate` marks arrivals the balancer did not order and
+  balancers ignore them. `mig.C` passes 8 of 8 on that branch. ckdyn-dev picks it up at
+  the next rebase onto recharm after the merge. A `migrateMe` while an LB step is in
+  progress on the destination PE remains unsafe; between steps it is fine.
 - `+MetaLB` with examples/particle/particle.py aborts in `CkMigratable::AtSync`
   ("Contributing to iter 0 < current iter 1"); tests/migration/test_migrate.py
   passes with `+MetaLB`. Not investigated; `+MetaLB` is not in any gate.
