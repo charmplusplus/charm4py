@@ -136,13 +136,25 @@ class Chare(object):
         charm.contribute(data, reducer, callback, self, section)
 
     def allreduce(self, data=None, reducer=None, section=None):
-        if section is not None:
-            raise NotImplementedError(SECTIONS_ERROR)
-        # the future id is shared by every contributor: the reduction number
-        # (+1, since 0 means no future) of this contribution
-        fid = self.__getRedNo__() + 1
-        f = charm.threadMgr.createCollectiveFuture(fid, self, self.thisProxy)
-        charm.contribute(data, reducer, f, self, section)
+        if section is None and self.thisProxy.issec:
+            section = self.thisProxy  # a branch of a constrained group
+        if section is None:
+            # the future id is shared by every contributor: the reduction number
+            # (+1, since 0 means no future) of this contribution
+            fid = self.__getRedNo__() + 1
+            f = charm.threadMgr.createCollectiveFuture(fid, self, self.thisProxy)
+            charm.contribute(data, reducer, f, self)
+            return f
+        # a section: the shared id is the section reduction number of this member
+        # (CkDynSectionRedNo), carried as the reference number of a section
+        # callback to _coll_future_deposit_result; the future is keyed by
+        # (number, section id), so it cannot clash with a whole-collection one
+        sid = charm._section_id(section)
+        secproxy = self.thisProxy._as_section(sid)
+        refnum = _ckdyn.section_redno(self, sid) + 1
+        f = charm.threadMgr.createCollectiveFuture((refnum, sid), self, secproxy)
+        cb = _ckdyn.Callback.target(secproxy._coll_future_deposit_result, refnum)
+        charm.contribute(data, reducer, cb, self, sid)
         return f
 
     def AtSync(self):
@@ -467,7 +479,6 @@ class Group(object):
             index = charm.myPe()
         obj.thisIndex = index
         obj.thisProxy = charm.proxyClasses[GROUP][obj.__class__](gid)
-        obj._scookies = defaultdict(int)
 
     @classmethod
     def __baseEntryMethods__(cls):

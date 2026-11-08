@@ -357,10 +357,15 @@ class Charm(object):
     def _invoke(self, obj, ep, header, args):
         """ slow delivery path: when conditions, coroutines, header flags, profiling """
         try:
-            if b'refnum' in header and self.entryMethods[ep].name != '_coll_future_deposit_result':
-                # the done callback of charm.checkpoint(dir, resume): the
-                # reference number is its tag, not an argument of the entry
-                self._checkpoint_done(args.pop(0))
+            if b'refnum' in header:
+                if self.entryMethods[ep].name != '_coll_future_deposit_result':
+                    # the done callback of charm.checkpoint(dir, resume): the
+                    # reference number is its tag, not an argument of the entry
+                    self._checkpoint_done(args.pop(0))
+                elif b'sid' in header:
+                    # the result of a section allreduce: its collective future is
+                    # keyed by (reduction number, section id) (Chare.allreduce)
+                    args[0] = (args[0], header[b'sid'])
             if b'custom_reducer' in header:
                 # reduction result of a Python reducer: the result is the last argument
                 reducer = self.redMgr.reducers_by_id[header[b'custom_reducer']]
@@ -488,6 +493,18 @@ class Charm(object):
 
     def _error(self, msg):
         print('CkDyn error: ' + str(msg), file=sys.stderr)
+
+    def _section_joined(self, obj, sid):
+        """ obj received the creation multicast of section sid (hook section_joined,
+            before obj's contribution that completes the section's creation) """
+        secs = obj.__dict__.get('_sections')
+        if secs is None:
+            secs = obj._sections = set()
+        secs.add(sid)
+        if obj.__dict__.pop('_constrained', False):
+            # a branch of a constrained group: the first section it joins is the
+            # group section that Group(C, onPEs=...) creates right after the group
+            obj.thisProxy = obj.thisProxy._as_section(sid)
 
     # register class C in Charm
     def registerInCharmAs(self, C, charm_type):
