@@ -2207,6 +2207,25 @@ two processes (copy-based on this Mac), the same on Anvil over the fabric, and a
 tests in CI, GPU tests run by hand and recorded.
 Decision 2026-11-08 (review F18): when step 3 lands, the GPU test also gets a periodic
 job on Delta, so that a regression after step 3 is caught.
+Status 2026-11-08, step 3: Mac part of the gate met on `ckdyn-dev` 365a128b5 and `thin`
+80639f5 (docs/design/SPEC-3.md 7; logs/step-3); the GPU part is written but not compiled
+with CUDA or run. `NCPY` slots use the generated `nocopy` layout and `_processHandler`'s
+`CkRdmaIssueRgets` with no change to ck.C; `DEVICE` slots use `CkRdmaDeviceOnSender` at
+send time and `CkRdmaDeviceIssueRgets` from the first delivery, into `CkDeviceMalloc`
+memory freed with the message; `CkDynHapiAddCallback` relays through a new `CkDynMgr`
+entry. The `ckdyntest` phases `ncpy/nonpost`, `ncpy/post_before`, `ncpy/post_after` and
+`ncpy/samepe` (16 MB out and back, done functions called once, retained views, posts
+before and after the send) pass at one PE, four PEs and `lcrun -n 2`; `thin/zerocopy`
+passes at one and two processes; the thin gate is 100 of 100. A 16 MB array one way
+between two processes on the Mac: 2.87 ms as BUFFER, 2.57 ms as NCPY. Deviations: a
+host post is filled by one copy on the receiving PE at delivery (receiving directly would
+need `_processHandler` to consult CkDyn); received device memory is `CkDeviceMalloc`,
+not `hapiPoolMalloc` (pinned host memory); zero-copy slots are also refused in
+constructor messages, reduction payloads, multi-branch sends and broadcast or section
+callbacks; in the binding a device array in a broadcast, section, reduction, Ray or
+pool send is pickled as in 1.x, and the pool's classes opt out of zero-copy with
+`_ckdyn_no_zerocopy`. Not done: the Delta recipe, scripts and runs, the Delta
+measurements and the crossover size (8.7 item 3).
 
 **Step 4 (charm4py branch `thin`): the binding and the Python cut-over.** Done in
 four sub-steps, each gated on a subset of auto_test so that the suite is green for the

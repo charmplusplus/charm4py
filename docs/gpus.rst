@@ -5,36 +5,97 @@ GPUs
 .. .. contents::
 
 
-GPUs are supported in Charm4py via the Charm++ HAPI (Hybrid API) interface.
-Presently, this support allows asynchronous completion detection of GPU kernels via Charm4py futures, 
-using the function ``charm.hapiAddCudaCallback``.
+Charm4py 2 works with GPU arrays in two ways: device arrays can be passed as
+arguments of entry methods, and the completion of work on a CUDA stream can set
+a Charm4py future (``charm.hapiAddCudaCallback``). Both use the Charm++ HAPI
+(Hybrid API) and device zero-copy support, so they need a Charm++ built with
+``cuda`` (or ``hip``); see `Building with GPU support`_.
 
-The HAPI Charm4py API is:
+``charm4py._ckdyn.has_device_support()`` returns ``True`` when the Charm++
+library Charm4py runs on was built with CUDA or HIP.
+
+Device arrays as arguments
+--------------------------
+
+Any argument that implements the `CUDA Array Interface
+<https://numba.readthedocs.io/en/stable/cuda/cuda_array_interface.html>`_
+(``__cuda_array_interface__``: CuPy arrays, PyTorch CUDA tensors, Numba device
+arrays) is sent device to device when the call is point to point (to one
+element of an array, one branch of a group, a chare, or as the value sent to a
+future, including ``ret=True`` results). Charm++ picks the transfer: a device
+copy within a process, CUDA IPC between processes on one node, and GPUDirect
+RDMA between nodes. The array must be C-contiguous. The data must be valid on
+the stream named in the interface (``stream``; the default stream when absent):
+the sender's stream is synchronized, or ordered with an event, before the data
+is read.
+
+Charm4py keeps a reference to the argument until the transfer has read it, so
+the sender may drop its own reference right after the call, but must not write
+to the array until then.
+
+The receiver gets a ``charm4py._ckdyn.DeviceBuffer``: device memory owned by
+the received message, freed when the last reference to the buffer (or to an
+array made from it) goes away. It implements ``__cuda_array_interface__``
+(version 3), so the usual libraries wrap it without a copy:
+
+.. code-block:: python
+
+    import cupy
+
+    class Worker(Chare):
+
+        def recv(self, buf):
+            a = cupy.asarray(buf)    # or torch.as_tensor(buf, device='cuda'),
+                                     # or numba.cuda.as_cuda_array(buf)
+            ...
+
+    # sender
+    x = cupy.arange(1 << 20, dtype=cupy.float64)
+    workers[3].recv(x)
+
+``DeviceBuffer`` also has ``shape``, ``typestr``, ``nbytes``, ``device`` (the
+device ordinal) and ``ptr``.
+
+Broadcasts, section multicasts, reductions and Ray or pool tasks do not use
+device transfers: a device array given to them is pickled (copied through the
+host), as in Charm4py 1.x. Without device support in Charm++, sending a device
+array raises ``TypeError``.
+
+The same rule applies to host arrays: a numpy array of at least
+``charm.options.zerocopy_threshold`` bytes (1 MB by default) in a point-to-point
+call is transferred by Charm++ from the sender's memory instead of being copied
+into the message, and the received array is a view of the data in the message.
+
+Completion callbacks: ``charm.hapiAddCudaCallback``
+---------------------------------------------------
 
 .. code-block:: python
 
     def hapiAddCudaCallback(stream, future)
 
-.. note::
+inserts a callback into the CUDA stream ``stream`` (the stream handle as an
+integer: ``cupy.cuda.Stream.ptr``, ``numba`` ``stream.handle.value``,
+``torch.cuda.Stream.cuda_stream``). When the stream reaches it, ``future`` is
+set to ``None`` on the PE that made the call. Quiescence detection treats the
+pending callback as outstanding work.
 
-    For now, ``charm.hapiAddCudaCallback`` only supports numba and torch streams as input. This function inserts a callback 
-    into the stream such that when the callback is reached, the corresponding Charm4py future is set.
+Building with GPU support
+-------------------------
 
-Enabling HAPI
---------
-To build Charm4py with HAPI support, add "cuda" to the Charm build options and follow the steps to build Charm4py from source:
+Wheels have no device support. A GPU build is a source build against a Charm++
+built with ``cuda`` (or ``hip``); the recipe is in :doc:`install` (section
+"GPUs (CUDA and HIP)"). In short, for a build of Charm++ by ``pip``:
 
 .. code-block:: shell
 
    export CHARM_EXTRA_BUILD_OPTS="cuda"
    pip install .
 
-.. warning:: 
+or point ``CHARM4PY_CHARM_BUILD_DIR`` at a Charm++ ``charm4py`` target built
+with ``cuda``, as described there.
 
-    To ensure that the underlying Charm build has Cuda enabled, remove any pre-existing builds in charm_src/charm before setting the Cuda option and running install.
-
-Examples
---------
+Example
+-------
 
 .. code-block:: python
 
@@ -86,6 +147,12 @@ Examples
 
     charm.start(main)
 
+The example inserts a callback into a CUDA stream and waits on the future for
+the completion of a Numba kernel. More examples are in ``examples/cuda``.
 
-The above example demonstrates how to use the Charm4py HAPI interface to insert a callback into a CUDA stream and track 
-completion of a numba kernel launch.
+.. note::
+
+    As of November 2026 the device paths of Charm4py 2 (device arrays as
+    arguments, ``DeviceBuffer``, ``hapiAddCudaCallback``) are written but have
+    not yet been compiled with CUDA or run on a GPU; the first runs are planned
+    on NCSA Delta (``docs/design/SPEC-3.md``, section 7).

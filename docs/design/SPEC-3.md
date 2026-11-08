@@ -161,4 +161,88 @@ Kale installs the line, since it runs under his allocation.
 
 ## 7. Status
 
-(filled in as the step progresses)
+Status 2026-11-08 (Mac part done; Delta part not started). Charm++ `ckdyn-dev`
+4929702e8, 00b174877 (HAPI callback), 96de91030 (NCPY, posts, DEVICE code),
+7dc8e25a0 (ncpy phases), 365a128b5 (device phases); charm4py `thin` 012ff3a
+(binding), 80639f5 (tests). Mechanism: `doc/internals/ckdyn.md`, "Zero-copy".
+
+**Built.** Sections 2-5 as specified, except the deviations below. The wire format is
+the generated layout (descriptor prefix at the start of `buf`, envelope marked
+`CMK_ZC_P2P_SEND_MSG` or `CMK_ZC_DEVICE_MSG`); ck.C and ckrdma.C are unchanged, and
+the fallback protocol was not needed. The receiver finds the CkDyn header after the
+prefix (`dynPayload`; no prefix when `buf` starts with the magic) and reads a slot's
+pointer from its rewritten descriptor. `CkDynSlot.reserved` is a DEVICE slot's device
+ordinal, `reserved2` the descriptor index (documented in `ckdyn.h`). Posts: CkDyn's own
+per-object table (not `CkPostBuffer`/`CkMatchBuffer`). Binding: the sender table with
+the threshold read at pack time; copies kept for broadcasts, sections, reduction
+contributions, constructor messages, Ray sends and classes that set
+`_ckdyn_no_zerocopy` (the pool's scheduler and workers); `__cuda_array_interface__`
+arguments; `_ckdyn.DeviceBuffer`; `ret=True` values through the same table;
+`_ckdyn.zerocopy_counts()` for tests. `docs/gpus.rst` rewritten for 2.0.
+
+**Deviations, each kept.**
+
+1. Host posts are applied at delivery with one copy on the receiving PE (from the
+   delivered message into the posted buffer; the descriptor is then pointed at it).
+   The sender cannot know whether the receiver posted, and the non-post path moves
+   the data in `_processHandler` before the target object is known; receiving
+   straight into the posted buffer needs `_processHandler` to consult CkDyn before
+   `CkRdmaIssueRgets` (a ck.C change, excluded by section 2), or every NCPY message
+   to take the two-delivery `P2P_RECV` flow, whose ownership differs between array
+   elements (`CkDeliverMessageFree`) and other kinds (`CkDeliverMessageReadonly`).
+   Device posts receive directly (the receiver issues the device transfers).
+2. Received DEVICE memory comes from `CkDeviceMalloc` (the registered device pool of
+   ckrdmadevice.C), not `hapiPoolMalloc`, which allocates pinned host memory. It is
+   freed after the hook when the binding kept no retain, else at the release that
+   leaves the message's reference count at 1 (process-wide table).
+3. Beyond broadcasts and sections, CkDyn also refuses zero-copy slots in multi-branch
+   sends, constructor messages, reduction payloads (`CkDynMsgPayload`) and broadcast
+   or section callbacks; a message cannot mix NCPY and DEVICE slots (the generated
+   code cannot either); at most 4096 zero-copy slots; posts for nodegroup branches
+   are refused. A send of a zero-copy message drops `CK_MSG_INLINE` (an inline
+   delivery would bypass the transfer). An `IGNORE`/`EXIT` callback frees the message
+   (running its done functions) and sends an empty one.
+4. Binding: a device array in a copied context (broadcast, section, reduction, Ray,
+   pool) is pickled as in 1.x instead of raising; only the missing device support
+   raises `TypeError`. A device array to a singleton chare whose PE is not known yet
+   (created with `onPE=-1`, not yet constructed) raises `TypeError`, since
+   `CkRdmaDeviceOnSender` needs the destination PE. The pool is excluded by a class
+   attribute (`_ckdyn_no_zerocopy`), since a pool task is not marked in the message.
+5. C++ test: `ncpy/post_after` orders the post after the send deterministically: on
+   one PE the post follows the send in the same method; within one process the target
+   PE spins until the sender has sent; across processes the post request follows the
+   data, which is delivered only after its transfer. The device pool check is "a
+   second `CkDeviceMalloc` of the same size returns the same block". `make test` also
+   runs `-zcbcast`, which must abort on a broadcast with an NCPY slot.
+
+**Tests run (Mac).** `ckdyntest` with the new phases `ncpy/nonpost`, `ncpy/post_before`,
+`ncpy/post_after`, `ncpy/samepe` at `+pe 1`, `+pe 4`, `lcrun -n 2 +pe 2` and
+`lcrun -n 2 +pe 4`; the full `make test` sequence passes (randomized queue run,
+RotateLB run, restart runs, `+p1`, stale-send and `-zcbcast` aborts); the `device`
+and `hapi` phases print SKIP. `tests/thin/zerocopy.py` passes at `+p1` and `+p2`;
+`tests/thin/device.py` prints SKIP (no cupy, no device support). Thin gate
+(`logs/gate-4c/gate4a.py 1 2`): 100 of 100; `gate4c.sh 2`: 10 of 10
+(`logs/step-3/`).
+
+**Measurement (Mac, 2 processes).** 16 MB float64, 20 round trips after 3 warm-up,
+one-way time = round trip / 2, median of three runs (`logs/step-3/bench.txt`):
+
+| path | one-way (ms) | min one-way (ms) |
+|---|---|---|
+| BUFFER (threshold 32 MB) | 2.87 | 2.23 |
+| NCPY (threshold 1 MB) | 2.57 | 2.08 |
+
+On this Mac NCPY saves the sender's copy into the message and the receiver's copy
+out of the received message is replaced by the copy-based get; the 10% difference
+says nothing about a fabric with RDMA. Delta (2 nodes) and the crossover size are
+not measured yet.
+
+**Untested here (no GPU, no CUDA toolkit on this Mac).** Every line under
+`CMK_CUDA || CMK_HIP`: in `ckdyn.C` `CkDynMsgAddDevice`, the device prefix in
+`zcBuildPrefix`, `zcDevicePrepare`, `zcDeviceIssue`, `zcAfterDelivery`,
+`zcBeforeRelease`, the device branches of `zcPrefixLen`, `zcFreeUnsent` and
+`zcViewPtr`, `CkDynPostDeviceBuffer`, `CkDynHapiAddCallback`; the `device/remote`,
+`device/samepe` and `hapi` phases of `ckdyntest.C`; the binding's `add_device` and
+`DeviceBuffer`; `tests/thin/device.py`. `ckdyn.C` and `ckdyntest.C` pass a syntax-only
+compile with `CMK_CUDA` defined against stub CUDA headers, nothing more. The Delta
+part of section 6 (recipe, scripts, `scrontab` line, GPU runs) is not done.
