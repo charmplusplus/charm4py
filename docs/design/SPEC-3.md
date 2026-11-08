@@ -339,3 +339,25 @@ allocation, the buddy allocator test) and needs a charm issue with this evidence
 **Open.** hapitest's host memory growth (above). The `+gpushm` IPC path for `DEVICE`
 slots between processes on one node is untested. The BUFFER slowdown at 64 MB between
 nodes. numba-cuda 0.30.4 is incompatible with numpy 2.5 (outside this project).
+
+### Follow-ups (decided 2026-11-08 14:30 PST)
+
+- `zerocopy_threshold` stays at 1 MB. Delta shows zero-copy never slower from 256 KB
+  up, but the Mac loopback case below 16 MB is unmeasured and a lower threshold holds the
+  sender's array longer; the option exists for applications that want 256 KB.
+- Pin: `charm_version.txt` moves to ckdyn-dev 6a57e5553, which includes the device
+  prefix-length fix; without it a DEVICE slot sent to another process is rejected.
+- Not in this step, candidates for step 7 (raised by Kale 2026-11-08 13:17 as "device to
+  device communication from Charm++"): the persistent direct API (`CkDevicePersistent`
+  `get`/`put` between registered device buffers, no entry method; a Python
+  `charm.DevicePersistent(array)` with a completion future) and a Python surface for the
+  receiver-posted host and device buffers (`CkDynPostBuffer`, `CkDynPostDeviceBuffer`),
+  which lets an application receive into a preallocated numpy or cupy array. The
+  entry-method path (DEVICE slots, this step) is the Python form of `nocopydevice` and
+  already gives GPU-to-GPU transfers, RDMA between nodes.
+- Untested: the `+gpushm` IPC path between processes on one node; the 64 MB BUFFER
+  slowdown between nodes; hapitest's memory growth is an upstream charm issue to file
+  when Kale lifts speculative mode (evidence above).
+- The weekly Delta gate (`tools/delta/scrontab.txt`) waits for Kale to install the line.
+  Its dependencies `$WS/torch-cuda` (CUDA torch, 4.2 GB) and `$WS/numpy-compat` (numpy
+  2.4.6 for numba-cuda) stay in the Delta workspace.

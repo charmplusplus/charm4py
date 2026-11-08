@@ -2337,8 +2337,9 @@ wheel installed into a clean venv runs hello_world at +p1/+p2 and all 83 auto_te
 tests at 2 processes; CI run 42516684727 (beb171a) has the sdist install and test jobs
 (ubuntu-latest, macos-15) and the three wheel jobs. Deviations from 6.1-6.3: wheels are
 built without `--enable-tracing` (a tracing libcharm writes trace files on every run),
-and `tools/bundle_libs.py` stays for wheels. Known issue: CCS requests crash a build
-from the pin until the reconverse `ccs-fn-dispatch` fix is merged. The macOS runners
+and `tools/bundle_libs.py` stays for wheels. The CCS crash in builds from the pin was
+closed 2026-11-08 14:08 PST: reconverse `ccs-fn-dispatch` (ee47fb6) is pushed, ckdyn-dev
+44b27e6c8 records it, and the pin moved. The macOS runners
 take about 36 s per job launch (as in the 1.x reconverse job), so the macOS test job
 takes about 55 minutes.
 
