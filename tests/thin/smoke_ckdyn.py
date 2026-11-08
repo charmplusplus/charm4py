@@ -123,7 +123,7 @@ class FakeCharm(object):
         cls, name = self.ep_name[ep]
         f = getattr(cls, name)
         if ep in self.threaded:
-            r = ck.spawn(f, obj, *args)
+            r = ck.spawn(ep, f, obj, *args)
             obj.spawn_results.append(r)
             return
         if name in HEADER_METHODS:
@@ -298,26 +298,27 @@ class G(object):
 
     def coro_wake(self, v):
         check(self.paused is not None, 'a paused greenlet to resume')
+        ep_of_wake = ck.last_ep()   # spawn(ep, fn, obj, ...): the entry the task is charged to
         done = ck.resume(self.paused, v)
         check(done is True, 'resume returns True when the task finishes')
         check(self.spawn_results == [False], 'spawn returned False for the paused task: %r' % self.spawn_results)
         self.main.report('coro')
         # a task that raises: spawn re-raises it
         try:
-            ck.spawn(_raise_task, 3)
+            ck.spawn(ep_of_wake, _raise_task, self, 3)
             check(False, 'spawn of a raising task did not raise')
         except ValueError as e:
             check(str(e) == 'boom 3', 'exception text')
             log('PASS spawn re-raises the task exception')
             self.main.report('spawn-exc')
         # a task that finishes without pausing, on a pooled worker
-        r = ck.spawn(_plain_task, self)
+        r = ck.spawn(ep_of_wake, _plain_task, self)
         check(r is True and self.plain_done, 'spawn of a task that does not pause returns True')
         log('PASS spawn of a non-pausing task on a pooled worker')
         self.main.report('spawn-done')
 
 
-def _raise_task(x):
+def _raise_task(obj, x):
     raise ValueError('boom %d' % x)
 
 

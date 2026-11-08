@@ -116,6 +116,13 @@ struct PeState {
   std::unordered_map<void *, PyObject *> packed;    // handle -> bytes (pack_size .. pack)
   PyObject *ro_packed = nullptr;
   KeepAlive reduce_keep;   // buffer sources of the last reduce hook's result (finished by CkDyn after the hook)
+  // One record per worker greenlet that runs a task (key: the greenlet; no
+  // reference held): the chare's target and the entry index the task runs, for
+  // CkDynCoroResume/CkDynCoroSuspend around every switch into the worker. The
+  // record holds no Python object, and it is erased when the task finishes.
+  struct CoroRec { CkDynTarget t; int ep; uint64_t id; };
+  std::unordered_map<PyObject *, CoroRec> coros;
+  uint64_t next_coro_id = 1;
 };
 thread_local PeState tls;
 
@@ -1905,12 +1912,49 @@ PyObject *switch_result(PyObject *r) {
   Py_RETURN_FALSE;
 }
 
+// Switch into worker w with argument tuple argt, bracketed by
+// CkDynCoroResume/CkDynCoroSuspend for the task's chare (rec): Resume right
+// before the switch, Suspend right after it returns to this frame (the task
+// paused by switching to its parent, or finished). A finished task's record is
+// erased. Returns switch_result's value.
+PyObject *switch_into(PyGreenlet *w, PyObject *argt, const PeState::CoroRec *rec) {
+  PyObject *r;
+  if (rec) {
+    PeState::CoroRec c = *rec;   // the map may rehash while the task runs
+    CkDynCoroResume(&c.t, c.ep, c.id);
+    r = PyGreenlet_Switch(w, argt, nullptr);
+    CkDynCoroSuspend(&c.t);
+  } else {
+    r = PyGreenlet_Switch(w, argt, nullptr);
+  }
+  PyObject *res = switch_result(r);
+  if (res != Py_False) tls.coros.erase((PyObject *)w);   // finished (True) or raised (NULL)
+  return res;
+}
+
+// spawn(ep, fn, obj, *args): run fn(obj, *args) on a pooled worker greenlet.
+// ep is the entry index the task runs and obj the chare (its _ckdyn_target
+// names it to CkDynCoroResume).
 PyObject *py_spawn(PyObject *, PyObject *const *a, Py_ssize_t nargs) {
-  if (nargs < 1) { PyErr_SetString(PyExc_TypeError, "spawn(fn, *args)"); return nullptr; }
+  if (nargs < 3) { PyErr_SetString(PyExc_TypeError, "spawn(ep, fn, obj, *args)"); return nullptr; }
+  int ep = (int)PyLong_AsLong(a[0]);
+  if (ep == -1 && PyErr_Occurred()) return nullptr;
+  PeState::CoroRec rec;
+  try {
+    rec.t = target_of(a[2]);
+  } catch (nb::python_error &e) {
+    e.restore();
+    return nullptr;
+  } catch (...) {
+    cpp_exc_to_python();
+    return nullptr;
+  }
+  rec.ep = ep;
+  rec.id = tls.next_coro_id++;
   if (!tls.main_gr) tls.main_gr = (PyObject *)PyGreenlet_GetCurrent();
-  PyObject *args = PyTuple_New(nargs - 1);
+  PyObject *args = PyTuple_New(nargs - 2);
   if (!args) return nullptr;
-  for (Py_ssize_t i = 1; i < nargs; i++) PyTuple_SET_ITEM(args, i - 1, Py_NewRef(a[i]));
+  for (Py_ssize_t i = 2; i < nargs; i++) PyTuple_SET_ITEM(args, i - 2, Py_NewRef(a[i]));
   PyGreenlet *cur = PyGreenlet_GetCurrent();
   PyGreenlet *w;
   if (!tls.idle.empty()) {
@@ -1922,26 +1966,35 @@ PyObject *py_spawn(PyObject *, PyObject *const *a, Py_ssize_t nargs) {
     if (!w) { Py_DECREF(cur); Py_DECREF(args); return nullptr; }
   }
   Py_DECREF(cur);
-  PyObject *task = PyTuple_Pack(2, a[0], args);
+  PyObject *task = PyTuple_Pack(2, a[1], args);
   Py_DECREF(args);
-  PyObject *r = task ? PyGreenlet_Switch(w, task, nullptr) : nullptr;
+  PyObject *r = nullptr;
+  if (task) {
+    tls.coros[(PyObject *)w] = rec;
+    r = switch_into(w, task, &rec);
+  }
   Py_XDECREF(task);
   Py_DECREF(w);
-  return switch_result(r);
+  return r;
 }
 
+// resume(gr, value): continue a paused task with value; uses the chare and
+// entry recorded at spawn.
 PyObject *py_resume(PyObject *, PyObject *const *a, Py_ssize_t nargs) {
   if (nargs != 2) { PyErr_SetString(PyExc_TypeError, "resume(gr, value)"); return nullptr; }
   if (!PyGreenlet_Check(a[0])) { PyErr_SetString(PyExc_TypeError, "resume: not a greenlet"); return nullptr; }
   PyObject *argt = PyTuple_Pack(1, a[1]);
   if (!argt) return nullptr;
-  PyObject *r = PyGreenlet_Switch((PyGreenlet *)a[0], argt, nullptr);
+  auto it = tls.coros.find(a[0]);
+  PyGreenlet *w = (PyGreenlet *)Py_NewRef(a[0]);   // a[0] may lose its last other reference while it runs
+  PyObject *r = switch_into(w, argt, it == tls.coros.end() ? nullptr : &it->second);
+  Py_DECREF(w);
   Py_DECREF(argt);
-  return switch_result(r);
+  return r;
 }
 
 PyMethodDef raw_functions[] = {
-    {"spawn", (PyCFunction)(void (*)(void))py_spawn, METH_FASTCALL, "spawn(fn, *args) -> bool"},
+    {"spawn", (PyCFunction)(void (*)(void))py_spawn, METH_FASTCALL, "spawn(ep, fn, obj, *args) -> bool"},
     {"resume", (PyCFunction)(void (*)(void))py_resume, METH_FASTCALL, "resume(gr, value) -> bool"},
     {"_rebuild_bound", (PyCFunction)(void (*)(void))rebuild_bound, METH_FASTCALL, "unpickle a BoundProxyMethod"},
     {nullptr, nullptr, 0, nullptr}};

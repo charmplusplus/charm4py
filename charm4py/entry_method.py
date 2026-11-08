@@ -113,10 +113,12 @@ class EntryMethod(object):
             gr.notify = None
 
     def _run_th(self, obj, header, args, ret_fut=False):
-        """ run entry method of the given object on a worker greenlet (_ckdyn.spawn) """
+        """ run entry method of the given object on a worker greenlet (_ckdyn.spawn).
+            The C side brackets every switch into the worker with
+            CkDynCoroResume/CkDynCoroSuspend for obj and this entry. """
         obj._numthreads += 1
         try:
-            done = _spawn(self._run_coro, obj, header, args, ret_fut)
+            done = _spawn(self.epIdx, self._run_coro, obj, header, args, ret_fut)
         except BaseException:
             obj._numthreads -= 1
             raise
@@ -131,7 +133,7 @@ class EntryMethod(object):
         obj._numthreads += 1
         exception = None
         try:
-            done = _ckdyn.spawn(self._run_coro_prof, obj, header, args, ret_fut)
+            done = _ckdyn.spawn(self.epIdx, self._run_coro_prof, obj, header, args, ret_fut)
         except Exception as e:
             exception = e
             done = True
