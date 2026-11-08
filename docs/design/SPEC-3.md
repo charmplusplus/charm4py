@@ -161,7 +161,7 @@ Kale installs the line, since it runs under his allocation.
 
 ## 7. Status
 
-Status 2026-11-08 (Mac part done; Delta part not started). Charm++ `ckdyn-dev`
+Status 2026-11-08 (Mac part done; Delta part done, see "Delta" at the end of this section). Charm++ `ckdyn-dev`
 4929702e8, 00b174877 (HAPI callback), 96de91030 (NCPY, posts, DEVICE code),
 7dc8e25a0 (ncpy phases), 365a128b5 (device phases); charm4py `thin` 012ff3a
 (binding), 80639f5 (tests). Mechanism: `doc/internals/ckdyn.md`, "Zero-copy".
@@ -244,5 +244,98 @@ not measured yet.
 `zcViewPtr`, `CkDynPostDeviceBuffer`, `CkDynHapiAddCallback`; the `device/remote`,
 `device/samepe` and `hapi` phases of `ckdyntest.C`; the binding's `add_device` and
 `DeviceBuffer`; `tests/thin/device.py`. `ckdyn.C` and `ckdyntest.C` pass a syntax-only
-compile with `CMK_CUDA` defined against stub CUDA headers, nothing more. The Delta
-part of section 6 (recipe, scripts, `scrontab` line, GPU runs) is not done.
+compile with `CMK_CUDA` defined against stub CUDA headers, nothing more. On Delta all of it then
+compiled unchanged and ran ("Delta" below).
+
+### Delta
+
+Run 2026-11-08 on NCSA Delta, gpuA40x4-interactive, A40 (sm_86), CUDA 13.2, gcc 14.2.1,
+builds `reconverse-linux-x86_64 cuda --with-production` (charm4py target for Python,
+charm++ target for the C++ tests). Scripts: `tools/delta/` (README.md there); logs:
+`logs/step-3/delta/` (RESULTS.md, `job-<id>/`).
+
+**Commits.** Built first at `ckdyn-dev` 365a128b5 (reconverse ba836e6) and `thin` c036613;
+the passing runs are at `ckdyn-dev` 44b27e6c8 plus the fix below, now 6a57e5553
+(reconverse ee47fb6, the CCS fix), and `thin` c036613 plus 714ea58.
+
+**Compile.** Everything under `CMK_CUDA || CMK_HIP` compiled with no change: `ckdyn.C`,
+`ckdyntest.C` and the binding (`add_device`, `DeviceBuffer`) built without errors or new
+warnings. Run-time defects found and fixed:
+
+1. `ckdyn.C` `zcPrefixLen` (6a57e5553). A `DEVICE` message to another process aborted on
+   the receiver with "CkDyn: message without a CkDyn header (magic 0x0)" (`ckdyntest`
+   `device/remote` at -n 2, `device.py` at 2 processes; within one process both
+   passed). Between processes `CkRdmaDeviceOnSender` takes the RDMA path (also on one
+   node: the IPC path needs `+gpushm`), where `deviceMintAck` replaces each descriptor's
+   source callback with an ignore callback; `CkCallback::pup` writes fewer bytes for
+   that, so the re-pupped descriptors were shorter than when `zcBuildPrefix` sized the
+   prefix, and the receiver, which derived the payload offset from the bytes it walked,
+   read the zero padding. `zcPrefixLen` now sums the widths `zcBuildPrefix` used (a C
+   function callback, no acknowledgement ids). 13 lines.
+2. `examples/cuda/hapi/hapi-cuda-callback.py` (714ea58): numba-cuda 0.30.4's stream
+   handle is a cuda.bindings `CUstream` (`int()`), not a ctypes `c_void_p` (`.value`).
+   The example then needs numpy below 2.5 (numba-cuda 0.30.4 calls `numpy.row_stack`,
+   removed in numpy 2.5); the gate provides it for that step from `$WS/numpy-compat`.
+
+**Results, one node (2 GPUs; `srun --mpi=pmix`, one GPU per task; jobs 23670424,
+23670643, 23670701).**
+
+| test | -n 1 (+pe 1) | -n 2 (+pe 2) | -n 2 (+pe 4) |
+|---|---|---|---|
+| ckdyntest `ncpy/nonpost`, `post_before`, `post_after`, `samepe` | PASS | PASS | PASS |
+| ckdyntest `device/remote`, `device/samepe` | PASS (MEMCPY) | PASS after fix 1 (RDMA) | PASS after fix 1 |
+| ckdyntest `hapi` | PASS | PASS | PASS |
+| ckdyntest Makefile set (RotateLB randomized, RotateLB, restart; +p1, restart) | PASS | PASS | |
+| ckdyntest `-stalesend`, `-zcbcast` (must abort) | abort with the expected message | | |
+| tests/thin/zerocopy.py | PASS | PASS | |
+| tests/thin/device.py | PASS | PASS after fix 1 | |
+| examples/cuda/hapi/hapi-cuda-callback.py | PASS after fix 2 | PASS after fix 2 | |
+| examples/cuda/hapi/multi_gpu_callback.py (1 process, 2 GPUs, CUDA torch 2.14.1+cu130 from `$WS/torch-cuda`) | PASS | | |
+| examples/ray/parameter_server.py sync, async | PASS | PASS | |
+| thin suite (test_config.json and tests/thin, run_thin.py; job 23670424, before fix 1) | 140 of 145 pass: the 4 n=1 `charm.pool` examples (expected) and device.py n=2 (fix 1) | | |
+
+**Two nodes, one process and one A40 each (job 23670727, gpub058 and gpub072).**
+`ckdyntest +pe 2`: banner "2 processes", every phase passes, `device/remote` 16 MB device
+to device in 16-18 ms including the host check. Transport: neither HAPI nor LCI names the
+device path; the source does: `findTransferModeDevice` returns RDMA for PEs on different
+physical nodes, and the Python device runs print `CkRdmaDevice> device pool arena ...
+registered on first use` and `device RDMA registrations released on completion`, which
+only the RDMA path prints. So a `DEVICE` slot between nodes is an LCI RDMA get on
+registered device memory over cxi (GPUDirect RDMA), with no host staging. On one node
+the same RDMA path is used between processes, since `+gpushm` (the IPC path) was not
+given; the IPC path has not been run.
+
+**Measurement (two nodes).** `tools/delta/bench_zc_delta.py`: main (PE 0) to element 1
+(PE 1) and back to element 0, 3 warm-up then 20 timed round trips, one-way = round trip
+/ 2, median over the 20. BUFFER: threshold above the size; NCPY: threshold equal to the
+size; DEVICE: a cupy array.
+
+| size | BUFFER one-way (ms) | NCPY one-way (ms) | NCPY / BUFFER | DEVICE one-way (ms) |
+|---|---|---|---|---|
+| 64 KB | 0.038 | 0.038 | 1.00 | |
+| 256 KB | 0.061 | 0.054 | 0.89 | |
+| 1 MB | 0.108 | 0.085 | 0.79 | 0.106 |
+| 4 MB | 0.321 | 0.247 | 0.77 | |
+| 16 MB | 1.231 | 0.853 | 0.69 | |
+| 64 MB | 20.47 | 9.04 | 0.44 | 4.02 |
+
+16 MB, three runs each (median of the three medians): BUFFER 1.240 (1.244, 1.240, 1.230),
+NCPY 0.851 (0.853, 0.851, 0.745), DEVICE 0.996 (0.974, 1.086, 0.996). Mac for comparison
+(2 processes, loopback): BUFFER 2.87, NCPY 2.57.
+
+Crossover: NCPY is never slower than BUFFER at any measured size; the two tie at 64 KB
+and NCPY leads from 256 KB on. The 1 MB default `zerocopy_threshold` is therefore safe
+on Slingshot and could come down to 256 KB; below 64 KB was not measured. The BUFFER time
+grows from 1.23 ms at 16 MB to 20.5 ms at 64 MB (17 times for 4 times the bytes), which
+NCPY (10.6 times) and DEVICE do not show; not investigated.
+
+**hapitest** (upstream test, not CkDyn). `./hapitest -v -c 2 -k 1 -n 64 +pe 1` under
+`srun --mem=8g`: prints the "chares 2, chains/chare 1, doubles/chain 64" line, then is
+OOM-killed after 8 s at MaxRSS 8388344 KB (jobs 23670424 and 23670643). In phase 1 the
+default sizes reached 33 GB in 27 s. The growth does not depend on the problem size, so it
+happens in the per-PE checks that follow (stream creation, mapping, pinned host
+allocation, the buddy allocator test) and needs a charm issue with this evidence.
+
+**Open.** hapitest's host memory growth (above). The `+gpushm` IPC path for `DEVICE`
+slots between processes on one node is untested. The BUFFER slowdown at 64 MB between
+nodes. numba-cuda 0.30.4 is incompatible with numpy 2.5 (outside this project).

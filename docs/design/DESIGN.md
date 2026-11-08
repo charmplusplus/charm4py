@@ -2224,8 +2224,16 @@ not `hapiPoolMalloc` (pinned host memory); zero-copy slots are also refused in
 constructor messages, reduction payloads, multi-branch sends and broadcast or section
 callbacks; in the binding a device array in a broadcast, section, reduction, Ray or
 pool send is pickled as in 1.x, and the pool's classes opt out of zero-copy with
-`_ckdyn_no_zerocopy`. Not done: the Delta recipe, scripts and runs, the Delta
-measurements and the crossover size (8.7 item 3).
+`_ckdyn_no_zerocopy`. Delta part of the gate met 2026-11-08 on `ckdyn-dev` 6a57e5553
+(reconverse ee47fb6) and `thin` 10cb05b, 2x A40 (SPEC-3.md 7, "Delta"): every
+`ckdyntest` phase including `device/*` and `hapi` passes at one process, two processes
+on one node and two nodes; `device.py`, `zerocopy.py`, both 1.x HAPI examples and the
+thin suite (140 of 145, the 5 others expected) pass. The first GPU run found one defect,
+fixed: a `DEVICE` message between processes lost its payload offset, because the RDMA
+path shortens each descriptor's pupped callback. Between two nodes a 16 MB array goes
+one way in 1.23 ms as BUFFER, 0.85 ms as NCPY and 0.99 ms as a cupy array (DEVICE, RDMA
+get); NCPY is never slower from 64 KB up, so the 1 MB threshold could come down to
+256 KB (8.7 item 3). Not done: `hapitest` (upstream) is OOM-killed at 8 GB on Delta.
 
 **Step 4 (charm4py branch `thin`): the binding and the Python cut-over.** Done in
 four sub-steps, each gated on a subset of auto_test so that the suite is green for the
