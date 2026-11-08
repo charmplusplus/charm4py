@@ -1297,6 +1297,19 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
 // Other hooks (SPEC 2.2)
 
 void h_register_classes(void *) {
+  // One PE per process until step 7 (the GIL and the runtime's per-PE threads).
+  // CkDynStart does not return, so no Python exception can reach the program
+  // here: abort with the message (CmiAbort prints it on stderr).
+  int node_size = CkDynNodeSize(CkDynMyNode());
+  if (node_size > 1) {
+    char text[512];
+    snprintf(text, sizeof text,
+             "charm4py runs one PE per process for now, and this process has %d PEs. "
+             "Use several processes with one PE each instead of +pe N in one process: "
+             "lcrun -n N python app.py +pe N, or python -m charmrun.start +pN app.py.",
+             node_size);
+    CkDynAbort(text);   // before taking the GIL: this thread may not hold it
+  }
   Gil g;
   g_in_register = true;
   PyObject *r = c_registerMainModule ? PyObject_CallNoArgs(c_registerMainModule) : nullptr;

@@ -18,6 +18,12 @@ applications like this::
 
 The option ``+pN`` specifies how many processes to run the application with.
 
+.. note::
+  Charm4py on Reconverse runs one PE per process for now. Use several
+  processes with one PE each (``+pN`` with the launcher above, or
+  ``lcrun -n N python myprogram.py +pe N``). Giving ``+pe N`` to a single
+  process stops the program at start-up with an error saying so.
+
 Alternatively, if ``charmrun`` is in your PATH (this depends on where Charm4py was
 installed and your system configuration)::
 

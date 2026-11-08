@@ -161,6 +161,8 @@ equivalent ``lcrun`` command is::
     $ /path/to/lci/lcrun -n 2 python examples/simple/hello_world.py +pe 2
 
 Across several nodes, start the processes with the cluster's launcher (for
-example ``srun``) and pass the total PE count with ``+pe``.
+example ``srun``) and pass the total PE count with ``+pe``. Each process runs
+one PE: ``+pe N`` in a single process (more PEs than processes) is refused at
+start-up for now.
 
 .. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm
