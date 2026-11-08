@@ -13,8 +13,9 @@ endif()
 # CHARM4PY_CHARM_BUILD_DIR: an existing Charm++ charm4py build (developers).
 # Otherwise tools/build_charm.py finds or builds one: in CHARM4PY_CHARM_DIR when
 # that is set, else in a clone of the commit pinned in charm_version.txt.
-set(CHARM4PY_CHARM_BUILD_DIR "$ENV{CHARM4PY_CHARM_BUILD_DIR}" CACHE PATH
-    "Charm++ build directory (lib/libcharm.*, include/ckdyn.h)")
+# Read from the environment on every configure, not cached: a value cached by
+# an earlier build would otherwise outlive the variable in an existing build tree.
+set(CHARM4PY_CHARM_BUILD_DIR "$ENV{CHARM4PY_CHARM_BUILD_DIR}")
 find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
 if(NOT CHARM4PY_CHARM_BUILD_DIR)
   set(_result "${CMAKE_CURRENT_BINARY_DIR}/charm_build_dir.txt")
