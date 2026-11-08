@@ -1066,7 +1066,15 @@ CkMulticast defect was found and fixed in e05d5cc0b (cross-array section results
 their reducer type, user flag and callback in `XArraySectionReducer::finalReducer`);
 that fix is independent of CkDyn and is a candidate for its own small recharm PR with a
 plain C++ test. Relay slots are being re-keyed by (section, ep) with the refnum taken
-from the arriving message, so the table is bounded.
+from the arriving message, so the table is bounded (done in c81fbeecc: key (section, ep);
+reduction results carry the refnum as the reduction user flag; CkDynMsg sends to a
+SECTION callback go directly through `CkDynSendSection`; only QD and checkpoint callbacks
+to a section keep one slot per refnum, because a Charm++ callback's send overwrites the
+envelope refnum with the slot number). Step 4b (Python sections, `thin` e1de9d6, SPEC-4b.md)
+exercised this API with no CkDyn defect found; one API gap: a built-in reduction result
+relayed to a section entry is indistinguishable from a user send of a 0-d array (the
+binding tags 0-d arrays on send; a CkDyn header flag set by the relay would remove the
+need), and `CkDynSectionCreateGroup` needs a local branch of the group on the calling PE.
 
 **Migration.** CkMulticast rebuilds its spanning tree when members migrate
 (`needRebuild`, ckmulticast.C:941-951), so an element in a section may migrate; today
