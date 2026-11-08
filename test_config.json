@@ -173,6 +173,7 @@
         "path": "tests/futures/test_futures.py"
     },
     {
+        "force_min_processes": 2,
         "path": "tests/futures/test_different_coroutines.py"
     },
     {
