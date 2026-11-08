@@ -137,7 +137,7 @@ PyObject *g_DONE, *g_EXC, *g_worker_main, *g_empty_tuple;
 PyObject *s_cond_next, *s_flush, *s_ckdyn_target, *s_src, *s_fid, *s_store, *s_append, *s_frombytes,
     *s_ret, *s_awaitable, *s_is_ray, *s_Future, *s_createFuture, *s_name, *s_kw_protocol_cb,
     *s_kw_buffers, *s_kw_store;
-PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single;
+PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single, *k_refnum;
 
 bool g_profiling = false, g_copy_arrays = false, g_auto_flush = true, g_in_register = false, g_started = false;
 CkDynHooks g_hooks;
@@ -1241,8 +1241,9 @@ void deliver_one(PyObject *obj, int ep, uint32_t ep_flags, const CkDynMsgView *v
     PyObject *header = make_header(v, block);
     PyObject *lst = header ? args.list() : nullptr;
     if (lst && callback_refnum(v) != 0) {   // a callback with a reference number: it is the first argument
+      // and header[b'refnum'] (charm._invoke tells the uses apart by entry)
       PyObject *rn = PyLong_FromUnsignedLong(callback_refnum(v));
-      if (!rn || PyList_Insert(lst, 0, rn) < 0) { Py_XDECREF(rn); Py_CLEAR(lst); }
+      if (!rn || PyList_Insert(lst, 0, rn) < 0 || PyDict_SetItem(header, k_refnum, rn) < 0) { Py_XDECREF(rn); Py_CLEAR(lst); }
       else Py_DECREF(rn);
     }
     PyObject *epo = PyLong_FromLong(ep);
@@ -1418,6 +1419,20 @@ void *h_unpack(void *, const CkDynTarget *t, int reason, const void *buf, size_t
   PyObject *obj = (tg && ro && mv) ? call(c_unpack, {tg, ro, mv}) : nullptr;
   if (mv) { PyObject *r = PyObject_CallMethod(mv, "release", nullptr); if (r) Py_DECREF(r); else PyErr_Clear(); }
   Py_XDECREF(tg); Py_XDECREF(ro); Py_XDECREF(mv);
+  if (obj && t->chare_idx < 0) {
+    // Work-around for a CkDyn defect: the *Dyn::pup functions build the
+    // target before pupObj restores d.chareIdx, so the target of an unpacked
+    // object has chare_idx -1 (a main chare's target then crashes
+    // CkDynCoroResume and any other call that looks the object up). Take the
+    // chare index from the registered class of the unpickled object.
+    CkDynTarget fixed = *t;
+    PyObject *cls = (PyObject *)Py_TYPE(obj);
+    for (size_t i = 0; i < g_classes.size(); i++)
+      if (g_classes[i].cls == cls && g_classes[i].kind == fixed.kind) { fixed.chare_idx = (int32_t)i; break; }
+    PyObject *tg2 = make_target(fixed);
+    if (!tg2 || PyObject_SetAttr(obj, s_ckdyn_target, tg2) < 0) { Py_XDECREF(tg2); Py_CLEAR(obj); }
+    else Py_DECREF(tg2);
+  }
   if (!obj) hook_abort("charm._unpack");
   return obj;
 }
@@ -2426,6 +2441,7 @@ NB_MODULE(_ckdyn, m) {
   k_creation = PyBytes_FromString("creation");
   k_custom_reducer = PyBytes_FromString("custom_reducer");
   k_single = PyBytes_FromString("single");
+  k_refnum = PyBytes_FromString("refnum");
 
   nb::module_ pickle = nb::module_::import_("pickle");
   g_dumps = nb::object(pickle.attr("dumps")).release().ptr();

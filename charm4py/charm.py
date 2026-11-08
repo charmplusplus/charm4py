@@ -88,6 +88,9 @@ class Charm(object):
         self.classEntryMethods = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
         self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
         self.sched_tagpool = set(range(1, 128))  # pool of tags for scheduling callables
+        self._ckpt_future = None      # future of the charm.checkpoint(dir, resume) in progress on this PE
+        self._ckpt_seq = 0            # sequence number of the last checkpoint started on this PE
+        self._restart_done_seen = False  # the restart's own resume delivery arrived (restarted process)
         self.sched_next_tag = 128  # the pool grows from here when every tag is in use
         self.sched_callables = {}  # tag -> (callable, args)
 
@@ -354,6 +357,10 @@ class Charm(object):
     def _invoke(self, obj, ep, header, args):
         """ slow delivery path: when conditions, coroutines, header flags, profiling """
         try:
+            if b'refnum' in header and self.entryMethods[ep].name != '_coll_future_deposit_result':
+                # the done callback of charm.checkpoint(dir, resume): the
+                # reference number is its tag, not an argument of the entry
+                self._checkpoint_done(args.pop(0))
             if b'custom_reducer' in header:
                 # reduction result of a Python reducer: the result is the last argument
                 reducer = self.redMgr.reducers_by_id[header[b'custom_reducer']]
@@ -421,6 +428,12 @@ class Charm(object):
         """ an object arriving by migration or restored from a checkpoint; returns it """
         obj = cPickle.loads(data)
         obj._ckdyn_target = target
+        if reason != CKDYN_PUP_MIGRATE:
+            # restored from a checkpoint: its coroutines were not restored
+            obj._numthreads = 0
+            obj._nsuspended = 0
+            if isinstance(obj, CharmRemote):
+                self.thisProxy = obj.thisProxy
         kind = target.kind
         if kind == CKDYN_ARRAY:
             self.arrays[target.aid][tuple(target.index)] = obj
@@ -741,6 +754,65 @@ class Charm(object):
 
     def startQD(self, callback):
         _ckdyn.start_qd(callback)
+
+    def checkpoint(self, dirname, resume=None):
+        """ Write a checkpoint of every chare to directory dirname (Charm++
+            CkStartCheckpoint). A program started with +restart dirname
+            continues from it.
+
+            resume is None: returns a future that receives None once the
+            checkpoint is written; call this from a coroutine and wait on the
+            future. A restarted run has nothing to continue in this form.
+
+            resume is a bound entry method of a group proxy, an array element
+            proxy or the main chare (for example self.thisProxy.resumed in the
+            main chare): the runtime calls that entry with no arguments once
+            the checkpoint is written, and, in a program restarted from
+            dirname, on the restored object once the restart completes. This
+            is how a program continues after a restart, because coroutines
+            (including a coroutine main) are not restored. Called from a
+            coroutine, it also returns a future that receives None on the
+            original run once the checkpoint is written; called from a plain
+            entry method it returns None.
+
+            Futures and suspended coroutines from before a restart do not
+            exist in the restarted run.
+        """
+        if resume is None:
+            f = self.threadMgr.createFuture()  # raises NotThreadedError outside a coroutine
+            _ckdyn.checkpoint(dirname, f)
+            return f
+        # the done callback is resume with reference number (seq << 24) | (PE + 1);
+        # charm._invoke strips it and sends _checkpoint_written to this PE
+        self._ckpt_seq = (self._ckpt_seq % 255) + 1
+        tag = (self._ckpt_seq << 24) | (self._myPe + 1)
+        cb = _ckdyn.Callback.target(resume, tag)
+        f = None
+        if not self.threadMgr.isMainThread():
+            f = self.threadMgr.createFuture()
+        self._ckpt_future = f
+        _ckdyn.checkpoint(dirname, cb)
+        return f
+
+    def _checkpoint_done(self, tag):
+        """ a charm.checkpoint resume entry is being delivered with its tag """
+        if _ckdyn.is_restarting() and not self._restart_done_seen:
+            # the restart's own delivery: the checkpointing PE's future is gone
+            self._restart_done_seen = True
+            return
+        pe = (tag & 0xffffff) - 1
+        if pe == self._myPe:
+            self._checkpoint_written(tag)
+        else:
+            self.thisProxy[pe]._checkpoint_written(tag)
+
+    def _checkpoint_written(self, tag):
+        """ on the PE that called charm.checkpoint(dir, resume): deposit its future """
+        f = self._ckpt_future
+        if f is None or (tag >> 24) != self._ckpt_seq:
+            return  # a group resume delivers once per PE: only the first one counts
+        self._ckpt_future = None
+        self.threadMgr.depositFuture(f.fid, None)
 
     def waitQD(self):
         f = self.Future()
@@ -1096,6 +1168,9 @@ class CharmRemote(Chare):
 
     def printStats(self):
         charm.printStats()
+
+    def _checkpoint_written(self, tag):
+        charm._checkpoint_written(tag)
 
     def registerNewChareType(self, name, source):
         if charm.options.remote_exec is not True:
