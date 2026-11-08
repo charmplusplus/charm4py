@@ -2257,6 +2257,24 @@ also in plain C++ (SPEC-4c.md 6). The checkpoint test of the gate is
 `checkpoint/restart.py`. Long-lived received numpy views were measured (SPEC-4c.md 7):
 no stall, memory grows by the retained messages.
 
+Status 2026-11-08, step 4d: gate met on `thin` against `ckdyn-dev` c81fbeecc, except
+live CCS requests (docs/design/SPEC-4d.md; logs/gate-4d). `pool/pool`, `pool/pool_ncores`,
+`exceptions/pool`, `interactive/test1.in` (piped to `charm4py.interactive`), the
+dist-task-scheduler, fibonacci, hello, multi-module and nqueen examples pass at four
+processes; `appspector/loads` at two; `ray/simple`, `ray/fib`, `ray/mandelbrot`,
+`parallel-map/square` at two (one process is refused by the pool, which needs a worker
+PE, as in 1.x); `ray/parameter_server` (sync, async), `jacobi2d` and `examples/simple/*`
+at one and two; `liveviz/test_liveviz_unit` and `steer/test_steer_unit` pass. Changes:
+a reserved keyword of a proxy call (`is_ray`) also fills a parameter of that name, as in
+1.x, which `PoolScheduler.start` relies on for Ray tasks; Ray actor proxies wrap only
+entry methods; appspector measures through a binding meter (`_ckdyn.set_meter`, called
+around every delivery, construction and unpacking) instead of wrapping the removed 1.x
+dispatch functions, since CkDyn has no call that reads an object's load. Found outside
+charm4py: in the `CMK_CHARM4PY` reconverse build, `callHandlerRec` calls only `fnOld`,
+so every request to a handler registered through `CkDynCcsRegister` crashes PE 0
+(SIGSEGV); steer and liveViz requests wait on that reconverse fix (SPEC-4d.md 4). The
+numba examples are skipped (numba absent). The 4a, 4b and 4c gates show no regression.
+
 **Step 5 (charm PR): delete the Ext API.** Remove every `CMK_CHARM4PY` block listed in
 3.15, rename the macro, restore the C++ section callback, update `README.charm4py` and
 the internals chapter. Gate: charm CI; the thin charm4py's auto_test against the
