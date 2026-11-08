@@ -30,7 +30,7 @@ if [ "$(uname -s)" = Linux ]; then
 fi
 # shellcheck disable=SC2086
 ./configure --prefix="$prefix" --enable-only $providers \
-  --disable-static --disable-dependency-tracking --with-dlopen=no
+  --disable-static --disable-dependency-tracking
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 make -j"$jobs"
 make install
