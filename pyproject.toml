@@ -77,3 +77,30 @@ path = "charm4py/_version.py"
 template = "version='${version}'\n"
 location = "source"
 
+# ---- wheels (docs/design/SPEC-6.md) ----------------------------------------
+# Each wheel build first builds libcharm (tools/build_charm.py, the commit in
+# charm_version.txt; one Charm++ build serves every Python version of a job)
+# against a small libfabric (tools/build_libfabric.sh) that auditwheel or
+# delocate then copies into the wheel.
+[tool.cibuildwheel]
+build = "cp311-* cp312-* cp313-*"
+# no musllinux, no free-threaded interpreters (step 7)
+skip = "*-musllinux_* cp3??t-*"
+build-verbosity = 1
+test-command = [
+    "python -m charmrun.start {project}/examples/simple/hello_world.py +p1",
+    "python -m charmrun.start {project}/examples/simple/hello_world.py +p2",
+]
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+before-all = "sh tools/build_libfabric.sh /usr/local"
+# CHARM4PY_WHEEL_BUILD: LCI's ofi backend only and no hwloc (tools/build_charm.py)
+environment = { OFI_ROOT = "/usr/local", LD_LIBRARY_PATH = "/usr/local/lib", FI_PROVIDER = "tcp", CHARM4PY_WHEEL_BUILD = "1" }
+
+[tool.cibuildwheel.macos]
+archs = ["arm64"]
+before-all = "MACOSX_DEPLOYMENT_TARGET=14.0 sh tools/build_libfabric.sh $HOME/charm4py-libfabric"
+environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OFI_ROOT = "$HOME/charm4py-libfabric", FI_PROVIDER = "tcp", CHARM4PY_WHEEL_BUILD = "1" }
