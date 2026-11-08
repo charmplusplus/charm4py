@@ -4,165 +4,195 @@ Install
 
 .. .. contents::
 
-Charm4py runs on Linux, macOS, Windows, Raspberry Pi, and a wide variety of clusters and
-supercomputer environments (including many supercomputers in the TOP500).
+Charm4py 2 runs on Charm++ with the Reconverse runtime, on Linux (x86_64 and
+aarch64) and macOS (Apple Silicon). It supports the CPython implementation.
+The Charm++ library it uses, ``libcharm``, and the Reconverse and LCI
+libraries ``libcharm`` needs, are part of the installed package; an installed
+Charm4py does not need a Charm++ source or build tree.
 
-Charm4py runs on Python 3.9+. Charm4py supports the CPython Python implementation.
+There are three ways to install it:
 
-Installing Charm4Py binaries (via pip)
----------------------------------------
+* from a wheel (`Installing a wheel`_), which needs nothing but pip;
+* from source, letting the build fetch and build Charm++ itself
+  (`Installing from source`_);
+* from source against a Charm++ tree you build yourself
+  (`Building against your own Charm++ build`_), for work on Charm++ or
+  Charm4py.
 
-The easiest way to install Charm4Py is via pip. Currently, pip wheels are available for Linux and macOS.
+Installing a wheel
+------------------
 
-To install the latest release of Charm4Py, run::
+Wheels exist for CPython 3.11, 3.12 and 3.13 on
+
+* Linux x86_64 and aarch64 (``manylinux_2_28``: glibc 2.28 or newer), and
+* macOS 14 or newer on Apple Silicon (arm64).
+
+::
 
     $ pip install charm4py
 
-This will install the latest stable release of Charm4Py, using the default underlying Charm++ build
-(see the `Charm++ manual`_ for more information on the different builds of Charm++). If you want to 
-use a specific Charm++ build, you can install and build Charm4Py from source. Note that the source distribution
-is available via "pip install", but the standard from source build process is via "git clone", as outlined below.
+A wheel includes ``libcharm``, Reconverse, LCI, and a libfabric built with only
+its ``tcp``, ``sockets``, ``udp`` and ``rxm`` providers (and ``shm`` on Linux).
+That is enough for one machine and for clusters on Ethernet. A wheel cannot
+use a cluster's high-speed network (InfiniBand verbs, Slingshot, Omni-Path);
+on such a cluster, install from source against the site's libfabric (or
+libibverbs), as described below.
 
-To minimally test the pip installation, you can run the following one-line example::
+LCI uses the first provider libfabric offers. If a program does not start,
+choose the TCP provider explicitly::
 
-    $ python -c 'import charm4py; charm4py.charm.start(lambda x: print("hello") or charm4py.charm.exit())'
+    $ export FI_PROVIDER=tcp
 
-To run the full test suite, it is necessary to build Charm4Py from source. Examples of charm4py programs are also available in the Charm4Py source.
+To check the installation::
 
-Installing Charm4Py from source
-------------------------------------------------------------
+    $ python -m charmrun.start +p2 hello_world.py
 
-This install process covers the installation of Charm4Py from source.
+with ``hello_world.py`` from ``examples/simple`` in the Charm4py source.
 
-The first step is to clone the Charm4py repository from Git::
+Installing from source
+----------------------
+
+::
 
     $ git clone https://github.com/charmplusplus/charm4py.git
     $ cd charm4py
-
-Next, clone the Charm++ repo into charm_src::
-
-    $ git clone --branch classic https://github.com/charmplusplus/charm.git charm_src/charm
-
-The ``classic`` branch has the classic Converse machine layers (``netlrts``,
-``mpi`` and the others) that the default build and the commands below use.
-Charm++'s default branch, ``recharm``, builds only Reconverse triplets (see
-`Using an external Charm++ source tree`_).
-
-Once this is done, there are two ways to build Charm4py. The first is to simply run the installation
-from the Charm4py root. This method will use the default Charm++ backend::
-
-    $ cd ..
     $ pip install .
 
-The other option is to manually build Charm++ before building Charm4py. This may be necessary
-if you want to configure Charm++ differently from the default. To do this, change to
-the charm directory and run the following build command, then build Charm4Py::
+(``pip install charm4py`` on a platform without a wheel does the same from
+the source distribution.)
 
-    $ cd charm
-    $ ./build charm4py <target-architecture> -j<N>
-    $ cd ../..
-    $ pip install .
+When none of the ``CHARM4PY_CHARM_*`` variables below is set, the build
+clones Charm++ at the commit named in ``charm_version.txt`` (with Reconverse,
+the ``contrib/reconverse`` submodule) and builds it with::
 
-On MacOS, you may need to set your DYLD_LIBRARY_PATH so that the dynamic linker can find Charm++ libraries. For example: 
+    ./build charm4py <triplet> -j<N> --with-production --disable-fortran \
+        --with-refnum-type="unsigned int" \
+        --with-cmake-args=-DLCI_OPTIMIZE_FOR_NATIVE=OFF
 
-    $ export DYLD_LIBRARY_PATH=<charm_install_folder>/lib
+before it builds the extension module, ``charm4py._ckdyn``. This takes several
+minutes. ``<triplet>`` is the Reconverse triplet of the machine
+(``reconverse-linux-x86_64``, ``reconverse-linux-arm8`` or
+``reconverse-darwin-arm8``), and ``<N>`` is the number of cores. The clone and
+the Charm++ build are kept in ``build/charm`` of the source tree, so a second
+``pip install .`` reuses them. Requirements:
 
-Replace <charm_install_folder> with the path where you built/installed Charm++(usually this is the charm_src/charm folder)
+* git, a C and C++ compiler (C++17), and network access (the build fetches
+  Charm++ and, through Reconverse, LCI);
+* CMake 3.21 or newer (pip provides one when the system's is older);
+* libfabric with its headers (``libfabric-dev`` on Debian and Ubuntu,
+  ``libfabric-devel`` on RHEL-like systems, ``libfabric`` in Homebrew or
+  MacPorts), or libibverbs (``rdma-core``). LCI looks for libfabric through
+  pkg-config and in ``$OFI_ROOT``.
 
-Finally, if necessary, when installing dependencies or when running the install script, add the --user
-option to the Python command to complete the installation without permission errors.
+Environment variables that change this build:
 
-After building, you can run Charm4py examples. For example::
+* ``CHARM_BUILD_PROCESSES``: the ``-j`` count of the Charm++ build.
+* ``CHARM_EXTRA_BUILD_OPTS``: more options for Charm++'s ``./build``, for
+  example ``--with-cmake-args=-DLCI_NETWORK_BACKENDS=ofi`` to build LCI's
+  libfabric backend only.
+* ``CHARM4PY_CHARM_CACHE_DIR``: where to keep the clone and the build instead
+  of ``build/charm``.
+* ``CHARM4PY_BUILD_TRIPLET``: the Charm++ triplet, when the automatic choice
+  is wrong. It must be a ``reconverse-*`` triplet.
 
-    $ python -m charmrun.start +p2 examples/hello/array_hello.py
+Building against your own Charm++ build
+---------------------------------------
 
-The full charm4py test suite can be run from the Charm4Py root as follows::
+For work on Charm++ or on Charm4py's extension module, point the build at a
+Charm++ checkout or build:
 
-    $ python auto_test.py
+* ``CHARM4PY_CHARM_BUILD_DIR``: an existing ``charm4py`` build of Charm++ (the
+  directory with ``lib/libcharm.*`` and ``include/ckdyn.h``). It is used as it
+  is; rebuild it yourself (``make`` in that directory) after changing Charm++.
+* ``CHARM4PY_CHARM_DIR``: a Charm++ source tree. Without
+  ``CHARM4PY_CHARM_BUILD_DIR``, the build uses
+  ``$CHARM4PY_CHARM_DIR/<triplet>-charm4py`` when it holds a ``libcharm``,
+  and otherwise builds it there with the command above.
 
-Choosing the target architecture
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-When building from source, as described above, you must chose the appropriate target architecture.
-
-For building on a laptop or personal machine, you must use a netlrts build of Charm4Py. 
-For example, to build for a personal machine running macOS with ARM processors, using 4 cmake 
-threads, you would run::
-    
-    $ ./build charm4py netlrts-darwin-arm -j4 --with-production
-
-To install Charm4Py on a cluster machine, you will generally want to chose a different backend. 
-For example, to use Charm4Py with MPI, build the Charm backend as follows::
-
-    $ ./build charm4py mpi-<os>-<architecture> -j<N> --with-production
-
-Check the Charm++ documentation to identify the correct os and architecture command 
-to pass into the build command. 
-
-Using an external Charm++ source tree
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-By default, Charm4py builds the Charm++ sources in ``charm_src/charm``. The source
-tree, build triplet, and build output directory can instead be selected with
-environment variables:
-
-* ``CHARM4PY_CHARM_DIR`` is the path to the Charm++ source tree.
-* ``CHARM4PY_BUILD_TRIPLET`` overrides the automatically selected build triplet.
-* ``CHARM4PY_CHARM_BUILD_DIR`` selects a separate Charm++ build directory. This
-  directory may contain an existing ``charm4py`` build or may be a new directory
-  that Charm4py will ask the Charm++ build system to create.
-* ``CHARM4PY_LCI_DIR`` optionally selects a local LCI source tree for a
-  Reconverse build, avoiding a network fetch.
-
-For example, to install Charm4py using a Reconverse build on an Apple Silicon Mac::
-
-    $ CHARM4PY_CHARM_DIR=/path/to/charm \
-      CHARM4PY_BUILD_TRIPLET=reconverse-darwin-arm8 \
-      CHARM4PY_CHARM_BUILD_DIR=/path/to/charm/reconverse-darwin-arm8-charm4py \
-      pip install .
-
-Use a distinct ``CHARM4PY_CHARM_BUILD_DIR`` if the triplet has already been built
-with the ``charm++`` target. The ``charm4py`` target has a different CMake
-configuration because it produces the shared ``libcharm`` library.
-
-Reconverse triplets need a Charm++ tree with Reconverse support (the ``recharm``
-branch), where Reconverse is the ``contrib/reconverse`` submodule. Initialize it
-before building::
+The Charm++ tree needs CkDyn (``include/ckdyn.h``): the commit in
+``charm_version.txt`` or a later one. Initialize Reconverse first::
 
     $ git -C /path/to/charm submodule update --init contrib/reconverse
 
-A Reconverse build fetches LCI unless ``CHARM4PY_LCI_DIR`` is set or an earlier
-build of the same triplet left LCI sources in ``<triplet>/_deps/lci-src``.
-Either way it builds LCI from source, and the LCI that Reconverse pins needs
-CMake 3.21 or newer and Python 3.8 or newer for that. With an older CMake,
-configure fails with "C_STANDARD is set to invalid value '17'"; when CMake
-finds only an older Python, it fails with "Cannot find source file
-.../src/binding/generated/binding.cpp". If a system's defaults are older,
-load a newer Python module, or install a recent CMake with
-``pip install cmake``.
+To build that tree by hand::
 
-An installed Charm4py does not need the Charm++ build directory: the build
-copies ``libcharm`` and the Reconverse and LCI libraries it uses into the
-package and makes them find each other there. On Linux this uses
-``patchelf``, which pip installs for the build; with
-``--no-build-isolation``, install it first (``pip install patchelf``).
+    $ cd /path/to/charm
+    $ ./build charm4py reconverse-darwin-arm8 -j8 --with-production \
+          --disable-fortran --with-refnum-type="unsigned int" \
+          --destination=$PWD/reconverse-darwin-arm8-charm4py
 
-Reconverse launches one Python interpreter per process. Use the normal
-Charm4py ``+pN`` syntax::
+``--with-refnum-type="unsigned int"`` is required: Charm4py keeps future ids
+in the 32-bit reference number of a message, and the extension module refuses
+at import a ``libcharm`` built without it. ``--enable-tracing`` adds
+Projections and Summary tracing; a ``libcharm`` built with it writes trace
+files on every run, so the default build leaves it out (add it with
+``CHARM_EXTRA_BUILD_OPTS=--enable-tracing``).
+Use a build directory of its own for the ``charm4py``
+target; a directory configured for the ``charm++`` target does not produce
+the shared ``libcharm``.
+
+An editable install for development::
+
+    $ python -m venv venv && . venv/bin/activate
+    $ pip install scikit-build-core nanobind numpy greenlet ninja
+    $ CHARM4PY_CHARM_DIR=/path/to/charm \
+      CHARM4PY_BUILD_TRIPLET=reconverse-darwin-arm8 \
+      CHARM4PY_CHARM_BUILD_DIR=/path/to/charm/reconverse-darwin-arm8-charm4py \
+      pip install --no-build-isolation -e .
+
+With an editable install, Python changes take effect at once; after a change to
+``src/*.cpp`` or to ``libcharm``, run the ``pip install`` command again.
+On Linux the build needs ``patchelf`` (pip installs it in an isolated build;
+with ``--no-build-isolation``, ``pip install patchelf`` first).
+
+The test suite, from the source tree::
+
+    $ CHARM4PY_TEST_NUM_PROCESSES=2 python auto_test.py
+
+Running: one PE per process
+---------------------------
+
+Reconverse runs one Python interpreter per process, and Charm4py runs one PE
+in each process for now. ``+pN`` with the Charm4py launcher starts ``N``
+processes on this machine::
 
     $ python -m charmrun.start +p2 examples/simple/hello_world.py
 
-The Charm4py launcher starts two processes on this machine, bootstrapped the
-way LCI's ``lcrun`` does, and passes ``+pe 2`` to Reconverse. As ``lcrun``
-does, it stops the whole job when one process fails. ``lcrun`` is a script in
-LCI's source tree, so it is not part of a Charm4py installation; the
-equivalent ``lcrun`` command is::
+The launcher bootstraps the processes the way LCI's ``lcrun`` does and passes
+``+pe 2`` to Reconverse; when one process fails, it stops the others.
+``lcrun`` itself is a script in LCI's source tree (``_deps/lci-src/lcrun`` in a
+Charm++ build directory) and is not part of an installation; the equivalent
+``lcrun`` command is::
 
     $ /path/to/lci/lcrun -n 2 python examples/simple/hello_world.py +pe 2
 
-Across several nodes, start the processes with the cluster's launcher (for
-example ``srun``) and pass the total PE count with ``+pe``. Each process runs
-one PE: ``+pe N`` in a single process (more PEs than processes) is refused at
-start-up for now.
+Across several nodes, start one process per PE with the cluster's launcher
+(for example ``srun -n 8 python myprogram.py +pe 8``). ``+pe N`` given to a
+single process (more PEs than processes) is refused at start-up. See
+:doc:`running`.
 
-.. _manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#installing-charm
+GPUs (CUDA and HIP)
+-------------------
+
+Wheels have no device support. A CUDA or HIP build is a source build against
+a Charm++ built with ``cuda`` or ``hip`` and the site's CUDA, libfabric and
+PMI. The recipe (``CHARM_EXTRA_BUILD_OPTS=cuda``) is written and checked in
+step 3 of the Charm4py 2 plan (``docs/design/DESIGN.md``, section 6.4); until
+then this section is a placeholder.
+
+Known issues
+------------
+
+* **CCS requests crash a process of a wheel or of a default source build.**
+  The Reconverse commit that ``charm_version.txt`` selects calls a CCS handler
+  registered through ``CcsRegisterHandlerFn`` the wrong way in a ``charm4py``
+  build, and the fix (Reconverse branch ``ccs-fn-dispatch``) is not merged
+  upstream yet. This affects everything that serves CCS: ``++server`` with
+  ``charm4py.liveviz``, ``charm4py.appspector`` and ``charm4py.steer``. Until
+  the fix is merged and the pin moves, use a Charm++ tree whose
+  ``contrib/reconverse`` has the fix (`Building against your own Charm++
+  build`_).
+* The pin in ``charm_version.txt`` is a commit of Charm++'s ``ckdyn-dev``
+  branch; it moves to a ``recharm`` commit when CkDyn is merged there.
+* No free-threaded (``3.13t``) wheels yet, and no multi-PE processes (step 7
+  of the plan).
