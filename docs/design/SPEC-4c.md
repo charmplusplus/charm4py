@@ -122,15 +122,15 @@ processes, this Mac, 2026-11-08:
 
 | mode (N) | wall time | receiver RSS before → after |
 |---|---|---|
-| drop (10000) | 3.25 s | 88 → 93 MB |
-| copy (10000), payload 625 MB | 2.19 s | 88 → 728 MB |
-| keep views (10000), payload 625 MB | 3.15 s | 88 → 874 MB |
-| keep views (30000), payload 1875 MB | 9.15 s | 89 → 1254 MB (peak 1551) |
+| drop (10000) | 0.79 s | 88 → 90 MB |
+| copy (10000), payload 625 MB | 1.06 s | 87 → 716 MB |
+| keep views (10000), payload 625 MB | 0.83 s | 87 → 872 MB |
+| keep views (30000), payload 1875 MB | 3.56 s | 88 → 1244 MB (peak 1797 MB) |
 
 Every run completes; nothing stalls, so the receive path does not hold an LCI or
 reconverse receive buffer: the message is an ordinary runtime allocation once it
 is delivered. A kept view costs its whole message, about 15 KB (23 %) more per
-64 KB array than a copy here (message header and allocation rounding). The
+64 KB array than a copy here (872 against 716 MB) (message header and allocation rounding). The
 30000 run's RSS is below the payload because macOS compresses and pages out under
 memory pressure. No change is proposed; a program that keeps many small received
 arrays can set `charm.options.copy_received_arrays = True` or copy them itself.
