@@ -341,5 +341,13 @@
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device.py"
+    },
+    {
+        "path": "tests/thin/posted_receive.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/thin/device_persistent.py"
     }
 ]
