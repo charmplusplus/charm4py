@@ -6,6 +6,8 @@ name: Charm4py 2 (thin)
 on:
   push:
     branches: [thin]
+  pull_request:
+    branches: [thin]
   workflow_dispatch:
 
 jobs:
