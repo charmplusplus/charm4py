@@ -1781,20 +1781,6 @@ void *h_unpack(void *, const CkDynTarget *t, int reason, const void *buf, size_t
   PyObject *obj = (tg && ro && mv) ? call(c_unpack, {tg, ro, mv}) : nullptr;
   if (mv) { PyObject *r = PyObject_CallMethod(mv, "release", nullptr); if (r) Py_DECREF(r); else PyErr_Clear(); }
   Py_XDECREF(tg); Py_XDECREF(ro); Py_XDECREF(mv);
-  if (obj && t->chare_idx < 0) {
-    // Work-around for a CkDyn defect: the *Dyn::pup functions build the
-    // target before pupObj restores d.chareIdx, so the target of an unpacked
-    // object has chare_idx -1 (a main chare's target then crashes
-    // CkDynCoroResume and any other call that looks the object up). Take the
-    // chare index from the registered class of the unpickled object.
-    CkDynTarget fixed = *t;
-    PyObject *cls = (PyObject *)Py_TYPE(obj);
-    for (size_t i = 0; i < g_classes.size(); i++)
-      if (g_classes[i].cls == cls && g_classes[i].kind == fixed.kind) { fixed.chare_idx = (int32_t)i; break; }
-    PyObject *tg2 = make_target(fixed);
-    if (!tg2 || PyObject_SetAttr(obj, s_ckdyn_target, tg2) < 0) { Py_XDECREF(tg2); Py_CLEAR(obj); }
-    else Py_DECREF(tg2);
-  }
   if (!obj) hook_abort("charm._unpack");
   meter_leave(fr, obj);
   return obj;
