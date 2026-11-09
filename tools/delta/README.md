@@ -14,6 +14,8 @@ on Delta and running its GPU gate. Recorded results: `docs/design/SPEC-3.md`, se
 | `run_thin.py` | the suite runner used by the gate (test_config.json plus tests/thin, one `srun` per test) |
 | `gpu-2node.sbatch` | two nodes, one GPU each: ckdyntest across the fabric and the one-way measurement |
 | `bench_zc_delta.py` | one-way time of a float64 array as BUFFER, NCPY or DEVICE (`MODE BYTES +pe 2`) |
+| `gpu-devpersist.sbatch` | SPEC-7-device: ckdyntest (`devpersist` phases), `device_persistent.py`, `posted_receive.py`, `device.py` per shape (one node: `-n 1`, `-n 2`, `-n 2 +gpushm`, and both again with both GPUs visible to both tasks; two nodes with `-N 2`), then the measurements |
+| `bench_devpersist.py` | time of a persistent `get` or `put` between two PEs (`OP BYTES +pe 2`), with its transfer mode |
 | `scrontab.txt` | the weekly gate entry; installed by hand with `scrontab -e` |
 
 ## Setup (once, on a login node)
