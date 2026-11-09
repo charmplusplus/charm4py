@@ -326,6 +326,9 @@
         "path": "tests/thin/zerocopy.py"
     },
     {
+        "path": "tests/thin/sweep_defects.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device.py"
