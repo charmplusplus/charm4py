@@ -118,6 +118,27 @@ explicit `__flush_wait_queues__()`, as in 1.x.
 - `+MetaLB` with examples/particle/particle.py aborts in `CkMigratable::AtSync`
   ("Contributing to iter 0 < current iter 1"); tests/migration/test_migrate.py
   passes with `+MetaLB`. Not investigated; `+MetaLB` is not in any gate.
+  Update 2026-11-08 21:50 PST: cause found; the runtime's MetaBalancer, triggered by
+  the binding's migratability toggle (section 3). Reproduces in one process
+  (`particle.py 8 4 2500 +balancer GreedyRefineLB +MetaLB +pe 1`: "Contributing to
+  iter 1 < current iter 1"; logs/step-7/defects/metalb_particle_p1.log). Every
+  `AtSync` adds one contribution for its iteration (`MetaBalancer::AddLoad`), and an
+  iteration counts as finished when the contributions equal
+  `LBManager::GetObjDataSz()`. With the default `_lb_args.migObjOnly()` ("Load
+  balancing strategy ignores non-migratable objects") that is the number of objects
+  that are migratable at that moment (LBDatabase.C `GetObjDataSz`). A particle cell
+  is non-migratable while its `run` coroutine waits in `charm.iwait` on its channels,
+  so the expected count drops (the log shows "total objs 1" with 32 cells) and an
+  iteration finishes before every cell contributed; the next `AtSync` of a late cell
+  then aborts. The same run with `_ckdyn.set_migratable` replaced by a function that
+  does nothing (logs/step-7/defects/metalb_notoggle.py) passes, with "total objs 33"
+  throughout. test_migrate passes because its elements never suspend. By the same code (read, not run), in plain
+  Charm++ any `AtSync` element that is non-migratable when another element's
+  contribution arrives gives the same miscount, so the fix belongs in MetaBalancer
+  (count the `AtSync` barrier's clients, not the migratable objects); a binding-side
+  workaround would have to stop toggling migratability under `+MetaLB` and give up the
+  guarantee of section 3 that an element with a suspended coroutine is not moved.
+  Needs a decision; not fixed.
 
 ## 7. Received numpy arrays kept alive
 
