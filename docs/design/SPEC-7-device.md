@@ -115,66 +115,143 @@ one node.
 
 ## 7. Status
 
-Status 2026-11-08 22:20 PST: sections 2, 3 and 5 built and the host side tested on the
-Mac; nothing under `CMK_CUDA || CMK_HIP` has run yet: the Delta part (sections 4 and 6)
-waits for an ssh control master to Delta (`ssh -O check delta` reported none at 22:13).
-Charm++ `ckdyn-dev7` 669707835; charm4py `thin-dev7` beef19d (binding), 75605e5
-(`device_persistent.py`), 67c9813 (Delta scripts). Mechanism: `doc/internals/ckdyn.md`,
-"Persistent device buffers" and "Posts".
+Status 2026-11-08 23:10 PST: done. Sections 2-6 built, tested on the Mac (host side) and
+on NCSA Delta (A100, CUDA 13.2), including `+gpushm` and two nodes. Then, at Kale's
+decision (2026-11-08 22:35), the three-mode implementation moved into Charm++'s
+`CkDevicePersistent` with CkDyn wrapping it (step 4b), and the one-node job was rerun.
+
+Commits. Charm++ `ckdyn-dev7`: 669707835 (CkDyn persistent buffers, argument posts,
+unpost, `devpersist` phases), bbcc2c9ed (step 4b: implementation in `CkDevicePersistent`,
+CkDyn wrappers, manual). charm4py `thin-dev7`: beef19d (binding), 75605e5
+(`device_persistent.py`), 67c9813, b4b1263, c5a29ee (Delta scripts), f0d5890 and this
+commit (docs). Mechanism: `doc/internals/ckdyn.md`, "Persistent device buffers" and
+"Posts". Logs: `logs/step-7/device/` (`mac/`, `devp-<job>/`, `devp-<job>.out`).
 
 **Built.**
 
-- C API of section 2 as specified, plus `CkDynDevPersistMode` (the mode a transfer
-  would use, for tests and `DevicePersistent.mode`). The handle is a fixed 376-byte
-  record (pointer, length, PE, process, host, the CUDA/HIP IPC handle
-  of the allocation and the buffer's offset in it, and the pupped `CmiNcpyBuffer` with
-  its registration).
+- C API of section 2, plus `CkDynDevPersistMode` (the mode a transfer would use). The
+  handle is a fixed 512-byte record holding the pupped `CkDevicePersistent` (pointer,
+  length, PE, process, host, the IPC handle of the allocation and the buffer's offset in
+  it, and the `CmiNcpyBuffer` with its registration) with an ignore callback.
 - `done` semantics: once per get or put on the issuing PE; for a `FUTURE` callback the
   call's refnum is the future id, for any other kind the callback's refnum. The binding
   opens every buffer with a `FUTURE` callback to its own PE and passes each transfer's
   future id as the refnum, so no slot table is needed.
+- `CkDevicePersistent` (step 4b): public constructors, `open`/`close`/`set_msg`/`get`/
+  `put` and the manual's callback semantics (both buffers' callbacks sent from the
+  issuing PE with their `cb_msg`) kept; added `mode()`. Defects fixed: it aborted between
+  hosts; it opened the IPC handle of an interior pointer as if it were the allocation
+  base (wrong for cupy, torch and pool allocations); it kept the IPC mapping in the
+  peer's copy, so every copy opened the handle again and `close()` on a copy unmapped
+  it. Also: the stream was uninitialized in the constructors without one.
 - Binding: `Chare.post_buffer`, `charm.DevicePersistent`, `charm.DevicePersistentHandle`,
   `_ckdyn.DevPersist`, `_ckdyn.post_buffer`, `_ckdyn.posted_count` (tests).
 - Tests: `ckdyntest` phases `devpersist/remote` and `devpersist/samepe`;
   `tests/thin/posted_receive.py`, `tests/thin/device_persistent.py`;
-  `tools/delta/gpu-devpersist.sbatch`, `tools/delta/bench_devpersist.py`.
+  `tools/delta/gpu-devpersist.sbatch` (also runs Charm++'s
+  `examples/charm++/cuda/gpudirect/persistent`), `tools/delta/bench_devpersist.py`,
+  `tools/delta/build-incr.sbatch`.
 
 **Deviations, each kept.**
 
-1. CkDyn does not wrap Charm++'s `CkDevicePersistent`. That class aborts between hosts
-   ("Persistent GPU messaging is currently not supported for inter-node messages"),
-   takes `cudaIpcGetMemHandle` of the buffer pointer and opens it as if it were the
-   allocation's base (cupy and torch arrays are pieces of larger allocations, so the
-   opened pointer would be wrong), keeps the opened mapping in the copy of the remote
-   buffer, and fires both buffers' callbacks from the issuing PE. CkDyn implements the
-   three modes itself with the same primitives (`hapiMemcpyAsync`, CUDA/HIP IPC,
-   `CmiNcpyBuffer::rdmaGet`) and documents it in `ckdyn.md`.
+1. The transfer code is new, not a wrapper of the old `CkDevicePersistent` (which aborts
+   between hosts and mishandles interior pointers and IPC mappings); since step 4b it is
+   the new `CkDevicePersistent`, so C++ programs have it too.
 2. The IPC mode is used only with `+gpushm`, as section 2 states, although persistent
-   IPC does not use the `+gpushm` communication buffer; without it, two processes on
-   one host use RDMA, which gives the comparison section 6 asks for.
-3. An RDMA put is a get issued by the destination's PE (`CkDynMgr::persistPutReq`,
-   `persistPutAck`): a true RDMA put completes on the source before the bytes are
-   visible at the destination (reconverse `CommRputLocalHandler`), so its `done` could
-   not mean "the bytes have arrived". The cost is one small message each way.
+   IPC does not use the `+gpushm` communication buffer; without it, two processes on one
+   host use RDMA. For C++ programs this changes the old `CkDevicePersistent`, which
+   used IPC between processes on one host without the flag.
+3. An RDMA put is a get issued by the destination's PE (two Converse handlers in
+   ckrdmadevice.C): a true RDMA put completes on the source before the bytes are
+   visible at the destination (reconverse `CommRputLocalHandler`), so its callbacks
+   could not mean "the bytes have arrived". Cost: one small message each way, and the
+   put measured no slower than the get (tables below).
 4. Two C additions besides section 2: `CKDYN_POST_ARG` (a post counts arguments: a
    `CKDYN_MSG_BLOCK` message's leading `FUTURE` slot is skipped, which the binding cannot
    know at post time) and `CkDynUnpostBuffer` (a post that a `BUFFER` slot did not
-   consume is removed by the binding, which then copies the value itself). Without
-   them a post made before a `ret=True` call, or before a send below the zero-copy
-   threshold, would land on the wrong argument or stay behind for a later message.
+   consume is removed by the binding, which then copies the value itself).
 5. A posted argument that arrives as a copy (host array below the threshold, any array
    in a broadcast) is copied into the posted array with `obj[...] = value`, so identity
    holds on every path; the length check then compares `nbytes`.
 6. `DevicePersistent.get`/`put` create their future with `charm.createFuture`, so they
    are called from a coroutine, as every Future-returning call in 1.x.
 
-**Tests run (Mac).** `ckdyntest` at `+pe 2`, `+pe 4`, `lcrun -n 2 +pe 2`: every phase
-passes, `devpersist/*` print SKIP. `posted_receive.py` host phases pass at `+p1` and at
-`+p2` (two processes; the post-then-migrate phase and the stale-object error run only
-there); `-mismatch` aborts with "CkDyn: entry 385 argument 0: the posted buffer has
-1048576 bytes, the message's slot 2097152". `zerocopy.py` and `smoke_ckdyn.py` pass at 1
-and 2 processes; `device.py` and `device_persistent.py` print SKIP. `ckdyn.C` and
-`ckdyntest.C` pass a syntax-only compile with `CMK_CUDA=1` against stub CUDA headers.
+**Compile on Delta.** Everything under `CMK_CUDA || CMK_HIP` compiled without a change or
+a new warning, before and after step 4b (build jobs 23677297, 23677399, both on
+`cpu-interactive`: the auto-mode classifier refused a `make -j16` on the login node, and
+the GPU interactive queues had a two-hour wait at the time). No run-time defect was
+found; no Job A iteration was needed.
 
-**Not yet run (needs Delta).** Every line under `CMK_CUDA || CMK_HIP` of this step, the
-`+gpushm` runs of section 4 and the measurements of section 6.
+**Results, one node** (gpuA100x4-interactive, A100-SXM4-40GB, `srun --mpi=pmix`).
+Shapes: `n1` one process; `n2` two processes, one GPU per task; `n2vis` two processes
+with both GPUs visible to both (HAPI's block mapping gives process k device k);
+`n2visshm` the same with `+gpushm`. Job 23677329 at 669707835, job 23677400 at bbcc2c9ed
+(step 4b); results identical.
+
+| test | n1 | n2 | n2vis | n2visshm |
+|---|---|---|---|---|
+| ckdyntest `ncpy/*`, `device/*`, `hapi` | PASS | PASS | PASS | PASS |
+| ckdyntest `devpersist/remote` (mode) | PASS (copy) | PASS (RDMA) | PASS (RDMA) | PASS (IPC) |
+| ckdyntest `devpersist/samepe` | PASS (copy) | PASS (copy) | PASS (copy) | PASS (copy) |
+| `examples/charm++/cuda/gpudirect/persistent` (4b only) | | PASS (RDMA) | PASS (RDMA) | PASS (IPC) |
+| `device_persistent.py` | PASS (copy) | PASS (rdma) | PASS (rdma) | PASS (ipc) |
+| `posted_receive.py` (host and device phases) | PASS | PASS | PASS | PASS |
+| `device.py` (DEVICE slot mode) | PASS (copy) | PASS (RDMA) | PASS (RDMA) | PASS (IPC) |
+| `posted_receive.py -mismatch` | aborts with both lengths | | | |
+
+Two nodes (job 23677376, gpua001 and gpua009, one A100 each, at 669707835): ckdyntest
+all phases PASS (`devpersist/remote` RDMA), `device_persistent.py`, `posted_receive.py`,
+`device.py` PASS.
+
+**`+gpushm`.** The transfer mode is printed once per process: `CkDyn> DEVICE slots: ...`
+and `CkDevicePersistent> get/put: ...`. With `+gpushm` and both GPUs visible, DEVICE
+slots and persistent transfers between the two processes take the IPC path (first runs
+of the IPC path for DEVICE slots). With one GPU per task, `+gpushm` aborts in `hapiInit`
+("Fatal hapi Error invalid argument", hapi_impl.cpp:1739, `ipcHandleOpen`): HAPI opens the
+other process's communication buffer, whose GPU that process cannot see. So `+gpushm`
+needs `srun --gpus=2 --gpu-bind=none` (both GPUs visible), not `--gpus-per-task=1`.
+
+**Measurements** (16 MB unless stated; one-way, median of 20 after 3 warm-up). DEVICE
+slot: `bench_zc_delta.py device`, round trip / 2 between main and element 1. Persistent:
+`bench_devpersist.py`, element 1 times the call to the future's value (done callback
+included), each element's cupy array on the device HAPI chose (printed in the logs).
+
+One node (job 23677400, gpua086):
+
+| path | n2 (RDMA, one GPU per task) | n2vis (RDMA) | n2visshm (IPC) |
+|---|---|---|---|
+| DEVICE slot (ms) | 0.820 | 0.821 | 0.267 |
+| persistent get (ms) | 0.848 | 0.849 | 0.199 |
+| persistent put (ms) | 0.748 | 0.750 | 0.200 |
+
+Two nodes (job 23677376, Slingshot):
+
+| size | persistent get (ms) | persistent put (ms) | DEVICE slot (ms) |
+|---|---|---|---|
+| 1 MB | 0.069 | 0.084 | |
+| 4 MB | 0.244 | 0.237 | |
+| 16 MB | 0.848 | 0.857 | 0.895 |
+| 64 MB | 4.085 | 4.147 | |
+
+Answers. Between nodes, and between processes on one node over RDMA, the persistent path
+saves little against a DEVICE slot message at 16 MB (0.85 against 0.90 ms between nodes;
+on one node the get is no faster, the put 0.07 ms faster): the transfer itself dominates,
+and the message path's registration of the pool arena and per-message descriptors cost
+less than 0.1 ms. On one node, IPC (`+gpushm`) beats RDMA by 3 to 4 times (persistent
+0.20 against 0.75-0.85 ms; DEVICE slot 0.27 against 0.82 ms), and there the persistent
+path saves 0.07 ms (25%) against the DEVICE slot, whose IPC path stages through the
+`+gpushm` communication buffer. Two nodes reach 16 MB / 0.85 ms = 19.7 GB/s, 64 MB 16.4 GB/s.
+
+Caveat on measurement. The first one-node job measured persistent IPC at 0.042 ms because
+both processes' cupy arrays were on device 0 (cupy's default device is 0 even when HAPI
+set another); `bench_devpersist.py` now selects the device HAPI chose. Python programs
+with several visible GPUs per process must do the same (`cupy.cuda.Device(
+cupy.cuda.runtime.getDevice()).use()`). The DEVICE slot one-node RDMA numbers differ
+between nodes (1.23 ms on gpua011 in job 23677329, 0.82 ms on gpua086 in job 23677400);
+the tables compare paths within one job.
+
+**Open.** HAPI's `+gpushm` with one GPU per task (above). cupy's default device in
+multi-GPU processes (a note for docs/gpus.rst, or the binding could select HAPI's device
+at start-up). The pin in `charm_version.txt` must move to the merged ckdyn-dev commit (the
+binding needs `CkDynUnpostBuffer`). Two-node runs were not repeated after step 4b (the
+RDMA paths ran in the one-node `n2`/`n2vis` shapes of job 23677400).

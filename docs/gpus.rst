@@ -148,6 +148,11 @@ outstanding; another ``get`` or ``put`` before its future has a value raises
 until ``close()``; a buffer garbage-collected without ``close()`` is closed with a
 ``RuntimeWarning``. The data to be read must be complete before the call (work on
 the array's stream is ordered before the transfer; work on other streams is not).
+Between processes on one node the IPC path needs ``+gpushm`` and every GPU visible
+to every process (``srun --gpus=N --gpu-bind=none``, not ``--gpus-per-task=1``); Charm++
+then gives process k of a node device k. CuPy's current device is 0 unless set, so in a
+process that sees several GPUs, select the device Charm++ chose before allocating:
+``cupy.cuda.Device(cupy.cuda.runtime.getDevice()).use()``.
 ``p.mode(h)`` says how a transfer with ``h`` moves the bytes: ``'copy'`` within a
 process, ``'ipc'`` between processes on one host when the program runs with
 ``+gpushm``, ``'rdma'`` otherwise (GPUDirect RDMA on registered device memory, also
@@ -242,9 +247,7 @@ the completion of a Numba kernel. More examples are in ``examples/cuda``.
 .. note::
 
     The device paths (device arrays as arguments, ``DeviceBuffer``,
-    ``hapiAddCudaCallback``) were run on NCSA Delta A40 and A100 nodes with CUDA
-    13.2, on one node and on two nodes; the measurements are in
-    ``docs/design/SPEC-3.md`` and ``docs/design/SPEC-7-device.md`` (section 7 of
-    each). Posted device arrays and ``DevicePersistent`` compile and pass their
-    host-side tests; their GPU runs are recorded in ``SPEC-7-device.md``,
-    section 7.
+    ``hapiAddCudaCallback``, posted device arrays and ``DevicePersistent``) were
+    run on NCSA Delta A40 and A100 nodes with CUDA 13.2, on one node and on two
+    nodes; the measurements are in ``docs/design/SPEC-3.md`` and
+    ``docs/design/SPEC-7-device.md`` (section 7 of each).
