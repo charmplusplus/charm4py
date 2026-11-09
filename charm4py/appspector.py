@@ -62,9 +62,10 @@ What is not attributed, or attributed coarsely:
     method of that outer call. Converting the arguments of an array
     broadcast, done once for all local elements, is charged to the entry
     method and to no chare.
-  - ('g', gid) and ('c', cid) counters are kept while the group or chare
-    exists on the PE (charm.groups, charm.chares). charm4py never removes
-    groups or chares from those tables, so the counters are bounded by the
+  - ('g', gid), ('n', gid) and ('c', cid) counters are kept while the
+    group, nodegroup or chare exists on the PE (charm.groups,
+    charm.nodegroups, charm.chares). charm4py never removes groups,
+    nodegroups or chares from those tables, so the counters are bounded by the
     runtime's own tables and are not capped: dropping one would make a
     client that takes differences of replies see a bogus jump.
 
@@ -83,6 +84,7 @@ import time
 from greenlet import getcurrent
 
 from .charm import charm, Chare, register
+from .chare import CKDYN_NODEGROUP
 from . import loadfmt
 
 OBJLOADS_HANDLER = "charm4py ObjLoads"
@@ -117,7 +119,8 @@ def serve():
 
 
 def _objkey(obj):
-    """Internal key of the chare obj: ('a', aid, index), ('g', gid) or
+    """Internal key of the chare obj: ('a', aid, index), ('g', gid),
+    ('n', gid) for a nodegroup (whose ids are a separate space) or
     ('c', cid)."""
     p = obj.thisProxy
     aid = getattr(p, 'aid', None)
@@ -125,7 +128,7 @@ def _objkey(obj):
         return ('a', aid, obj.thisIndex)
     gid = getattr(p, 'gid', None)
     if gid is not None:
-        return ('g', gid)
+        return ('n' if getattr(p, '_kind', None) == CKDYN_NODEGROUP else 'g', gid)
     return ('c', getattr(p, 'cid', None))
 
 
@@ -263,12 +266,17 @@ class Tracker(object):
         tm.pauseThread = pauseThread
         set_meter(self.enter, self.leave)
 
-    def snapshot(self, pe, arrays, groups, chares):
+    def snapshot(self, pe, arrays, groups, chares, nodegroups=None):
         """(pe, wall now, elapsed, idle, objs, eps) with objs as
-        loadfmt.encode_objloads wants them. arrays, groups, chares: the
-        chares that exist on this PE (charm.arrays, charm.groups,
-        charm.chares); the counters of the others (array elements migrated
-        away or deleted, groups and chares that are gone) are forgotten."""
+        loadfmt.encode_objloads wants them. arrays, groups, chares,
+        nodegroups: the chares that exist on this PE (charm.arrays,
+        charm.groups, charm.chares, charm.nodegroups); the counters of the
+        others (array elements migrated away or deleted, groups, nodegroups
+        and chares that are gone) are forgotten. A nodegroup branch is
+        reported as a group branch is, with its nodegroup id as the
+        collection id."""
+        if nodegroups is None:
+            nodegroups = {}
         elapsed = _clock() - self.start
         objs = []
         for key, secs in list(self.objs.items()):
@@ -279,8 +287,8 @@ class Tracker(object):
                     del self.objs[key]
                     continue
                 objs.append((key[1], loadfmt.obj_id(key[2]), secs, True))
-            elif kind == 'g':
-                if key[1] not in groups:
+            elif kind == 'g' or kind == 'n':
+                if key[1] not in (groups if kind == 'g' else nodegroups):
                     del self.objs[key]
                     continue
                 objs.append((key[1], pe, secs, False))
@@ -411,7 +419,8 @@ class AppSpectorLoads(Chare):
     # -- every PE ----------------------------------------------------------
 
     def report(self, gen=0):
-        snap = self.tracker.snapshot(charm.myPe(), charm.arrays, charm.groups, charm.chares)
+        snap = self.tracker.snapshot(charm.myPe(), charm.arrays, charm.groups, charm.chares,
+                                     charm.nodegroups)
         self.reduce(self.thisProxy[0].gathered, (gen, snap), charm.reducers.gather)
 
     # -- PE 0 --------------------------------------------------------------

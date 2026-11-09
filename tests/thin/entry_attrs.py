@@ -5,11 +5,13 @@ Run: python -m charmrun.start tests/thin/entry_attrs.py +p1   (and +p2, +p4)
 Phases:
 - register: every attribute lands in the CkDyn entry flags (_ckdyn.ep_flags) of the
   group and array registrations of a class; @entry composes with @coro and @when in
-  either order, and is found through a __wrapped__ chain.
+  either order, and is found through a __wrapped__ chain; immediate and exclusive
+  on a class registered for NodeGroup only.
 - errors: charm.register raises Charm4PyError for an unknown attribute, for inline
   on a coroutine, and for immediate or exclusive on a class registered as Group,
   Array or singleton Chare.
-- deliver: expedited, notrace and appwork entries of a group and an array deliver,
+- deliver: immediate (no effect on reconverse) and exclusive nodegroup entries
+  deliver to every node; expedited, notrace and appwork entries of a group and an array deliver,
   locally and to the last PE; an inline entry of a group branch and of an array
   element, sent to the same object from a coroutine, has run when the send returns
   (its side effect is visible right after the call, and not after a plain send to the
@@ -18,10 +20,10 @@ The notrace attribute also removes the entry from Projections logs; that is chec
 with the trace build (logs/step-7/trace/), not here.
 """
 import functools
-from charm4py import charm, Chare, Group, Array, coro, when, entry
+from charm4py import charm, Chare, Group, Array, NodeGroup, coro, when, entry
 from charm4py import _ckdyn
 from charm4py.charm import Charm4PyError
-from charm4py.chare import GROUP, ARRAY
+from charm4py.chare import GROUP, ARRAY, NODEGROUP
 
 EP_THREADED = _ckdyn.EP_THREADED
 F = {'inline': _ckdyn.EP_INLINE, 'expedited': _ckdyn.EP_EXPEDITED,
@@ -113,6 +115,17 @@ class Attrs(Chare):
         return before, self.inl_val
 
 
+class NGAttrs(Chare):
+
+    @entry(immediate=True)
+    def imm(self, x):
+        return (charm.myNode(), x)
+
+    @entry(exclusive=True)
+    def exc(self, x):
+        return (charm.myNode(), x)
+
+
 def ep_flags(C, kind, name):
     for em in charm.classEntryMethods[kind][C]:
         if em.name == name:
@@ -163,11 +176,18 @@ class Main(Chare):
             check(ep_flags(Attrs, kind, 'wrapped') & F['appwork'], 'register %s: @entry under a __wrapped__ wrapper' % kname)
             check(ep_flags(Attrs, kind, 'setready') & ATTR_MASK == 0, 'register %s: a plain entry has no attribute flags' % kname)
 
+        check(NGAttrs not in charm.proxyClasses[GROUP] and NGAttrs not in charm.proxyClasses[ARRAY],
+              'register: a class with immediate or exclusive is registered for NodeGroup only')
+        check(ep_flags(NGAttrs, NODEGROUP, 'imm') & ATTR_MASK == F['immediate'], 'register nodegroup: immediate')
+        check(ep_flags(NGAttrs, NODEGROUP, 'exc') & ATTR_MASK == F['exclusive'], 'register nodegroup: exclusive')
+        check(ep_flags(Attrs, NODEGROUP, 'inl') & ATTR_MASK == F['inline'], 'register nodegroup: inline')
+
     def phase_errors(self):
         cases = [({'bogus': True}, False, (GROUP,), 'unknown attribute'),
                  ({'inline': True}, True, (GROUP,), 'inline on a coroutine'),
                  ({'immediate': True}, False, (GROUP,), 'immediate on a group'),
-                 ({'exclusive': True}, False, (ARRAY,), 'exclusive on an array')]
+                 ({'exclusive': True}, False, (ARRAY,), 'exclusive on an array'),
+                 ({'exclusive': True}, False, (NODEGROUP, GROUP), 'exclusive on a class also registered as group')]
         for attrs, coro_too, kinds, what in cases:
             Bad = make_bad(attrs, coro_too)
             try:
@@ -178,6 +198,11 @@ class Main(Chare):
                 charm.abort('FAIL errors: %s was accepted' % what)
 
     def phase_deliver(self):
+        nx = NodeGroup(NGAttrs)
+        charm.awaitCreation(nx)
+        for name in ('imm', 'exc'):
+            r = [getattr(nx[n], name)(n, ret=True).get() for n in range(charm.numNodes())]
+            check(r == [(n, n) for n in range(charm.numNodes())], 'nodegroup %s delivers to every node: %r' % (name, r))
         last = charm.numPes() - 1
         g = Group(Attrs)
         a = Array(Attrs, charm.numPes())

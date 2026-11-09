@@ -17,8 +17,8 @@ from collections import defaultdict
 import traceback
 from . import _ckdyn
 from . import chare
-from .chare import MAINCHARE, GROUP, ARRAY, CHARE, CHARM_TYPES
-from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare
+from .chare import MAINCHARE, GROUP, ARRAY, CHARE, NODEGROUP, CHARM_TYPES
+from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare, NodeGroup
 from .chare import (CKDYN_MAINCHARE, CKDYN_CHARE, CKDYN_GROUP, CKDYN_NODEGROUP,
                     CKDYN_ARRAY, CKDYN_ARRAYMAP, CKDYN_EP_THREADED, CKDYN_PUP_MIGRATE,
                     CKDYN_PUP_SIZING)
@@ -84,6 +84,7 @@ class Charm(object):
         self.register_order = []  # list of classes in registration order (all processes must use same order)
         self.chares = {}
         self.groups = {}          # group ID -> group instance on this PE
+        self.nodegroups = {}      # nodegroup ID -> nodegroup branch of this process (a separate id space)
         self.arrays = defaultdict(dict)  # aid -> idx -> array element instance with index idx on this PE
         self.entryMethods = {}    # ep_idx -> EntryMethod object
         self.classEntryMethods = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
@@ -327,11 +328,16 @@ class Charm(object):
             header[b'creation'] = True
         obj = object.__new__(em.C)  # create object but don't call __init__
         obj._ckdyn_target = target
-        if kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+        if kind == CKDYN_NODEGROUP:
+            if self.options.profiling:
+                self.activeChares.add((em.C, NodeGroup))
+            NodeGroup.initMember(obj, target.gid, _ckdyn.my_node())
+            Chare.__init__(obj)
+            self.nodegroups[target.gid] = obj
+        elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
             if self.options.profiling:
                 self.activeChares.add((em.C, Group))
-            index = _ckdyn.my_node() if kind == CKDYN_NODEGROUP else None
-            Group.initMember(obj, target.gid, index)
+            Group.initMember(obj, target.gid)
             Chare.__init__(obj)  # Chare state first; super(em.C, obj) would be a parent user class
             if b'constrained' in header:
                 # Group(C, onPEs=...): thisProxy becomes the group section proxy
@@ -462,7 +468,9 @@ class Charm(object):
         kind = target.kind
         if kind == CKDYN_ARRAY:
             self.arrays[target.aid][tuple(target.index)] = obj
-        elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+        elif kind == CKDYN_NODEGROUP:
+            self.nodegroups[target.gid] = obj
+        elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
             self.groups[target.gid] = obj
         else:
             self.chares[target.cid] = obj
@@ -501,7 +509,10 @@ class Charm(object):
                 index = tuple(target.index)
                 if elems is not None and elems.get(index) is obj:
                     del elems[index]
-            elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+            elif kind == CKDYN_NODEGROUP:
+                if self.nodegroups.get(target.gid) is obj:
+                    del self.nodegroups[target.gid]
+            elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
                 if self.groups.get(target.gid) is obj:
                     del self.groups[target.gid]
             elif self.chares.get(target.cid) is obj:
@@ -536,6 +547,8 @@ class Charm(object):
             kind = CKDYN_CHARE
         elif charm_type_id == GROUP:
             kind = CKDYN_ARRAYMAP if ArrayMap in C.mro() else CKDYN_GROUP
+        elif charm_type_id == NODEGROUP:
+            kind = CKDYN_NODEGROUP
         else:
             kind = CKDYN_ARRAY  # ndims 0: any dimension, fixed by each array's creation
         entries = []
@@ -577,6 +590,8 @@ class Charm(object):
             self.registerInCharmAs(C, Array)
         if SingletonChare in charm_types:
             self.registerInCharmAs(C, SingletonChare)
+        if NodeGroup in charm_types:
+            self.registerInCharmAs(C, NodeGroup)
 
     # first callback from the Charm++ runtime (hook register_classes)
     # this method registers classes with CkDyn
@@ -650,17 +665,23 @@ class Charm(object):
     def _check_entry_attrs(self, C, collections):
         """ raise Charm4PyError for an @entry attribute that registration would refuse """
         for charm_type_id in collections:
-            nodegroup = False
             for m in ['__init__'] + self._entry_method_names(C, charm_type_id):
-                entry_method.entry_flags(C, m, nodegroup)
+                entry_method.entry_flags(C, m, charm_type_id == NODEGROUP)
 
     # called by user (from Python) to register their Charm++ classes with the Charm4py runtime
-    # by default a class is registered to work as Group, Array and singleton Chare
-    def register(self, C, collections=(GROUP, ARRAY, CHARE)):
+    # by default a class is registered to work as Group, Array, singleton Chare and NodeGroup;
+    # a class with a nodegroup-only entry attribute (@entry(exclusive=True) or immediate)
+    # only as NodeGroup
+    def register(self, C, collections=None):
         if C in self.registered:
             return
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise Charm4PyError('Only subclasses of Chare can be registered')
+        if collections is None:
+            if entry_method.has_nodegroup_only_attrs(C):
+                collections = (NODEGROUP,)
+            else:
+                collections = (GROUP, ARRAY, CHARE, NODEGROUP)
 
         # cache of template condition objects for `chare.wait(cond_str)` calls
         # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
@@ -1181,6 +1202,14 @@ class Charm(object):
 
     def numPes(self):
         return self._numPes
+
+    def myNode(self):
+        """ the logical node (process) of this PE, the index of its nodegroup branches """
+        return _ckdyn.my_node()
+
+    def numNodes(self):
+        """ the number of logical nodes (processes), the number of branches of a nodegroup """
+        return _ckdyn.num_nodes()
 
     def myHost(self):
         return _ckdyn.physical_node_id(self._myPe)

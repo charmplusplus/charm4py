@@ -4,12 +4,12 @@ import sys
 from greenlet import getcurrent
 from . import _ckdyn
 
-# A Chare class defined by a user can be used in 4 ways: (1) as a Mainchare, (2) to form Groups,
-# (3) to form Arrays, (4) as a singleton chare (`Chare(C, onPE=p)`). Charm4py registers with
-# Charm++ (through CkDyn) one class per use, each with its own entry methods, even though the
-# definition (body) of the entry methods in Python is the same.
-MAINCHARE, GROUP, ARRAY, CHARE = range(4)
-CHARM_TYPES = (MAINCHARE, GROUP, ARRAY, CHARE)
+# A Chare class defined by a user can be used in 5 ways: (1) as a Mainchare, (2) to form Groups,
+# (3) to form Arrays, (4) as a singleton chare (`Chare(C, onPE=p)`), (5) to form NodeGroups.
+# Charm4py registers with Charm++ (through CkDyn) one class per use, each with its own entry
+# methods, even though the definition (body) of the entry methods in Python is the same.
+MAINCHARE, GROUP, ARRAY, CHARE, NODEGROUP = range(5)
+CHARM_TYPES = (MAINCHARE, GROUP, ARRAY, CHARE, NODEGROUP)
 
 # Constants of ckdyn.h (CkDyn API version 1). _ckdyn may export them; the
 # values here are the header's and are used when it does not.
@@ -523,11 +523,65 @@ class ArrayMap(Chare):
         super(ArrayMap, self).__init__()
 
 
+# ------------------ NodeGroup and Proxy  ------------------
+
+def nodegroup_proxy_elem(proxy, node):  # nodegroup proxy [] overload method
+    if not isinstance(node, int):
+        raise Charm4PyError('a nodegroup proxy is indexed by a node number (an int), not ' + repr(node))
+    proxy_clone = proxy.__class__(proxy.gid)
+    proxy_clone._set_elem(node)
+    return proxy_clone
+
+def nodegroup_ckNew_gen(C):
+    @classmethod
+    def nodegroup_ckNew(cls, args):
+        flags, future = 0, None
+        if not charm.threadMgr.isMainThread():
+            future = charm.Future()
+            flags = CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST  # the constructors contribute to it
+        gid = _ckdyn.create_nodegroup(C.idx[NODEGROUP], tuple(args), flags, future)
+        proxy = cls(gid)
+        if future is not None:
+            proxy.creation_future = future
+        return proxy
+    return nodegroup_ckNew
+
+def nodegroup_proxy_localbranch(proxy):
+    return charm.nodegroups[proxy.gid]
+
 class NodeGroup(object):
-    """ One branch per process (DESIGN.md 5.4 item 1). Not available before step 7. """
+    """ One branch per logical node (process), indexed by node number
+        0..charm.numNodes()-1. """
+
+    type_id = NODEGROUP
 
     def __new__(cls, C, args=[]):
-        raise NotImplementedError('NodeGroup: step 7')
+        if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
+            raise Charm4PyError('Only subclasses of Chare can be member of NodeGroup')
+        if C not in charm.proxyClasses[NODEGROUP]:
+            raise Charm4PyError(str(C) + ' not registered for use in NodeGroups')
+        return charm.proxyClasses[NODEGROUP][C].ckNew(args)
+
+    @classmethod
+    def initMember(cls, obj, gid, node):
+        obj.thisIndex = node
+        obj.thisProxy = charm.proxyClasses[NODEGROUP][obj.__class__](gid)
+
+    @classmethod
+    def __baseEntryMethods__(cls):
+        return ['__init__']
+
+    @classmethod
+    def __getProxyClass__(C, cls):
+        proxyClassName = cls.__name__ + 'NodeGroupProxy'
+        M = _proxy_methods(cls, NODEGROUP, proxyClassName, ('__init__',))
+        M['__init__'] = group_proxy_ctor
+        M['__getitem__'] = nodegroup_proxy_elem
+        M['elemIdx'] = property(_base_elemIdx().__get__, group_proxy_set_elemIdx)
+        M['ckNew'] = nodegroup_ckNew_gen(cls)
+        M['ckLocalBranch'] = nodegroup_proxy_localbranch
+        M['_ckdyn_kind'] = CKDYN_NODEGROUP
+        return type(proxyClassName, (_ckdyn.Proxy,), M)
 
 
 # -------------------- Array and Proxy --------------------
@@ -676,6 +730,8 @@ for i in CHARM_TYPES:
         charm_type_id_to_class[i] = Array
     elif i == CHARE:
         charm_type_id_to_class[i] = SingletonChare
+    elif i == NODEGROUP:
+        charm_type_id_to_class[i] = NodeGroup
 
 
 def charmStarting():
