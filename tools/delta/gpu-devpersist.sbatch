@@ -31,7 +31,7 @@ step() {  # step <name> <seconds> <cmd...>
   local t0=$(date +%s)
   timeout $secs stdbuf -o0 -e0 "$@" > $OUT/$name.log 2>&1 < /dev/null
   local rc=$?
-  echo "RESULT $name exit=$rc $(( $(date +%s)-t0 ))s banner=[$(grep -o 'Starting Reconverse with [0-9]* process' $OUT/$name.log | head -1)] modes=[$(grep -h -o 'Ck[A-Za-z]*> [^:]*: [A-Za-z/ ]*' $OUT/$name.log | grep -v 'device pool' | sort -u | tr '\n' ';')]"
+  echo "RESULT $name exit=$rc hapi=[$(grep -h -o 'HAPI> Config: .*' $OUT/$name.log | head -1)] $(( $(date +%s)-t0 ))s banner=[$(grep -o 'Starting Reconverse with [0-9]* process' $OUT/$name.log | head -1)] modes=[$(grep -h -o 'Ck[A-Za-z]*> [^:]*: [A-Za-z/ ]*' $OUT/$name.log | grep -v 'device pool' | sort -u | tr '\n' ';')]"
   return $rc
 }
 if [ "$NN" = 1 ]; then
@@ -39,13 +39,20 @@ if [ "$NN" = 1 ]; then
   # gives process k device k); the second form is what +gpushm IPC needs if the first fails
   SR1="srun --mpi=pmix -n 1 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
   SR2="srun --mpi=pmix -n 2 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
-  SR2V="srun --mpi=pmix -n 2 -c 4 --gpus=2 --gpu-bind=none --cpu-bind=none --kill-on-bad-exit=1"
+  # --gpus=2 --gpu-bind=none alone gave both tasks the same single GPU on gpua040
+  # (job 23677526); CUDA_VISIBLE_DEVICES=0,1 inside the step exposes both
+  SR2V="srun --mpi=pmix -n 2 -c 4 --gpus=2 --gpu-bind=none --cpu-bind=none --kill-on-bad-exit=1 env CUDA_VISIBLE_DEVICES=0,1"
   # n2shm (one GPU per task with +gpushm) fails in hapiInit: HAPI's +gpushm opens the
   # other process's communication buffer, which needs that GPU visible (job 23677329)
   SHAPES=${SHAPES:-"n1 n2 n2vis n2visshm"}
 else
   SR2="srun --mpi=pmix -N 2 --ntasks-per-node=1 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
   SHAPES="2node"
+fi
+if [ "$NN" = 1 ]; then   # what each task of each launcher sees
+  for L in "$SR2" "$SR2V"; do
+    echo "VISIBLE [$L]: $($L bash -c 'echo "task $SLURM_PROCID CVD=$CUDA_VISIBLE_DEVICES $(nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader | tr "\n" " ")"' 2>&1 | grep -v PMIX | sort | tr '\n' ';')"
+  done
 fi
 cmd_of() {   # the launcher and extra arguments of a shape
   case $1 in
