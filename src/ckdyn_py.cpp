@@ -133,6 +133,9 @@ struct PeState {
   PyObject *meter_enter = nullptr, *meter_leave = nullptr;   // strong
   // NCPY and DEVICE slots this PE has sent, and their done functions run (zerocopy_counts)
   uint64_t zc_sent = 0, zc_done = 0;
+  // numpy arrays this PE made read-only while NCPY slots that read them are in
+  // flight (array -> number of such slots; see Packer::add_ndarray)
+  std::unordered_map<PyObject *, int> zc_locked;
 };
 thread_local PeState tls;
 
@@ -805,6 +808,22 @@ void obj_done(void *arg) {
   Py_DECREF((PyObject *)arg);
 }
 
+// The done function of an NCPY slot whose source array the Packer made
+// read-only: when the last such slot of the array is done, the array is
+// writeable again. Then the reference is released as in obj_done.
+void obj_done_unlock(void *arg) {
+  if (!Py_IsInitialized()) return;
+  Gil g;
+  PyObject *o = (PyObject *)arg;
+  auto it = tls.zc_locked.find(o);
+  if (it != tls.zc_locked.end() && --it->second == 0) {
+    tls.zc_locked.erase(it);
+    PyArray_ENABLEFLAGS((PyArrayObject *)o, NPY_ARRAY_WRITEABLE);
+  }
+  tls.zc_done++;
+  Py_DECREF(o);
+}
+
 // charm.options.zerocopy_threshold, read when a message is packed.
 long long zerocopy_threshold() {
   long long t = 1 << 20;
@@ -999,6 +1018,22 @@ struct Packer {
     d.strides = nullptr;
     PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
     if (zc_ok && ndim > 0 && (long long)nbytes >= threshold()) {
+      // The runtime reads the sender's array after the send returns, so a write
+      // to it before the transfer is done would change what the receiver gets.
+      // An array that is writeable is made read-only until the done function of
+      // its last pending slot runs; one that was read-only already is left so.
+      // Other views of the same memory stay writeable. A copy made here for a
+      // non-contiguous array (c != a) is not visible to the program.
+      if (c == a) {
+        auto it = tls.zc_locked.find(o);
+        if (it != tls.zc_locked.end() || PyArray_ISWRITEABLE(a)) {
+          if (it != tls.zc_locked.end()) it->second++;
+          else { tls.zc_locked.emplace(o, 1); PyArray_CLEARFLAGS(a, NPY_ARRAY_WRITEABLE); }
+          CkDynMsgAddNcpy(b, &d, obj_done_unlock, src);
+          tls.zc_sent++;
+          return true;
+        }
+      }
       CkDynMsgAddNcpy(b, &d, obj_done, src);   // released by obj_done once the data has left
       tls.zc_sent++;
       return true;

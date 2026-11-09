@@ -272,6 +272,19 @@ New in 2.0
   multicasts, reduction contributions and pool or Ray task arguments are
   copied into the message whatever their size.
   ``charm.options.copy_received_arrays`` (default ``False``): see above.
+
+  The receiver reads a zero-copy array from the sender's memory after the
+  send call has returned, whereas 1.x copied it at the send. So that a write
+  to the array in that interval cannot change what the receiver gets, the
+  send makes the array read-only (``a.flags.writeable`` is ``False``) and the
+  runtime makes it writeable again when the transfer is done. A program that
+  overwrites its send buffer in place right after the send (a ghost exchange
+  that refills the same array) then gets ``ValueError: assignment destination
+  is read-only`` instead of sending wrong data; fill a new array, send a copy
+  (``a.copy()``), or wait until the receiver has replied. An array that was
+  read-only before the send stays read-only. Other views of the same memory
+  (``a[:]``, ``a.reshape(...)``, the array ``a`` was sliced from) stay
+  writeable and are not protected.
 * **Device arrays as arguments.** In a Charm++ and Charm4py built with CUDA,
   an object with ``__cuda_array_interface__`` (cupy, torch, numba) passed to
   an entry method in a point-to-point send travels device to device. The

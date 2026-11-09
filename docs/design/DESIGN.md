@@ -2004,7 +2004,12 @@ Removals and changes:
    The result of an `allreduce` arrives by broadcast and is therefore read-only too
    (found 2026-11-08 in examples/mnist/mnist.py, which hands it to `torch.from_numpy`
    and gets a warning); a reduction delivered to a future is writable.
-   `copy_received_arrays=True` restores copies. The test survey's feature rows for
+   `copy_received_arrays=True` restores copies. On the sending side, a writeable
+   array sent as an NCPY slot is made read-only from the send until the slot's done
+   function runs (decided 2026-11-08, tests/thin/sweep_defects.py `zcprotect`), so an
+   in-place write before the transfer is done raises instead of changing what the
+   receiver gets; other views of the same memory are not protected.
+   The test survey's feature rows for
    dcopy and broadcasts show no test that mutates a received broadcast array, which
    is not a proof; the gate of step 4 is where it is checked.
 9. `charm.getTopoSubtrees` is kept (tests/topo/topo_treeAPI2.py) but no longer used
