@@ -31,7 +31,7 @@ step() {  # step <name> <seconds> <cmd...>
   local t0=$(date +%s)
   timeout $secs stdbuf -o0 -e0 "$@" > $OUT/$name.log 2>&1 < /dev/null
   local rc=$?
-  echo "RESULT $name exit=$rc $(( $(date +%s)-t0 ))s banner=[$(grep -o 'Starting Reconverse with [0-9]* process' $OUT/$name.log | head -1)] modes=[$(grep -h -o 'CkDyn> [^:]*: [A-Za-z/ ]*' $OUT/$name.log | sort -u | tr '\n' ';')]"
+  echo "RESULT $name exit=$rc $(( $(date +%s)-t0 ))s banner=[$(grep -o 'Starting Reconverse with [0-9]* process' $OUT/$name.log | head -1)] modes=[$(grep -h -o 'Ck[A-Za-z]*> [^:]*: [A-Za-z/ ]*' $OUT/$name.log | grep -v 'device pool' | sort -u | tr '\n' ';')]"
   return $rc
 }
 if [ "$NN" = 1 ]; then
@@ -40,7 +40,9 @@ if [ "$NN" = 1 ]; then
   SR1="srun --mpi=pmix -n 1 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
   SR2="srun --mpi=pmix -n 2 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
   SR2V="srun --mpi=pmix -n 2 -c 4 --gpus=2 --gpu-bind=none --cpu-bind=none --kill-on-bad-exit=1"
-  SHAPES="n1 n2 n2shm n2vis n2visshm"
+  # n2shm (one GPU per task with +gpushm) fails in hapiInit: HAPI's +gpushm opens the
+  # other process's communication buffer, which needs that GPU visible (job 23677329)
+  SHAPES=${SHAPES:-"n1 n2 n2vis n2visshm"}
 else
   SR2="srun --mpi=pmix -N 2 --ntasks-per-node=1 -c 4 --gpus-per-task=1 --cpu-bind=none --kill-on-bad-exit=1"
   SHAPES="2node"
@@ -81,7 +83,7 @@ fi
 if [ -z "$SKIP_BENCH" ]; then
 cd $CHARM4PY_SRC
 B=$CHARM4PY_SRC/tools/delta
-if [ "$NN" = 1 ]; then BSHAPES="n2 n2shm n2vis n2visshm"; SIZES="16777216"; else BSHAPES="2node"; SIZES="1048576 4194304 16777216 67108864"; fi
+if [ "$NN" = 1 ]; then BSHAPES=${BSHAPES:-"n2 n2vis n2visshm"}; SIZES="16777216"; else BSHAPES="2node"; SIZES="1048576 4194304 16777216 67108864"; fi
 for sh in $BSHAPES; do
   IFS='|' read L A <<< "$(cmd_of $sh)"
   step bench_device_$sh 180 $L python $B/bench_zc_delta.py device 16777216 $A

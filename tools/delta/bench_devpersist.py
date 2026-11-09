@@ -22,10 +22,18 @@ class P(Chare):
     def open(self, n, seed):
         import cupy
         self.cp = cupy
+        # the device HAPI chose for this PE (cupy would otherwise default to device 0)
+        dev = cupy.cuda.runtime.getDevice()
+        cupy.cuda.Device(dev).use()
         self.a = cupy.arange(n, dtype=cupy.float64) + seed
         cupy.cuda.Device().synchronize()
         self.p = charm.DevicePersistent(self.a)
         return self.p.handle
+
+    def where(self):
+        import cupy
+        d = self.a.device.id
+        return 'PE %d device %d (%s)' % (charm.myPe(), d, cupy.cuda.runtime.deviceGetPCIBusId(d))
 
     @coro
     def run(self, op, h, n):
@@ -55,6 +63,7 @@ def main(args):
     charm.awaitCreation(arr)
     h0 = arr[0].open(n, 100.0, ret=True).get()
     arr[1].open(n, 200.0, ret=True).get()
+    print('BENCH devices: %s; %s' % (arr[0].where(ret=True).get(), arr[1].where(ret=True).get()))
     mode, times, ok = arr[1].run(op, h0, n, ret=True).get()
     if op == 'put':
         ok = arr[0].check(n, ret=True).get()
