@@ -64,6 +64,16 @@ for sh in $SHAPES; do
   echo "PHASES ckdyn_$sh: $(grep -E '^(PASS|SKIP|FAIL) (ncpy|device|hapi|devpersist)' $OUT/ckdyn_$sh.log | sed 's/ (.*//' | tr '\n' ',')"
   grep -h "devpersist/" $OUT/ckdyn_$sh.log | grep mode
 done
+# Charm++'s own persistent example (CkDevicePersistent from C++), per shape except n1
+EX=$CBUILD_CXX/examples/charm++/cuda/gpudirect/persistent
+make -C $EX clean > /dev/null 2>&1; make -C $EX CUDA_ARCH=$CUDA_ARCH > $OUT/persistent-build.log 2>&1; echo "RESULT persistent_build exit=$?"
+cd $EX
+for sh in $SHAPES; do
+  [ $sh = n1 ] && continue
+  IFS='|' read L A <<< "$(cmd_of $sh)"
+  step persistent_ex_$sh 200 $L ./persistent $A
+  echo "TAIL persistent_ex_$sh: $(grep -E 'PASS|FAIL|rror|Elapsed' $OUT/persistent_ex_$sh.log | grep -v PMIX | tr '\n' '|' | cut -c1-300)"
+done
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH#$CBUILD_CXX/lib:}
 fi
 
