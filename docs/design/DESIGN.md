@@ -2360,6 +2360,11 @@ appears in the log. Decision 2026-11-08 (review F12): the coroutine trace and
 callstack brackets move from this list to the step 4a follow-ups (3.12, 3.13).
 Decision 2026-11-08 (review F14): multi-PE processes in this step choose among the
 three options of 8.3, and the GIL-held-while-busy measurement of 8.3 is made here.
+Status 2026-11-08 22:20 PST, step 7 item "device to device" (SPEC-7-device.md):
+persistent device buffers (`CkDynDevPersist*`, `charm.DevicePersistent`) and posted
+receives (`Chare.post_buffer`) are built on Charm++ `ckdyn-dev7` and charm4py
+`thin-dev7` and pass their host-side tests on the Mac; the GPU runs, the `+gpushm` IPC
+path and the measurements wait for Delta (SPEC-7-device.md section 7).
 
 **Step 8 (reconverse PR, then charm PR, then charm4py): shrink/expand.** Reconverse
 gains the Converse half that classic charmrun and netlrts provided (`Cmi_isOldProcess`,

@@ -115,4 +115,66 @@ one node.
 
 ## 7. Status
 
-(filled in as the work proceeds)
+Status 2026-11-08 22:20 PST: sections 2, 3 and 5 built and the host side tested on the
+Mac; nothing under `CMK_CUDA || CMK_HIP` has run yet: the Delta part (sections 4 and 6)
+waits for an ssh control master to Delta (`ssh -O check delta` reported none at 22:13).
+Charm++ `ckdyn-dev7` 669707835; charm4py `thin-dev7` beef19d (binding), 75605e5
+(`device_persistent.py`), 67c9813 (Delta scripts). Mechanism: `doc/internals/ckdyn.md`,
+"Persistent device buffers" and "Posts".
+
+**Built.**
+
+- C API of section 2 as specified, plus `CkDynDevPersistMode` (the mode a transfer
+  would use, for tests and `DevicePersistent.mode`). The handle is a fixed 376-byte
+  record (pointer, length, PE, process, host, the CUDA/HIP IPC handle
+  of the allocation and the buffer's offset in it, and the pupped `CmiNcpyBuffer` with
+  its registration).
+- `done` semantics: once per get or put on the issuing PE; for a `FUTURE` callback the
+  call's refnum is the future id, for any other kind the callback's refnum. The binding
+  opens every buffer with a `FUTURE` callback to its own PE and passes each transfer's
+  future id as the refnum, so no slot table is needed.
+- Binding: `Chare.post_buffer`, `charm.DevicePersistent`, `charm.DevicePersistentHandle`,
+  `_ckdyn.DevPersist`, `_ckdyn.post_buffer`, `_ckdyn.posted_count` (tests).
+- Tests: `ckdyntest` phases `devpersist/remote` and `devpersist/samepe`;
+  `tests/thin/posted_receive.py`, `tests/thin/device_persistent.py`;
+  `tools/delta/gpu-devpersist.sbatch`, `tools/delta/bench_devpersist.py`.
+
+**Deviations, each kept.**
+
+1. CkDyn does not wrap Charm++'s `CkDevicePersistent`. That class aborts between hosts
+   ("Persistent GPU messaging is currently not supported for inter-node messages"),
+   takes `cudaIpcGetMemHandle` of the buffer pointer and opens it as if it were the
+   allocation's base (cupy and torch arrays are pieces of larger allocations, so the
+   opened pointer would be wrong), keeps the opened mapping in the copy of the remote
+   buffer, and fires both buffers' callbacks from the issuing PE. CkDyn implements the
+   three modes itself with the same primitives (`hapiMemcpyAsync`, CUDA/HIP IPC,
+   `CmiNcpyBuffer::rdmaGet`) and documents it in `ckdyn.md`.
+2. The IPC mode is used only with `+gpushm`, as section 2 states, although persistent
+   IPC does not use the `+gpushm` communication buffer; without it, two processes on
+   one host use RDMA, which gives the comparison section 6 asks for.
+3. An RDMA put is a get issued by the destination's PE (`CkDynMgr::persistPutReq`,
+   `persistPutAck`): a true RDMA put completes on the source before the bytes are
+   visible at the destination (reconverse `CommRputLocalHandler`), so its `done` could
+   not mean "the bytes have arrived". The cost is one small message each way.
+4. Two C additions besides section 2: `CKDYN_POST_ARG` (a post counts arguments: a
+   `CKDYN_MSG_BLOCK` message's leading `FUTURE` slot is skipped, which the binding cannot
+   know at post time) and `CkDynUnpostBuffer` (a post that a `BUFFER` slot did not
+   consume is removed by the binding, which then copies the value itself). Without
+   them a post made before a `ret=True` call, or before a send below the zero-copy
+   threshold, would land on the wrong argument or stay behind for a later message.
+5. A posted argument that arrives as a copy (host array below the threshold, any array
+   in a broadcast) is copied into the posted array with `obj[...] = value`, so identity
+   holds on every path; the length check then compares `nbytes`.
+6. `DevicePersistent.get`/`put` create their future with `charm.createFuture`, so they
+   are called from a coroutine, as every Future-returning call in 1.x.
+
+**Tests run (Mac).** `ckdyntest` at `+pe 2`, `+pe 4`, `lcrun -n 2 +pe 2`: every phase
+passes, `devpersist/*` print SKIP. `posted_receive.py` host phases pass at `+p1` and at
+`+p2` (two processes; the post-then-migrate phase and the stale-object error run only
+there); `-mismatch` aborts with "CkDyn: entry 385 argument 0: the posted buffer has
+1048576 bytes, the message's slot 2097152". `zerocopy.py` and `smoke_ckdyn.py` pass at 1
+and 2 processes; `device.py` and `device_persistent.py` print SKIP. `ckdyn.C` and
+`ckdyntest.C` pass a syntax-only compile with `CMK_CUDA=1` against stub CUDA headers.
+
+**Not yet run (needs Delta).** Every line under `CMK_CUDA || CMK_HIP` of this step, the
+`+gpushm` runs of section 4 and the measurements of section 6.
