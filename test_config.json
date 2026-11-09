@@ -346,6 +346,10 @@
         "path": "tests/thin/posted_receive.py"
     },
     {
+        "force_min_processes": 2,
+        "path": "tests/thin/cprofile.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device_persistent.py"

@@ -203,6 +203,8 @@ class Charm(object):
 
         self.options = Options()
         self.options.profiling = False
+        self.options.cprofiling = False          # per-PE cProfile, dumped at exit
+        self.options.cprofile_filename = 'profile'   # dump to <this><pe>.prof
         self.options.pickle_protocol = 5
         self.options.local_msg_optim = False     # accepted and ignored
         self.options.local_msg_buf_size = 50     # accepted and ignored
@@ -755,6 +757,25 @@ class Charm(object):
 
         for C in self.register_order:
             self.registerInCharm(C)
+
+        if self.options.cprofiling:
+            self._start_cprofile()
+
+    def _start_cprofile(self):
+        """ charm.options.cprofiling: profile this PE with cProfile from here (before
+            any constructor or entry method runs) to process exit, where the atexit
+            handler that thin runs on every process (flush_at_exit) dumps the
+            statistics to <charm.options.cprofile_filename><pe>.prof """
+        import cProfile
+        import atexit
+        prof = cProfile.Profile()
+        filename = str(self.options.cprofile_filename) + str(self._myPe) + '.prof'
+
+        def dump():
+            prof.disable()
+            prof.dump_stats(filename)
+        atexit.register(dump)
+        prof.enable()
 
     def registerAs(self, C, charm_type_id):
         if charm_type_id == MAINCHARE:

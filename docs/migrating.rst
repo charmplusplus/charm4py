@@ -310,6 +310,10 @@ New in 2.0
 * **Message priorities.** ``proxy.method(..., prio=p)`` sends with integer
   priority ``p`` (lower runs first), on point-to-point sends and broadcasts; not
   on section sends.
+* **cProfile per PE.** ``charm.options.cprofiling = True`` profiles every PE
+  with ``cProfile`` from start-up to exit and writes
+  ``<charm.options.cprofile_filename><pe>.prof`` (default ``profile0.prof``,
+  ...); ``charm.exit()`` is unchanged. See :doc:`profiling`.
 
 Removed or not yet available
 ----------------------------
