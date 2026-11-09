@@ -148,17 +148,34 @@ outstanding; another ``get`` or ``put`` before its future has a value raises
 until ``close()``; a buffer garbage-collected without ``close()`` is closed with a
 ``RuntimeWarning``. The data to be read must be complete before the call (work on
 the array's stream is ordered before the transfer; work on other streams is not).
-Between processes on one node the IPC path needs ``+gpushm`` and every GPU visible
-to every process (``srun --gpus=N --gpu-bind=none``, not ``--gpus-per-task=1``); Charm++
-then gives process k of a node device k. CuPy's current device is 0 unless set, so in a
-process that sees several GPUs, select the device Charm++ chose before allocating:
-``cupy.cuda.Device(cupy.cuda.runtime.getDevice()).use()``.
 ``p.mode(h)`` says how a transfer with ``h`` moves the bytes: ``'copy'`` within a
-process, ``'ipc'`` between processes on one host when the program runs with
-``+gpushm``, ``'rdma'`` otherwise (GPUDirect RDMA on registered device memory, also
-between processes on one host without ``+gpushm``). A ``put`` between hosts is
-carried out as a ``get`` by the destination's PE, so its future too means that the
-bytes have arrived.
+process, ``'ipc'`` between processes on one host when the other buffer's GPU is
+visible to this process (``srun --gpus=N --gpu-bind=none`` rather than
+``--gpus-per-task=1``), ``'rdma'`` otherwise (GPUDirect RDMA on registered device
+memory, also between processes on one host when the other GPU is not visible). The
+``+gpushm`` option is not needed for persistent buffers; it selects the IPC path for
+device arrays sent as arguments, and it too needs every GPU of the node visible to
+every process. A ``put`` between hosts is carried out as a ``get`` by the
+destination's PE, so its future too means that the bytes have arrived.
+
+The device of a PE: ``charm.myDevice()``
+-----------------------------------------
+
+Charm++ assigns each PE one GPU: with one PE per process and every GPU of a node
+visible to every process, process k of the node gets device k.
+``charm.myDevice()`` returns its ordinal, or -1 without device support, and before
+any Python code runs on a PE Charm4py makes it the thread's current CUDA device, so
+CuPy, PyTorch and Numba allocate on it by default:
+
+.. code-block:: python
+
+    import cupy
+
+    class Worker(Chare):
+
+        def __init__(self):
+            assert cupy.cuda.Device().id == charm.myDevice()
+            self.a = cupy.zeros(1 << 20)   # on this PE's GPU
 
 Completion callbacks: ``charm.hapiAddCudaCallback``
 ---------------------------------------------------

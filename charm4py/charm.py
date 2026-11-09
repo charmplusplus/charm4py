@@ -1335,6 +1335,12 @@ class Charm(object):
     def LBTurnInstrumentOff(self):
         _ckdyn.lb_instrument(False)
 
+    def myDevice(self):
+        """ the GPU device Charm++ (HAPI) assigned to this PE, which is also the
+            current CUDA device of the thread running Python code; -1 without
+            device support """
+        return _ckdyn.my_device()
+
     def hapiAddCudaCallback(self, stream, future):
         _ckdyn.hapi_add_callback(stream, future)
 

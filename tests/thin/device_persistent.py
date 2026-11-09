@@ -12,7 +12,8 @@ Element 0 and element 1 (another PE at +p2) each wrap a 16 MB cupy array:
 - a second transfer while one is outstanding raises Charm4PyError;
 - element 0 closes its buffer and opens it again; the new handle works;
 - a get between two buffers on one element (copy in one process);
-- the mode of each transfer is printed (copy, ipc or rdma).
+- the mode of each transfer is printed (copy, ipc or rdma);
+- cupy's current device is charm.myDevice() on every PE (the binding selects it).
 """
 from charm4py import charm, Chare, Array, coro
 from charm4py import _ckdyn
@@ -30,6 +31,9 @@ def pattern(seed):
 
 
 class D(Chare):
+
+    def devices(self):
+        return charm.myPe(), cupy.cuda.Device().id, charm.myDevice()
 
     def open(self, seed):
         self.a = pattern(seed) if seed else cupy.zeros(N, dtype=cupy.float64)
@@ -100,6 +104,12 @@ def main(args):
         return
     arr = Array(D, 2)
     charm.awaitCreation(arr)
+    # the binding made HAPI's device the current device of every PE's thread
+    devs = [arr[i].devices(ret=True).get() for i in range(2)] + [(0, cupy.cuda.Device().id, charm.myDevice())]
+    for pe, cur, mine in devs:
+        assert cur == mine >= 0, 'PE %d: cupy current device %d, charm.myDevice() %d' % (pe, cur, mine)
+    print('device_persistent: cupy current device == charm.myDevice() on every PE: %s'
+          % ', '.join('PE %d device %d' % (pe, cur) for pe, cur, mine in devs[:2]))
     h0 = arr[0].open(11.0, ret=True).get()
     arr[1].open(0, ret=True).get()
     assert isinstance(h0, charm.DevicePersistentHandle)

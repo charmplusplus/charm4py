@@ -139,8 +139,17 @@ struct PeState {
   uint64_t zc_sent = 0, zc_done = 0;
   // outstanding posts per object (key: the object's handle); dropped by destruct
   std::unordered_map<void *, std::vector<PostRec> > posts;
+  bool device_used = false;   // use_device ran on this PE
 };
 thread_local PeState tls;
+
+// Before the first Python code on a PE: make the device HAPI assigned to this PE
+// the thread's current device, so CuPy, PyTorch and Numba allocate on it by default.
+inline void use_device() {
+  if (tls.device_used) return;
+  tls.device_used = true;
+  if (CkDynHasDeviceSupport()) CkDynHapiUseMyDevice();
+}
 
 PyObject *g_charm = nullptr, *g_options = nullptr;
 PyObject *c_registerMainModule, *c_construct, *c_mainchare, *c_invoke, *c_process_exception,
@@ -1664,6 +1673,7 @@ void apply_posts(PyObject *obj, int ep, const CkDynMsgView *v, ObjVec &args) {
 }
 
 void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const CkDynMsgView *v) {
+  use_device();
   Gil g;
   PyObject *fr = meter_enter((PyObject *)handle, ep);
   try {
@@ -1683,6 +1693,7 @@ void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const 
 }
 
 void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep_flags, const CkDynMsgView *v) {
+  use_device();
   Gil g;
   PyObject *fr = meter_enter(nullptr, ep);   // the conversion: charged to the entry method only
   try {
@@ -1744,6 +1755,7 @@ void h_register_classes(void *) {
 }
 
 void h_mainchare(void *, void **handle_out, const CkDynTarget *t, int argc, char **argv) {
+  use_device();
   Gil g;
   PyObject *lst = PyList_New(argc);
   for (int i = 0; lst && i < argc; i++) {
@@ -1759,6 +1771,7 @@ void h_mainchare(void *, void **handle_out, const CkDynTarget *t, int argc, char
 }
 
 void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
+  use_device();
   Gil g;
   PyObject *fr = meter_enter(nullptr, v->hdr ? v->hdr->ep : -1);
   try {
@@ -1842,6 +1855,7 @@ void h_pack(void *bd, void *handle, int reason, void *buf, size_t len) {
 }
 
 void *h_unpack(void *, const CkDynTarget *t, int reason, const void *buf, size_t len) {
+  use_device();
   Gil g;
   PyObject *fr = meter_enter(nullptr, -1);
   PyObject *tg = make_target(*t);
@@ -1880,6 +1894,7 @@ size_t h_pack_readonly_size(void *) {
 }
 
 void h_pack_readonly(void *gl, void *buf, size_t len) {
+  use_device();
   if (Gil g; !tls.ro_packed) h_pack_readonly_size(gl);
   Gil g;
   if ((size_t)PyBytes_GET_SIZE(tls.ro_packed) != len) {
@@ -1891,6 +1906,7 @@ void h_pack_readonly(void *gl, void *buf, size_t len) {
 }
 
 void h_unpack_readonly(void *, const void *buf, size_t len) {
+  use_device();
   Gil g;
   if (!c_recvReadOnly) return;
   PyObject *b = PyBytes_FromStringAndSize((const char *)buf, (Py_ssize_t)len);
@@ -1901,6 +1917,7 @@ void h_unpack_readonly(void *, const void *buf, size_t len) {
 }
 
 void h_reduce(void *, uint32_t rid, const CkDynMsgView **contribs, int n, CkDynMsgBuilder *result) {
+  use_device();
   Gil g;
   try {
     PyObject *vals = PyList_New(0);
@@ -1929,6 +1946,7 @@ void h_reduce(void *, uint32_t rid, const CkDynMsgView **contribs, int n, CkDynM
 }
 
 void h_future(void *, int, uint32_t id, const CkDynMsgView *v) {
+  use_device();
   Gil g;
   try {
     PyObject *value;
@@ -1958,6 +1976,7 @@ void h_future(void *, int, uint32_t id, const CkDynMsgView *v) {
 // A member received its section's creation multicast (inside CkDyn's init
 // entry, before its "done" contribution): charm._section_joined(obj, sid_bytes).
 void h_section_joined(void *, void *handle, const CkDynSectionID *sid) {
+  use_device();
   Gil g;
   if (!c_section_joined) return;
   PyObject *b = sid_to_bytes(*sid);
@@ -1968,6 +1987,7 @@ void h_section_joined(void *, void *handle, const CkDynSectionID *sid) {
 }
 
 int h_map_proc_num(void *, void *handle, int aid, int ndims, const int *index) {
+  use_device();
   Gil g;
   PyObject *a = PyLong_FromLong(aid);
   PyObject *idx = index_tuple(index, ndims);
@@ -1981,6 +2001,7 @@ int h_map_proc_num(void *, void *handle, int aid, int ndims, const int *index) {
 }
 
 void h_resume_from_sync(void *, void *handle) {
+  use_device();
   Gil g;
   PyObject *r = c_resume_from_sync ? call(c_resume_from_sync, {(PyObject *)handle}) : nullptr;
   if (!r) hook_abort("charm._resume_from_sync");
@@ -3238,6 +3259,7 @@ NB_MODULE(_ckdyn, m) {
   m.def("api_version", []() { return CkDynApiVersion(); });
   m.def("refnum_bytes", []() { return CkDynRefnumBytes(); });
   m.def("has_device_support", []() { return CkDynHasDeviceSupport() != 0; });
+  m.def("my_device", []() { return CkDynHapiMyDevice(); });
   // (NCPY and DEVICE slots sent from this PE, their done functions run so far)
   m.def("zerocopy_counts", []() { return nb::make_tuple((unsigned long long)tls.zc_sent, (unsigned long long)tls.zc_done); });
   m.def("my_pe", []() { return CkDynMyPe(); });
