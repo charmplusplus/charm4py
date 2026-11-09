@@ -2402,6 +2402,14 @@ number of a nodegroup branch); `tests/thin/entry_attrs.py`, `nodegroup.py` (with
 restart) and `priorities.py` pass at 1, 2 and 4 processes, and the gate (`gate4a.py 1
 2`, 100 of 100; `gate4c.sh 2`, 10 of 10) passes. Open: a priority does not reliably
 order messages that arrive from another process on reconverse (SPEC-7-api.md 6).
+Status 2026-11-09 00:05 PST, step 7 item "device to device" (SPEC-7-device.md): done.
+Persistent device buffers (`CkDevicePersistent`, now with RDMA between hosts and IPC
+whenever the peer's handle opens, wrapped by `CkDynDevPersist*` and
+`charm.DevicePersistent`), posted receives (`Chare.post_buffer`) and `charm.myDevice()`
+are on Charm++ `ckdyn-dev7` and charm4py `thin-dev7`; all their tests pass on the Mac and
+on Delta (one node with and without `+gpushm`, two nodes). On one node IPC beats RDMA
+about 6 times for persistent transfers; the persistent path saves little against a
+DEVICE slot except over IPC (25%).
 
 **Step 8 (reconverse PR, then charm PR, then charm4py): shrink/expand.** Reconverse
 gains the Converse half that classic charmrun and netlrts provided (`Cmi_isOldProcess`,

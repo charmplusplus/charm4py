@@ -65,6 +65,111 @@ class Charm4PyError(Exception):
         self.message = msg
 
 
+class DevicePersistentHandle(object):
+    """ The handle of a DevicePersistent buffer: immutable bytes that may be sent
+        to any chare (as an argument, or inside a pickled object) and passed to
+        that chare's own DevicePersistent.get or put. """
+    __slots__ = ('_b',)
+
+    def __init__(self, b):
+        object.__setattr__(self, '_b', bytes(b))
+
+    def __setattr__(self, name, value):
+        raise AttributeError('DevicePersistentHandle is immutable')
+
+    def __reduce__(self):
+        return (DevicePersistentHandle, (self._b,))
+
+    def __eq__(self, other):
+        return isinstance(other, DevicePersistentHandle) and other._b == self._b
+
+    def __hash__(self):
+        return hash(self._b)
+
+    def __repr__(self):
+        return 'DevicePersistentHandle(%d bytes)' % len(self._b)
+
+
+class DevicePersistent(object):
+    """ A device array registered for direct get and put with other
+        DevicePersistent buffers (SPEC-7-device section 2). The array must stay
+        contiguous and alive until close(). get and put return a Future that
+        receives None when the transfer is complete; one transfer at a time per
+        buffer. Call them from a coroutine (a threaded entry method). """
+
+    MODES = ('copy', 'ipc', 'rdma')
+
+    def __init__(self, array):
+        if not _ckdyn.has_device_support():
+            raise Charm4PyError('DevicePersistent needs a CUDA or HIP build of Charm++')
+        if not hasattr(array, '__cuda_array_interface__'):
+            raise TypeError('DevicePersistent: expected an array with __cuda_array_interface__')
+        self._p = _ckdyn.DevPersist(array)
+        self.array = array
+        self._handle = DevicePersistentHandle(self._p.handle())
+        self._fut = None
+
+    @property
+    def handle(self):
+        return self._handle
+
+    @property
+    def nbytes(self):
+        return self._p.nbytes
+
+    @property
+    def closed(self):
+        return self._p.closed
+
+    def _check(self, h, what):
+        if self._p.closed:
+            raise Charm4PyError('DevicePersistent.' + what + ': the buffer is closed')
+        if self._p.pe != charm.myPe():
+            raise Charm4PyError('DevicePersistent.' + what + ': the buffer was opened on PE ' + str(self._p.pe))
+        if self._fut is not None and not self._fut.ready():
+            raise Charm4PyError('DevicePersistent.' + what + ': a transfer on this buffer is outstanding')
+        if not isinstance(h, DevicePersistentHandle):
+            raise TypeError('DevicePersistent.' + what + ': expected a DevicePersistentHandle, got ' + type(h).__name__)
+
+    def get(self, src):
+        """ copy the buffer `src` (a handle) into this one """
+        self._check(src, 'get')
+        f = charm.createFuture()
+        self._p.get(src._b, f.fid)
+        self._fut = f
+        return f
+
+    def put(self, dst):
+        """ copy this buffer into the buffer `dst` (a handle) """
+        self._check(dst, 'put')
+        f = charm.createFuture()
+        self._p.put(dst._b, f.fid)
+        self._fut = f
+        return f
+
+    def mode(self, h):
+        """ 'copy', 'ipc' or 'rdma': how a transfer with `h` would move the bytes """
+        return DevicePersistent.MODES[self._p.mode(h._b)]
+
+    def close(self):
+        if self._p.closed:
+            return
+        if self._fut is not None and not self._fut.ready():
+            raise Charm4PyError('DevicePersistent.close: a transfer on this buffer is outstanding')
+        self._p.close()
+        self.array = None
+
+    def __del__(self):
+        p = getattr(self, '_p', None)
+        if p is None or p.closed:
+            return
+        import warnings
+        if self._fut is not None and not self._fut.ready():
+            warnings.warn('DevicePersistent garbage-collected with a transfer outstanding; not closed', RuntimeWarning)
+            return
+        warnings.warn('DevicePersistent garbage-collected without close(); closing it', RuntimeWarning)
+        p.close()
+
 # Acts as the Charm runtime at the Python level (there is one instance of this class
 # per process)
 class Charm(object):
@@ -128,6 +233,8 @@ class Charm(object):
         self.lb_requested = False
         self.threadMgr = threads.EntryMethodThreadManager(self)
         self.createFuture = self.Future = self.threadMgr.createFuture
+        self.DevicePersistent = DevicePersistent
+        self.DevicePersistentHandle = DevicePersistentHandle
 
         # The send buffer is not currently used since we do not buffer messages on
         # the sender. This should be used later when scheduling decisions are to be
@@ -498,6 +605,27 @@ class Charm(object):
                 obj.thisProxy[obj.thisIndex].resumeFromSync()
             except Exception as e:
                 self.handleGeneralError(e)
+
+    def _is_local(self, obj):
+        """ obj is the live local object of its target (not migrated away or destroyed) """
+        target = getattr(obj, '_ckdyn_target', None)
+        if target is None:
+            return False
+        kind = target.kind
+        if kind == CKDYN_ARRAY:
+            return self.arrays.get(target.aid, {}).get(tuple(target.index)) is obj
+        if kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+            return self.groups.get(target.gid) is obj
+        return self.chares.get(target.cid) is obj
+
+    def _entry_of(self, obj, name):
+        """ (entry index, argument count) of method `name` of obj's class in obj's role """
+        kind = obj._ckdyn_target.kind
+        tid = {CKDYN_ARRAY: ARRAY, CKDYN_MAINCHARE: MAINCHARE, CKDYN_CHARE: CHARE}.get(kind, GROUP)
+        for em in self.classEntryMethods[tid].get(obj.__class__, ()):
+            if em.name == name:
+                return em.epIdx, chare.getEntryMethodInfo(em.C, name)[0]
+        raise Charm4PyError(str(name) + ' is not an entry method of ' + obj.__class__.__name__)
 
     def _destruct(self, obj):
         """ the runtime deleted obj (migrated away or destroyed) """
@@ -1248,6 +1376,12 @@ class Charm(object):
 
     def LBTurnInstrumentOff(self):
         _ckdyn.lb_instrument(False)
+
+    def myDevice(self):
+        """ the GPU device Charm++ (HAPI) assigned to this PE, which is also the
+            current CUDA device of the thread running Python code; -1 without
+            device support """
+        return _ckdyn.my_device()
 
     def hapiAddCudaCallback(self, stream, future):
         _ckdyn.hapi_add_callback(stream, future)

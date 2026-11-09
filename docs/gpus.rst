@@ -66,6 +66,117 @@ The same rule applies to host arrays: a numpy array of at least
 call is transferred by Charm++ from the sender's memory instead of being copied
 into the message, and the received array is a view of the data in the message.
 
+Receiving into a posted array: ``Chare.post_buffer``
+-----------------------------------------------------
+
+.. code-block:: python
+
+    self.post_buffer(self.method, slot, array)
+
+makes ``array`` the destination of argument ``slot`` (0-based, counting the
+method's arguments) of the next message to ``method`` of this object; the method
+is then called with ``array`` itself, not a new array. ``array`` is a numpy array
+(C-contiguous, writable) or an object with ``__cuda_array_interface__`` (CuPy,
+PyTorch, Numba), and the argument that arrives must have the same number of bytes
+(the program aborts with both lengths otherwise). A device array is received
+directly into the posted memory; a host array costs one copy on the receiving PE,
+from the message into the posted array, which still saves allocating a
+message-sized array. When the argument arrives as a copy (a host array below
+``zerocopy_threshold``, or any array in a broadcast) it is copied into the posted
+array, so the method still receives the posted object.
+
+.. code-block:: python
+
+    import cupy
+
+    class Worker(Chare):
+
+        def __init__(self):
+            self.halo = cupy.empty(1 << 20, dtype=cupy.float64)
+
+        def start(self):
+            self.post_buffer(self.recv_halo, 0, self.halo)
+
+        def recv_halo(self, halo):
+            assert halo is self.halo   # the posted array, filled device to device
+            ...
+            self.post_buffer(self.recv_halo, 0, self.halo)   # for the next message
+
+One post per (method, slot) may be outstanding; a second raises
+``Charm4PyError``. Posts are dropped when the object migrates or is deleted (the
+next message then allocates as usual). ``post_buffer`` raises on an object that is
+not on this PE and on nodegroup branches.
+
+Persistent device buffers: ``charm.DevicePersistent``
+-----------------------------------------------------
+
+A persistent buffer wraps a device array once, registers it with the runtime, and
+then moves its bytes to or from another persistent buffer with no entry method
+and no per-transfer setup:
+
+.. code-block:: python
+
+    p = charm.DevicePersistent(a)    # a: CuPy array, PyTorch CUDA tensor, ...
+    h = p.handle                     # small and picklable: send it as an argument
+    f = p.get(h_remote)              # copy the remote buffer into a; a Future
+    f.get()                          # None once the bytes are in a
+    f = p.put(h_remote)              # copy a into the remote buffer
+    p.close()
+
+.. code-block:: python
+
+    class Peer(Chare):
+
+        def setup(self, n):
+            self.a = cupy.zeros(n, dtype=cupy.float64)
+            self.p = charm.DevicePersistent(self.a)
+            return self.p.handle
+
+        @coro
+        def pull(self, h):
+            self.p.get(h).get()      # self.a now holds the other buffer's data
+            return float(self.a.sum())
+
+    h0 = peers[0].setup(n, ret=True).get()
+    peers[1].setup(n, ret=True).get()
+    total = peers[1].pull(h0, ret=True).get()
+
+``get`` and ``put`` create a future, so they are called from a coroutine (a
+``@coro`` entry method or the main function). One transfer per buffer may be
+outstanding; another ``get`` or ``put`` before its future has a value raises
+``Charm4PyError``, and so does ``close``. The array must stay contiguous and alive
+until ``close()``; a buffer garbage-collected without ``close()`` is closed with a
+``RuntimeWarning``. The data to be read must be complete before the call (work on
+the array's stream is ordered before the transfer; work on other streams is not).
+``p.mode(h)`` says how a transfer with ``h`` moves the bytes: ``'copy'`` within a
+process, ``'ipc'`` between processes on one host when the other buffer's GPU is
+visible to this process (``srun --gpus=N --gpu-bind=none`` rather than
+``--gpus-per-task=1``), ``'rdma'`` otherwise (GPUDirect RDMA on registered device
+memory, also between processes on one host when the other GPU is not visible). The
+``+gpushm`` option is not needed for persistent buffers; it selects the IPC path for
+device arrays sent as arguments, and it too needs every GPU of the node visible to
+every process. A ``put`` between hosts is carried out as a ``get`` by the
+destination's PE, so its future too means that the bytes have arrived.
+
+The device of a PE: ``charm.myDevice()``
+-----------------------------------------
+
+Charm++ assigns each PE one GPU: with one PE per process and every GPU of a node
+visible to every process, process k of the node gets device k.
+``charm.myDevice()`` returns its ordinal, or -1 without device support, and before
+any Python code runs on a PE Charm4py makes it the thread's current CUDA device, so
+CuPy, PyTorch and Numba allocate on it by default:
+
+.. code-block:: python
+
+    import cupy
+
+    class Worker(Chare):
+
+        def __init__(self):
+            assert cupy.cuda.Device().id == charm.myDevice()
+            self.a = cupy.zeros(1 << 20)   # on this PE's GPU
+
 Completion callbacks: ``charm.hapiAddCudaCallback``
 ---------------------------------------------------
 
@@ -152,7 +263,8 @@ the completion of a Numba kernel. More examples are in ``examples/cuda``.
 
 .. note::
 
-    As of November 2026 the device paths of Charm4py 2 (device arrays as
-    arguments, ``DeviceBuffer``, ``hapiAddCudaCallback``) are written but have
-    not yet been compiled with CUDA or run on a GPU; the first runs are planned
-    on NCSA Delta (``docs/design/SPEC-3.md``, section 7).
+    The device paths (device arrays as arguments, ``DeviceBuffer``,
+    ``hapiAddCudaCallback``, posted device arrays and ``DevicePersistent``) were
+    run on NCSA Delta A40 and A100 nodes with CUDA 13.2, on one node and on two
+    nodes; the measurements are in ``docs/design/SPEC-3.md`` and
+    ``docs/design/SPEC-7-device.md`` (section 7 of each).
