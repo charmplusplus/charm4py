@@ -1,0 +1,54 @@
+name: Build wheels
+
+on: workflow_dispatch
+
+jobs:
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cibw-sdist
+          path: dist/*.tar.gz
+
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-26-intel is x86_64, macos-26 is arm64
+        os: [ubuntu-26.04, macos-26-intel, macos-26]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Fetch full history, necessary for git describe in setup.py
+
+      - name: Checkout charm_src # is this best practice? should we use a submodule?
+        uses: actions/checkout@v7
+        with:
+          repository: charmplusplus/charm
+          ref: classic # the wheels use classic Converse (netlrts)
+          path: charm_src/charm
+          fetch-depth: 0 # Fetch full history, necessary for commit_str parsing in setup.py
+
+      - name: Build wheels
+        env:
+          # only the runner's own architecture is built (cibuildwheel's
+          # default); no musllinux, and no free-threaded Python, which
+          # Charm4py is not tested on
+          CIBW_SKIP: "*musllinux_* cp3??t-*"
+        uses: pypa/cibuildwheel@v4.3.5
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl

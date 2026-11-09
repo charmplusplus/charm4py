@@ -1,10 +1,11 @@
-from charm4py import charm, Chare
+from charm4py import register, charm, Chare
 import time
 
 # this will be set by Main chare
 bye_chares = None
 
 
+@register
 class Hello(Chare):
 
     def SayHi(self):

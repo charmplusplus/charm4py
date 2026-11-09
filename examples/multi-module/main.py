@@ -27,4 +27,4 @@ class Main(Chare):
 # Start a main chare of type Main. We specify to the charm runtime which
 # modules contain Chare definitions. Note that the __main__ module is always
 # searched for chare definitions, so we don't have to specify it
-charm.start(Main, modules=['hello', 'goodbye'])
+charm.start(Main)
