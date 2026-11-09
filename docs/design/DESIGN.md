@@ -2001,6 +2001,9 @@ Removals and changes:
    setting a lower protocol disables that path but still works.
 8. Received numpy arrays from a broadcast or section multicast are read-only views;
    from point-to-point sends they are writable views; neither is a copy. Reason: 4.3.
+   The result of an `allreduce` arrives by broadcast and is therefore read-only too
+   (found 2026-11-08 in examples/mnist/mnist.py, which hands it to `torch.from_numpy`
+   and gets a warning); a reduction delivered to a future is writable.
    `copy_received_arrays=True` restores copies. The test survey's feature rows for
    dcopy and broadcasts show no test that mutates a received broadcast array, which
    is not a proof; the gate of step 4 is where it is checked.
