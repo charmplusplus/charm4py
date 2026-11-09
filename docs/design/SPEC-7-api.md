@@ -145,7 +145,9 @@ Different from the spec, or not stated by it:
   `Charm4PyError`; contributions have no `prio` parameter, so reduction callbacks
   carry no priority. `prio=None` sends without one; a non-int raises `TypeError`, a
   value outside 32 bits `OverflowError`.
-- **Priorities across processes are not reliable on reconverse.** Within a PE the
+- **Priorities across processes are best-effort.** Decision 2026-11-08 22:50 PST
+  (Kale): a priority is a hint and guarantees nothing, as in Charm++; no reconverse
+  change is asked for. The observation stays for the record. Within a PE the
   prio=-1 message runs before 100 queued plain ones. When the 101 messages come from
   another process while the receiver is busy, the prio=-1 message ran at positions
   48 to 99 of 101 in six runs (24 with `+old-scheduler`): the communication backend

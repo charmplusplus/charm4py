@@ -213,10 +213,11 @@ The syntax to call a remote method is:
     without a priority counts as 0. ``prio=-1`` makes a message overtake the
     plain messages queued before it. Priorities apply to point-to-point sends and to
     broadcasts to groups, nodegroups and arrays; a send to a section proxy with
-    *prio* raises ``Charm4PyError``. A priority orders messages already in the
-    receiving PE's queue; a message from another process enters that queue only
-    when the communication layer delivers it, so it can run after lower-priority
-    messages that arrived earlier.
+    *prio* raises ``Charm4PyError``. A priority is a hint, as in Charm++: it
+    orders the messages already in the receiving PE's queue and guarantees
+    nothing else. A message from another process enters that queue only when the
+    communication layer delivers it, so it can run after lower-priority messages
+    that arrived earlier.
 
 Proxies the refer to collections can be **sliced** to obtain section proxies
 (see :doc:`sections`).
