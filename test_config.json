@@ -329,6 +329,10 @@
         "path": "tests/thin/sweep_defects.py"
     },
     {
+        "force_min_processes": 2,
+        "path": "tests/thin/cprofile.py"
+    },
+    {
         "path": "tests/thin/entry_attrs.py"
     },
     {
@@ -344,10 +348,6 @@
     },
     {
         "path": "tests/thin/posted_receive.py"
-    },
-    {
-        "force_min_processes": 2,
-        "path": "tests/thin/cprofile.py"
     },
     {
         "condition": "deviceSupport",
