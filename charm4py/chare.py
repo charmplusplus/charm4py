@@ -168,6 +168,25 @@ class Chare(object):
                                 ': it has ' + str(self._nsuspended) + ' suspended coroutine(s)')
         _ckdyn.migrate(self, toPe)
 
+    def ckDestroy(self):
+        """ Destroy this array element (Charm++ ArrayElement::ckDestroy). Called on
+            the element itself, the element is deleted before the call returns: the
+            object leaves charm.arrays, and code after the call in the same entry
+            method runs on an object that is no longer in the array (its changes are
+            lost, and a contribution from it aborts). Called on an element proxy,
+            proxy[i].ckDestroy() is a message that runs this method on the element
+            wherever it lives; proxy.ckDestroy() destroys every element. """
+        target = getattr(self, '_ckdyn_target', None)
+        if target is None or target.kind != CKDYN_ARRAY:
+            raise Charm4PyError('ckDestroy: ' + type(self).__name__ + ' object is not an array element')
+        if not charm._is_local(self):
+            raise Charm4PyError('ckDestroy: ' + type(self).__name__ + str(self.thisIndex) +
+                                ' is not on this PE (it has migrated or was destroyed)')
+        if self._nsuspended > 0:
+            raise Charm4PyError('Cannot destroy ' + type(self).__name__ + str(self.thisIndex) +
+                                ': it has ' + str(self._nsuspended) + ' suspended coroutine(s)')
+        _ckdyn.destroy_element(target.aid, tuple(target.index))
+
     # called after the chare has migrated to a new PE
     def post_buffer(self, method, slot, array):
         """ Receive argument `slot` (0-based, counting the method's arguments) of
@@ -291,7 +310,7 @@ method_restrictions = {
     # reserved methods are those that can't be redefined in user subclass
     'reserved': {'__flush_wait_queues__',
                  '__waitEnqueue__', 'wait', 'contribute', 'reduce', 'allreduce',
-                 'AtSync', 'migrate', 'setMigratable',
+                 'AtSync', 'migrate', 'setMigratable', 'ckDestroy',
                  '_coll_future_deposit_result', '__getRedNo__', '_sectionVote_',
                  '__addThreadEventSubscriber__',
                  '__initchannelattrs__', '__findPendingChannel__',
@@ -712,6 +731,20 @@ def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False
 def array_proxy_doneInserting(proxy):
     _ckdyn.array_done_inserting(proxy.aid)
 
+def array_ckDestroy_gen(send):
+    # send: the generated proxy method of Chare.ckDestroy
+    def array_proxy_ckDestroy(proxy, ret=False, awaitable=False):
+        """ Destroy the element (or, on the whole array or a section, every member)
+            wherever it lives. ret=True on an element proxy returns a future that
+            receives None once the element is gone. A broadcast or section send
+            cannot return a future: its completion is a reduction over the members,
+            which no longer exist to contribute. """
+        if (ret or awaitable) and (proxy.issec or len(proxy.elemIdx) == 0):
+            raise Charm4PyError('ckDestroy on a whole array or a section cannot use ret or awaitable '
+                                '(the destroyed elements cannot contribute to the completion reduction)')
+        return send.__get__(proxy, type(proxy))(ret=ret, awaitable=awaitable)
+    return array_proxy_ckDestroy
+
 
 class Array(object):
 
@@ -751,6 +784,7 @@ class Array(object):
         M['ckNew'] = array_ckNew_gen(cls)
         M['ckInsert'] = array_ckInsert
         M['ckDoneInserting'] = array_proxy_doneInserting
+        M['ckDestroy'] = array_ckDestroy_gen(M['ckDestroy'])
         return type(proxyClassName, (_ckdyn.Proxy,), M)  # create and return proxy class
 
 # ---------------------------------------------------

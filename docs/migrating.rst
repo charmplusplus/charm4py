@@ -310,6 +310,10 @@ New in 2.0
 * **Message priorities.** ``proxy.method(..., prio=p)`` sends with integer
   priority ``p`` (lower runs first), on point-to-point sends and broadcasts; not
   on section sends.
+* **Destroying array elements.** ``proxy[i].ckDestroy()`` destroys element
+  ``i`` wherever it lives, ``proxy.ckDestroy()`` every element, and
+  ``self.ckDestroy()`` the calling element (1.x had none). See
+  :ref:`array-api-label` and ``tests/thin/ckdestroy.py``.
 
 Removed or not yet available
 ----------------------------

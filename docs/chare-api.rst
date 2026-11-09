@@ -77,6 +77,16 @@ Methods
         chares. Instead, applications should delegate to the runtime's load
         balancing framework.
 
+* **ckDestroy(self)**:
+
+    Destroy this array element (array elements only; Charm++
+    ``ArrayElement::ckDestroy``). The element is deleted before the call returns:
+    it leaves ``charm.arrays``, and code after the call in the same entry method
+    runs on an object that is no longer in the array, so its changes are lost and
+    a contribution from it aborts. Call it last. An element with suspended
+    coroutines cannot be destroyed (``Charm4PyError``). To destroy an element from
+    elsewhere, use ``proxy[index].ckDestroy()`` (see :ref:`Array <array-api-label>`).
+
 * **migrated(self)**:
 
     This is called after a chare has migrated to a new PE. This method is empty,
