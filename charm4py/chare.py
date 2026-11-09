@@ -169,6 +169,29 @@ class Chare(object):
         _ckdyn.migrate(self, toPe)
 
     # called after the chare has migrated to a new PE
+    def post_buffer(self, method, slot, array):
+        """ Receive argument `slot` (0-based, counting the method's arguments) of
+            the next message to `method` of this object into `array`, a numpy
+            array or an object with __cuda_array_interface__ of the same number
+            of bytes; the method is then called with `array` itself. Device
+            arrays are received directly; host arrays with one copy on this PE.
+            One post per (method, slot) at a time; dropped on migration. """
+        target = self._ckdyn_target
+        if target.kind == CKDYN_NODEGROUP:
+            raise Charm4PyError('post_buffer: nodegroup branches cannot post buffers')
+        if not charm._is_local(self):
+            raise Charm4PyError('post_buffer: ' + type(self).__name__ + ' object is not on this PE')
+        name = getattr(method, '__name__', method)
+        if getattr(method, '__self__', self) is not self:
+            raise Charm4PyError('post_buffer: ' + str(name) + ' is a method of another object')
+        ep, argcount = charm._entry_of(self, name)
+        if not 0 <= slot < argcount:
+            raise Charm4PyError('post_buffer: ' + name + ' has ' + str(argcount) + ' arguments, slot ' +
+                                str(slot) + ' is out of range')
+        if _ckdyn.post_buffer(self, ep, slot, array) != 0:
+            raise Charm4PyError('post_buffer: a buffer is already posted for argument ' + str(slot) +
+                                ' of ' + name)
+
     def migrated(self):
         pass
 

@@ -113,6 +113,10 @@ struct KeepAlive {
   }
 };
 
+// A buffer posted by Chare.post_buffer: argument `arg` of entry `ep` of the
+// object is received into `obj` (strong reference) by the next message.
+struct PostRec { int ep; int arg; PyObject *obj; uintptr_t ptr; uint64_t len; bool device; };
+
 struct PeState {
   PyObject *main_gr = nullptr;                      // strong
   std::vector<PyObject *> idle;                     // idle worker greenlets, strong
@@ -133,6 +137,8 @@ struct PeState {
   PyObject *meter_enter = nullptr, *meter_leave = nullptr;   // strong
   // NCPY and DEVICE slots this PE has sent, and their done functions run (zerocopy_counts)
   uint64_t zc_sent = 0, zc_done = 0;
+  // outstanding posts per object (key: the object's handle); dropped by destruct
+  std::unordered_map<void *, std::vector<PostRec> > posts;
 };
 thread_local PeState tls;
 
@@ -857,6 +863,66 @@ int device_ordinal(PyObject *o) {
   return dev;
 }
 
+// A C-contiguous device array described by its __cuda_array_interface__ (cai,
+// the interface dict) as a CkDynDevDesc; sh receives the shape (d.shape points
+// at it). Returns false with a Python error set.
+bool cai_desc(PyObject *o, PyObject *cai, CkDynDevDesc &d, int64_t *sh) {
+  if (!PyDict_Check(cai)) { PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ is not a dict"); return false; }
+  PyObject *shape = PyDict_GetItemString(cai, "shape");       // borrowed
+  PyObject *typestr = PyDict_GetItemString(cai, "typestr");
+  PyObject *data = PyDict_GetItemString(cai, "data");
+  PyObject *strides = PyDict_GetItemString(cai, "strides");
+  PyObject *stream = PyDict_GetItemString(cai, "stream");
+  if (!shape || !PyTuple_Check(shape) || !typestr || !PyUnicode_Check(typestr) || !data || !PyTuple_Check(data) ||
+      PyTuple_GET_SIZE(data) < 1) {
+    PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ without shape, typestr or data");
+    return false;
+  }
+  int elem = typestr_elem(PyUnicode_AsUTF8(typestr));
+  if (elem < 0) { PyErr_Format(PyExc_TypeError, "device array of type %U is not supported", typestr); return false; }
+  Py_ssize_t ndim = PyTuple_GET_SIZE(shape);
+  if (ndim > CKDYN_MAX_BUF_DIMS) { PyErr_SetString(PyExc_ValueError, "device array with too many dimensions"); return false; }
+  uint64_t n = 1;
+  for (Py_ssize_t i = 0; i < ndim; i++) {
+    sh[i] = PyLong_AsLongLong(PyTuple_GET_ITEM(shape, i));
+    if (sh[i] == -1 && PyErr_Occurred()) return false;
+    n *= (uint64_t)sh[i];
+  }
+  uint64_t isz = elem_size(elem);
+  if (strides && strides != Py_None) {   // must be the C-contiguous strides
+    if (!PyTuple_Check(strides) || PyTuple_GET_SIZE(strides) != ndim) {
+      PyErr_SetString(PyExc_TypeError, "device array strides do not match its shape");
+      return false;
+    }
+    int64_t expect = (int64_t)isz;
+    for (Py_ssize_t i = ndim - 1; i >= 0; i--) {
+      long long st = PyLong_AsLongLong(PyTuple_GET_ITEM(strides, i));
+      if (st == -1 && PyErr_Occurred()) return false;
+      if (sh[i] > 1 && st != expect) {
+        PyErr_SetString(PyExc_TypeError, "device arrays must be C-contiguous to be sent");
+        return false;
+      }
+      expect *= sh[i];
+    }
+  }
+  unsigned long long ptr = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(data, 0));
+  if (ptr == (unsigned long long)-1 && PyErr_Occurred()) return false;
+  uint64_t st = 0;
+  if (stream && stream != Py_None) {
+    st = PyLong_AsUnsignedLongLong(stream);
+    if (st == (uint64_t)-1 && PyErr_Occurred()) return false;
+  }
+  memset(&d, 0, sizeof d);
+  d.ptr = (const void *)(uintptr_t)ptr;
+  d.len = n * isz;
+  d.elem = (uint8_t)elem;
+  d.ndim = (uint8_t)ndim;
+  d.device = device_ordinal(o);
+  d.stream = st;
+  d.shape = ndim ? sh : nullptr;
+  return true;
+}
+
 struct Packer {
   CkDynMsgBuilder *b;
   PyObject *pickled = nullptr;   // list of values for the tail
@@ -885,62 +951,10 @@ struct Packer {
       PyErr_SetString(PyExc_TypeError, "a device array cannot be sent to a chare whose PE is not known yet");
       return false;
     }
-    if (!PyDict_Check(cai)) { PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ is not a dict"); return false; }
-    PyObject *shape = PyDict_GetItemString(cai, "shape");       // borrowed
-    PyObject *typestr = PyDict_GetItemString(cai, "typestr");
-    PyObject *data = PyDict_GetItemString(cai, "data");
-    PyObject *strides = PyDict_GetItemString(cai, "strides");
-    PyObject *stream = PyDict_GetItemString(cai, "stream");
-    if (!shape || !PyTuple_Check(shape) || !typestr || !PyUnicode_Check(typestr) || !data || !PyTuple_Check(data) ||
-        PyTuple_GET_SIZE(data) < 1) {
-      PyErr_SetString(PyExc_TypeError, "__cuda_array_interface__ without shape, typestr or data");
-      return false;
-    }
-    int elem = typestr_elem(PyUnicode_AsUTF8(typestr));
-    if (elem < 0) { PyErr_Format(PyExc_TypeError, "device array of type %U is not supported", typestr); return false; }
-    Py_ssize_t ndim = PyTuple_GET_SIZE(shape);
-    if (ndim > CKDYN_MAX_BUF_DIMS) { PyErr_SetString(PyExc_ValueError, "device array with too many dimensions"); return false; }
     int64_t sh[CKDYN_MAX_BUF_DIMS];
-    uint64_t n = 1;
-    for (Py_ssize_t i = 0; i < ndim; i++) {
-      sh[i] = PyLong_AsLongLong(PyTuple_GET_ITEM(shape, i));
-      if (sh[i] == -1 && PyErr_Occurred()) return false;
-      n *= (uint64_t)sh[i];
-    }
-    uint64_t isz = elem_size(elem);
-    if (strides && strides != Py_None) {   // must be the C-contiguous strides
-      if (!PyTuple_Check(strides) || PyTuple_GET_SIZE(strides) != ndim) {
-        PyErr_SetString(PyExc_TypeError, "device array strides do not match its shape");
-        return false;
-      }
-      int64_t expect = (int64_t)isz;
-      for (Py_ssize_t i = ndim - 1; i >= 0; i--) {
-        long long st = PyLong_AsLongLong(PyTuple_GET_ITEM(strides, i));
-        if (st == -1 && PyErr_Occurred()) return false;
-        if (sh[i] > 1 && st != expect) {
-          PyErr_SetString(PyExc_TypeError, "device arrays must be C-contiguous to be sent");
-          return false;
-        }
-        expect *= sh[i];
-      }
-    }
-    unsigned long long ptr = PyLong_AsUnsignedLongLong(PyTuple_GET_ITEM(data, 0));
-    if (ptr == (unsigned long long)-1 && PyErr_Occurred()) return false;
-    uint64_t st = 0;
-    if (stream && stream != Py_None) {
-      st = PyLong_AsUnsignedLongLong(stream);
-      if (st == (uint64_t)-1 && PyErr_Occurred()) return false;
-    }
-    if (n * isz > 0xffffffffull) { PyErr_SetString(PyExc_ValueError, "device array argument of 4 GB or more"); return false; }
     CkDynDevDesc d;
-    memset(&d, 0, sizeof d);
-    d.ptr = (const void *)(uintptr_t)ptr;
-    d.len = n * isz;
-    d.elem = (uint8_t)elem;
-    d.ndim = (uint8_t)ndim;
-    d.device = device_ordinal(o);
-    d.stream = st;
-    d.shape = ndim ? sh : nullptr;
+    if (!cai_desc(o, cai, d, sh)) return false;
+    if (d.len > 0xffffffffull) { PyErr_SetString(PyExc_ValueError, "device array argument of 4 GB or more"); return false; }
     CkDynMsgAddDevice(b, &d, obj_done, Py_NewRef(o));   // the reference goes to obj_done
     tls.zc_sent++;
     return true;
@@ -1221,6 +1235,16 @@ struct DeviceBufferW {
   int device = 0;
   int elem = 0;
   std::vector<int64_t> shape;
+};
+
+// A persistent device buffer (charm.DevicePersistent, SPEC-7-device 2). The
+// done callback is a FUTURE callback to this PE; each get or put passes the
+// id of its future as the refnum, which CkDyn uses as the future id.
+struct DevPersistW {
+  CkDynDevPersist *p = nullptr;
+  nb::object arr;       // the wrapped array, kept alive until close
+  uint64_t nbytes = 0;
+  int pe = -1;
 };
 
 PyObject *device_buffer(RecvCtx &ctx, int i) {
@@ -1586,6 +1610,59 @@ void deliver_one(PyObject *obj, int ep, uint32_t ep_flags, const CkDynMsgView *v
   Py_DECREF(obj);
 }
 
+// Posted buffers (Chare.post_buffer, SPEC-7-device 3): for each post of obj
+// for entry ep, argument arg becomes the posted object. When CkDyn delivered
+// the slot into it (an NCPY or DEVICE slot whose pointer is the posted one)
+// nothing is copied here; otherwise (a BUFFER slot below the zero-copy
+// threshold, a pickled value) the post is removed from CkDyn and the value is
+// copied into the posted object with obj[...] = value. A length mismatch aborts.
+void drop_posts(void *handle) {
+  auto it = tls.posts.find(handle);
+  if (it == tls.posts.end()) return;
+  for (PostRec &r : it->second) Py_DECREF(r.obj);
+  tls.posts.erase(it);
+}
+
+void apply_posts(PyObject *obj, int ep, const CkDynMsgView *v, ObjVec &args) {
+  auto it = tls.posts.find(obj);
+  if (it == tls.posts.end()) return;
+  std::vector<PostRec> &vec = it->second;
+  const CkDynSlot *sl = v->slots;
+  int off = (v->hdr && (v->hdr->flags & CKDYN_MSG_BLOCK) && v->nslots > 0 && sl[0].type == CKDYN_SLOT_FUTURE) ? 1 : 0;
+  CkDynTarget t;
+  bool have_t = false;
+  for (size_t i = 0; i < vec.size();) {
+    PostRec r = vec[i];
+    if (r.ep != ep) { i++; continue; }
+    vec.erase(vec.begin() + i);
+    int slot = r.arg + off;
+    bool consumed = false;
+    if (v->kind == CKDYN_MSGKIND_DYN && slot < v->nslots &&
+        (sl[slot].type == CKDYN_SLOT_NCPY || sl[slot].type == CKDYN_SLOT_DEVICE))
+      consumed = (uintptr_t)CkDynViewBufferPtr(v, slot, nullptr) == r.ptr;
+    if (!consumed) {
+      if (!have_t) { t = target_of(obj); have_t = true; }
+      CkDynUnpostBuffer(&t, ep, r.arg | CKDYN_POST_ARG);
+      if ((size_t)r.arg >= args.n) { Py_DECREF(r.obj); continue; }   // too few arguments: the call raises
+      PyObject *val = args.p[r.arg];
+      PyObject *nb_ = PyObject_GetAttrString(val, "nbytes");
+      long long vlen = nb_ ? PyLong_AsLongLong(nb_) : -1;
+      Py_XDECREF(nb_);
+      PyErr_Clear();
+      if (vlen != (long long)r.len) {
+        char msg[256];
+        snprintf(msg, sizeof msg, "charm4py: entry %d argument %d: the posted buffer has %llu bytes, the message's value %lld (%s)",
+                 ep, r.arg, (unsigned long long)r.len, vlen, Py_TYPE(val)->tp_name);
+        CkDynAbort(msg);
+      }
+      if (PyObject_SetItem(r.obj, Py_Ellipsis, val) < 0) hook_abort("deliver (copying into a posted buffer)");
+    }
+    Py_DECREF(args.p[r.arg]);
+    args.p[r.arg] = r.obj;   // the record's reference moves to args
+  }
+  if (vec.empty()) tls.posts.erase(it);
+}
+
 void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const CkDynMsgView *v) {
   Gil g;
   PyObject *fr = meter_enter((PyObject *)handle, ep);
@@ -1595,6 +1672,7 @@ void h_deliver(void *, void *handle, int ep, uint32_t, uint32_t ep_flags, const 
     ObjVec args;
     PyObject *block = nullptr;
     if (!view_args(ctx, args, &block)) hook_abort("deliver (converting arguments)");
+    if (!tls.posts.empty()) apply_posts((PyObject *)handle, ep, v, args);
     deliver_one((PyObject *)handle, ep, ep_flags, v, args, block);
     Py_XDECREF(block);
   } catch (...) {
@@ -1618,7 +1696,14 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
       CkDynTarget t = target_of(obj);
       PyObject *efr = meter_enter(obj, ep);
       CkDynCallstackPush(&t);
-      deliver_one(obj, ep, ep_flags, v, args, block);
+      if (!tls.posts.empty() && tls.posts.count(obj)) {   // this element's own arguments
+        ObjVec mine;
+        for (size_t k = 0; k < args.n; k++) mine.push(Py_NewRef(args.p[k]));
+        apply_posts(obj, ep, v, mine);
+        deliver_one(obj, ep, ep_flags, v, mine, block);
+      } else {
+        deliver_one(obj, ep, ep_flags, v, args, block);
+      }
       CkDynCallstackPop(&t);
       meter_leave(efr, nullptr);
     }
@@ -1702,6 +1787,7 @@ void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
 void h_destruct(void *, void *handle) {
   Gil g;
   PyObject *obj = (PyObject *)handle;
+  drop_posts(handle);   // CkDyn dropped its posts with the object
   auto it = tls.packed.find(handle);
   if (it != tls.packed.end()) { Py_DECREF(it->second); tls.packed.erase(it); }
   if (c_destruct) {
@@ -3257,6 +3343,102 @@ NB_MODULE(_ckdyn, m) {
     CkDynCcsSendDelayedReply((void *)token, (int)b.size(), b.c_str());
   });
   m.def("call_after", [](int tag, double msecs) { CkDynCallAfter(call_after_fn, (void *)(intptr_t)tag, msecs); });
+  // Chare.post_buffer: 0, or 1 when (ep, arg) already has a post on obj
+  m.def("post_buffer", [](nb::handle obj, int ep, int arg, nb::handle arr) {
+    std::vector<PostRec> &vec = tls.posts[obj.ptr()];
+    for (const PostRec &r : vec)
+      if (r.ep == ep && r.arg == arg) return 1;
+    CkDynTarget t = target_of(obj.ptr());
+    PostRec r;
+    r.ep = ep; r.arg = arg; r.obj = arr.ptr();
+    PyObject *cai = getattr_or_null(arr.ptr(), "__cuda_array_interface__");
+    PyErr_Clear();
+    if (cai) {
+      nb::object guard = nb::steal(cai);
+      if (!CkDynHasDeviceSupport()) throw nb::type_error("device arrays need a CUDA or HIP build of Charm++");
+      int64_t sh[CKDYN_MAX_BUF_DIMS];
+      CkDynDevDesc d;
+      if (!cai_desc(arr.ptr(), cai, d, sh)) throw_py();
+      r.ptr = (uintptr_t)d.ptr; r.len = d.len; r.device = true;
+      CkDynPostDeviceBuffer(&t, ep, arg | CKDYN_POST_ARG, &d);
+    } else if (PyArray_Check(arr.ptr())) {
+      PyArrayObject *a = (PyArrayObject *)arr.ptr();
+      if (!PyArray_IS_C_CONTIGUOUS(a)) throw nb::type_error("post_buffer: the numpy array must be C-contiguous");
+      if (!PyArray_ISWRITEABLE(a)) throw nb::type_error("post_buffer: the numpy array is read-only");
+      CkDynBufDesc d;
+      memset(&d, 0, sizeof d);
+      d.ptr = PyArray_DATA(a);
+      d.len = (uint64_t)PyArray_NBYTES(a);
+      int elem = np_elem(a);
+      d.elem = (uint8_t)(elem < 0 ? CKDYN_ELEM_BYTE : elem);
+      r.ptr = (uintptr_t)d.ptr; r.len = d.len; r.device = false;
+      CkDynPostBuffer(&t, ep, arg | CKDYN_POST_ARG, &d);
+    } else {
+      throw nb::type_error("post_buffer: expected a numpy array or an object with __cuda_array_interface__");
+    }
+    Py_INCREF(r.obj);
+    vec.push_back(r);
+    return 0;
+  });
+  m.def("posted_count", [](nb::handle obj) {
+    auto it = tls.posts.find(obj.ptr());
+    return it == tls.posts.end() ? 0 : (int)it->second.size();
+  });
+
+  nb::class_<DevPersistW>(m, "DevPersist")
+      .def("__init__", [](DevPersistW *w, nb::handle arr) {
+        new (w) DevPersistW();
+        if (!CkDynHasDeviceSupport()) throw nb::type_error("DevicePersistent needs a CUDA or HIP build of Charm++");
+        PyObject *cai = getattr_or_null(arr.ptr(), "__cuda_array_interface__");
+        PyErr_Clear();
+        if (!cai) throw nb::type_error("DevicePersistent: the array has no __cuda_array_interface__");
+        nb::object guard = nb::steal(cai);
+        int64_t sh[CKDYN_MAX_BUF_DIMS];
+        CkDynDevDesc d;
+        if (!cai_desc(arr.ptr(), cai, d, sh)) throw_py();
+        CkDynCallback done;
+        memset(&done, 0, sizeof done);
+        done.kind = CKDYN_CB_FUTURE;
+        done.pe = CkDynMyPe();
+        done.id = 0;   // each transfer's refnum is its future id
+        w->p = CkDynDevPersistOpen(&d, &done);
+        w->arr = nb::borrow(arr);
+        w->nbytes = d.len;
+        w->pe = CkDynMyPe();
+      })
+      .def("handle", [](DevPersistW &w) {
+        if (!w.p) throw CkDynError("DevicePersistent: closed");
+        std::string h(CkDynDevPersistHandleSize(), '\0');
+        CkDynDevPersistHandle(w.p, &h[0]);
+        return nb::bytes(h.data(), h.size());
+      })
+      .def("get", [](DevPersistW &w, nb::bytes h, uint32_t fid) {
+        if (!w.p) throw CkDynError("DevicePersistent: closed");
+        if (h.size() != CkDynDevPersistHandleSize()) throw nb::value_error("not a DevicePersistent handle of this libcharm");
+        if (fid == 0) throw nb::value_error("future id 0");
+        CkDynDevPersistGet(w.p, h.c_str(), fid);
+      })
+      .def("put", [](DevPersistW &w, nb::bytes h, uint32_t fid) {
+        if (!w.p) throw CkDynError("DevicePersistent: closed");
+        if (h.size() != CkDynDevPersistHandleSize()) throw nb::value_error("not a DevicePersistent handle of this libcharm");
+        if (fid == 0) throw nb::value_error("future id 0");
+        CkDynDevPersistPut(h.c_str(), w.p, fid);
+      })
+      .def("mode", [](DevPersistW &w, nb::bytes h) {
+        if (!w.p) throw CkDynError("DevicePersistent: closed");
+        if (h.size() != CkDynDevPersistHandleSize()) throw nb::value_error("not a DevicePersistent handle of this libcharm");
+        return CkDynDevPersistMode(w.p, h.c_str());
+      })
+      .def("close", [](DevPersistW &w) {
+        if (!w.p) return;
+        CkDynDevPersistClose(w.p);
+        w.p = nullptr;
+        w.arr = nb::object();
+      })
+      .def_prop_ro("nbytes", [](const DevPersistW &w) { return (unsigned long long)w.nbytes; })
+      .def_prop_ro("pe", [](const DevPersistW &w) { return w.pe; })
+      .def_prop_ro("closed", [](const DevPersistW &w) { return w.p == nullptr; });
+
   m.def("hapi_add_callback", [](uint64_t stream, nb::handle future) {
     if (!CkDynHasDeviceSupport()) throw CkDynError("hapi_add_callback: this libcharm has no device support");
     CkDynCallback cb = callback_from(future);
