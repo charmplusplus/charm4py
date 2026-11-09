@@ -321,6 +321,26 @@ class ReductionManager(object):
                             data = self._to_buffer(data, elem)
                     except:
                         pyReducer = py_red_func
+            if pyReducer is not None:
+                # A built-in reducer on data with no Charm++ type (a torch tensor, an
+                # object with __array__, a list of mixed types): the Python reducer
+                # combines the contributions, but Charm++ does not call a reducer when
+                # a reduction has one contributor, so that result would be the object
+                # as contributed. Convert the contribution the way the reducer does
+                # (the built-in Python reducers return numpy arrays), so that the
+                # result type does not depend on the number of contributors; a numeric
+                # array then uses the Charm++ reducer.
+                try:
+                    conv = py_red_func([data])
+                except Exception:
+                    conv = data
+                if (isinstance(conv, np.ndarray) and not conv.dtype.hasobject
+                        and conv.dtype.name in self.numpy_type_map):
+                    rtype = self.red_table[op][self.numpy_type_map[conv.dtype.name]]
+                    data = np.ascontiguousarray(conv)
+                    pyReducer = None
+                else:
+                    data = conv
         else:
             pyReducer = reducer
 
