@@ -2615,7 +2615,8 @@ void mod_start(nb::list argv) {
   PyEval_RestoreThread(ts);
 }
 
-nb::tuple mod_register_class(nb::handle cls, int kind, int ndims, nb::list entries) {
+// name: the registered chare name (Projections); None uses cls.__name__
+nb::tuple mod_register_class(nb::handle cls, int kind, int ndims, nb::list entries, nb::handle name) {
   size_t n = nb::len(entries);
   if (n < 1) throw nb::value_error("register_class: entries[0] must be the constructor");
   std::vector<nb::tuple> ents;
@@ -2632,7 +2633,7 @@ nb::tuple mod_register_class(nb::handle cls, int kind, int ndims, nb::list entri
   }
   CkDynClassDesc d;
   memset(&d, 0, sizeof d);
-  d.name = strdup(nb::cast<std::string>(nb::str(cls.attr("__name__"))).c_str());
+  d.name = strdup(nb::cast<std::string>(nb::str(name.is_none() ? cls.attr("__name__") : name)).c_str());
   d.kind = (CkDynKind)kind;
   d.ndims = ndims;
   d.num_entries = (int)n;
@@ -3220,7 +3221,8 @@ NB_MODULE(_ckdyn, m) {
   m.def("init", &mod_init, nb::arg("charm"), nb::arg("options"), nb::arg("future_type").none() = nb::none(),
         nb::arg("remote_future").none() = nb::none(), nb::arg("collective_future_type").none() = nb::none());
   m.def("start", &mod_start, nb::arg("argv"));
-  m.def("register_class", &mod_register_class, nb::arg("cls"), nb::arg("kind"), nb::arg("ndims"), nb::arg("entries"));
+  m.def("register_class", &mod_register_class, nb::arg("cls"), nb::arg("kind"), nb::arg("ndims"), nb::arg("entries"),
+        nb::arg("name").none() = nb::none());
   m.def("set_proxy_class", &mod_set_proxy_class);
   m.def("ep_flags", [](int ep) {   // the CKDYN_EP_* flags an entry was registered with
     if (ep < 0 || (size_t)ep >= g_methods.size() || !g_methods[ep].valid) throw CkDynError("ep_flags: unknown ep " + std::to_string(ep));

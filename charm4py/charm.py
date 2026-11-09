@@ -551,6 +551,7 @@ class Charm(object):
             kind = CKDYN_NODEGROUP
         else:
             kind = CKDYN_ARRAY  # ndims 0: any dimension, fixed by each array's creation
+        cname = chare.trace_class_name(C)
         entries = []
         for em in entryMethods:
             if charm_type_id == ARRAY and em.name in ('migrated', 'AtSync'):
@@ -566,9 +567,10 @@ class Charm(object):
                 argcount, argnames, defaults = chare.getEntryMethodInfo(C, em.name)
             else:
                 argcount, argnames, defaults = 0, (), ()
-            entries.append((func, em, C.__name__ + '.' + em.name, flags,
+            entries.append((func, em, cname + '.' + em.name, flags,
                             em.when_cond is not None, argcount, argnames, defaults))
-        C.idx[charm_type_id], startEpIdx = _ckdyn.register_class(C, kind, 0, entries)
+        C.idx[charm_type_id], startEpIdx = _ckdyn.register_class(
+            C, kind, 0, entries, cname + chare.TRACE_KIND_SUFFIX[charm_type_id])
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em

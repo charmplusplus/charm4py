@@ -281,6 +281,18 @@ method_restrictions = {
 }
 
 
+def trace_class_name(C):
+    """ the class string of C in Projections names: module.Class, or Class for a
+        class defined in __main__ """
+    if C.__module__ == '__main__':
+        return C.__qualname__
+    return C.__module__ + '.' + C.__qualname__
+
+# suffix of the registered (Projections) chare name per use of a class; arrays and
+# main chares keep the plain class string
+TRACE_KIND_SUFFIX = {MAINCHARE: '', GROUP: '/group', ARRAY: '', CHARE: '/chare', NODEGROUP: '/nodegroup'}
+
+
 def getEntryMethodInfo(cls, method_name):
     func = getattr(cls, method_name)
     argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument

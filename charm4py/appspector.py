@@ -84,7 +84,7 @@ import time
 from greenlet import getcurrent
 
 from .charm import charm, Chare, register
-from .chare import CKDYN_NODEGROUP
+from .chare import CKDYN_NODEGROUP, trace_class_name
 from . import loadfmt
 
 OBJLOADS_HANDLER = "charm4py ObjLoads"
@@ -440,5 +440,5 @@ class AppSpectorLoads(Chare):
     def _sts_handler(self, data):
         names = {}
         for ep, em in charm.entryMethods.items():
-            names[ep] = '%s.%s' % (em.C.__name__, em.name)
+            names[ep] = '%s.%s' % (trace_class_name(em.C), em.name)
         charm.CcsSendReply(loadfmt.sts_text(names).encode())
