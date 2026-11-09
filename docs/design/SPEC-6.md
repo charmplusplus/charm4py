@@ -128,7 +128,9 @@ to `N` processes with `+pe N`, and starts them itself with LCI's file PMI
   `ccs-fn-dispatch`) is pushed to charmplusplus/reconverse; ckdyn-dev `44b27e6c8` records
   it as the submodule commit and `charm_version.txt` pins that commit, so wheels and
   default source builds now carry the fix. The branch becomes a reconverse pull request
-  when speculative mode ends.
+  when speculative mode ends. Update 2026-11-09 08:30 PST: merged as reconverse PR #325
+  (squash commit 405edc6 on main, same tree as ee47fb6); ckdyn-dev 9d3f1ccbb points the
+  submodule at it and `charm_version.txt` pins that commit.
 - No tracing in wheels (section 2, item 1).
 - No CUDA/HIP wheels; the source recipe is step 3's (placeholder in `install.rst`).
 - macOS x86_64: no Reconverse triplet, no wheel.
