@@ -349,5 +349,15 @@
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device_persistent.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/cuda/single_array.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/cuda/multi_array.py"
     }
 ]
