@@ -2270,6 +2270,36 @@ mode, and the single-process multi-PE configuration (`+pe 2` in one process
 segfaults in about one run in eight inside the worker greenlet; that configuration
 is step 7 and the GIL rule of 4.4 is not yet enforced, review F14).
 
+Status 2026-11-08, step 4a Projections gate (3.13, F12, F13): met on `thin` f2951e9
+against `ckdyn-dev` 6a57e5553, at one and two processes (logs/step-7/trace: `prog.py`,
+the decoder `decode.py`, the runs in `p1c` and `p2c`). The tracing libcharm is
+`charm/reconverse-darwin-arm8-charm4py-trace` (`--enable-tracing`, otherwise the
+options of tools/build_charm.py; `charm/bin` still points at the plain build) and the
+venv that uses it is `venv-trace` (Python 3.12, charm4py installed non-editable from
+the `charm4py` clone; reinstall with `pip install --force-reinstall --no-deps` and the
+three `CHARM4PY_*` variables pointing at that build directory). The program has an array
+class with a plain method, a coroutine reached by a broadcast and one reached by a
+point-to-point message, each suspending on a future, a broadcast of a plain method to a
+2-d array and a singleton chare; run with `+logsize 100000`, it writes `.sts`,
+`.log.gz` and `.sum` files named after the script, and the summary module accepts the
+late-registered entries. Checked: every entry is listed as `Class.method` with its
+chare index; the log has an execute event per method with the element index as the
+object id (2 fields for the 2-d array, 1 for the others); a coroutine shows one
+bracket ending at the suspend and one starting at the resume; the array classes,
+registered with 0 dimensions, report 1 and 2 in the `.sts` file. One defect found
+and fixed in the binding (f2951e9): a broadcast of a plain method goes through
+`deliver_many`, which recorded no event, so Grid.touch was missing from the log; it
+now brackets each element with `CkDynCoroResume`/`CkDynCoroSuspend` and the log shows
+one event per element. Different from 3.13: the binding registers each Python class
+once per kind (group, array, singleton chare), so the `.sts` file has three `CHARE`
+lines with the same name per class and only the array line gets a dimension count, and
+the `Worker` class of `charm.pool` and a user class `Worker` have the same name there.
+A coroutine reached by a point-to-point message has its first run inside the entry's
+own execute event, so Projections shows that run as three events (the entry's bracket
+is ended at the coroutine's begin and reopened at its end, the trace module's
+nested-event handling), as for a Charm++ `[threaded]` entry. The cost of the
+compiled-in trace checks on the plain-message number was not measured.
+
 Status 2026-11-08, step 4c: gate met on `thin` against `ckdyn-dev` c81fbeecc
 (docs/design/SPEC-4c.md; logs/gate-4c). `migration/test_migrate` (GreedyRefineLB, and
 RotateLB), `migration/test_nonmigratables`, `migration/chare_migration` and
