@@ -1287,19 +1287,20 @@ class CharmRemote(Chare):
             raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         return eval(expression, sys.modules[module_name].__dict__)
 
-    def notify_future_deletion(self, store_id, depth):
-        charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers -= 1
-        if charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers == 0:
+    def notify_future_deletion(self, store_id, key):
+        # a copy of the future that this PE sent under borrow key `key` was deleted
+        fut = charm.threadMgr.borrowed_futures[(store_id, key)]
+        fut.num_borrowers -= 1
+        if fut.num_borrowers == 0:
             # check if threadMgr.futures has the only reference to fid
             # if yes, remove it
-            fut = charm.threadMgr.borrowed_futures[(store_id, depth)]
             refcount = ctypes.c_long.from_address(id(fut)).value
             #print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
             if (fut.parent == None and refcount == 3) or (fut.parent != None and refcount == 2):
                 #print("Real deletion of", store_id, "from", charm.myPe())
                 if fut.parent == None:
                     charm.threadMgr.futures.pop(fut.fid)
-                charm.threadMgr.borrowed_futures.pop((store_id, depth))
+                charm.threadMgr.borrowed_futures.pop((store_id, key))
 
     def propagateException(self, error):
         if time.time() - charm.last_exception_timestamp >= 1.0:

@@ -155,14 +155,25 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        # keep track of how many PEs this future is being sent to
+        # keep track of how many copies of this future are sent. A copy notifies
+        # its parent PE when it is deleted, naming this object by its borrow key:
+        # one PE can hold several copies of the same stored future at the same
+        # depth (one per message that carried it), so the key is per object, not
+        # (store_id, depth). borrowed_futures keeps this object alive until every
+        # copy made from it has notified.
         self.num_borrowers += 1
+        key = 0
         if self.store:
-            charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
-        return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe())
+            key = self.__dict__.get('_borrow_key')
+            if key is None:
+                tm = charm.threadMgr
+                tm.last_borrow_key += 1
+                key = self._borrow_key = tm.last_borrow_key
+            charm.threadMgr.borrowed_futures[(self.store_id, key)] = self
+        return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe(), key)
 
     def __setstate__(self, state):
-        self.fid, self.src, self.store, self.borrow_depth, self.parent = state
+        self.fid, self.src, self.store, self.borrow_depth, self.parent, self.parent_key = state
         self.borrow_depth += 1
         if self.store:
             self.store_id = (self.src << 32) + self.fid
@@ -180,7 +191,7 @@ class Future(object):
             else:
                 # this is a borrower, notify its parent of the deletion
                 #print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
-                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.borrow_depth - 1)
+                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.parent_key)
 
 
 def remote_future(pe, fid):
@@ -256,7 +267,8 @@ class EntryMethodThreadManager(object):
         self.options = charm.options
         self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
-        self.borrowed_futures = {}
+        self.borrowed_futures = {}  # (store_id, borrow key) -> Future sent to other PEs (Future.__getstate__)
+        self.last_borrow_key = 0
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
 
     def start(self):
