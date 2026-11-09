@@ -63,6 +63,8 @@ cmd_of() {   # the launcher and extra arguments of a shape
 
 if [ -z "$SKIP_CXX" ]; then
 export LD_LIBRARY_PATH=$CBUILD_CXX/lib:$LD_LIBRARY_PATH
+# clean first: the Makefile relinks only when an object changes, not when libck does
+make -C $CBUILD_CXX/tests/charm++/ckdyn clean > /dev/null 2>&1
 make -C $CBUILD_CXX/tests/charm++/ckdyn > $OUT/ckdyn-build.log 2>&1; echo "RESULT ckdyn_build exit=$?"
 cd $CBUILD_CXX/tests/charm++/ckdyn && rm -rf ckdyntest.ckpt
 for sh in $SHAPES; do
