@@ -1617,9 +1617,14 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
       if (!obj) continue;
       CkDynTarget t = target_of(obj);
       PyObject *efr = meter_enter(obj, ep);
-      CkDynCallstackPush(&t);
+      // CkDyn records no per-element event for a deliver_many broadcast. A plain
+      // entry gets one here from CkDynCoroResume/Suspend (running object and, with
+      // tracing, an execute event with the element's index); a coroutine entry gets
+      // its events from switch_into, so here it only pushes the running object.
+      const bool coro = (ep_flags & CKDYN_EP_THREADED) != 0;
+      if (coro) CkDynCallstackPush(&t); else CkDynCoroResume(&t, ep, 0);
       deliver_one(obj, ep, ep_flags, v, args, block);
-      CkDynCallstackPop(&t);
+      if (coro) CkDynCallstackPop(&t); else CkDynCoroSuspend(&t);
       meter_leave(efr, nullptr);
     }
     Py_XDECREF(block);
