@@ -149,7 +149,7 @@ std::unordered_map<int, PyObject *> g_pm_name;   // ep -> proxy method name (Bou
 PyObject *g_dumps, *g_loads, *g_array_type, *g_format_exception;
 PyObject *g_DONE, *g_EXC, *g_worker_main, *g_empty_tuple;
 PyObject *s_cond_next, *s_flush, *s_ckdyn_target, *s_src, *s_fid, *s_store, *s_append, *s_frombytes,
-    *s_ret, *s_awaitable, *s_is_ray, *s_Future, *s_createFuture, *s_name, *s_kw_protocol_cb,
+    *s_ret, *s_awaitable, *s_is_ray, *s_prio, *s_Future, *s_createFuture, *s_name, *s_kw_protocol_cb,
     *s_kw_buffers, *s_kw_store;
 PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single, *k_refnum,
     *k_sid, *k_constrained;
@@ -1974,6 +1974,10 @@ void call_after_fn(void *arg, double) {
 // ---------------------------------------------------------------------------
 // Sends (SPEC 2.4)
 
+// CK_QUEUEING_IFIFO (charm.h) = CQS_QUEUEING_IFIFO (converse.h); ckdyn.h does not
+// define the queueing values, and tests/charm++/ckdyn uses the same number
+constexpr int kQueueingIFIFO = 4;
+
 void send_built(const CkDynTarget &t, bool has_elem, int ep, CkDynMsg *m) {
   if (has_elem || t.kind == CKDYN_CHARE || t.kind == CKDYN_MAINCHARE) {
     CkDynSendTarget(&t, ep, m, nullptr);
@@ -1996,7 +2000,14 @@ bool is_bcast_proxy(const ProxyObject *p) {
 // is set only with a block future (the members then contribute to it over the
 // section, EntryMethod._run), so a plain section send keeps flags 0 and the
 // receivers' fast path.
-bool do_send_section(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16_t flags, PyObject *block_future) {
+bool do_send_section(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16_t flags, PyObject *block_future,
+                     bool has_prio) {
+  if (has_prio) {
+    PyObject *t = charm4py_error_type();
+    PyErr_SetString(t, "prio is not supported on a send to a section proxy");
+    Py_DECREF(t);
+    return false;
+  }
   bool block = block_future && block_future != Py_None;
   if (block) flags |= CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST;
   else flags &= (uint16_t)~(CKDYN_MSG_BLOCK | CKDYN_MSG_BCAST | CKDYN_MSG_BCASTRET);
@@ -2017,9 +2028,10 @@ bool do_send_section(ProxyObject *p, int ep, PyObject *const *args, size_t nargs
   return true;
 }
 
+// has_prio: the message carries the integer priority prio (CK_QUEUEING_IFIFO).
 bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16_t flags, PyObject *block_future,
-             bool caller_flags = false) {
-  if (p->issec) return do_send_section(p, ep, args, nargs, flags, block_future);
+             bool caller_flags = false, bool has_prio = false, int32_t prio = 0) {
+  if (p->issec) return do_send_section(p, ep, args, nargs, flags, block_future, has_prio);
   if (is_bcast_proxy(p)) flags |= CKDYN_MSG_BCAST;
   else if (!caller_flags) flags &= (uint16_t)~CKDYN_MSG_BCASTRET;
   if (block_future && block_future != Py_None) flags |= CKDYN_MSG_BLOCK;
@@ -2027,7 +2039,7 @@ bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16
     PyErr_SetString(PyExc_ValueError, "send: BLOCK flag without a future");
     return false;
   } else flags &= (uint16_t)~CKDYN_MSG_BLOCK;
-  BuilderGuard bg(CkDynMsgBegin((int)nargs + 2, 64, 0, 0, -1));
+  BuilderGuard bg(CkDynMsgBegin((int)nargs + 2, 64, 0, has_prio ? 8 * (int)sizeof(int32_t) : 0, -1));
   CkDynMsgSetFlags(bg.b, flags);
   if (flags & CKDYN_MSG_BLOCK) {
     int pe; uint32_t fid;
@@ -2045,6 +2057,10 @@ bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16
     if (!pk.add(args[i])) return false;
   if (!pk.finish()) return false;
   CkDynMsg *m = bg.finish(ep);
+  if (has_prio) {
+    *(int32_t *)CkDynMsgPriorityPtr(m) = prio;
+    CkDynMsgSetQueueing(m, kQueueingIFIFO);
+  }
   try {
     send_built(p->t, p->has_elem, ep, m);
   } catch (CkDynError &e) {
@@ -2061,7 +2077,8 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
     PyErr_Format(PyExc_TypeError, "%U: first argument must be a proxy", pm->qualname);
     return nullptr;
   }
-  bool ret = false, awaitable = false, is_ray = false;
+  bool ret = false, awaitable = false, is_ray = false, has_prio = false;
+  int32_t prio = 0;
   Py_ssize_t nkw = kwnames ? PyTuple_GET_SIZE(kwnames) : 0;
   PyObject *const *kwvals = args + nargs;
   int nuser = 0;
@@ -2071,7 +2088,24 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
     if (PyUnicode_Compare(name, s_ret) == 0) which = 1;
     else if (PyUnicode_Compare(name, s_awaitable) == 0) which = 2;
     else if (PyUnicode_Compare(name, s_is_ray) == 0) which = 3;
+    else if (PyUnicode_Compare(name, s_prio) == 0) which = 4;
     if (!which) { nuser++; continue; }
+    if (which == 4) {   // prio=None is no priority
+      if (kwvals[k] == Py_None) continue;
+      if (!PyLong_Check(kwvals[k]) || PyBool_Check(kwvals[k])) {
+        PyErr_Format(PyExc_TypeError, "%U: prio must be an int, not %s", pm->qualname, Py_TYPE(kwvals[k])->tp_name);
+        return nullptr;
+      }
+      long long v = PyLong_AsLongLong(kwvals[k]);
+      if (v == -1 && PyErr_Occurred()) return nullptr;
+      if (v < INT32_MIN || v > INT32_MAX) {
+        PyErr_Format(PyExc_OverflowError, "%U: prio %lld is outside the 32-bit signed range", pm->qualname, v);
+        return nullptr;
+      }
+      has_prio = true;
+      prio = (int32_t)v;
+      continue;
+    }
     int t = PyObject_IsTrue(kwvals[k]);
     if (t < 0) return nullptr;
     if (which == 1) ret = t; else if (which == 2) awaitable = t; else is_ray = t;
@@ -2107,7 +2141,7 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
     for (Py_ssize_t k = 0; nuser > 0 && k < nkw; k++) {
       PyObject *name = PyTuple_GET_ITEM(kwnames, k);
       if (used[k] || PyUnicode_Compare(name, s_ret) == 0 || PyUnicode_Compare(name, s_awaitable) == 0 ||
-          PyUnicode_Compare(name, s_is_ray) == 0)
+          PyUnicode_Compare(name, s_is_ray) == 0 || PyUnicode_Compare(name, s_prio) == 0)
         continue;
       PyErr_Format(PyExc_TypeError, "%U got an unexpected keyword argument '%U'", pm->qualname, name);
       return nullptr;
@@ -2131,7 +2165,7 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
   uint16_t flags = 0;
   if (is_ray) flags |= CKDYN_MSG_RAY;
   if (ret && is_bcast_proxy(p)) flags |= CKDYN_MSG_BCASTRET;
-  bool ok = do_send(p, pm->ep, pos, npos, flags, future);
+  bool ok = do_send(p, pm->ep, pos, npos, flags, future, false, has_prio, prio);
   if (!ok) { Py_XDECREF(future); Py_XDECREF(ray_future); return nullptr; }
   if (ray_future) { Py_XDECREF(future); return ray_future; }
   if (future) return future;
@@ -2928,6 +2962,7 @@ NB_MODULE(_ckdyn, m) {
   INTERN(s_ret, "ret");
   INTERN(s_awaitable, "awaitable");
   INTERN(s_is_ray, "is_ray");
+  INTERN(s_prio, "prio");
   INTERN(s_Future, "Future");
   INTERN(s_createFuture, "createFuture");
   INTERN(s_name, "__name__");
