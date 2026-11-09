@@ -3187,6 +3187,10 @@ NB_MODULE(_ckdyn, m) {
   m.def("start", &mod_start, nb::arg("argv"));
   m.def("register_class", &mod_register_class, nb::arg("cls"), nb::arg("kind"), nb::arg("ndims"), nb::arg("entries"));
   m.def("set_proxy_class", &mod_set_proxy_class);
+  m.def("ep_flags", [](int ep) {   // the CKDYN_EP_* flags an entry was registered with
+    if (ep < 0 || (size_t)ep >= g_methods.size() || !g_methods[ep].valid) throw CkDynError("ep_flags: unknown ep " + std::to_string(ep));
+    return g_methods[ep].flags;
+  });
   m.def("api_version", []() { return CkDynApiVersion(); });
   m.def("refnum_bytes", []() { return CkDynRefnumBytes(); });
   m.def("has_device_support", []() { return CkDynHasDeviceSupport() != 0; });

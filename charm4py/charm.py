@@ -547,6 +547,8 @@ class Charm(object):
             flags = 0
             if hasattr(func, '_ck_coro'):
                 flags |= CKDYN_EP_THREADED
+            if func is not None:
+                flags |= entry_method.entry_flags(C, em.name, kind == CKDYN_NODEGROUP)
             if func is not None and hasattr(func, '__code__'):
                 argcount, argnames, defaults = chare.getEntryMethodInfo(C, em.name)
             else:
@@ -623,11 +625,14 @@ class Charm(object):
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         profilingOn = self.options.profiling
         ems = [entry_method.EntryMethod(C, m, profilingOn) for m in charm_type.__baseEntryMethods__()]
-
-        members = dir(C)
+        ems += [entry_method.EntryMethod(C, m, profilingOn) for m in self._entry_method_names(C, charm_type_id)]
         self.classEntryMethods[charm_type_id][C] = ems
+        self.registered[C].add(charm_type)
 
-        for m in members:
+    def _entry_method_names(self, C, charm_type_id):
+        """ the user entry methods of C as charm_type_id, besides __baseEntryMethods__ """
+        names = []
+        for m in dir(C):
             m_obj = getattr(C, m)
             if not callable(m_obj) or inspect.isclass(m_obj):
                 continue
@@ -639,10 +644,15 @@ class Charm(object):
                 continue
             if charm_type_id != ARRAY and m in {'migrate', 'setMigratable'}:
                 continue
-            # print(m)
-            em = entry_method.EntryMethod(C, m, profilingOn)
-            self.classEntryMethods[charm_type_id][C].append(em)
-        self.registered[C].add(charm_type)
+            names.append(m)
+        return names
+
+    def _check_entry_attrs(self, C, collections):
+        """ raise Charm4PyError for an @entry attribute that registration would refuse """
+        for charm_type_id in collections:
+            nodegroup = False
+            for m in ['__init__'] + self._entry_method_names(C, charm_type_id):
+                entry_method.entry_flags(C, m, nodegroup)
 
     # called by user (from Python) to register their Charm++ classes with the Charm4py runtime
     # by default a class is registered to work as Group, Array and singleton Chare
@@ -656,6 +666,7 @@ class Charm(object):
         # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
         # TODO: remove old/unused condition strings from dict?
         C.__charm_wait_conds__ = {}
+        self._check_entry_attrs(C, collections)
         self.registered[C] = set()
         for charm_type_id in collections:
             self.registerAs(C, charm_type_id)

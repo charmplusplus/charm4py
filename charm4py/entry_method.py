@@ -216,12 +216,79 @@ def _thread_finished(obj):
 
 
 def entry(**attrs):
-    """ Entry-method attributes (expedited, inline, immediate, notrace,
-        exclusive). Recorded on the function; Charm4py does not use them yet. """
+    """ Entry-method attributes, given as keyword arguments set to True:
+        expedited, inline, immediate, notrace, exclusive, appwork (the meaning of
+        each is in the user documentation, docs/chares.rst). Recorded on the
+        function and checked when its class is registered (entry_flags). """
     def _entry(func):
         func._ck_entry_attrs = dict(attrs)
         return func
     return _entry
+
+
+# attribute of @entry -> CkDyn entry flag (ckdyn.h CKDYN_EP_*)
+ENTRY_ATTR_FLAGS = {
+    'inline':    getattr(_ckdyn, 'EP_INLINE', 1 << 1),
+    'expedited': getattr(_ckdyn, 'EP_EXPEDITED', 1 << 2),
+    'immediate': getattr(_ckdyn, 'EP_IMMEDIATE', 1 << 3),
+    'notrace':   getattr(_ckdyn, 'EP_NOTRACE', 1 << 5),
+    'appwork':   getattr(_ckdyn, 'EP_APPWORK', 1 << 6),
+    'exclusive': getattr(_ckdyn, 'EP_EXCLUSIVE', 1 << 7),
+}
+NODEGROUP_ONLY_ATTRS = ('immediate', 'exclusive')
+
+
+def entry_attrs(func):
+    """ the @entry attributes of func, looked up along its __wrapped__ chain """
+    while func is not None:
+        attrs = getattr(func, '_ck_entry_attrs', None)
+        if attrs is not None:
+            return attrs
+        func = getattr(func, '__wrapped__', None)
+    return {}
+
+
+def entry_flags(C, name, nodegroup):
+    """ the CKDYN_EP_* flags of the @entry attributes of method name of C, registered
+        for a nodegroup if nodegroup is True. Raises Charm4PyError for an unknown
+        attribute, inline on a coroutine, and immediate or exclusive outside a nodegroup. """
+    from .charm import Charm4PyError
+    func = getattr(C, name, None)
+    attrs = entry_attrs(func)
+    flags = 0
+    for a, v in attrs.items():
+        if a not in ENTRY_ATTR_FLAGS:
+            raise Charm4PyError('@entry on %s.%s: unknown attribute %r (known: %s)' %
+                                (C.__name__, name, a, ', '.join(sorted(ENTRY_ATTR_FLAGS))))
+        if not v:
+            continue
+        if a in NODEGROUP_ONLY_ATTRS and not nodegroup:
+            raise Charm4PyError('@entry(%s=True) on %s.%s: allowed only on nodegroup entry methods '
+                                '(register the class for NodeGroup only)' % (a, C.__name__, name))
+        if a == 'inline' and is_coro(func):
+            raise Charm4PyError('@entry(inline=True) on %s.%s: a coroutine entry method cannot be inline'
+                                % (C.__name__, name))
+        flags |= ENTRY_ATTR_FLAGS[a]
+    return flags
+
+
+def has_nodegroup_only_attrs(C):
+    """ whether a method of C has @entry(immediate=True) or @entry(exclusive=True) """
+    for m in dir(C):
+        f = getattr(C, m, None)
+        attrs = entry_attrs(f) if callable(f) else {}
+        if any(attrs.get(a) for a in NODEGROUP_ONLY_ATTRS):
+            return True
+    return False
+
+
+def is_coro(func):
+    """ whether func is a coroutine entry method (@coro), along its __wrapped__ chain """
+    while func is not None:
+        if getattr(func, '_ck_coro', False):
+            return True
+        func = getattr(func, '__wrapped__', None)
+    return False
 
 
 def coro(func):
@@ -240,3 +307,4 @@ def coro_ext(event_notify=False):
 def charmStarting():
     global charm
     from .charm import charm
+
