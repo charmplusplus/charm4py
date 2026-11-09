@@ -98,6 +98,16 @@ Query processor and host information
 
     Returns the total number of PEs that the application is running on.
 
+* **charm.myNode()**:
+
+    Returns the logical node (process) of the caller, the index of the
+    :ref:`NodeGroup <nodegroup-api-label>` branches on it.
+
+* **charm.numNodes()**:
+
+    Returns the number of logical nodes (processes), which is the number of
+    branches of a NodeGroup.
+
 * **charm.myHost()**:
 
     Returns the host number on which the caller is running.

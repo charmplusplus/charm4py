@@ -25,7 +25,10 @@ handled by Charm++ itself. What this gives a program:
 * sections are Charm++ ``CkMulticast`` sections, and their members may
   migrate;
 * Projections and Summary traces name every Python chare class and entry
-  method (``Class.method``), in a Charm++ built with tracing;
+  method (``module.Class.method``, ``Class.method`` for a class defined in the
+  main script; the group, single-chare and nodegroup registrations of a class
+  add ``/group``, ``/chare`` and ``/nodegroup`` to the class name), in a
+  Charm++ built with tracing;
 * one Charm++ build (Reconverse) for laptops and clusters, shipped inside
   the wheel.
 
@@ -297,6 +300,16 @@ New in 2.0
   :doc:`install`.
 * **Sections**: combined sections are deduplicated unions, members migrate,
   and the section id is usable as a key (see above).
+* **NodeGroup.** ``NodeGroup(C, args=[...])`` creates one branch per process,
+  indexed by ``charm.myNode()`` (new, with ``charm.numNodes()``), with sends,
+  broadcasts, ``ret=True`` gathers, reductions and checkpoint as for groups. See
+  :ref:`nodegroup-api-label`.
+* **Entry-method attributes.** ``@entry(expedited=True)``, ``inline``,
+  ``notrace``, ``appwork``, and for nodegroups ``exclusive`` and ``immediate``
+  set the Charm++ attributes of a method. See :ref:`entry-attributes-label`.
+* **Message priorities.** ``proxy.method(..., prio=p)`` sends with integer
+  priority ``p`` (lower runs first), on point-to-point sends and broadcasts; not
+  on section sends.
 
 Removed or not yet available
 ----------------------------
@@ -309,9 +322,8 @@ Removed or not yet available
   creates them again.
 * ``charm.combine`` of groups, group sections or arrays of different classes
   or dimension counts.
-* ``NodeGroup`` is exported but raises ``NotImplementedError``; the
-  ``@entry`` decorator is accepted and has no effect yet; the ``priority=``
-  and ``expedited=`` keywords of proxy calls are not available yet.
+* A per-send ``expedited=`` keyword (use ``@entry(expedited=True)`` on the
+  method), ``prio=`` on section sends, and priorities on reduction callbacks.
 * Wheels have no tracing: Projections and Summary traces need a source build
   with ``CHARM_EXTRA_BUILD_OPTS=--enable-tracing``, whose ``libcharm`` writes
   trace files on every run.
@@ -349,10 +361,6 @@ Checklist
       on thin has no such message. Which one holds?
    3. Restart with a different process count than the checkpointing run
       (tests use the same count).
-   4. Whether modifying a sent numpy array above zerocopy_threshold before the
-      transfer completes changes what the receiver gets.
-   5. Minimum Python for a source build: pyproject says >=3.8, wheels are
-      3.11-3.13, TASK-examples says 3.11 or newer.
-   6. docs/gpus.rst's closing note says the device paths have not been run on a
+   4. docs/gpus.rst's closing note says the device paths have not been run on a
       GPU; DESIGN 7.1 step 3 says the Delta gate passed 2026-11-08. That note
       (not this file) needs updating.

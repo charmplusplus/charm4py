@@ -329,6 +329,15 @@
         "path": "tests/thin/sweep_defects.py"
     },
     {
+        "path": "tests/thin/entry_attrs.py"
+    },
+    {
+        "path": "tests/thin/nodegroup.py"
+    },
+    {
+        "path": "tests/thin/priorities.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device.py"

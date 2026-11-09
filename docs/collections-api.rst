@@ -50,6 +50,50 @@ Methods
 Group proxies can be **sliced** to obtain section proxies (see :doc:`sections`).
 
 
+.. _nodegroup-api-label:
+
+NodeGroup
+---------
+
+``charm4py.NodeGroup`` is a collection with one chare per logical node, that is, per
+process. Its elements (branches) are indexed by node number, from 0 to
+``charm.numNodes() - 1``; inside a branch, ``self.thisIndex`` is ``charm.myNode()``.
+With one PE per process, which is what Charm4py runs today, node numbers equal PE
+numbers, but a program should use ``charm.myNode()`` and ``charm.numNodes()`` and not
+rely on that. Like group elements, branches are not migratable.
+
+* **NodeGroup(chare_type, args=[])**:
+
+    Creates one instance of *chare_type* (a subclass of ``Chare``) on every node,
+    passing *args* to each constructor, and returns a nodegroup proxy. As for
+    groups, the call is asynchronous (see ``charm.awaitCreation()``).
+
+Every registered chare class can be used for a NodeGroup. A class with an entry
+method marked ``@entry(exclusive=True)`` or ``@entry(immediate=True)`` (see
+:ref:`entry-attributes-label`) is registered for NodeGroup only; using it as a Group,
+Array or single chare, or registering it explicitly for those, raises
+``Charm4PyError``.
+
+Branches contribute to reductions with ``self.contribute``, ``self.reduce`` and
+``self.allreduce`` as group elements do; the reduction is over the branches of the
+nodegroup. ``charm.checkpoint`` saves nodegroups with the other chares, and a
+restarted program finds them restored. The branches on this process are in
+``charm.nodegroups`` (nodegroup id to branch), separate from ``charm.groups``.
+
+NodeGroup Proxy
+~~~~~~~~~~~~~~~
+
+A nodegroup proxy is returned when creating a NodeGroup and is the ``thisProxy`` of
+its branches. Calling a method on it broadcasts to every branch; with ``ret=True``
+the future receives the return values in node order.
+
+* **self[node]**: return a new proxy object which references the branch on node
+  *node*.
+* **self.ckLocalBranch()**: the branch on the caller's node.
+
+Nodegroup proxies cannot be sliced, and nodegroups have no sections.
+
+
 .. _array-api-label:
 
 Array

@@ -108,4 +108,61 @@ the new names.
 
 ## 6. Status
 
-(filled in as the work proceeds)
+Status 2026-11-08: items 1-4 done on charm4py `thin` (85290de entry attributes,
+623fbbe NodeGroup, c7cd56e priorities, 0be173a trace names) and Charm++ `ckdyn-dev`
+89a5fbecf. The three tests pass at 1, 2 and 4 processes (`nodegroup.py` also with
+`+restart` at each count); gate: `gate4a.py 1 2` 100 of 100, `gate4c.sh 2` 10 of 10 (logs/gate-4c/*-step7api.txt).
+
+Different from the spec, or not stated by it:
+
+- **Registration as a nodegroup.** Every class is now registered for NodeGroup as well
+  as Group, Array and single chare, so `NodeGroup(C)` works for any registered class
+  (one more `CHARE` line and entry set per class). A class with an
+  `@entry(exclusive=True)` or `immediate` method is registered for NodeGroup only;
+  registering it explicitly for another kind raises `Charm4PyError`. Without this
+  rule the "error on other kinds" of section 2 would reject every such class, since
+  the default registration includes all kinds. The checks run in `charm.register`,
+  before anything is registered, so the error reaches the program as a Python
+  exception and not as an abort inside the registration hook.
+- **A Charm++ change was needed** (89a5fbecf): `CkDynGetReductionNumber` aborted for
+  a nodegroup branch, which `allreduce` needs. `NodeGroupDyn::getRedNo()` exposes
+  the protected `reductionInfo.redNo`; array maps take the group path. The
+  `tests/charm++/ckdyn` nodegroup constructor checks it. `CkDynMyNode` and
+  `CkDynNumNodes` already existed.
+- **Nodegroup ids are a separate id space** from group ids (`_numNodeGroups` and
+  `_numGroups` in ck.C), so branches live in `charm.nodegroups`, not `charm.groups`,
+  and appspector keys them as `('n', gid)`; in the ObjLoads reply a branch is
+  reported as a group branch with its nodegroup id.
+- **exclusive on a coroutine entry**: CkDyn holds the node lock for the delivery
+  call, which returns at the coroutine's first suspension; a resume runs outside the
+  lock. So each synchronous part runs alone, and a second invocation can start while
+  the first is suspended. `nodegroup.py` checks the second part (the first is trivial
+  with one PE per process); the user docs say so.
+- **Priorities need no Charm++ change.** `CkDynMsgSetQueueing` exists; ckdyn.h has
+  no queueing constants, so the binding uses the value 4 (`CK_QUEUEING_IFIFO`) as
+  `tests/charm++/ckdyn` does. Point-to-point sends and broadcasts to groups,
+  nodegroups and arrays carry `prio`; a section send with `prio` raises
+  `Charm4PyError`; contributions have no `prio` parameter, so reduction callbacks
+  carry no priority. `prio=None` sends without one; a non-int raises `TypeError`, a
+  value outside 32 bits `OverflowError`.
+- **Priorities across processes are not reliable on reconverse.** Within a PE the
+  prio=-1 message runs before 100 queued plain ones. When the 101 messages come from
+  another process while the receiver is busy, the prio=-1 message ran at positions
+  48 to 99 of 101 in six runs (24 with `+old-scheduler`): the communication backend
+  hands received messages to the scheduler in batches, one per progress call, and
+  the priority queue runs between batches, so it never holds all of them. The test
+  checks delivery and prints the position. Fixing it belongs in reconverse (drain
+  the backend before taking from the priority queue, or bound the drain); not
+  attempted here.
+- **Trace names**: the nodegroup registration appends `/nodegroup`; the main-chare
+  registration keeps the plain name, as arrays do. appspector's "SumDetail sts"
+  reply uses the same class strings. The migration-constructor entry that CkDyn
+  registers carries the registered chare name (`Worker/group`). Verified in
+  `logs/step-7/trace/names` with the trace build and `venv-trace`: the `.sts` file
+  lists `charm4py.pool.Worker/group`, `charm4py.pool.Worker`, `.../chare`,
+  `.../nodegroup`, `Worker`, `Worker/group`, `Worker/chare`, `Worker/nodegroup`,
+  `NX/nodegroup`, entries `Worker.poke`, `charm4py.pool.Worker.runTask`; the log has
+  4 events for `Worker.poke` and none for the `@entry(notrace=True)` method
+  `Worker.quiet`, called as often. `logs/step-7/trace/decode.py` now accepts the new
+  name of `CharmRemote`.
+- `_ckdyn.ep_flags(ep)` was added so that tests can read the registered flags.

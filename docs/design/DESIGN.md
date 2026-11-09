@@ -2395,6 +2395,13 @@ appears in the log. Decision 2026-11-08 (review F12): the coroutine trace and
 callstack brackets move from this list to the step 4a follow-ups (3.12, 3.13).
 Decision 2026-11-08 (review F14): multi-PE processes in this step choose among the
 three options of 8.3, and the GIL-held-while-busy measurement of 8.3 is made here.
+Status 2026-11-08 (SPEC-7-api.md): `NodeGroup`, `@entry` attributes, `prio=` on proxy
+sends and module-qualified Projections names are done on `thin` (85290de, 623fbbe,
+c7cd56e, 0be173a) with one CkDyn change on `ckdyn-dev` (89a5fbecf, the reduction
+number of a nodegroup branch); `tests/thin/entry_attrs.py`, `nodegroup.py` (with
+restart) and `priorities.py` pass at 1, 2 and 4 processes, and the gate (`gate4a.py 1
+2`, 100 of 100; `gate4c.sh 2`, 10 of 10) passes. Open: a priority does not reliably
+order messages that arrive from another process on reconverse (SPEC-7-api.md 6).
 
 **Step 8 (reconverse PR, then charm PR, then charm4py): shrink/expand.** Reconverse
 gains the Converse half that classic charmrun and netlrts provided (`Cmi_isOldProcess`,
