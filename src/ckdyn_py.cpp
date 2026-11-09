@@ -197,9 +197,21 @@ void flush_stdio() {
   }
 }
 
+// A C atexit handler (registered by mod_start), run once in every process when
+// the runtime ends it: ConverseExit calls exit() after its barrier and teardown,
+// so the interpreter is never finalized and Python's own atexit handlers would not
+// run. It runs them here (atexit._run_exitfuncs clears the list, so a later
+// finalization does not run them again) and flushes stdout and stderr. The
+// runtime's communication is already shut down: a handler that sends messages
+// fails.
 void flush_at_exit() {
   if (!Py_IsInitialized()) return;
   PyGILState_STATE s = PyGILState_Ensure();
+  PyObject *ax = PyImport_ImportModule("atexit");
+  PyObject *r = ax ? PyObject_CallMethod(ax, "_run_exitfuncs", nullptr) : nullptr;
+  if (!r) PyErr_Clear();
+  Py_XDECREF(r);
+  Py_XDECREF(ax);
   flush_stdio();
   PyGILState_Release(s);
 }
