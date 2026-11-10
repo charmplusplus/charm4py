@@ -261,6 +261,19 @@ Example
 The example inserts a callback into a CUDA stream and waits on the future for
 the completion of a Numba kernel. More examples are in ``examples/cuda``.
 
+``examples/cuda/gpudirect/jacobi3d`` is a 3-D Jacobi iteration with numba.cuda
+kernels and one block per chare, whose ghost exchange runs in three modes
+(``-m``): through pinned host memory, as device arrays sent into posted receives
+(``post_buffer``), and as ``DevicePersistent`` puts followed by a notification
+message; its README has the commands for one node and for NCSA Delta. Two
+benchmarks measure the same paths between two PEs: ``tests/benchmark/pingpong_gpu.py``
+(one-way latency and bandwidth of a ping-pong, modes ``staged``, ``device``,
+``device-post`` and ``persistent``) and ``tests/benchmark/bandwidth.py`` (a
+window of transfers in flight, modes ``staged``, ``device`` and ``persistent``).
+``tests/cuda/single_array.py`` and ``tests/cuda/multi_array.py`` check one and
+several device arguments per message, with and without posted receives. These
+come from Charm4py 1.x (pull request #208), rewritten for this API.
+
 .. note::
 
     The device paths (device arrays as arguments, ``DeviceBuffer``,
