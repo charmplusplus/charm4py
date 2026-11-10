@@ -4,7 +4,7 @@ otherwise.
 
 Run: python -m charmrun.start +p2 tests/cuda/single_array.py
 
-Element 1 (PE 1) sends element 0 (PE 0) the arguments (1, 2, "hello", a 1 MB numpy
+Element 1 (PE 1) sends element 0 (PE 0) the arguments (1, 2, "hello", a 4 KB numpy
 array of ones, a 1 MB numba device array of fives); element 0 checks them and sends
 the received device array back with (2, 3); element 1 checks it. Each exchange runs:
 - with a chare array and with a group;
@@ -27,6 +27,10 @@ except ImportError:
     cuda = None
 
 N = 1 << 20
+# A host array of zerocopy_threshold bytes or more travels as an NCPY slot, and a CkDyn
+# message cannot carry NCPY and DEVICE slots together (it aborts), so the host array
+# that rides with the device array is small (a BUFFER slot, copied into the message).
+H = 4096
 
 
 def as_host(d):
@@ -50,7 +54,7 @@ class A(Chare):
     def recv(self, a, b, s, h, d, posted, done):
         """ element 0 """
         assert (a, b, s) == (1, 2, 'hello'), (a, b, s)
-        assert np.array_equal(h, np.ones(N, dtype=np.int8)), 'host argument differs'
+        assert np.array_equal(h, np.ones(H, dtype=np.int8)), 'host argument differs'
         if posted:
             assert d is self.posted, 'device argument: got a %s, not the posted array' % type(d).__name__
         else:
@@ -77,7 +81,7 @@ class A(Chare):
             self.post('back', 2)
         d = cuda.to_device(np.full(N, 5, dtype=np.int8))
         done = Future()
-        self.partner.recv(1, 2, 'hello', np.ones(N, dtype=np.int8), d, posted, done)
+        self.partner.recv(1, 2, 'hello', np.ones(H, dtype=np.int8), d, posted, done)
         return done.get()
 
     @coro
@@ -85,12 +89,12 @@ class A(Chare):
         """ both elements: one message each way over a channel """
         ch = Channel(self, self.partner)
         if self.idx == 1:
-            ch.send(1, 2, 'hello', np.ones(N, dtype=np.int8), cuda.to_device(np.full(N, 5, dtype=np.int8)))
+            ch.send(1, 2, 'hello', np.ones(H, dtype=np.int8), cuda.to_device(np.full(N, 5, dtype=np.int8)))
             d = ch.recv()
             assert isinstance(d, _ckdyn.DeviceBuffer), type(d)
             return bool((as_host(d) == 5).all())
         a, b, s, h, d = ch.recv()
-        assert (a, b, s) == (1, 2, 'hello') and np.array_equal(h, np.ones(N, dtype=np.int8))
+        assert (a, b, s) == (1, 2, 'hello') and np.array_equal(h, np.ones(H, dtype=np.int8))
         assert isinstance(d, _ckdyn.DeviceBuffer), type(d)
         assert (as_host(d) == 5).all(), 'channel: device argument differs'
         ch.send(d)   # a DeviceBuffer is itself a device array: sent device to device

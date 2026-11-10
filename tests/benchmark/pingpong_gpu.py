@@ -24,6 +24,7 @@ Run: python -m charmrun.start +p2 pingpong_gpu.py -m device
 """
 from charm4py import charm, Chare, Array, Future, coro
 from argparse import ArgumentParser
+import numpy as np
 import time
 
 MODES = ('staged', 'device', 'device-post', 'persistent')
@@ -32,14 +33,16 @@ WARMUP_ITERS = 10
 
 class Ping(Chare):
 
-    def setup(self, mode, nbytes):
+    def setup(self, mode, nbytes, niter):
         import cupy
         import cupyx
         self.cp = cupy
         self.mode = mode
         self.me = self.thisIndex[0]
         self.partner = self.thisProxy[1 - self.me]
-        self.d_send = cupy.full(nbytes, self.me + 1, dtype=cupy.int8)
+        # no cupy kernels (fill, compare): a compiled cupy module unloaded at interpreter
+        # exit, after Charm++ has shut CUDA down, crashed the process on Delta
+        self.d_send = cupy.asarray(np.full(nbytes, self.me + 1, dtype=np.int8))
         self.d_recv = cupy.zeros(nbytes, dtype=cupy.int8)
         if mode == 'staged':
             self.h_send = cupyx.empty_pinned(nbytes, dtype=cupy.int8)
@@ -47,6 +50,7 @@ class Ping(Chare):
         self.got = 0
         self.wait_fut = None
         self.last = None
+        self.expect = niter + WARMUP_ITERS   # messages this element will receive
         if mode == 'device-post':
             self.post_buffer(self.recv, 0, self.d_recv)
         if mode == 'persistent':
@@ -81,7 +85,9 @@ class Ping(Chare):
             self.d_recv.set(x)          # host to device
         elif self.mode == 'device-post':
             assert x is self.d_recv
-            self.post_buffer(self.recv, 0, self.d_recv)
+            self.expect -= 1
+            if self.expect > 0:   # no post is left behind for the next size's setup
+                self.post_buffer(self.recv, 0, self.d_recv)
         self.last = x
         self.notify()
 
@@ -111,12 +117,8 @@ class Ping(Chare):
 
     def check(self):
         """ the last data received is the partner's pattern """
-        cp = self.cp
-        if self.mode == 'device':
-            got = cp.asarray(self.last)
-        else:
-            got = self.d_recv
-        return bool(cp.all(got == 2 - self.me))
+        got = self.cp.asnumpy(self.cp.asarray(self.last) if self.mode == 'device' else self.d_recv)
+        return bool((got == 2 - self.me).all())
 
     def finish(self):
         if self.mode == 'persistent':
@@ -177,7 +179,7 @@ def main(argv):
     ok = True
     for nbytes in sizes:
         niter = args.low_iter if nbytes <= args.threshold else args.high_iter
-        h = [pings[i].setup(args.mode, nbytes, ret=True) for i in range(2)]
+        h = [pings[i].setup(args.mode, nbytes, niter, ret=True) for i in range(2)]
         h = [f.get() for f in h]
         if nbytes == sizes[0]:
             where = [pings[i].where(ret=True).get() for i in range(2)]

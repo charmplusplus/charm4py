@@ -24,6 +24,7 @@ Run: python -m charmrun.start +p2 bandwidth.py -m device
 """
 from charm4py import charm, Chare, Array, Future, coro
 from argparse import ArgumentParser
+import numpy as np
 import time
 
 MODES = ('staged', 'device', 'persistent')
@@ -42,7 +43,8 @@ class Block(Chare):
         self.partner = self.thisProxy[1 - self.me]
         nbuf = window if mode == 'persistent' or (mode == 'staged' and self.me == 0) else 1
         if self.me == 0:
-            self.d = [cupy.full(nbytes, 1, dtype=cupy.int8) for _ in range(nbuf)]
+            # no cupy kernels (fill, compare): see pingpong_gpu.py
+            self.d = [cupy.asarray(np.ones(nbytes, dtype=np.int8)) for _ in range(nbuf)]
         else:
             self.d = [cupy.zeros(nbytes, dtype=cupy.int8) for _ in range(nbuf)]
         if mode == 'staged' and self.me == 0:
@@ -113,8 +115,8 @@ class Block(Chare):
     def check(self):
         cp = self.cp
         if self.mode == 'device':
-            return bool(cp.all(cp.asarray(self.last) == 1))
-        return all(bool(cp.all(a == 1)) for a in self.d)
+            return bool((cp.asnumpy(cp.asarray(self.last)) == 1).all())
+        return all(bool((cp.asnumpy(a) == 1).all()) for a in self.d)
 
     def finish(self):
         if self.mode == 'persistent':
