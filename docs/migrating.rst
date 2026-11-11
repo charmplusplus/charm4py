@@ -321,7 +321,11 @@ Removed or not yet available
 * Classic Converse builds (``netlrts`` and the others), ``charmrun``'s
   ``++ppn`` and ``++nodelist``.
 * Sections are not part of a checkpoint: after ``+restart`` the program
-  creates them again.
+  creates them again. A section id from before the restart raises an error
+  when used (the runtime detects it). A constrained group
+  (``Group(C, onPEs=...)``) is built on a section, so its ``thisProxy`` does
+  not survive a restart either: a program that checkpoints constrained
+  groups must recreate them after ``+restart``.
 * ``charm.combine`` of groups, group sections or arrays of different classes
   or dimension counts.
 * A per-send ``expedited=`` keyword (use ``@entry(expedited=True)`` on the
