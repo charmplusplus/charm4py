@@ -1509,6 +1509,10 @@ class CharmRemote(Chare):
         charm.registerInCharm(chare_type)
 
     def registerNewChareTypes(self, classes):
+        if charm.options.remote_exec is not True:
+            # CkDyn allows registration after start-up only with remote_exec
+            # (CkDynAllowLateRegistration); it aborts otherwise
+            raise Charm4PyError('Registering classes after start needs charm.options.remote_exec = True')
         for chare_type in classes:
             charm.register(chare_type)
             charm.registerInCharm(chare_type)
