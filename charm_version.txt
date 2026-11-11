@@ -9,4 +9,4 @@
 # Charm++ commit records.
 repository https://github.com/charmplusplus/charm.git
 branch ckdyn-dev
-commit ce2932c9514310ca4e3c64d818970fc989a8429d
+commit 8a51f278e30b83f25cf2bc71db22122b0752639c
