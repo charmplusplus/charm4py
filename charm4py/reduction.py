@@ -66,10 +66,17 @@ def _pairwiseOp(op, data):
     return result
 
 
+def _np_dtype(contribs):
+    # the element type of numpy contributions, so that add.reduce and
+    # multiply.reduce do not widen small integers (the Charm++ reducers keep it)
+    c0 = contribs[0] if len(contribs) > 0 else None
+    return c0.dtype if isinstance(c0, np.ndarray) and not c0.dtype.hasobject else None
+
+
 # python versions of built-in reducers
 def _sum(contribs):
     if _useNumpyForReduction(contribs):
-        return np.add.reduce(contribs)
+        return np.add.reduce(contribs, dtype=_np_dtype(contribs))
 
     try:
         return sum(contribs)
@@ -79,7 +86,7 @@ def _sum(contribs):
 
 def _product(contribs):
     if _useNumpyForReduction(contribs):
-        return np.multiply.reduce(contribs)
+        return np.multiply.reduce(contribs, dtype=_np_dtype(contribs))
 
     try:
         return _elementwiseOp(op.mul, contribs)
@@ -321,6 +328,11 @@ class ReductionManager(object):
                             data = self._to_buffer(data, elem)
                     except:
                         pyReducer = py_red_func
+            if rtype is None and pyReducer is None:
+                # no Charm++ reducer for this element kind (for example int8 where
+                # plain char is unsigned, aarch64 and POWER Linux: CkDyn labels the
+                # *_char reducers U8 there): the Python reducer combines them
+                pyReducer = py_red_func
             if pyReducer is not None:
                 # A built-in reducer on data with no Charm++ type (a torch tensor, an
                 # object with __array__, a list of mixed types): the Python reducer
@@ -335,7 +347,8 @@ class ReductionManager(object):
                 except Exception:
                     conv = data
                 if (isinstance(conv, np.ndarray) and not conv.dtype.hasobject
-                        and conv.dtype.name in self.numpy_type_map):
+                        and conv.dtype.name in self.numpy_type_map
+                        and self.red_table[op][self.numpy_type_map[conv.dtype.name]] is not None):
                     rtype = self.red_table[op][self.numpy_type_map[conv.dtype.name]]
                     data = np.ascontiguousarray(conv)
                     pyReducer = None
