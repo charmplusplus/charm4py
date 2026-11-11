@@ -205,6 +205,9 @@ class Chare(object):
         charm.threadMgr.depositCollectiveFuture(fid, result, self)
 
     def __getRedNo__(self):
+        if isinstance(self, ArrayMap):
+            # CkDynGetReductionNumber aborts on an array map: it has no reduction number
+            raise Charm4PyError('an ArrayMap has no reduction number (allreduce is not available)')
         return _ckdyn.reduction_number(self)
 
     def _sectionVote_(self, numsections, section_func, slicing, elems, f, secproxy):  # entry method

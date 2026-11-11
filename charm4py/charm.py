@@ -570,6 +570,9 @@ class Charm(object):
             # restored from a checkpoint: its coroutines were not restored
             obj._numthreads = 0
             obj._nsuspended = 0
+            # sections are not checkpointed: ids from before the restart are
+            # stale (CkDyn aborts on their use), so membership starts empty
+            obj.__dict__.pop('_sections', None)
             if isinstance(obj, CharmRemote):
                 self.thisProxy = obj.thisProxy
         kind = target.kind
@@ -1085,6 +1088,9 @@ class Charm(object):
             Futures and suspended coroutines from before a restart do not
             exist in the restarted run.
         """
+        if resume is not None and getattr(getattr(resume, '__self__', None), 'issec', False):
+            # CkDynCheckpoint rejects a SECTION callback as its done callback
+            raise Charm4PyError('charm.checkpoint: resume cannot be an entry of a section proxy')
         if resume is None:
             f = self.threadMgr.createFuture()  # raises NotThreadedError outside a coroutine
             _ckdyn.checkpoint(dirname, f)
