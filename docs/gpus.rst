@@ -66,6 +66,13 @@ The same rule applies to host arrays: a numpy array of at least
 call is transferred by Charm++ from the sender's memory instead of being copied
 into the message, and the received array is a view of the data in the message.
 
+One message cannot carry both kinds of zero-copy argument: a host array sent
+by zero-copy (``zerocopy_threshold`` bytes or more) and a device array in the
+same call raise ``TypeError``, because Charm++ (CkDyn) refuses such a message.
+Send them in two calls, or pass one of them by copy: for the host array, lower
+its size below the threshold or raise ``charm.options.zerocopy_threshold``; for
+either one, pass ``pickle.dumps(x)`` and unpickle it in the receiver.
+
 Receiving into a posted array: ``Chare.post_buffer``
 -----------------------------------------------------
 

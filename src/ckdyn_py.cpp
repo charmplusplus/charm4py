@@ -967,7 +967,17 @@ struct Packer {
   bool zc_ok = false;
   bool device_dest_known = true;   // false: a singleton chare whose PE is not known yet
   long long zc_thr = -1;
+  // CkDyn aborts on a message with both NCPY and DEVICE slots; the Packer raises
+  // TypeError instead
+  bool has_ncpy = false, has_device = false;
   explicit Packer(CkDynMsgBuilder *b_) : b(b_) {}
+
+  bool zc_mix_error() {
+    PyErr_SetString(PyExc_TypeError,
+                    "one message cannot carry both a host array sent by zero-copy (zerocopy_threshold bytes or more) "
+                    "and a device array: send one of them in another message, or pickle it");
+    return false;
+  }
   ~Packer() { Py_XDECREF(pickled); keep.release(); }
 
   long long threshold() {
@@ -986,11 +996,13 @@ struct Packer {
       PyErr_SetString(PyExc_TypeError, "a device array cannot be sent to a chare whose PE is not known yet");
       return false;
     }
+    if (has_ncpy) return zc_mix_error();
     int64_t sh[CKDYN_MAX_BUF_DIMS];
     CkDynDevDesc d;
     if (!cai_desc(o, cai, d, sh)) return false;
     if (d.len > 0xffffffffull) { PyErr_SetString(PyExc_ValueError, "device array argument of 4 GB or more"); return false; }
     CkDynMsgAddDevice(b, &d, obj_done, Py_NewRef(o));   // the reference goes to obj_done
+    has_device = true;
     tls.zc_sent++;
     return true;
   }
@@ -1036,6 +1048,8 @@ struct Packer {
     d.strides = nullptr;
     PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
     if (zc_ok && ndim > 0 && (long long)nbytes >= threshold()) {
+      if (has_device) { Py_DECREF(src); return zc_mix_error(); }
+      has_ncpy = true;
       // The runtime reads the sender's array after the send returns, so a write
       // to it before the transfer is done would change what the receiver gets.
       // An array that is writeable is made read-only until the done function of

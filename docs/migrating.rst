@@ -273,7 +273,9 @@ New in 2.0
   default 1 MB): a contiguous numpy array of at least this size in a
   point-to-point send goes through Charm++ zero-copy. Broadcasts, section
   multicasts, reduction contributions and pool or Ray task arguments are
-  copied into the message whatever their size.
+  copied into the message whatever their size. A point-to-point call cannot
+  pass both a zero-copy host array and a device array (``TypeError``; see
+  :doc:`gpus`): send them in two calls or pass one of them by copy.
   ``charm.options.copy_received_arrays`` (default ``False``): see above.
 
   The receiver reads a zero-copy array from the sender's memory after the
