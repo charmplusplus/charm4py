@@ -346,6 +346,9 @@
         "path": "tests/thin/posted_receive.py"
     },
     {
+        "path": "tests/thin/section_reduce.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device_persistent.py"
