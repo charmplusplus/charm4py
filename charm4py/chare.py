@@ -729,7 +729,11 @@ def array_ckInsert(proxy, index, args=[], onPE=-1, useAtSync=False, single=False
             if is_ray:
                 flags |= CKDYN_MSG_RAY
             proxy.creation_future = future
-    _ckdyn.array_insert(proxy.aid, index, onPE, tuple(args), flags, future, bool(useAtSync))
+    # pass the chare class index: the binding knows an array's class only in the
+    # process that created it (_chare_idx comes from the proxy class, registered
+    # with set_proxy_class in every process)
+    _ckdyn.array_insert(proxy.aid, index, onPE, tuple(args), flags, future, bool(useAtSync),
+                        proxy._chare_idx)
 
 def array_proxy_doneInserting(proxy):
     _ckdyn.array_done_inserting(proxy.aid)
