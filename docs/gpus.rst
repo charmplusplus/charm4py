@@ -66,6 +66,13 @@ The same rule applies to host arrays: a numpy array of at least
 call is transferred by Charm++ from the sender's memory instead of being copied
 into the message, and the received array is a view of the data in the message.
 
+One message cannot carry both kinds of zero-copy argument: a host array sent
+by zero-copy (``zerocopy_threshold`` bytes or more) and a device array in the
+same call raise ``TypeError``, because Charm++ (CkDyn) refuses such a message.
+Send them in two calls, or pass one of them by copy: for the host array, lower
+its size below the threshold or raise ``charm.options.zerocopy_threshold``; for
+either one, pass ``pickle.dumps(x)`` and unpickle it in the receiver.
+
 Receiving into a posted array: ``Chare.post_buffer``
 -----------------------------------------------------
 
@@ -260,6 +267,19 @@ Example
 
 The example inserts a callback into a CUDA stream and waits on the future for
 the completion of a Numba kernel. More examples are in ``examples/cuda``.
+
+``examples/cuda/gpudirect/jacobi3d`` is a 3-D Jacobi iteration with numba.cuda
+kernels and one block per chare, whose ghost exchange runs in three modes
+(``-m``): through pinned host memory, as device arrays sent into posted receives
+(``post_buffer``), and as ``DevicePersistent`` puts followed by a notification
+message; its README has the commands for one node and for NCSA Delta. Two
+benchmarks measure the same paths between two PEs: ``tests/benchmark/pingpong_gpu.py``
+(one-way latency and bandwidth of a ping-pong, modes ``staged``, ``device``,
+``device-post`` and ``persistent``) and ``tests/benchmark/bandwidth.py`` (a
+window of transfers in flight, modes ``staged``, ``device`` and ``persistent``).
+``tests/cuda/single_array.py`` and ``tests/cuda/multi_array.py`` check one and
+several device arguments per message, with and without posted receives. These
+come from Charm4py 1.x (pull request #208), rewritten for this API.
 
 .. note::
 

@@ -93,7 +93,8 @@ std::unordered_map<PyTypeObject *, int> g_proxy_type_idx;
 std::unordered_map<int, int> g_array_class;         // aid -> chare index (arrays created in this process)
 
 // Sources of BUFFER slots: CkDynMsgAddBuffer records the pointer and copies the
-// bytes only at CkDynMsgFinish, so each source stays alive until then.
+// bytes only at CkDynMsgFinish, so each source stays alive until then (the
+// reduce hook's result builder copies at CkDynMsgAddBuffer instead).
 struct KeepAlive {
   std::vector<PyObject *> objs;     // strong
   std::vector<Py_buffer *> views;   // held views (heap: a Py_buffer is not copied)
@@ -105,11 +106,6 @@ struct KeepAlive {
     objs.clear();
     for (void *m : mem) free(m);
     mem.clear();
-  }
-  void take(KeepAlive &o) {
-    objs.insert(objs.end(), o.objs.begin(), o.objs.end()); o.objs.clear();
-    views.insert(views.end(), o.views.begin(), o.views.end()); o.views.clear();
-    mem.insert(mem.end(), o.mem.begin(), o.mem.end()); o.mem.clear();
   }
 };
 
@@ -123,7 +119,6 @@ struct PeState {
   int last_ep = -1;
   std::unordered_map<void *, PyObject *> packed;    // handle -> bytes (pack_size .. pack)
   PyObject *ro_packed = nullptr;
-  KeepAlive reduce_keep;   // buffer sources of the last reduce hook's result (finished by CkDyn after the hook)
   // One record per worker greenlet that runs a task (key: the greenlet; no
   // reference held): the chare's target and the entry index the task runs, for
   // CkDynCoroResume/CkDynCoroSuspend around every switch into the worker. The
@@ -972,7 +967,17 @@ struct Packer {
   bool zc_ok = false;
   bool device_dest_known = true;   // false: a singleton chare whose PE is not known yet
   long long zc_thr = -1;
+  // CkDyn aborts on a message with both NCPY and DEVICE slots; the Packer raises
+  // TypeError instead
+  bool has_ncpy = false, has_device = false;
   explicit Packer(CkDynMsgBuilder *b_) : b(b_) {}
+
+  bool zc_mix_error() {
+    PyErr_SetString(PyExc_TypeError,
+                    "one message cannot carry both a host array sent by zero-copy (zerocopy_threshold bytes or more) "
+                    "and a device array: send one of them in another message, or pickle it");
+    return false;
+  }
   ~Packer() { Py_XDECREF(pickled); keep.release(); }
 
   long long threshold() {
@@ -991,11 +996,13 @@ struct Packer {
       PyErr_SetString(PyExc_TypeError, "a device array cannot be sent to a chare whose PE is not known yet");
       return false;
     }
+    if (has_ncpy) return zc_mix_error();
     int64_t sh[CKDYN_MAX_BUF_DIMS];
     CkDynDevDesc d;
     if (!cai_desc(o, cai, d, sh)) return false;
     if (d.len > 0xffffffffull) { PyErr_SetString(PyExc_ValueError, "device array argument of 4 GB or more"); return false; }
     CkDynMsgAddDevice(b, &d, obj_done, Py_NewRef(o));   // the reference goes to obj_done
+    has_device = true;
     tls.zc_sent++;
     return true;
   }
@@ -1041,6 +1048,8 @@ struct Packer {
     d.strides = nullptr;
     PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
     if (zc_ok && ndim > 0 && (long long)nbytes >= threshold()) {
+      if (has_device) { Py_DECREF(src); return zc_mix_error(); }
+      has_ncpy = true;
       // The runtime reads the sender's array after the send returns, so a write
       // to it before the transfer is done would change what the receiver gets.
       // An array that is writeable is made read-only until the done function of
@@ -1970,12 +1979,11 @@ void h_reduce(void *, uint32_t rid, const CkDynMsgView **contribs, int n, CkDynM
     PyObject *value = ro ? call(c_reduce_foreign, {ro, vals}) : nullptr;
     Py_XDECREF(ro); Py_DECREF(vals);
     if (!value) hook_abort("charm._reduce_foreign");
-    tls.reduce_keep.release();   // the previous result was finished by CkDyn after its hook returned
     Packer pk(result);
     if (!pk.add(value) || !pk.finish()) hook_abort("reduce (packing the result)");
     Py_DECREF(value);
-    // CkDyn finishes `result` after this hook returns: keep the buffer sources until the next call
-    tls.reduce_keep.take(pk.keep);
+    // The reduce hook's builder copies BUFFER slots at CkDynMsgAddBuffer, so
+    // the Packer releases the sources when it goes out of scope.
     CkDynMsgSetFlags(result, PYMSG_REDRESULT);
   } catch (...) {
     cpp_exc_to_python();

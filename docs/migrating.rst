@@ -273,7 +273,9 @@ New in 2.0
   default 1 MB): a contiguous numpy array of at least this size in a
   point-to-point send goes through Charm++ zero-copy. Broadcasts, section
   multicasts, reduction contributions and pool or Ray task arguments are
-  copied into the message whatever their size.
+  copied into the message whatever their size. A point-to-point call cannot
+  pass both a zero-copy host array and a device array (``TypeError``; see
+  :doc:`gpus`): send them in two calls or pass one of them by copy.
   ``charm.options.copy_received_arrays`` (default ``False``): see above.
 
   The receiver reads a zero-copy array from the sender's memory after the
@@ -307,6 +309,10 @@ New in 2.0
 * **Entry-method attributes.** ``@entry(expedited=True)``, ``inline``,
   ``notrace``, ``appwork``, and for nodegroups ``exclusive`` and ``immediate``
   set the Charm++ attributes of a method. See :ref:`entry-attributes-label`.
+* **cProfile per PE.** ``charm.options.cprofiling = True`` profiles every PE
+  with ``cProfile`` from start-up to exit and writes
+  ``<charm.options.cprofile_filename><pe>.prof`` (default ``profile0.prof``,
+  ...); ``charm.exit()`` is unchanged. See :doc:`profiling`.
 * **Message priorities.** ``proxy.method(..., prio=p)`` sends with integer
   priority ``p`` (lower runs first), on point-to-point sends and broadcasts; not
   on section sends.
@@ -323,7 +329,11 @@ Removed or not yet available
 * Classic Converse builds (``netlrts`` and the others), ``charmrun``'s
   ``++ppn`` and ``++nodelist``.
 * Sections are not part of a checkpoint: after ``+restart`` the program
-  creates them again.
+  creates them again. A section id from before the restart raises an error
+  when used (the runtime detects it). A constrained group
+  (``Group(C, onPEs=...)``) is built on a section, so its ``thisProxy`` does
+  not survive a restart either: a program that checkpoints constrained
+  groups must recreate them after ``+restart``.
 * ``charm.combine`` of groups, group sections or arrays of different classes
   or dimension counts.
 * A per-send ``expedited=`` keyword (use ``@entry(expedited=True)`` on the

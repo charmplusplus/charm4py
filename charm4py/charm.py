@@ -203,6 +203,8 @@ class Charm(object):
 
         self.options = Options()
         self.options.profiling = False
+        self.options.cprofiling = False          # per-PE cProfile, dumped at exit
+        self.options.cprofile_filename = 'profile'   # dump to <this><pe>.prof
         self.options.pickle_protocol = 5
         self.options.local_msg_optim = False     # accepted and ignored
         self.options.local_msg_buf_size = 50     # accepted and ignored
@@ -570,6 +572,9 @@ class Charm(object):
             # restored from a checkpoint: its coroutines were not restored
             obj._numthreads = 0
             obj._nsuspended = 0
+            # sections are not checkpointed: ids from before the restart are
+            # stale (CkDyn aborts on their use), so membership starts empty
+            obj.__dict__.pop('_sections', None)
             if isinstance(obj, CharmRemote):
                 self.thisProxy = obj.thisProxy
         kind = target.kind
@@ -755,6 +760,25 @@ class Charm(object):
 
         for C in self.register_order:
             self.registerInCharm(C)
+
+        if self.options.cprofiling:
+            self._start_cprofile()
+
+    def _start_cprofile(self):
+        """ charm.options.cprofiling: profile this PE with cProfile from here (before
+            any constructor or entry method runs) to process exit, where the atexit
+            handler that thin runs on every process (flush_at_exit) dumps the
+            statistics to <charm.options.cprofile_filename><pe>.prof """
+        import cProfile
+        import atexit
+        prof = cProfile.Profile()
+        filename = str(self.options.cprofile_filename) + str(self._myPe) + '.prof'
+
+        def dump():
+            prof.disable()
+            prof.dump_stats(filename)
+        atexit.register(dump)
+        prof.enable()
 
     def registerAs(self, C, charm_type_id):
         if charm_type_id == MAINCHARE:
@@ -1085,6 +1109,9 @@ class Charm(object):
             Futures and suspended coroutines from before a restart do not
             exist in the restarted run.
         """
+        if resume is not None and getattr(getattr(resume, '__self__', None), 'issec', False):
+            # CkDynCheckpoint rejects a SECTION callback as its done callback
+            raise Charm4PyError('charm.checkpoint: resume cannot be an entry of a section proxy')
         if resume is None:
             f = self.threadMgr.createFuture()  # raises NotThreadedError outside a coroutine
             _ckdyn.checkpoint(dirname, f)
@@ -1503,6 +1530,10 @@ class CharmRemote(Chare):
         charm.registerInCharm(chare_type)
 
     def registerNewChareTypes(self, classes):
+        if charm.options.remote_exec is not True:
+            # CkDyn allows registration after start-up only with remote_exec
+            # (CkDynAllowLateRegistration); it aborts otherwise
+            raise Charm4PyError('Registering classes after start needs charm.options.remote_exec = True')
         for chare_type in classes:
             charm.register(chare_type)
             charm.registerInCharm(chare_type)
