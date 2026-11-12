@@ -811,7 +811,7 @@ class Charm(object):
                 continue  # filter out non-user methods
             if m in chare.method_restrictions['non_entry_method']:
                 continue
-            if charm_type_id != ARRAY and m in {'migrate', 'setMigratable'}:
+            if charm_type_id != ARRAY and m in {'migrate', 'setMigratable', 'ckDestroy'}:
                 continue
             names.append(m)
         return names

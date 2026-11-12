@@ -350,6 +350,10 @@
         "path": "tests/thin/posted_receive.py"
     },
     {
+        "force_min_processes": 2,
+        "path": "tests/thin/ckdestroy.py"
+    },
+    {
         "path": "tests/thin/section_reduce.py"
     },
     {
