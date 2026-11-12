@@ -122,4 +122,29 @@ receive overhead due to chares migrating into this PE (method ``migrated``).
 
 
 
+Python function profiles with cProfile
+--------------------------------------
+
+Set ``charm.options.cprofiling`` to ``True`` before ``charm.start`` to run every
+PE under Python's ``cProfile``. Each PE starts its profiler before any constructor
+or entry method of the program runs, and at process exit (after ``charm.exit()``)
+writes the statistics to ``<charm.options.cprofile_filename><pe>.prof``; the
+default file name is ``"profile"``, so the files are ``profile0.prof``,
+``profile1.prof``, ... in the current directory. ``charm.exit()`` keeps its
+signature and can be called from any entry method. Read a profile with
+``pstats``:
+
+.. code-block:: python
+
+    import pstats
+    pstats.Stats('profile0.prof').sort_stats('cumulative').print_stats(20)
+
+or open it with a viewer such as snakeviz. The profile covers Python functions
+only: time in Charm++ and in the compiled binding shows up as the Python calls
+that enter it (for example a proxy method call). Coroutines run as greenlets, and
+cProfile attributes the time of a suspended coroutine to whatever runs while it
+waits, so per-function times of coroutine entry methods include other work. A
+process that aborts (``charm.abort``, an unhandled error) writes no profile.
+``tests/thin/cprofile.py`` is an example.
+
 .. _Projections: https://charm.readthedocs.io/en/latest/projections/manual.html

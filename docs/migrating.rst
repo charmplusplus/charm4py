@@ -309,6 +309,10 @@ New in 2.0
 * **Entry-method attributes.** ``@entry(expedited=True)``, ``inline``,
   ``notrace``, ``appwork``, and for nodegroups ``exclusive`` and ``immediate``
   set the Charm++ attributes of a method. See :ref:`entry-attributes-label`.
+* **cProfile per PE.** ``charm.options.cprofiling = True`` profiles every PE
+  with ``cProfile`` from start-up to exit and writes
+  ``<charm.options.cprofile_filename><pe>.prof`` (default ``profile0.prof``,
+  ...); ``charm.exit()`` is unchanged. See :doc:`profiling`.
 * **Message priorities.** ``proxy.method(..., prio=p)`` sends with integer
   priority ``p`` (lower runs first), on point-to-point sends and broadcasts; not
   on section sends.
