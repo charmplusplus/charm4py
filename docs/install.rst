@@ -183,7 +183,7 @@ then this section is a placeholder.
 Known issues
 ------------
 
-* The pin in ``charm_version.txt`` is a commit of Charm++'s ``ckdyn-dev``
-  branch; it moves to a ``recharm`` commit when CkDyn is merged there.
+* The pin in ``charm_version.txt`` is a commit of Charm++'s ``recharm``
+  branch; it moves to a 9.0 release tag when one exists.
 * No free-threaded (``3.13t``) wheels yet, and no multi-PE processes (step 7
   of the plan).
