@@ -146,13 +146,14 @@ void register_exit_handler();
 
 // Before the first Python code on a PE: make the device HAPI assigned to this PE
 // the thread's current device, so CuPy, PyTorch and Numba allocate on it by default.
-// Every hook that runs after the runtime's initialization calls this first, so it
-// is also where flush_at_exit is registered (see the comment there).
+// Every hook that runs after the runtime's initialization calls this first, so the
+// first call on each PE is also where flush_at_exit is registered (see the comment
+// there).
 inline void use_device() {
-  register_exit_handler();
   if (tls.device_used) return;
   tls.device_used = true;
   if (CkDynHasDeviceSupport()) CkDynHapiUseMyDevice();
+  register_exit_handler();
 }
 
 PyObject *g_charm = nullptr, *g_options = nullptr;
@@ -226,14 +227,20 @@ void flush_stdio() {
 // Ordering: libc runs atexit handlers in reverse order of registration, and the
 // CUDA runtime registers its own teardown at exit when it initializes, which
 // happens inside CkDynStart (_initCharm calls hapiInit after the register_classes
-// hook). This handler must therefore be registered AFTER CUDA's, so that it runs
-// BEFORE CUDA's teardown: Python handlers (CuPy's among them) that free device
-// memory or unload compiled modules after the teardown fail with CUDADriverError.
-// register_exit_handler registers it once per process from use_device, which the
-// first hook after initialization calls: mainchare on PE 0, unpack_readonly on
-// the other PEs (the readonly broadcast always carries data), unpack after a
-// restart. Registering it in mod_start, before CkDynStart, ran it after CUDA's
-// teardown.
+// hook). Python handlers (CuPy's among them) that free device memory or unload
+// compiled modules after that teardown fail with CUDADriverError, so this handler
+// is registered twice per process:
+// - by register_exit_handler, once per process, from the first use_device call,
+//   which the first hook after initialization makes: mainchare on PE 0,
+//   unpack_readonly on the other PEs, unpack after a restart. This registration
+//   comes after CUDA's, so it runs before CUDA's teardown and empties the list.
+// - by mod_start, before CkDynStart, for a process that reaches no hook: when
+//   main calls charm.exit() before PE 0's readonly broadcast arrives on another
+//   process, that process exits without a hook (CkDyn calls unpack_readonly even
+//   with zero bytes; what matters is that the broadcast arrives before the
+//   exit). There this registration runs Python's atexit handlers, after CUDA's
+//   teardown. Where a hook was reached it runs second, finds the list empty, and
+//   only flushes; running this function twice is harmless.
 void flush_at_exit() {
   if (!Py_IsInitialized()) return;
   PyGILState_STATE s = PyGILState_Ensure();
@@ -2744,6 +2751,7 @@ void mod_start(nb::list argv) {
   size_t n = nb::len(argv);
   char **cargv = (char **)calloc(n + 1, sizeof(char *));
   for (size_t i = 0; i < n; i++) cargv[i] = strdup(nb::cast<std::string>(nb::str(argv[i])).c_str());
+  atexit(flush_at_exit);   // for a process that reaches no hook; see flush_at_exit
   g_started = true;
   flush_stdio();
   PyThreadState *ts = PyEval_SaveThread();

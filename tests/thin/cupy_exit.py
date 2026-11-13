@@ -8,9 +8,41 @@ charm.exit() ends in ConverseExit, which calls exit(); the binding's C atexit
 handler then runs Python's atexit handlers, and CuPy's unload the modules it
 compiled. When that handler ran after CUDA's own teardown at exit, every process
 that had compiled a kernel printed "CUDADriverError" from Module.__dealloc__
-("Exception ignored in: 'cupy.cuda.function.Module.__dealloc__'"). Check the
-output of this test for those lines: the exit code alone does not show them.
+("Exception ignored in: 'cupy.cuda.function.Module.__dealloc__'") and still
+exited with status 0.
+
+The test checks this itself: a sys.unraisablehook records every exception that
+Python reports as ignored (Cython __dealloc__ errors go through it), and an atexit
+function registered BEFORE cupy is imported ends the process with os._exit(1) when
+anything was recorded. Python's atexit runs handlers last-registered first, so
+this function runs after CuPy's.
 """
+import atexit
+import os
+import sys
+
+_ignored = []   # text of every exception reported through sys.unraisablehook
+
+
+def _record_unraisable(u):
+    # keep only text: holding u.object or the exception could resurrect objects
+    _ignored.append('%s: %s (%s)' % (getattr(u.exc_type, '__name__', u.exc_type),
+                                     u.exc_value, u.err_msg or 'Exception ignored'))
+    sys.__unraisablehook__(u)   # print it as Python would
+
+
+def _fail_if_ignored():
+    if _ignored:
+        print('FAIL cupy_exit.py: pid %d: %d exception(s) ignored, first: %s'
+              % (os.getpid(), len(_ignored), _ignored[0]), file=sys.stderr)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
+
+
+sys.unraisablehook = _record_unraisable
+atexit.register(_fail_if_ignored)   # before `import cupy`: runs after CuPy's handlers
+
 from charm4py import charm, Chare, Group
 from charm4py import _ckdyn
 
