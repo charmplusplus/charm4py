@@ -272,6 +272,73 @@ take 0.85 ms (19.7 GB/s), 64 MB 4.1 ms (16.4 GB/s). One-node RDMA times vary bet
 nodes (0.82 ms on gpua086 in job 23677400, 1.23-1.25 ms on gpua011 and in job 23677847),
 so the tables compare paths within one job.
 
+**C++ comparison, no binding (2026-11-12, A40, 741e26982)**
+
+Charm++'s own ping-pong benchmarks `benchmarks/charm++/cuda/gpudirect/latency` and
+`latency-persistent`, built inside the job against the charm++-target CUDA reconverse
+build, ran with `-s 1024 -x 67108864 -i 1000 -l 100 -w 10 +pe 2` (1000 timed iterations up
+to 8 KB, 100 above, 10 warm-up). `latency` without `-z` runs a host-staged phase (D2H copy
+and stream sync, a host message, memcpy and H2D copy and sync on the receiver) and then
+the `nocopydevice` zero-copy parameter phase; `latency-persistent` does
+`CkDevicePersistent::put` into the peer's buffer, whose receive callback sends the reply.
+Every number is the mean of (round trip / 2) timed on PE 0, in microseconds; the
+persistent number includes the receive callback of each put. One node: job 23841776 on
+gpub002 (gpuA40x4-interactive, two NVIDIA A40); the modes printed by
+`+gpupersistverbose` are "IPC open ... failed; using RDMA" in `n2` and "CUDA/HIP IPC
+between processes on one host" in `n2vis`. The script is tools/delta/cxx-latency.sbatch.
+
+These numbers were measured in C++ with no Python binding involved; the tables above
+(`bench_zc_delta.py`, `bench_devpersist.py`, median of 20 on A100 nodes) were measured
+through the binding, so they include the Python-side call, future and callback costs and
+are not directly comparable cell by cell.
+
+One node, two processes, one GPU per task (`n2`; both paths on RDMA within the host), us:
+
+| size | host-staged message | zero-copy parameter | persistent put |
+|---|---|---|---|
+| 1 KB | 18.7 | 15.3 | 18.5 |
+| 4 KB | 20.4 | 15.3 | 18.3 |
+| 16 KB | 37.0 | 17.2 | 18.4 |
+| 64 KB | 45.5 | 19.3 | 19.7 |
+| 256 KB | 88.9 | 28.0 | 24.4 |
+| 1 MB | 248 | 62.8 | 42.0 |
+| 4 MB | 882 | 223 | 113 |
+| 16 MB | 7960 | 846 | 488 |
+| 64 MB | 34500 | 3330 | 1910 |
+
+One node, two processes, both GPUs visible (`n2vis`; persistent on CUDA IPC, the
+zero-copy parameter on RDMA, or on HAPI's IPC buffer with `+gpushm`), us:
+
+| size | host-staged message | zero-copy parameter | zero-copy parameter, `+gpushm` | persistent put |
+|---|---|---|---|---|
+| 1 KB | 19.5 | 15.5 | 25.8 | 8.57 |
+| 4 KB | 20.5 | 15.4 | 26.0 | 8.31 |
+| 16 KB | 37.5 | 17.3 | 26.5 | 8.59 |
+| 64 KB | 48.3 | 19.5 | 28.5 | 9.63 |
+| 256 KB | 97.3 | 28.1 | 36.5 | 13.5 |
+| 1 MB | 254 | 62.7 | 68.0 | 30.4 |
+| 4 MB | 891 | 223 | 214 | 98.9 |
+| 16 MB | 7700 | 846 | 766 | 360 |
+| 64 MB | 34400 | 3330 | aborted | 1400 |
+
+The `+gpushm` run aborted at 64 MB: "Not enough memory on device communication buffer
+(33554432 free)"; HAPI's communication buffer defaults to 64 MB, so a 64 MB message does
+not fit. The script now passes `+gpucommbuffer 256` in that shape; that cell has not been
+rerun.
+
+Two nodes, one process and one GPU each (RDMA over Slingshot): pending, job 23846960
+(submitted 2026-11-12, still queued after 90 minutes).
+
+Reading. Below 64 KB the fixed per-message cost dominates every path: the zero-copy
+parameter takes 15-19 us, the persistent put 18-20 us over RDMA (no gain, slightly slower
+up to 64 KB) and 8.3-9.6 us over CUDA IPC (about 1.8 times faster than the zero-copy
+parameter). Over RDMA the persistent put gains from 128 KB on and reaches 1.7 times at
+16-64 MB (488 against 846 us at 16 MB; 35 against 20 GB/s at 64 MB); with IPC it is 2.1-2.7
+times faster than either zero-copy form from 256 KB up (360 against 846 and 766 us at 16 MB;
+48 GB/s at 64 MB). The host-staged message costs only 3-5 us more than the zero-copy
+parameter at 1-4 KB, but from 8 KB on it is 2-10 times slower than the zero-copy parameter
+and 16-25 times slower than the persistent put at 16-64 MB (7700-7960 us at 16 MB).
+
 **Open.** HAPI's `+gpushm` with one GPU per task (above; the coordinator handles the
 issue). The pin in `charm_version.txt` moves at merge (the binding needs
 `CkDynUnpostBuffer` and `CkDynHapiUseMyDevice`). The two-node job was not repeated after
