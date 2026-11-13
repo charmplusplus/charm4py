@@ -14,10 +14,11 @@
 //    (CkDynBufDesc cannot set the slot's reserved field);
 //  - a PROXY slot of a proxy without an element (a broadcast proxy) has
 //    pe_or_node = -1 (group kinds) or u.array.ndims = -1 - ndims (arrays);
-//  - a 0-dimensional numpy array is a BUFFER slot with tag TAG_ND0, so that a
-//    BUFFER slot with ndim 0 and tag 0 in a section message is known to be a
-//    built-in reduction result relayed to a section entry (SPEC-4b 3);
-//    a shaped one (CkDynContributeShaped, issue #321) has ndim 2 or more.
+//  - a 0-dimensional numpy array is a BUFFER slot with tag TAG_ND0, and one of
+//    2 or more dimensions has tag TAG_NDN, so that a BUFFER slot with ndim other
+//    than 1 and tag 0 in a section message is known to be a built-in reduction
+//    result relayed to a section entry (SPEC-4b 3): ndim 0 for a flat result,
+//    2 or more for a shaped one (CkDynContributeShaped, issue #321).
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -58,7 +59,7 @@ enum : uint16_t {
   PYMSG_REDRESULT = 1u << 12,
   PYMSG_SINGLE    = 1u << 13,
 };
-enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4 };
+enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4, TAG_NDN = 5 };
 const int PICKLE_PROTOCOL = 5;
 
 struct CkDynError : std::runtime_error {
@@ -1044,7 +1045,7 @@ struct Packer {
     d.elem = (uint8_t)elem;
     d.ndim = (uint8_t)ndim;
     d.bflags = fortran ? CKDYN_BUF_FORTRAN : 0;
-    d.tag = ndim == 0 ? TAG_ND0 : 0;
+    d.tag = ndim == 0 ? TAG_ND0 : ndim == 1 ? 0 : TAG_NDN;   // tag 0 with ndim != 1 means a relayed result
     d.shape = ndim ? shape : nullptr;
     d.strides = nullptr;
     PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
@@ -1459,8 +1460,8 @@ bool view_args(RecvCtx &ctx, ObjVec &out, PyObject **block) {
   if (v->kind == CKDYN_MSGKIND_MCAST && flags == 0 && v->nslots == 1 && v->slots[0].type == CKDYN_SLOT_BUFFER &&
       v->slots[0].ndim != 1 && v->slots[0].tag == 0 && v->slots[0].bflags == 0) {
     // a built-in reduction result relayed to a section entry (a SECTION callback): converted as a
-    // REDRESULT view is (a user's 0-dimensional array has tag TAG_ND0); a shaped result has 2 or
-    // more dimensions, which redresult_value converts as the argument path would
+    // REDRESULT view is (a user's array of ndim 0 has tag TAG_ND0, of ndim 2 or more TAG_NDN); a
+    // shaped result has 2 or more dimensions, which redresult_value converts as the argument path would
     bool empty;
     PyObject *val = redresult_value(ctx, &empty);
     if (!val) return false;

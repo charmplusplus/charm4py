@@ -158,7 +158,13 @@ The shape travels with the contribution (CkDyn's
 ``CkDynContributeShaped``), so every contributor of one reduction must
 contribute the same shape: contributions of two shapes abort the program
 with ``CkDyn: contributions to one reduction have different shapes, (2, 3)
-and (3, 2)``. A result with two or more dimensions is an array even with one
+and (3, 2)``. For the same reason one reduction cannot mix arrays of two or
+more dimensions with 1-D arrays or scalars under a built-in reducer: 1.x
+summed a ``(2, 3)`` and a ``(6,)`` contribution as flat data, Charm4py 2
+aborts with ``Reduction: contributions to one reduction use different
+reducers (CkDyn::shaped (arrays of ndim >= 2) ... and CkReduction::sum_double
+...)``. Contribute ``a.ravel()`` everywhere to keep the flat result. A result
+with two or more dimensions is an array even with one
 element (a ``(1, 1)`` contribution gives a ``(1, 1)`` result); a scalar or a
 1-D array of one element still gives a Python scalar, as in 1.x.
 

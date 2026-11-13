@@ -10,4 +10,4 @@
 # Charm++ commit records.
 repository https://github.com/charmplusplus/charm.git
 branch ckdyn-redshape
-commit 1d0f09313494eb319118219b572cc23f31909bda
+commit 43a519316a066c02dcaa0848ae85699653e2fc6b

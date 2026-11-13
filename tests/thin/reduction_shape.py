@@ -12,9 +12,15 @@ shape, for a whole-array reduction and for a section reduction alike.
    result delivered to a SECTION callback (a method of the section members).
 4. A (1, 1) array stays an array; a 1-D array of length 1 is a scalar, as
    before.
-5. Contributions of two shapes to one reduction abort the program with a
-   CkDyn message naming both shapes: checked in a child process
-   (``--mixed``), which this test starts with one PE.
+5. A section send whose only argument is a numpy array of 2 or more
+   dimensions, also an empty one ((0, 3), (2, 0, 3)), reaches every member as
+   an array of that shape (a relayed reduction result also has one BUFFER
+   slot; the binding tells the two apart by the slot's tag).
+6. Contributions of two shapes to one reduction abort the program with a
+   CkDyn message naming both shapes, and a reduction that mixes a (2, 3)
+   array with a 1-D one aborts with the Charm++ message on different
+   reducers: each checked in a child process (``--mixed``, ``--mixed-flat``),
+   which this test starts with one PE.
 """
 import os
 import subprocess
@@ -53,9 +59,22 @@ class W(Chare):
         assert np.array_equal(r, expect), r
         self.contribute(1, Reducer.sum, self.f, self.sec)
 
-    def mixed(self, f):
+    def mixed(self, f, flat):
+        if flat:   # a (2, 3) array and the same 6 values as a 1-D array
+            a = np.arange(1, 7, dtype=np.float64)
+            self.contribute(a.reshape(2, 3) if self.thisIndex[0] % 2 == 0 else a, Reducer.sum, f)
+            return
         shape = (2, 3) if self.thisIndex[0] % 2 == 0 else (3, 2)
         self.contribute(np.ones(shape), Reducer.sum, f)
+
+    def set_report(self, f, sec):
+        self.f = f
+        self.sec = sec
+
+    def recv1(self, x):
+        # a section entry with one parameter: reports what it received
+        info = (type(x).__name__, getattr(x, 'shape', None), str(getattr(x, 'dtype', '')))
+        self.contribute(info, Reducer.gather, self.f, self.sec)
 
 
 def reduce(arr, shape, dtype, reducer, sec=None):
@@ -76,27 +95,31 @@ def base(shape, dtype):
     return np.arange(1, int(np.prod(shape)) + 1, dtype=dtype).reshape(shape)
 
 
-def run_mixed():
+def run_mixed(flat):
     """ the child process: two shapes in one reduction, which must abort """
     def main(args):
         arr = Array(W, N)
         f = Future()
-        arr.mixed(f)
+        arr.mixed(f, flat)
         print('MIXED-SHAPE RESULT', f.get())
         charm.exit()
     charm.start(main)
 
 
-def check_mixed():
+def check_mixed(flag):
     env = {k: v for k, v in os.environ.items() if not k.startswith(('LCT_', 'LCI_', 'PMI_', 'PMIX_'))}
-    p = subprocess.run([sys.executable, os.path.abspath(__file__), '--mixed', '+pe', '1'], env=env,
+    p = subprocess.run([sys.executable, os.path.abspath(__file__), flag, '+pe', '1'], env=env,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120)
     out = p.stdout
     assert p.returncode != 0, 'contributions of two shapes did not abort:\n' + out
     assert 'MIXED-SHAPE RESULT' not in out, out
-    assert ('contributions to one reduction have different shapes' in out and '(2, 3)' in out
-            and '(3, 2)' in out), out
-    print('  mixed shapes: the child aborted (exit status %d) with the CkDyn message' % p.returncode)
+    if flag == '--mixed':
+        assert ('contributions to one reduction have different shapes' in out and '(2, 3)' in out
+                and '(3, 2)' in out), out
+    else:
+        assert ('contributions to one reduction use different reducers' in out and 'CkDyn::shaped' in out
+                and 'sum_double' in out), out
+    print('  %s: the child aborted (exit status %d) with the expected message' % (flag, p.returncode))
 
 
 def main(args):
@@ -125,14 +148,25 @@ def main(args):
     assert isinstance(r, float) and r == total, r
     print('  whole array sum (1,): scalar %s ok' % r)
 
-    # 5. mixed shapes abort (one child process; only from the first process)
-    check_mixed()
+    # 5. a section send whose only argument is an array of 2 or more dimensions
+    for x in (np.zeros((0, 3)), np.zeros((2, 0, 3), dtype=np.int32), np.arange(6.0).reshape(2, 3)):
+        f = Future()
+        arr.set_report(f, sec, awaitable=True).get()
+        sec.recv1(x)
+        got = f.get()
+        expect = ('ndarray', x.shape, str(x.dtype))
+        assert got == [expect, expect], (x.shape, got)
+        print('  section send of one %s %s array: both members got it' % (x.shape, x.dtype))
+
+    # 6. mixed shapes abort (child processes; only from the first process)
+    check_mixed('--mixed')
+    check_mixed('--mixed-flat')
     print('reduction_shape: all checks passed')
     charm.exit()
 
 
 if __name__ == '__main__':
-    if '--mixed' in sys.argv:
-        run_mixed()
+    if '--mixed' in sys.argv or '--mixed-flat' in sys.argv:
+        run_mixed('--mixed-flat' in sys.argv)
     else:
         charm.start(main)
