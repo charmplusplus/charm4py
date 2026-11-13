@@ -326,8 +326,20 @@ The `+gpushm` run aborted at 64 MB: "Not enough memory on device communication b
 not fit. The script now passes `+gpucommbuffer 256` in that shape; that cell has not been
 rerun.
 
-Two nodes, one process and one GPU each (RDMA over Slingshot): pending, job 23846960
-(submitted 2026-11-12, still queued after 90 minutes).
+Two nodes, one process and one GPU each (RDMA over Slingshot; job 23846960 on gpub074 and
+gpub082, one A40 each; `+gpupersistverbose`: "put: RDMA on registered device memory"), us:
+
+| size | host-staged message | zero-copy parameter | persistent put |
+|---|---|---|---|
+| 1 KB | 19.3 | 15.7 | 18.3 |
+| 4 KB | 20.4 | 15.7 | 18.2 |
+| 16 KB | 37.8 | 17.9 | 18.5 |
+| 64 KB | 49.4 | 21.5 | 19.7 |
+| 256 KB | 94.6 | 33.4 | 24.4 |
+| 1 MB | 269 | 78.4 | 42.6 |
+| 4 MB | 909 | 278 | 112 |
+| 16 MB | 7820 | 1050 | 393 |
+| 64 MB | 34500 | 4280 | 1400 |
 
 Reading. Below 64 KB the fixed per-message cost dominates every path: the zero-copy
 parameter takes 15-19 us, the persistent put 18-20 us over RDMA (no gain, slightly slower
@@ -338,6 +350,17 @@ times faster than either zero-copy form from 256 KB up (360 against 846 and 766 
 48 GB/s at 64 MB). The host-staged message costs only 3-5 us more than the zero-copy
 parameter at 1-4 KB, but from 8 KB on it is 2-10 times slower than the zero-copy parameter
 and 16-25 times slower than the persistent put at 16-64 MB (7700-7960 us at 16 MB).
+
+Between nodes the persistent put is slower than the zero-copy parameter up to 16 KB (18.2
+against 15.7 us), equal at 32 KB, and faster from 64 KB on: 1.8 times at 1 MB, 2.7 times at
+16 MB and 3.1 times at 64 MB (1400 against 4280 us). The zero-copy parameter is 1.2-1.3
+times slower between nodes than over one-node RDMA from 1 MB up (4280 against 3330 us at
+64 MB), while the persistent put takes the same time or less (1400 against 1910 us at
+64 MB). These persistent times are not yet explained: 64 MB in 1400 us is 48 GB/s, above
+the 25 GB/s of a 200 Gb/s Slingshot port, 16 MB took 0.85 ms through the binding between
+two A100 nodes (table above), and `latency-persistent` does not check the received bytes.
+A run that checks the destination buffer after each put is needed before these
+persistent numbers are used.
 
 **Open.** HAPI's `+gpushm` with one GPU per task (above; the coordinator handles the
 issue). The pin in `charm_version.txt` moves at merge (the binding needs
