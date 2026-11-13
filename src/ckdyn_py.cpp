@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -141,12 +142,18 @@ struct PeState {
 };
 thread_local PeState tls;
 
+void register_exit_handler();
+
 // Before the first Python code on a PE: make the device HAPI assigned to this PE
 // the thread's current device, so CuPy, PyTorch and Numba allocate on it by default.
+// Every hook that runs after the runtime's initialization calls this first, so the
+// first call on each PE is also where flush_at_exit is registered (see the comment
+// there).
 inline void use_device() {
   if (tls.device_used) return;
   tls.device_used = true;
   if (CkDynHasDeviceSupport()) CkDynHapiUseMyDevice();
+  register_exit_handler();
 }
 
 PyObject *g_charm = nullptr, *g_options = nullptr;
@@ -210,13 +217,30 @@ void flush_stdio() {
   }
 }
 
-// A C atexit handler (registered by mod_start), run once in every process when
-// the runtime ends it: ConverseExit calls exit() after its barrier and teardown,
-// so the interpreter is never finalized and Python's own atexit handlers would not
-// run. It runs them here (atexit._run_exitfuncs clears the list, so a later
-// finalization does not run them again) and flushes stdout and stderr. The
-// runtime's communication is already shut down: a handler that sends messages
-// fails.
+// A C atexit handler, run once in every process when the runtime ends it:
+// ConverseExit calls exit() after its barrier and teardown, so the interpreter is
+// never finalized and Python's own atexit handlers would not run. It runs them here
+// (atexit._run_exitfuncs clears the list, so a later finalization does not run them
+// again) and flushes stdout and stderr. The runtime's communication is already shut
+// down: a handler that sends messages fails.
+//
+// Ordering: libc runs atexit handlers in reverse order of registration, and the
+// CUDA runtime registers its own teardown at exit when it initializes, which
+// happens inside CkDynStart (_initCharm calls hapiInit after the register_classes
+// hook). Python handlers (CuPy's among them) that free device memory or unload
+// compiled modules after that teardown fail with CUDADriverError, so this handler
+// is registered twice per process:
+// - by register_exit_handler, once per process, from the first use_device call,
+//   which the first hook after initialization makes: mainchare on PE 0,
+//   unpack_readonly on the other PEs, unpack after a restart. This registration
+//   comes after CUDA's, so it runs before CUDA's teardown and empties the list.
+// - by mod_start, before CkDynStart, for a process that reaches no hook: when
+//   main calls charm.exit() before PE 0's readonly broadcast arrives on another
+//   process, that process exits without a hook (CkDyn calls unpack_readonly even
+//   with zero bytes; what matters is that the broadcast arrives before the
+//   exit). There this registration runs Python's atexit handlers, after CUDA's
+//   teardown. Where a hook was reached it runs second, finds the list empty, and
+//   only flushes; running this function twice is harmless.
 void flush_at_exit() {
   if (!Py_IsInitialized()) return;
   PyGILState_STATE s = PyGILState_Ensure();
@@ -227,6 +251,11 @@ void flush_at_exit() {
   Py_XDECREF(ax);
   flush_stdio();
   PyGILState_Release(s);
+}
+
+void register_exit_handler() {
+  static std::once_flag once;
+  std::call_once(once, [] { atexit(flush_at_exit); });
 }
 
 std::string exception_text() {
@@ -2722,7 +2751,7 @@ void mod_start(nb::list argv) {
   size_t n = nb::len(argv);
   char **cargv = (char **)calloc(n + 1, sizeof(char *));
   for (size_t i = 0; i < n; i++) cargv[i] = strdup(nb::cast<std::string>(nb::str(argv[i])).c_str());
-  atexit(flush_at_exit);
+  atexit(flush_at_exit);   // for a process that reaches no hook; see flush_at_exit
   g_started = true;
   flush_stdio();
   PyThreadState *ts = PyEval_SaveThread();

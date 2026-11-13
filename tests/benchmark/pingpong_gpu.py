@@ -24,7 +24,6 @@ Run: python -m charmrun.start +p2 pingpong_gpu.py -m device
 """
 from charm4py import charm, Chare, Array, Future, coro
 from argparse import ArgumentParser
-import numpy as np
 import time
 
 MODES = ('staged', 'device', 'device-post', 'persistent')
@@ -40,9 +39,7 @@ class Ping(Chare):
         self.mode = mode
         self.me = self.thisIndex[0]
         self.partner = self.thisProxy[1 - self.me]
-        # no cupy kernels (fill, compare): a compiled cupy module unloaded at interpreter
-        # exit, after Charm++ has shut CUDA down, crashed the process on Delta
-        self.d_send = cupy.asarray(np.full(nbytes, self.me + 1, dtype=np.int8))
+        self.d_send = cupy.full(nbytes, self.me + 1, dtype=cupy.int8)
         self.d_recv = cupy.zeros(nbytes, dtype=cupy.int8)
         if mode == 'staged':
             self.h_send = cupyx.empty_pinned(nbytes, dtype=cupy.int8)
@@ -117,8 +114,12 @@ class Ping(Chare):
 
     def check(self):
         """ the last data received is the partner's pattern """
-        got = self.cp.asnumpy(self.cp.asarray(self.last) if self.mode == 'device' else self.d_recv)
-        return bool((got == 2 - self.me).all())
+        cp = self.cp
+        if self.mode == 'device':
+            got = cp.asarray(self.last)
+        else:
+            got = self.d_recv
+        return bool(cp.all(got == 2 - self.me))
 
     def finish(self):
         if self.mode == 'persistent':
