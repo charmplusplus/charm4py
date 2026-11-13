@@ -295,8 +295,12 @@ persistent columns below for `n2` and two nodes come from a corrected copy that 
 the size on PE 1 (`$WS/logs-cxxbench/verify/latency-check`, run with `-c 0`: the fixed
 benchmark without checks, `-s 1024 -x 67108864 -i 200 -l 20 -w 5`): `n2` from job
 23851354 on gpub001, two nodes from job 23854427 on gpub075 and gpub092. The `n2vis`
-persistent column is still from the defective benchmark. The fix to the benchmark itself
-is on the local branch `latency-persistent-size` (not pushed). The binding tables above
+persistent column and the 64 MB `+gpushm` cell come from the fixed benchmark itself (local
+branch `latency-persistent-size`, 985331d31, not pushed), job 23855202 on gpub094 with
+the table's options; a second `n2vis` run in that job agreed within 4% at every size. The
+same job's `n2` run of the fixed benchmark took 1235 us at 16 MB and 4860 us at 64 MB on
+gpub094, against 842 and 3320 us on gpub001: one-node RDMA times vary between nodes (as on
+the A100 nodes above), so compare columns of one table with that in mind. The binding tables above
 measured the persistent path with `bench_devpersist.py`, which carries the size in both
 directions, so they are not affected.
 
@@ -322,22 +326,22 @@ One node, two processes, one GPU per task (`n2`; both paths on RDMA within the h
 One node, two processes, both GPUs visible (`n2vis`; persistent on CUDA IPC, the
 zero-copy parameter on RDMA, or on HAPI's IPC buffer with `+gpushm`), us:
 
-| size | host-staged message | zero-copy parameter | zero-copy parameter, `+gpushm` | persistent put (from the defective benchmark, about 2x optimistic for large sizes; rerun pending) |
+| size | host-staged message | zero-copy parameter | zero-copy parameter, `+gpushm` | persistent put (fixed benchmark, job 23855202, gpub094) |
 |---|---|---|---|---|
-| 1 KB | 19.5 | 15.5 | 25.8 | 8.57 |
-| 4 KB | 20.5 | 15.4 | 26.0 | 8.31 |
-| 16 KB | 37.5 | 17.3 | 26.5 | 8.59 |
-| 64 KB | 48.3 | 19.5 | 28.5 | 9.63 |
-| 256 KB | 97.3 | 28.1 | 36.5 | 13.5 |
-| 1 MB | 254 | 62.7 | 68.0 | 30.4 |
-| 4 MB | 891 | 223 | 214 | 98.9 |
-| 16 MB | 7700 | 846 | 766 | 360 |
-| 64 MB | 34400 | 3330 | aborted | 1400 |
+| 1 KB | 19.5 | 15.5 | 25.8 | 12.9 |
+| 4 KB | 20.5 | 15.4 | 26.0 | 12.3 |
+| 16 KB | 37.5 | 17.3 | 26.5 | 12.9 |
+| 64 KB | 48.3 | 19.5 | 28.5 | 14.9 |
+| 256 KB | 97.3 | 28.1 | 36.5 | 23.7 |
+| 1 MB | 254 | 62.7 | 68.0 | 56.3 |
+| 4 MB | 891 | 223 | 214 | 190 |
+| 16 MB | 7700 | 846 | 766 | 710 |
+| 64 MB | 34400 | 3330 | 2990 (job 23855202) | 2800 |
 
 The `+gpushm` run aborted at 64 MB: "Not enough memory on device communication buffer
 (33554432 free)"; HAPI's communication buffer defaults to 64 MB, so a 64 MB message does
-not fit. The script now passes `+gpucommbuffer 256` in that shape; that cell has not been
-rerun.
+not fit. With `+gpucommbuffer 256` (job 23855202, gpub094, sizes 16-64 MB) 64 MB took
+2990 us, and 16 MB 767 us, the same as the first run's 766.
 
 Two nodes, one process and one GPU each (RDMA over Slingshot; job 23846960 on gpub074 and
 gpub082, one A40 each; `+gpupersistverbose`: "put: RDMA on registered device memory"), us:
@@ -359,8 +363,12 @@ parameter takes 15-19 us, the persistent put over RDMA 19-22 us (about 1.25 time
 up to 16 KB, on one node and between nodes). On one node over RDMA the corrected
 persistent put and the zero-copy parameter take the same time within 3% from 256 KB up
 (842 against 846 us at 16 MB, 3320 against 3330 us at 64 MB, 20 GB/s; the two columns
-come from different jobs and nodes). The `n2vis` (CUDA IPC) persistent column is still
-from the defective benchmark and is not interpreted here. The host-staged message costs
+come from different jobs and nodes). Over CUDA IPC (`n2vis`) the persistent put takes
+12-15 us up to 64 KB, 1.2 times faster than the zero-copy parameter and 2 times faster
+than its `+gpushm` form; from 1 MB up its lead shrinks to 1.1-1.2 times against the
+zero-copy parameter on RDMA (710 against 846 us at 16 MB, 2800 against 3330 us at 64 MB)
+and 1.07-1.21 times against `+gpushm` (710 against 766 us at 16 MB, 2800 against 2990 us
+at 64 MB); 64 MB in 2800 us is 24 GB/s between the two A40s over PCIe. The host-staged message costs
 only 3-5 us more than the zero-copy parameter at 1-4 KB, but from 8 KB on it is 2-10
 times slower than the zero-copy parameter (7700-7960 us at 16 MB).
 
