@@ -10,6 +10,6 @@
 | `SPEC-4b.md` | the contract for step 4b (sections in Python) |
 | `TASK-examples.md` | task contract: run the 1.x examples on `thin` (Ben Wu) |
 
-The C layer, CkDyn, lives in the Charm++ repository on branch `ckdyn-dev`
+The C layer, CkDyn, lives in the Charm++ repository on branch `recharm` (merged from `ckdyn` by charm PR #4193 on 2026-11-12)
 (`src/ck-core/ckdyn.h`, `doc/internals/ckdyn.md`). Paths of the form
 `~/software/...` in these documents refer to the development laptop.
