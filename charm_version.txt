@@ -10,4 +10,4 @@
 # Charm++ commit records.
 repository https://github.com/charmplusplus/charm.git
 branch recharm
-commit 70fbad77553558d865c205fb2980ef91e0dafc39
+commit 964c6626f4c47f2b84a6f1fb7a811180c2047720

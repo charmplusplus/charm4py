@@ -141,6 +141,33 @@ argument and inside a list arrives as two objects. In 1.x all arguments were
 one pickle and arrived as one object. If the receiver relies on identity,
 pass the object once.
 
+Numeric reduction results keep the contributors' array shape
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*What you will see.* A built-in reduction (``Reducer.sum``, ``max``, ``min``,
+``product``, the ``logical_*`` reducers) of numpy arrays with two or more
+dimensions returns an array of the contributors' shape: every chare
+contributes a ``(2, 3)`` array and the result is a ``(2, 3)`` array. 1.x
+returned the flat ``(6,)`` array for a reduction over a whole array or group
+and the ``(2, 3)`` array for a section reduction; Charm4py 2 returns
+``(2, 3)`` for both. Code that called ``reshape`` on a whole-collection
+result keeps working; code that indexed it as a flat array needs
+``result.ravel()``.
+
+The shape travels with the contribution (CkDyn's
+``CkDynContributeShaped``), so every contributor of one reduction must
+contribute the same shape: contributions of two shapes abort the program
+with ``CkDyn: contributions to one reduction have different shapes, (2, 3)
+and (3, 2)``. For the same reason one reduction cannot mix arrays of two or
+more dimensions with 1-D arrays or scalars under a built-in reducer: 1.x
+summed a ``(2, 3)`` and a ``(6,)`` contribution as flat data, Charm4py 2
+aborts with ``Reduction: contributions to one reduction use different
+reducers (CkDyn::shaped (arrays of ndim >= 2) ... and CkReduction::sum_double
+...)``. Contribute ``a.ravel()`` everywhere to keep the flat result. A result
+with two or more dimensions is an array even with one
+element (a ``(1, 1)`` contribution gives a ``(1, 1)`` result); a scalar or a
+1-D array of one element still gives a Python scalar, as in 1.x.
+
 Options that are accepted and ignored
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

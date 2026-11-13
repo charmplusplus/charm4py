@@ -14,9 +14,11 @@
 //    (CkDynBufDesc cannot set the slot's reserved field);
 //  - a PROXY slot of a proxy without an element (a broadcast proxy) has
 //    pe_or_node = -1 (group kinds) or u.array.ndims = -1 - ndims (arrays);
-//  - a 0-dimensional numpy array is a BUFFER slot with tag TAG_ND0, so that a
-//    BUFFER slot with ndim 0 and tag 0 in a section message is known to be a
-//    built-in reduction result relayed to a section entry (SPEC-4b 3).
+//  - a 0-dimensional numpy array is a BUFFER slot with tag TAG_ND0, and one of
+//    2 or more dimensions has tag TAG_NDN, so that a BUFFER slot with ndim other
+//    than 1 and tag 0 in a section message is known to be a built-in reduction
+//    result relayed to a section entry (SPEC-4b 3): ndim 0 for a flat result,
+//    2 or more for a shaped one (CkDynContributeShaped, issue #321).
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -58,7 +60,7 @@ enum : uint16_t {
   PYMSG_REDRESULT = 1u << 12,
   PYMSG_SINGLE    = 1u << 13,
 };
-enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4 };
+enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4, TAG_NDN = 5 };
 const int PICKLE_PROTOCOL = 5;
 
 struct CkDynError : std::runtime_error {
@@ -1072,7 +1074,7 @@ struct Packer {
     d.elem = (uint8_t)elem;
     d.ndim = (uint8_t)ndim;
     d.bflags = fortran ? CKDYN_BUF_FORTRAN : 0;
-    d.tag = ndim == 0 ? TAG_ND0 : 0;
+    d.tag = ndim == 0 ? TAG_ND0 : ndim == 1 ? 0 : TAG_NDN;   // tag 0 with ndim != 1 means a relayed result
     d.shape = ndim ? shape : nullptr;
     d.strides = nullptr;
     PyObject *src = c != a ? (PyObject *)c : Py_NewRef(o);   // c's reference moves on
@@ -1420,17 +1422,26 @@ PyObject *oob_buffer(RecvCtx &ctx, int i) {
   return PyByteArray_FromStringAndSize((const char *)p, (Py_ssize_t)s.len);
 }
 
-// Value of a REDRESULT view; *empty is set for a nop reduction.
+// Value of a REDRESULT view; *empty is set for a nop reduction. A result
+// slot with 2 or more dimensions (contributions made with
+// CkDynContributeShaped) is an array of that shape, even with one element;
+// a flat result is a scalar when it has one element, else a 1-D array.
 PyObject *redresult_value(RecvCtx &ctx, bool *empty) {
   const CkDynMsgView *v = ctx.v;
   *empty = false;
   if (v->nslots < 1 || v->slots[0].type != CKDYN_SLOT_BUFFER || v->slots[0].len == 0) { *empty = true; Py_RETURN_NONE; }
   const CkDynSlot &s = v->slots[0];
-  const char *p = (const char *)CkDynViewBufferPtr(v, 0, nullptr);
+  const int64_t *shape = nullptr;
+  const char *p = (const char *)CkDynViewBufferPtr(v, 0, &shape);
   int elem = s.elem;
   if (elem == CKDYN_ELEM_NONE || elem == CKDYN_ELEM_BYTE) return PyBytes_FromStringAndSize(p, (Py_ssize_t)s.len);
   size_t esz = elem_size(elem);
   size_t n = s.len / esz;
+  if (s.ndim >= 2) {
+    npy_intp dims[CKDYN_MAX_BUF_DIMS];
+    for (int i = 0; i < s.ndim; i++) dims[i] = (npy_intp)shape[i];
+    return make_ndarray(ctx, p, elem, s.ndim, dims, false);
+  }
   if (n == 1) {
     switch (elem) {
       case CKDYN_ELEM_I8: { int8_t x; memcpy(&x, p, 1); return PyLong_FromLong(x); }
@@ -1476,9 +1487,10 @@ bool view_args(RecvCtx &ctx, ObjVec &out, PyObject **block) {
   if (v->kind == CKDYN_MSGKIND_SYS || v->nslots == 0) return true;
   uint16_t flags = v->hdr ? v->hdr->flags : 0;
   if (v->kind == CKDYN_MSGKIND_MCAST && flags == 0 && v->nslots == 1 && v->slots[0].type == CKDYN_SLOT_BUFFER &&
-      v->slots[0].ndim == 0 && v->slots[0].tag == 0 && v->slots[0].bflags == 0) {
+      v->slots[0].ndim != 1 && v->slots[0].tag == 0 && v->slots[0].bflags == 0) {
     // a built-in reduction result relayed to a section entry (a SECTION callback): converted as a
-    // REDRESULT view is (a user's 0-dimensional array has tag TAG_ND0)
+    // REDRESULT view is (a user's array of ndim 0 has tag TAG_ND0, of ndim 2 or more TAG_NDN); a
+    // shaped result has 2 or more dimensions, which redresult_value converts as the argument path would
     bool empty;
     PyObject *val = redresult_value(ctx, &empty);
     if (!val) return false;
@@ -2984,11 +2996,22 @@ void contribute_any(nb::handle obj, nb::handle data, int rtype, nb::handle targe
     contribute(&me, &d, &cb);
     return;
   }
+  // The shape travels with the elements (issue #321): a C-contiguous buffer
+  // of 2 or more dimensions is contributed with CkDynContributeShaped, whose
+  // built-in reduction result has that shape; CkDyn treats any other buffer,
+  // and a reducer without a numeric element kind, as flat.
   Py_buffer v;
   if (PyObject_GetBuffer(data.ptr(), &v, PyBUF_ANY_CONTIGUOUS) < 0) throw_py();
   d.data = v.buf;
   d.len = (uint32_t)v.len;
-  contribute(&me, &d, &cb);
+  if (v.ndim >= 2 && v.ndim <= CKDYN_MAX_BUF_DIMS && v.shape && PyBuffer_IsContiguous(&v, 'C')) {
+    int64_t shape[CKDYN_MAX_BUF_DIMS];
+    for (int i = 0; i < v.ndim; i++) shape[i] = (int64_t)v.shape[i];
+    if (sid) CkDynContributeSectionShaped(&me, sid, &d, &cb, v.ndim, shape);
+    else CkDynContributeShaped(&me, &d, &cb, v.ndim, shape);
+  } else {
+    contribute(&me, &d, &cb);
+  }
   PyBuffer_Release(&v);
 }
 
