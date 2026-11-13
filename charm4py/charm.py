@@ -7,41 +7,28 @@
 #
 import sys
 import os
-if sys.version_info < (3, 0, 0):
-    import cPickle
-    from cStringIO import StringIO
-else:
-    import pickle as cPickle
-    from io import StringIO
+import pickle as cPickle
+from io import StringIO
 import inspect
 import time
 import gc
 import ctypes
 from collections import defaultdict
 import traceback
+from . import _ckdyn
 from . import chare
-from .chare import MAINCHARE, GROUP, ARRAY, CHARM_TYPES
-from .chare import CONTRIBUTOR_TYPE_GROUP, CONTRIBUTOR_TYPE_ARRAY
-from .chare import Chare, Mainchare, Group, ArrayMap, Array
+from .chare import MAINCHARE, GROUP, ARRAY, CHARE, NODEGROUP, CHARM_TYPES
+from .chare import Chare, Mainchare, Group, ArrayMap, Array, SingletonChare, NodeGroup
+from .chare import (CKDYN_MAINCHARE, CKDYN_CHARE, CKDYN_GROUP, CKDYN_NODEGROUP,
+                    CKDYN_ARRAY, CKDYN_ARRAYMAP, CKDYN_EP_THREADED, CKDYN_PUP_MIGRATE,
+                    CKDYN_PUP_SIZING)
 from . import entry_method
 from . import threads
 from .threads import Future, LocalFuture, LocalMultiFuture
 from . import reduction
 from . import wait
-from charm4py.c_object_store import MessageBuffer
+from ._ckdyn import MessageBuffer
 from . import ray
-import array
-try:
-    import numpy
-except ImportError:
-    # this is to avoid numpy dependency
-    class NumpyDummy:
-        ndarray = None
-    numpy = NumpyDummy()
-
-
-def SECTION_ALL(obj):
-    return 0
 
 
 def register(C):
@@ -78,6 +65,111 @@ class Charm4PyError(Exception):
         self.message = msg
 
 
+class DevicePersistentHandle(object):
+    """ The handle of a DevicePersistent buffer: immutable bytes that may be sent
+        to any chare (as an argument, or inside a pickled object) and passed to
+        that chare's own DevicePersistent.get or put. """
+    __slots__ = ('_b',)
+
+    def __init__(self, b):
+        object.__setattr__(self, '_b', bytes(b))
+
+    def __setattr__(self, name, value):
+        raise AttributeError('DevicePersistentHandle is immutable')
+
+    def __reduce__(self):
+        return (DevicePersistentHandle, (self._b,))
+
+    def __eq__(self, other):
+        return isinstance(other, DevicePersistentHandle) and other._b == self._b
+
+    def __hash__(self):
+        return hash(self._b)
+
+    def __repr__(self):
+        return 'DevicePersistentHandle(%d bytes)' % len(self._b)
+
+
+class DevicePersistent(object):
+    """ A device array registered for direct get and put with other
+        DevicePersistent buffers (SPEC-7-device section 2). The array must stay
+        contiguous and alive until close(). get and put return a Future that
+        receives None when the transfer is complete; one transfer at a time per
+        buffer. Call them from a coroutine (a threaded entry method). """
+
+    MODES = ('copy', 'ipc', 'rdma')
+
+    def __init__(self, array):
+        if not _ckdyn.has_device_support():
+            raise Charm4PyError('DevicePersistent needs a CUDA or HIP build of Charm++')
+        if not hasattr(array, '__cuda_array_interface__'):
+            raise TypeError('DevicePersistent: expected an array with __cuda_array_interface__')
+        self._p = _ckdyn.DevPersist(array)
+        self.array = array
+        self._handle = DevicePersistentHandle(self._p.handle())
+        self._fut = None
+
+    @property
+    def handle(self):
+        return self._handle
+
+    @property
+    def nbytes(self):
+        return self._p.nbytes
+
+    @property
+    def closed(self):
+        return self._p.closed
+
+    def _check(self, h, what):
+        if self._p.closed:
+            raise Charm4PyError('DevicePersistent.' + what + ': the buffer is closed')
+        if self._p.pe != charm.myPe():
+            raise Charm4PyError('DevicePersistent.' + what + ': the buffer was opened on PE ' + str(self._p.pe))
+        if self._fut is not None and not self._fut.ready():
+            raise Charm4PyError('DevicePersistent.' + what + ': a transfer on this buffer is outstanding')
+        if not isinstance(h, DevicePersistentHandle):
+            raise TypeError('DevicePersistent.' + what + ': expected a DevicePersistentHandle, got ' + type(h).__name__)
+
+    def get(self, src):
+        """ copy the buffer `src` (a handle) into this one """
+        self._check(src, 'get')
+        f = charm.createFuture()
+        self._p.get(src._b, f.fid)
+        self._fut = f
+        return f
+
+    def put(self, dst):
+        """ copy this buffer into the buffer `dst` (a handle) """
+        self._check(dst, 'put')
+        f = charm.createFuture()
+        self._p.put(dst._b, f.fid)
+        self._fut = f
+        return f
+
+    def mode(self, h):
+        """ 'copy', 'ipc' or 'rdma': how a transfer with `h` would move the bytes """
+        return DevicePersistent.MODES[self._p.mode(h._b)]
+
+    def close(self):
+        if self._p.closed:
+            return
+        if self._fut is not None and not self._fut.ready():
+            raise Charm4PyError('DevicePersistent.close: a transfer on this buffer is outstanding')
+        self._p.close()
+        self.array = None
+
+    def __del__(self):
+        p = getattr(self, '_p', None)
+        if p is None or p.closed:
+            return
+        import warnings
+        if self._fut is not None and not self._fut.ready():
+            warnings.warn('DevicePersistent garbage-collected with a transfer outstanding; not closed', RuntimeWarning)
+            return
+        warnings.warn('DevicePersistent garbage-collected without close(); closing it', RuntimeWarning)
+        p.close()
+
 # Acts as the Charm runtime at the Python level (there is one instance of this class
 # per process)
 class Charm(object):
@@ -85,7 +177,7 @@ class Charm(object):
     if os.name == 'nt':
         class PrintStream(object):
             def write(self, msg):
-                charm.lib.CkPrintf(msg.encode())
+                _ckdyn.printf(msg)
             def flush(self):
                 pass
 
@@ -97,47 +189,44 @@ class Charm(object):
         self.register_order = []  # list of classes in registration order (all processes must use same order)
         self.chares = {}
         self.groups = {}          # group ID -> group instance on this PE
+        self.nodegroups = {}      # nodegroup ID -> nodegroup branch of this process (a separate id space)
         self.arrays = defaultdict(dict)  # aid -> idx -> array element instance with index idx on this PE
         self.entryMethods = {}    # ep_idx -> EntryMethod object
         self.classEntryMethods = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> list of EntryMethod objects
         self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
-        self.groupMsgBuf = defaultdict(list)  # gid -> list of msgs received for constrained groups that haven't been created yet
-        self.section_counter = 0
-        self.rebuildFuncs = (rebuildByteArray, rebuildArray, rebuildNumpyArray)
         self.sched_tagpool = set(range(1, 128))  # pool of tags for scheduling callables
+        self._ckpt_future = None      # future of the charm.checkpoint(dir, resume) in progress on this PE
+        self._ckpt_seq = 0            # sequence number of the last checkpoint started on this PE
+        self._restart_done_seen = False  # the restart's own resume delivery arrived (restarted process)
         self.sched_next_tag = 128  # the pool grows from here when every tag is in use
         self.sched_callables = {}  # tag -> (callable, args)
 
         self.options = Options()
         self.options.profiling = False
-        self.options.pickle_protocol = -1  # -1 selects the highest protocol number
-        self.options.local_msg_optim = False
-        self.options.local_msg_buf_size = 50
+        self.options.cprofiling = False          # per-PE cProfile, dumped at exit
+        self.options.cprofile_filename = 'profile'   # dump to <this><pe>.prof
+        self.options.pickle_protocol = 5
+        self.options.local_msg_optim = False     # accepted and ignored
+        self.options.local_msg_buf_size = 50     # accepted and ignored
+        self.options.copy_received_arrays = False
+        self.options.zerocopy_threshold = 1 << 20
         self.options.auto_flush_wait_queues = True
         self.options.quiet = False
         self.options.remote_exec = False
         self.options.interactive = Options()
         self.options.interactive.verbose = 1
         self.options.interactive.broadcast_imports = True
-        self.lib = load_charm_library(self)
-        self.ReducerType = self.lib.ReducerType
-        self.CkContributeToChare = self.lib.CkContributeToChare
-        self.CkContributeToGroup = self.lib.CkContributeToGroup
-        self.CkContributeToArray = self.lib.CkContributeToArray
-        self.CkContributeToSection = self.lib.CkContributeToSection
-        self.CkChareSend = self.lib.CkChareSend
-        self.CkGroupSend = self.lib.CkGroupSend
-        self.CkArraySend = self.lib.CkArraySend
-        self.hapiAddCudaCallback = self.lib.hapiAddCudaCallback
+        # the +libcharm_interface <name> pair is accepted and ignored (one interface exists)
+        if '+libcharm_interface' in sys.argv:
+            arg_idx = sys.argv.index('+libcharm_interface')
+            del sys.argv[arg_idx:arg_idx + 2]
         self.reducers = reduction.ReducerContainer(self)
         self.redMgr = reduction.ReductionManager(self, self.reducers)
         self.mainchareRegistered = False
+        self._mainchare_class = None
         # entry point to Charm program. can be used in place of defining a Mainchare
         self.entry_func = None
-        if self.lib.name == 'cython':
-            # replace these methods with the fast Cython versions
-            self.packMsg = self.lib.packMsg
-            self.unpackMsg = self.lib.unpackMsg
+        self.last_em_exec = None
         self.interactive = False
         self.last_exception_timestamp = time.time()
         # store chare types defined after program start and other objects created
@@ -146,6 +235,8 @@ class Charm(object):
         self.lb_requested = False
         self.threadMgr = threads.EntryMethodThreadManager(self)
         self.createFuture = self.Future = self.threadMgr.createFuture
+        self.DevicePersistent = DevicePersistent
+        self.DevicePersistentHandle = DevicePersistentHandle
 
         # The send buffer is not currently used since we do not buffer messages on
         # the sender. This should be used later when scheduling decisions are to be
@@ -170,6 +261,8 @@ class Charm(object):
         self.runningEntryMethod = None
         # chares created on this PE
         self.activeChares = set()
+        # receive time is not measured (set by the old binding when a message arrived)
+        self._precvtime = -1
 
     
     def print_dbg(self, *args, **kwargs):
@@ -230,8 +323,12 @@ class Charm(object):
                     args[-1][i] = dep_obj
             self.invokeEntryMethod(*args, ret_fut=True)
 
-    def handleGeneralError(self):
-        errorType, error, stacktrace = sys.exc_info()
+    def handleGeneralError(self, error=None):
+        """ Report an exception that escaped an entry method (the current one
+            when `error` is None): print the traceback and abort, or in
+            interactive mode forward it to PE 0. """
+        if error is None:
+            error = sys.exc_info()[1]
         if not self.interactive:
             if hasattr(error, 'remote_stacktrace'):
                 origin, stacktrace = error.remote_stacktrace
@@ -239,15 +336,18 @@ class Charm(object):
                 print(stacktrace)
             else:
                 print('----------------- Python Stack Traceback PE ' + str(self.myPe()) + ' -----------------')
-                traceback.print_tb(stacktrace, limit=None)
-            self.abort(errorType.__name__ + ': ' + str(error))
+                traceback.print_tb(error.__traceback__, limit=None)
+            self.abort(type(error).__name__ + ': ' + str(error))
         else:
             self.thisProxy[self.myPe()].propagateException(self.prepareExceptionForSend(error))
 
     def prepareExceptionForSend(self, e):
         if not hasattr(e, 'remote_stacktrace'):
             f = StringIO()
-            traceback.print_tb(sys.exc_info()[2], limit=None, file=f)
+            tb = e.__traceback__
+            if tb is None:
+                tb = sys.exc_info()[2]
+            traceback.print_tb(tb, limit=None, file=f)
             e.remote_stacktrace = (self.myPe(), f.getvalue())
         return e
 
@@ -256,21 +356,18 @@ class Charm(object):
             raise e
         # remote is expecting a response via a future, send exception to the future
         blockFuture = header[b'block']
-        sid = None
-        if b'sid' in header:
-            sid = header[b'sid']
         if b'creation' in header:
             # don't send anything in this case (future is not guaranteed to be used)
-            obj.contribute(None, None, blockFuture, sid)
+            obj.contribute(None, None, blockFuture)
             raise e
         self.prepareExceptionForSend(e)
         if b'bcast' in header:
             if b'bcastret' in header:
-                obj.contribute(e, self.reducers.gather, blockFuture, sid)
+                obj.contribute(e, self.reducers.gather, blockFuture)
             else:
                 # NOTE: it will work if some elements contribute with an exception (here)
                 # and some do nop (None) reduction. Charm++ will ignore the nops
-                obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture, sid)
+                obj.contribute(e, self.reducers._bcast_exc_reducer, blockFuture)
         else:
             blockFuture.send(e)
 
@@ -284,34 +381,6 @@ class Charm(object):
                 setattr(readonlies, name, obj)
         gc.collect()
 
-    def buildMainchare(self, onPe, objPtr, ep, args):
-        cid = (onPe, objPtr)  # chare ID (objPtr should be a Python int)
-        assert onPe == self.myPe()
-        assert cid not in self.chares, 'Chare ' + str(cid) + ' already instantiated'
-        em = self.entryMethods[ep]
-        assert em.name == '__init__', 'Specified mainchare entry method is not constructor'
-        self._createInternalChares()
-        obj = object.__new__(em.C)  # create object but don't call __init__
-        Mainchare.initMember(obj, cid)
-        super(em.C, obj).__init__()  # call Chare class __init__ first
-        if self.entry_func is not None:
-            assert isinstance(obj, chare.DefaultMainchare)
-            obj.main = self.entry_func
-        if self.options.profiling:
-            self.activeChares.add((em.C, Mainchare))
-        gc.collect()
-        em.run(obj, {}, [args])  # now call the user's __init__
-        self.chares[cid] = obj
-        if self.myPe() == 0:  # broadcast readonlies
-            roData = {}
-            for attr in dir(readonlies):  # attr is string
-                if not attr.startswith('_') and not attr.endswith('_'):
-                    roData[attr] = getattr(readonlies, attr)
-            msg = cPickle.dumps(roData, self.options.pickle_protocol)
-            # print("Registering readonly data of size " + str(len(msg)))
-            self.lib.CkRegisterReadonly(b'charm4py_ro', b'charm4py_ro', msg)
-        gc.collect()
-
     def invokeEntryMethod(self, obj, ep, header, args, ret_fut=False):
         em = self.entryMethods[ep]
         if (em.when_cond is not None) and (not em.when_cond.evaluateWhen(obj, args)):
@@ -321,49 +390,109 @@ class Charm(object):
             if self.options.auto_flush_wait_queues and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 
-    def recvChareMsg(self, chare_id, ep, msg, dcopy_start):
-        obj = self.chares[chare_id]
-        header, args = self.unpackMsg(msg, dcopy_start, obj)
-        self.invokeEntryMethod(obj, ep, header, args)
+    # ---------------- targets of the _ckdyn hooks (SPEC-4a 2.2) ----------------
 
-    def recvGroupMsg(self, gid, ep, msg, dcopy_start):
-        if gid in self.groups:
-            obj = self.groups[gid]
-            header, args = self.unpackMsg(msg, dcopy_start, obj)
-            self.invokeEntryMethod(obj, ep, header, args, ret_fut=False)        
-        else:
-            em = self.entryMethods[ep]
-            header, args = self.unpackMsg(msg, dcopy_start, None)
-            if em.name != '__init__':
-                # this is not a constructor msg and the group hasn't been
-                # created yet. this should only happen for constrained groups
-                # (buffering of msgs for regular groups that haven't
-                # been created yet is done inside Charm++)
-                self.groupMsgBuf[gid].append((ep, header, args))
-                return
-            if b'constrained' in header:
-                # constrained group instances are created by SectionManager
-                return
-            assert gid not in self.groupMsgBuf
+    def _mainchare(self, target, argv):
+        """ create the main chare on PE 0; returns it """
+        cid = target.cid
+        assert cid not in self.chares, 'Chare ' + str(cid) + ' already instantiated'
+        em = self.classEntryMethods[MAINCHARE][self._mainchare_class][0]
+        assert em.name == '__init__', 'Specified mainchare entry method is not constructor'
+        self._createInternalChares()
+        obj = object.__new__(em.C)  # create object but don't call __init__
+        obj._ckdyn_target = target
+        Mainchare.initMember(obj, target)
+        Chare.__init__(obj)  # Chare state first; super(em.C, obj) would be a parent user class
+        if self.entry_func is not None:
+            assert isinstance(obj, chare.DefaultMainchare)
+            obj.main = self.entry_func
+        if self.options.profiling:
+            self.activeChares.add((em.C, Mainchare))
+        gc.collect()
+        try:
+            em.run(obj, {}, [argv])  # now call the user's __init__
+        except Exception as e:
+            self.handleGeneralError(e)
+        self.chares[cid] = obj
+        gc.collect()
+        return obj
+
+    def _pack_readonlies(self):
+        """ the readonly attributes, pickled (on PE 0, after the main chare's constructor) """
+        roData = {}
+        for attr in dir(readonlies):  # attr is string
+            if not attr.startswith('_') and not attr.endswith('_'):
+                roData[attr] = getattr(readonlies, attr)
+        return cPickle.dumps(roData, self.options.pickle_protocol)
+
+    def _construct(self, target, ep, header, args):
+        """ create a group branch, array element or singleton chare; returns it """
+        em = self.entryMethods[ep]
+        kind = target.kind
+        if b'block' in header and b'bcast' in header:
+            # group or array created from a coroutine: the constructor's slow path
+            # contributes a nop reduction to the creation future when __init__ has
+            # finished (EntryMethod._run); a failing constructor contributes None
+            # (process_em_exc). CKDYN_MSG_CREATION is not used.
+            header[b'creation'] = True
+        obj = object.__new__(em.C)  # create object but don't call __init__
+        obj._ckdyn_target = target
+        if kind == CKDYN_NODEGROUP:
+            if self.options.profiling:
+                self.activeChares.add((em.C, NodeGroup))
+            NodeGroup.initMember(obj, target.gid, _ckdyn.my_node())
+            Chare.__init__(obj)
+            self.nodegroups[target.gid] = obj
+        elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
             if self.options.profiling:
                 self.activeChares.add((em.C, Group))
-            obj = object.__new__(em.C)  # create object but don't call __init__
-            Group.initMember(obj, gid)
-            super(em.C, obj).__init__()  # call Chare class __init__ first
-            self.groups[gid] = obj
+            Group.initMember(obj, target.gid)
+            Chare.__init__(obj)  # Chare state first; super(em.C, obj) would be a parent user class
+            if b'constrained' in header:
+                # Group(C, onPEs=...): thisProxy becomes the group section proxy
+                # when this branch joins it (_section_joined)
+                obj._constrained = True
+            self.groups[target.gid] = obj
+        elif kind == CKDYN_ARRAY:
+            if self.options.profiling:
+                self.activeChares.add((em.C, Array))
+            index = tuple(target.index)
+            Array.initMember(obj, target.aid, index, single=(b'single' in header))
+            Chare.__init__(obj)
+            self.arrays[target.aid][index] = obj
+        elif kind == CKDYN_CHARE:
+            if self.options.profiling:
+                self.activeChares.add((em.C, SingletonChare))
+            SingletonChare.initMember(obj, target)
+            Chare.__init__(obj)
+            self.chares[target.cid] = obj
+        else:
+            raise Charm4PyError('Cannot construct a chare of CkDyn kind ' + str(kind))
+        try:
             em.run(obj, header, args)  # now call the user's __init__
+        except Exception as e:
+            self.handleGeneralError(e)
+        return obj
 
-    def arrayMapProcNum(self, gid, index):
-        return self.groups[gid].procNum(index)
-
-    def recvArrayMsg(self, aid, index, ep, msg, dcopy_start):
-        # print("Array msg received, aid=" + str(aid) + " arrIndex=" + str(index) + " ep=" + str(ep))
-        if index in self.arrays[aid]:
-            obj = self.arrays[aid][index]
-            header, args = self.unpackMsg(msg, dcopy_start, obj)
-            dep_ids = []
-            is_ray = 'is_ray' in header and header['is_ray']
-            if is_ray:
+    def _invoke(self, obj, ep, header, args):
+        """ slow delivery path: when conditions, coroutines, header flags, profiling """
+        try:
+            if b'refnum' in header:
+                if self.entryMethods[ep].name != '_coll_future_deposit_result':
+                    # the done callback of charm.checkpoint(dir, resume): the
+                    # reference number is its tag, not an argument of the entry
+                    self._checkpoint_done(args.pop(0))
+                elif b'sid' in header:
+                    # the result of a section allreduce: its collective future is
+                    # keyed by (reduction number, section id) (Chare.allreduce)
+                    args[0] = (args[0], header[b'sid'])
+            if b'custom_reducer' in header:
+                # reduction result of a Python reducer: the result is the last argument
+                reducer = self.redMgr.reducers_by_id[header[b'custom_reducer']]
+                if reducer.hasPostprocess:
+                    args[-1] = reducer.postprocess(args[-1])
+            if header.get('is_ray', False):
+                dep_ids = []
                 for i, arg in enumerate(args[:-1]):
                     if isinstance(arg, Future):
                         dep_obj = arg.lookup_object()
@@ -372,130 +501,209 @@ class Charm(object):
                             arg.request_object()
                         else:
                             args[i] = dep_obj
-            if len(dep_ids) > 0:
-                charm.receive_buffer.insert(dep_ids, (obj, ep, header, args))
-            else:
-                self.invokeEntryMethod(obj, ep, header, args, ret_fut=is_ray)
-        else:
-            em = self.entryMethods[ep]
-            assert em.name == '__init__', 'Specified array entry method not constructor'
-            header, args = self.unpackMsg(msg, dcopy_start, None)
-            if self.options.profiling:
-                self.activeChares.add((em.C, Array))
-            if isinstance(args, Chare):  # obj migrating in
-                em = self.entryMethods[ep + 1]  # get 'migrated' EntryMethod object instead of __init__
-                obj = args
-                obj._contributeInfo = self.lib.initContributeInfo(aid, index, CONTRIBUTOR_TYPE_ARRAY)
-                self.arrays[aid][index] = obj
-                em.run(obj, {}, ())
-            else:
-                obj = object.__new__(em.C)   # create object but don't call __init__
-                if b'single' in header:
-                    Array.initMember(obj, aid, index, single=True)
+                if len(dep_ids) > 0:
+                    self.receive_buffer.insert(dep_ids, (obj, ep, header, args))
                 else:
-                    Array.initMember(obj, aid, index)
-                super(em.C, obj).__init__()  # call Chare class __init__ first
-                self.arrays[aid][index] = obj
-                em.run(obj, header, args)  # now call the user's array element __init__
+                    self.invokeEntryMethod(obj, ep, header, args, ret_fut=True)
+            else:
+                self.invokeEntryMethod(obj, ep, header, args)
+        except Exception as e:
+            self.handleGeneralError(e)
 
-    def recvArrayBcast(self, aid, indexes, ep, msg, dcopy_start):
-        header, args = self.unpackMsg(msg, dcopy_start, None)
-        array = self.arrays[aid]
-        for index in indexes:
-            self.invokeEntryMethod(array[index], ep, header, args)
-
-    def unpackMsg(self, msg, dcopy_start, dest_obj):
-        if msg[:7] == b'_local:':
-            header, args = dest_obj.__removeLocal__(int(msg[7:]))
+    def _process_exception(self, obj, ep, exc):
+        """ an exception raised by an entry method on the fast path """
+        if isinstance(exc, SystemExit):
+            self.exit(entry_method.exit_code(exc))
         else:
-            header, args = cPickle.loads(msg)
-            if b'dcopy' in header:
-                rel_offset = dcopy_start
-                buf = memoryview(msg)
-                for arg_pos, typeId, rebuildArgs, size in header[b'dcopy']:
-                    arg_buf = buf[rel_offset:rel_offset + size]
-                    args[arg_pos] = self.rebuildFuncs[typeId](arg_buf, *rebuildArgs)
-                    rel_offset += size
-            elif b'custom_reducer' in header:
-                reducer = getattr(self.reducers, header[b'custom_reducer'])
-                # reduction result won't always be in position 0, but will always be last
-                # (e.g. if reduction target is a future, the reduction result will be 2nd argument)
+            self.handleGeneralError(exc)
+
+    def _deposit_future(self, fid, value, rid):
+        try:
+            if rid >= 0:
+                reducer = self.redMgr.reducers_by_id[rid]
                 if reducer.hasPostprocess:
-                    args[-1] = reducer.postprocess(args[-1])
+                    value = reducer.postprocess(value)
+            self.threadMgr.depositFuture(fid, value)
+        except Exception as e:
+            self.handleGeneralError(e)
 
-        return header, args
+    def _reduce_foreign(self, rid, values):
+        return self.redMgr.reducers_by_id[rid](values)
 
-    def packMsg(self, destObj, msgArgs, header):
-        """Prepares a message for sending, given arguments to an entry method invocation.
+    def _pack(self, obj, reason):
+        """ pickled obj for migration or checkpoint; None refuses (a coroutine of obj is
+            suspended). reason may include CKDYN_PUP_SIZING: the bytes of a sizing pass
+            are kept on obj and returned by the packing pass that follows. A sizing
+            pass can also run alone (AtSync under +MetaLB sizes every element), so it
+            never refuses and changes nothing else; the element leaves charm.arrays in
+            _destruct, when the runtime deletes it after it has migrated. """
+        sizing = reason & CKDYN_PUP_SIZING
+        why = reason & 0xff
+        d = obj.__dict__
+        cached = d.pop('_ckdyn_packed', None)
+        if why == CKDYN_PUP_MIGRATE and obj._nsuspended > 0:
+            if not sizing:
+                return None
+            # sizing alone, or the sizing pass of a migration that the packing pass
+            # refuses: report the size only
+        elif not sizing and cached is not None and cached[0] == why:
+            return cached[1]
+        if hasattr(obj, '__channels__'):
+            assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
+        target = d.pop('_ckdyn_target', None)
+        try:
+            data = cPickle.dumps(obj, self.options.pickle_protocol)
+        except Exception as e:
+            raise Charm4PyError('cannot pickle ' + type(obj).__name__ + str(getattr(obj, 'thisIndex', '')) +
+                                (' for migration' if why == CKDYN_PUP_MIGRATE else ' for a checkpoint') +
+                                ': ' + type(e).__name__ + ': ' + str(e)) from e
+        finally:
+            if target is not None:
+                obj._ckdyn_target = target
+        if sizing and not (why == CKDYN_PUP_MIGRATE and obj._nsuspended > 0):
+            d['_ckdyn_packed'] = (why, data)
+        return data
 
-          The message is the result of pickling `(header,args)` where header is a dict,
-          and args the list of arguments. If direct-copy is enabled, arguments supporting
-          the buffer interface will bypass pickling and their place in 'args' will be
-          made empty. Instead, metadata to reconstruct these args at the destination will be
-          put in the header, and this method will return a list of buffers for
-          direct-copying of these args into a CkMessage at Charm side.
-
-          If destination object exists on same PE as source, the args will be stored in
-          '_local' buffer of destination obj (without copying), and the msg will be a
-          small integer tag to retrieve the args from '_local' when the msg is delivered.
-
-          Args:
-              destObj: destination object if it exists on the same PE as source, otherwise None
-              msgArgs: arguments to entry method
-              header: msg header
-
-          Returns:
-              2-tuple containing msg and list of direct-copy buffers
-
-        """
-        direct_copy_buffers = []
-        dcopy_size = 0
-        if destObj is not None:  # if dest obj is local
-            localTag = destObj.__addLocal__((header, msgArgs))
-            msg = ('_local:' + str(localTag)).encode()
+    def _unpack(self, target, reason, data):
+        """ an object arriving by migration or restored from a checkpoint; returns it """
+        obj = cPickle.loads(data)
+        obj._ckdyn_target = target
+        if reason != CKDYN_PUP_MIGRATE:
+            # restored from a checkpoint: its coroutines were not restored
+            obj._numthreads = 0
+            obj._nsuspended = 0
+            # sections are not checkpointed: ids from before the restart are
+            # stale (CkDyn aborts on their use), so membership starts empty
+            obj.__dict__.pop('_sections', None)
+            if isinstance(obj, CharmRemote):
+                self.thisProxy = obj.thisProxy
+        kind = target.kind
+        if kind == CKDYN_ARRAY:
+            self.arrays[target.aid][tuple(target.index)] = obj
+        elif kind == CKDYN_NODEGROUP:
+            self.nodegroups[target.gid] = obj
+        elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
+            self.groups[target.gid] = obj
         else:
-            direct_copy_hdr = []  # goes to msg header
-            args = list(msgArgs)
-            if self.lib.direct_copy_supported:
-                for i, arg in enumerate(msgArgs):
-                    t = type(arg)
-                    if t == bytes:
-                        nbytes = len(arg)
-                        direct_copy_hdr.append((i, 0, (), nbytes))
-                    elif t == array.array:
-                        nbytes = arg.buffer_info()[1] * arg.itemsize
-                        direct_copy_hdr.append((i, 1, (arg.typecode), nbytes))
-                    elif t == numpy.ndarray and not arg.dtype.hasobject:
-                        # https://docs.scipy.org/doc/numpy/neps/npy-format.html explains what
-                        # describes a numpy array
-                        # FIXME support Fortran contiguous layout? NOTE that even if we passed
-                        # the layout order (array.flags.c_contiguous) to the remote, there is
-                        # the issue that when attempting to get a buffer in cffi to the
-                        # memoryview, Python throws error: "memoryview: underlying buffer is not
-                        # C-contiguous", which seems to be a CPython error (not cffi related)
-                        nbytes = arg.nbytes
-                        if arg.dtype.isbuiltin:
-                            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.char), nbytes))
-                        else:
-                            direct_copy_hdr.append((i, 2, (arg.shape, arg.dtype.name), nbytes))
-                    else:
-                        continue
-                    args[i] = None  # will direct-copy this arg so remove from args list
-                    direct_copy_buffers.append(memoryview(arg))
-                    dcopy_size += nbytes
-                if len(direct_copy_hdr) > 0: header[b'dcopy'] = direct_copy_hdr
-            msg = (header, args)
-            msg = cPickle.dumps(msg, self.options.pickle_protocol)
-        if self.options.profiling:
-            self.recordSend(len(msg) + dcopy_size)
-        return (msg, direct_copy_buffers)
+            self.chares[target.cid] = obj
+        if reason == CKDYN_PUP_MIGRATE:
+            ems = self.classEntryMethods[ARRAY].get(obj.__class__, ())
+            try:
+                for em in ems:
+                    if em.name == 'migrated':
+                        em.run(obj, {}, ())
+                        break
+                else:
+                    obj.migrated()
+            except Exception as e:
+                self.handleGeneralError(e)
+        return obj
+
+    def _map_proc_num(self, obj, aid, index):
+        return obj.procNum(index)
+
+    def _resume_from_sync(self, obj):
+        # not called inline: with no load balancer AtSync calls ResumeFromSync
+        # synchronously, and a resumeFromSync that calls AtSync would recurse
+        if hasattr(obj, 'resumeFromSync'):
+            try:
+                obj.thisProxy[obj.thisIndex].resumeFromSync()
+            except Exception as e:
+                self.handleGeneralError(e)
+
+    def _is_local(self, obj):
+        """ obj is the live local object of its target (not migrated away or destroyed) """
+        target = getattr(obj, '_ckdyn_target', None)
+        if target is None:
+            return False
+        kind = target.kind
+        if kind == CKDYN_ARRAY:
+            return self.arrays.get(target.aid, {}).get(tuple(target.index)) is obj
+        if kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+            return self.groups.get(target.gid) is obj
+        return self.chares.get(target.cid) is obj
+
+    def _entry_of(self, obj, name):
+        """ (entry index, argument count) of method `name` of obj's class in obj's role """
+        kind = obj._ckdyn_target.kind
+        tid = {CKDYN_ARRAY: ARRAY, CKDYN_MAINCHARE: MAINCHARE, CKDYN_CHARE: CHARE}.get(kind, GROUP)
+        for em in self.classEntryMethods[tid].get(obj.__class__, ()):
+            if em.name == name:
+                return em.epIdx, chare.getEntryMethodInfo(em.C, name)[0]
+        raise Charm4PyError(str(name) + ' is not an entry method of ' + obj.__class__.__name__)
+
+    def _destruct(self, obj):
+        """ the runtime deleted obj (migrated away or destroyed) """
+        target = getattr(obj, '_ckdyn_target', None)
+        if target is not None:
+            kind = target.kind
+            if kind == CKDYN_ARRAY:
+                elems = self.arrays.get(target.aid)
+                index = tuple(target.index)
+                if elems is not None and elems.get(index) is obj:
+                    del elems[index]
+            elif kind == CKDYN_NODEGROUP:
+                if self.nodegroups.get(target.gid) is obj:
+                    del self.nodegroups[target.gid]
+            elif kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
+                if self.groups.get(target.gid) is obj:
+                    del self.groups[target.gid]
+            elif self.chares.get(target.cid) is obj:
+                del self.chares[target.cid]
+        # facilitate garbage collection (remove cyclical references)
+        obj.__dict__.pop('_active_grp_conds', None)
+        obj._cond_next = None
+        obj._cond_last = None
+
+    def _error(self, msg):
+        print('CkDyn error: ' + str(msg), file=sys.stderr)
+
+    def _section_joined(self, obj, sid):
+        """ obj received the creation multicast of section sid (hook section_joined,
+            before obj's contribution that completes the section's creation) """
+        secs = obj.__dict__.get('_sections')
+        if secs is None:
+            secs = obj._sections = set()
+        secs.add(sid)
+        if obj.__dict__.pop('_constrained', False):
+            # a branch of a constrained group: the first section it joins is the
+            # group section that Group(C, onPEs=...) creates right after the group
+            obj.thisProxy = obj.thisProxy._as_section(sid)
 
     # register class C in Charm
-    def registerInCharmAs(self, C, charm_type, libRegisterFunc):
+    def registerInCharmAs(self, C, charm_type):
         charm_type_id = charm_type.type_id
         entryMethods = self.classEntryMethods[charm_type_id][C]
-        entryNames = [method.name for method in entryMethods]
-        C.idx[charm_type_id], startEpIdx = libRegisterFunc(C.__name__ + str(charm_type_id), entryNames, len(entryMethods))
+        if charm_type_id == MAINCHARE:
+            kind = CKDYN_MAINCHARE
+        elif charm_type_id == CHARE:
+            kind = CKDYN_CHARE
+        elif charm_type_id == GROUP:
+            kind = CKDYN_ARRAYMAP if ArrayMap in C.mro() else CKDYN_GROUP
+        elif charm_type_id == NODEGROUP:
+            kind = CKDYN_NODEGROUP
+        else:
+            kind = CKDYN_ARRAY  # ndims 0: any dimension, fixed by each array's creation
+        cname = chare.trace_class_name(C)
+        entries = []
+        for em in entryMethods:
+            if charm_type_id == ARRAY and em.name in ('migrated', 'AtSync'):
+                func = None  # placeholders, never sent
+            else:
+                func = getattr(C, em.name)
+            flags = 0
+            if hasattr(func, '_ck_coro'):
+                flags |= CKDYN_EP_THREADED
+            if func is not None:
+                flags |= entry_method.entry_flags(C, em.name, kind == CKDYN_NODEGROUP)
+            if func is not None and hasattr(func, '__code__'):
+                argcount, argnames, defaults = chare.getEntryMethodInfo(C, em.name)
+            else:
+                argcount, argnames, defaults = 0, (), ()
+            entries.append((func, em, cname + '.' + em.name, flags,
+                            em.when_cond is not None, argcount, argnames, defaults))
+        C.idx[charm_type_id], startEpIdx = _ckdyn.register_class(
+            C, kind, 0, entries, cname + chare.TRACE_KIND_SUFFIX[charm_type_id])
         for i, em in enumerate(entryMethods):
             em.epIdx = startEpIdx + i
             self.entryMethods[em.epIdx] = em
@@ -504,32 +712,27 @@ class Charm(object):
         proxyClass.__module__ = C.__module__
         setattr(sys.modules[C.__module__], proxyClass.__name__, proxyClass)
         self.proxyClasses[charm_type_id][C] = proxyClass
-        if charm_type_id in (GROUP, ARRAY):
-            secProxyClass = charm_type.__getProxyClass__(C, sectionProxy=True)
-            secProxyClass.__module__ = C.__module__
-            setattr(sys.modules[C.__module__], secProxyClass.__name__, secProxyClass)
-            proxyClass.__secproxyclass__ = secProxyClass
+        _ckdyn.set_proxy_class(C.idx[charm_type_id], proxyClass)
 
     def registerInCharm(self, C):
         C.idx = [None] * len(CHARM_TYPES)
         charm_types = self.registered[C]
         if Mainchare in charm_types:
-            self.registerInCharmAs(C, Mainchare, self.lib.CkRegisterMainchare)
+            self.registerInCharmAs(C, Mainchare)
         if Group in charm_types:
-            if ArrayMap in C.mro():
-                self.registerInCharmAs(C, Group, self.lib.CkRegisterArrayMap)
-            elif C == SectionManager:
-                self.registerInCharmAs(C, Group, self.lib.CkRegisterSectionManager)
-            else:
-                self.registerInCharmAs(C, Group, self.lib.CkRegisterGroup)
+            self.registerInCharmAs(C, Group)
         if Array in charm_types:
-            self.registerInCharmAs(C, Array, self.lib.CkRegisterArray)
+            self.registerInCharmAs(C, Array)
+        if SingletonChare in charm_types:
+            self.registerInCharmAs(C, SingletonChare)
+        if NodeGroup in charm_types:
+            self.registerInCharmAs(C, NodeGroup)
 
-    # first callback from Charm++ shared library
-    # this method registers classes with the shared library
+    # first callback from the Charm++ runtime (hook register_classes)
+    # this method registers classes with CkDyn
     def registerMainModule(self):
-        self._myPe   = self.lib.CkMyPe()
-        self._numPes = self.lib.CkNumPes()
+        self._myPe   = _ckdyn.my_pe()
+        self._numPes = _ckdyn.num_pes()
 
         # Charm++ library captures stdout/stderr. here we reset the streams with a buffering
         # policy that ensures that messages reach Charm++ in a timely fashion
@@ -538,8 +741,6 @@ class Charm(object):
         else:
             sys.stdout = os.fdopen(1, 'wt', 1)
             sys.stderr = os.fdopen(2, 'wt', 1)
-        if self.myPe() != 0:
-            self.lib.CkRegisterReadonly(b'python_null', b'python_null', None)
 
         if (self.myPe() == 0) and (not self.options.quiet):
             import platform
@@ -547,23 +748,43 @@ class Charm(object):
             py_impl = platform.python_implementation()
             print("Charm4py> Running Charm4py version " + charm4py_version +
                        " on Python " + str(platform.python_version()) + " (" +
-                       py_impl + "). Using '" +
-                       self.lib.name + "' interface to access Charm++")
+                       py_impl + "). Using 'ckdyn' interface to access Charm++")
             if py_impl != 'CPython':
                 raise Charm4PyError('PyPy is no longer supported. Use CPython instead')
             if sys.version_info < (3,8,0):
                 raise Charm4PyError('Python 2 is no longer supported. Use Python 3.8 or above instead')
             if self.options.profiling:
                 print('Charm4py> Profiling is ON (this affects performance)')
+            if self.options.local_msg_optim:
+                print('Charm4py> charm.options.local_msg_optim is ignored (local messages always go through Charm++)')
 
         for C in self.register_order:
             self.registerInCharm(C)
 
+        if self.options.cprofiling:
+            self._start_cprofile()
+
+    def _start_cprofile(self):
+        """ charm.options.cprofiling: profile this PE with cProfile from here (before
+            any constructor or entry method runs) to process exit, where the atexit
+            handler that thin runs on every process (flush_at_exit) dumps the
+            statistics to <charm.options.cprofile_filename><pe>.prof """
+        import cProfile
+        import atexit
+        prof = cProfile.Profile()
+        filename = str(self.options.cprofile_filename) + str(self._myPe) + '.prof'
+
+        def dump():
+            prof.disable()
+            prof.dump_stats(filename)
+        atexit.register(dump)
+        prof.enable()
+
     def registerAs(self, C, charm_type_id):
-        from .sections import SectionManager
         if charm_type_id == MAINCHARE:
             assert not self.mainchareRegistered, 'More than one entry point has been specified'
             self.mainchareRegistered = True
+            self._mainchare_class = C
             # make mainchare constructor always a coroutine
             if sys.version_info < (3, 0, 0):
                 entry_method.coro(C.__init__.im_func)
@@ -573,14 +794,14 @@ class Charm(object):
         # print("charm4py: Registering class " + C.__name__, "as", charm_type.__name__, "type_id=", charm_type_id, charm_type)
         profilingOn = self.options.profiling
         ems = [entry_method.EntryMethod(C, m, profilingOn) for m in charm_type.__baseEntryMethods__()]
-
-        members = dir(C)
-        if C == SectionManager:
-            ems.append(entry_method.EntryMethod(C, 'sendToSection', profilingOn))
-            members.remove('sendToSection')
+        ems += [entry_method.EntryMethod(C, m, profilingOn) for m in self._entry_method_names(C, charm_type_id)]
         self.classEntryMethods[charm_type_id][C] = ems
+        self.registered[C].add(charm_type)
 
-        for m in members:
+    def _entry_method_names(self, C, charm_type_id):
+        """ the user entry methods of C as charm_type_id, besides __baseEntryMethods__ """
+        names = []
+        for m in dir(C):
             m_obj = getattr(C, m)
             if not callable(m_obj) or inspect.isclass(m_obj):
                 continue
@@ -590,58 +811,61 @@ class Charm(object):
                 continue  # filter out non-user methods
             if m in chare.method_restrictions['non_entry_method']:
                 continue
-            if charm_type_id != ARRAY and m in {'migrate', 'setMigratable'}:
+            if charm_type_id != ARRAY and m in {'migrate', 'setMigratable', 'ckDestroy'}:
                 continue
-            # print(m)
-            em = entry_method.EntryMethod(C, m, profilingOn)
-            self.classEntryMethods[charm_type_id][C].append(em)
-        self.registered[C].add(charm_type)
+            names.append(m)
+        return names
+
+    def _check_entry_attrs(self, C, collections):
+        """ raise Charm4PyError for an @entry attribute that registration would refuse """
+        for charm_type_id in collections:
+            for m in ['__init__'] + self._entry_method_names(C, charm_type_id):
+                entry_method.entry_flags(C, m, charm_type_id == NODEGROUP)
 
     # called by user (from Python) to register their Charm++ classes with the Charm4py runtime
-    # by default a class is registered to work with both Groups and Arrays
-    def register(self, C, collections=(GROUP, ARRAY)):
+    # by default a class is registered to work as Group, Array, singleton Chare and NodeGroup;
+    # a class with a nodegroup-only entry attribute (@entry(exclusive=True) or immediate)
+    # only as NodeGroup
+    def register(self, C, collections=None):
         if C in self.registered:
             return
         if (not hasattr(C, 'mro')) or (Chare not in C.mro()):
             raise Charm4PyError('Only subclasses of Chare can be registered')
+        if collections is None:
+            if entry_method.has_nodegroup_only_attrs(C):
+                collections = (NODEGROUP,)
+            else:
+                collections = (GROUP, ARRAY, CHARE, NODEGROUP)
 
         # cache of template condition objects for `chare.wait(cond_str)` calls
         # maps cond_str to condition object. the condition object stores the lambda function associated with cond_str
         # TODO: remove old/unused condition strings from dict?
         C.__charm_wait_conds__ = {}
+        self._check_entry_attrs(C, collections)
         self.registered[C] = set()
         for charm_type_id in collections:
             self.registerAs(C, charm_type_id)
         self.register_order.append(C)
 
     def _registerInternalChares(self):
-        global SectionManager
-        from .sections import SectionManager
-        self.register(SectionManager, (GROUP,))
-
         self.register(CharmRemote, (GROUP,))
 
         from .pool import PoolScheduler, Worker
         if self.interactive:
-            if sys.version_info < (3, 0, 0):
-                entry_method.coro(PoolScheduler.start.im_func)
-                entry_method.coro(PoolScheduler.startSingleTask.im_func)
-            else:
-                entry_method.coro(PoolScheduler.start)
-                entry_method.coro(PoolScheduler.startSingleTask)
+            entry_method.coro(PoolScheduler.start)
+            entry_method.coro(PoolScheduler.startSingleTask)
         self.register(PoolScheduler, (ARRAY,))
         self.register(Worker, (GROUP,))
 
         if self.options.profiling:
-            self.internalChareTypes.update({SectionManager, CharmRemote,
-                                            PoolScheduler, Worker})
+            self.internalChareTypes.update({CharmRemote, PoolScheduler, Worker})
 
     def _createInternalChares(self):
         Group(CharmRemote)
-        Group(SectionManager)
 
         from .pool import Pool, PoolScheduler
-        pool_proxy = Chare(PoolScheduler, onPE=0)
+        # one-element array form: pool.py needs an element proxy (elemIdx a tuple)
+        pool_proxy = Chare(PoolScheduler, onPE=0, migratable=True)
         self.pool = Pool(pool_proxy)
         readonlies.charm_pool_proxy__h = pool_proxy
 
@@ -735,134 +959,194 @@ class Charm(object):
         self.threadMgr.start()
 
         self.lb_requested = '+balancer' in sys.argv
-        self.lib.start()
+        _ckdyn.init(self, self.options)
+        _ckdyn.start(sys.argv)
 
-    def arrayElemLeave(self, aid, index):
-        obj = self.arrays[aid].pop(index)
-        if hasattr(obj, '_scookies'):
-            charm.abort('Cannot migrate elements that are part of a section '
-                        '(this will be supported in a future version)')
-        self.threadMgr.objMigrating(obj)
-        if hasattr(obj, '__channels__'):
-            assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
-        del obj._contributeInfo  # don't want to pickle this
-        pickled_chare = cPickle.dumps(({}, obj), self.options.pickle_protocol)
-        # facilitate garbage collection (especially by removing cyclical references)
-        del obj._local
-        del obj._local_free_head
-        del obj._active_grp_conds
-        obj._cond_next = None
-        obj._cond_last = None
-        return pickled_chare
-
-    # Charm class contribute function used by Array, Group and Sections for reductions
-    # 'section' can either be an sid (2-tuple) or a section proxy
+    # Charm class contribute function used by Array, Group and sections for reductions.
+    # 'section' is a section proxy or a section id (proxy.section[1]); a branch of a
+    # constrained group contributes to its group section when section is None.
     def contribute(self, data, reducer, target, chare, section=None):
-        if section is None and not chare.thisProxy.issec:
-            contribution = self.redMgr.prepare(data, reducer, chare)
-            fid = 0
-            if isinstance(target, Future):
-                fid = target.fid
-                target = target.getTargetProxyEntryMethod()
-            contributeInfo = self.lib.getContributeInfo(target.ep, fid, contribution, chare)
-            if self.options.profiling:
-                self.recordSend(contributeInfo.getDataSize())
-            target.__self__.ckContribute(contributeInfo)
+        if section is None and chare.thisProxy.issec:
+            section = chare.thisProxy
+        rtype, data = self.redMgr.prepare(data, reducer, chare)
+        if section is None:
+            _ckdyn.contribute(chare, data, rtype, target)
         else:
-            if section is None:
-                # for constrained groups, thisProxy is a section proxy
-                sid = chare.thisProxy.section[1]  # get the sid from the proxy
-            elif isinstance(section, tuple):
-                sid = section  # already a sid
-            else:
-                # is a section proxy
-                sid = section.section[1]
-            if isinstance(reducer, tuple):
-                reducer = reducer[1]
-            if reducer is not None and reducer.hasPreprocess:
-                data = reducer.preprocess(data, chare)
-            try:
-                redno = chare._scookies[sid]
-            except:
-                raise Charm4PyError('Chare doing section reduction but is not part of a section')
-            self.sectionMgr.contrib(sid, redno, data, reducer, target)
-            chare._scookies[sid] += 1
+            sid = self._section_id(section)
+            if sid not in chare.__dict__.get('_sections', ()):
+                raise Charm4PyError('Section reduction by ' + chare.__class__.__name__ + str(chare.thisIndex) +
+                                    ', which is not a member of the section')
+            _ckdyn.contribute_section(chare, sid, data, rtype, target)
 
-    def combine(self, *proxies):
-        sid = (self._myPe, self.section_counter)
-        self.section_counter += 1
-        pes = set()
-        futures = [self.Future() for _ in range(len(proxies))]
-        for i, proxy in enumerate(proxies):
-            secproxy = None
-            if proxy.issec:
-                secproxy = proxy
-            proxy._getSectionLocations_(sid, 1, SECTION_ALL, None, None, futures[i], secproxy)
-        for f in futures:
-            pes.update(f.get()[0])
-        assert len(pes) > 0
-        root = min(pes)
-        self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
-        return proxies[0].__getsecproxy__((root, sid))
+    # ---------------- sections (SPEC-4b.md) ----------------
 
-    def split(self, proxy, numsections, section_func=None, elems=None, slicing=None, cons=None):
-        assert (hasattr(proxy, 'gid') and proxy.elemIdx == -1) or (hasattr(proxy, 'aid') and proxy.elemIdx == ())
-        sid0 = (self._myPe, self.section_counter)
-        self.section_counter += numsections
-        secproxy = None
-        if proxy.issec:
-            secproxy = proxy
-        if elems is None:
-            f = self.Future()
-            proxy._getSectionLocations_(sid0, numsections, section_func, slicing, None, f, secproxy)
-            section_pes = f.get()
-        else:
+    def _section_id(self, section):
+        """ the 16-byte section id of a section proxy, or section itself if it is one """
+        if isinstance(section, bytes):
+            return section
+        if getattr(section, 'issec', False):
+            return section.section[1]
+        raise TypeError('expected a section proxy or a section id, got ' + repr(section))
+
+    def _require_coroutine(self, what):
+        if self.threadMgr.isMainThread():
+            raise Charm4PyError(what + ' must be called from a coroutine: it waits until '
+                                'every member has joined the new section(s)')
+
+    def _create_section(self, proxy, members, done):
+        """ Create one section on this PE (its root) from members, a list of
+            (gid, pe) or (aid, index); returns the section id. Members from several
+            arrays (the split of a combined section) become one section per array,
+            combined. """
+        if proxy._kind == CKDYN_GROUP:
+            gid = members[0][0]
+            return _ckdyn.section_create_group(gid, sorted({pe for _, pe in members}), 0, done)
+        by_aid = {}
+        for aid, index in members:
+            by_aid.setdefault(aid, []).append(index)
+        parts = []
+        for aid, indices in by_aid.items():
+            ndims = len(indices[0])
+            flat = [i for index in indices for i in index]
+            parts.append((aid, ndims, flat))
+        if len(parts) == 1:
+            aid, ndims, flat = parts[0]
+            return _ckdyn.section_create_array(aid, ndims, flat, 0, done)
+        sids = [_ckdyn.section_create_array(aid, ndims, flat, 0, None) for aid, ndims, flat in parts]
+        return _ckdyn.section_combine(sids, done)
+
+    def split(self, proxy, numsections, section_func=None, elems=None, slicing=None):
+        """ Split a group, an array or a section into numsections sections; returns the
+            list of section proxies. Membership is given by section_func(obj) (a section
+            number, a list of them, or a negative number for none), by elems (one list
+            of indices or PEs per section), by slicing (one slice per dimension; one
+            section), or, with none of them, every member is in the one section.
+            Must be called from a coroutine: it returns when every member of every new
+            section has joined it, so sends to the returned proxies are safe at once. """
+        if (not isinstance(proxy, _ckdyn.Proxy) or proxy._kind not in (CKDYN_GROUP, CKDYN_ARRAY)
+                or proxy._has_elem):
+            raise Charm4PyError('charm.split: expected a group, array or section proxy (not an element proxy)')
+        self._require_coroutine('charm.split')
+        if elems is not None:
             if numsections == 1 and not isinstance(elems[0], list) and not isinstance(elems[0], set):
                 elems = [elems]
-            try:
-                assert len(elems) == numsections
-            except AssertionError:
-                print(len(elems), numsections)
-            if hasattr(proxy, 'gid') and not proxy.issec:
-                # in this case the elements are guaranteed to be PEs, so I don't
-                # have to collect locations
-                section_pes = elems
-            else:
-                f = self.Future()
-                proxy._getSectionLocations_(sid0, numsections, None, None, elems, f, secproxy)
-                section_pes = f.get()
-        secProxies = []
-        # TODO if there are many many sections, should do a stateless multicast to the roots with the section info
-        for i in range(numsections):
-            sid = (self._myPe, sid0[1] + i)
-            pes = section_pes[i]
-            if not isinstance(pes, set):
-                # pes will be a set in most cases, unless the user passed a list of elements.
-                # transforming to set ensures we get rid of duplicates
-                pes = set(pes)
-            assert len(pes) > 0
-            root = min(pes)
-            if not proxy.issec and hasattr(proxy, 'gid'):
-                self.sectionMgr.thisProxy[root].createGroupSectionDown(sid, proxy.gid, pes, None, cons)
-            else:
-                self.sectionMgr.thisProxy[root].createSectionDown(sid, pes, None)
-            secProxies.append(proxy.__getsecproxy__((root, sid)))
-        return secProxies
+            if len(elems) != numsections:
+                raise Charm4PyError('charm.split: elems has ' + str(len(elems)) + ' lists for ' +
+                                    str(numsections) + ' sections')
+        members = [[] for _ in range(numsections)]
+        if proxy._kind == CKDYN_GROUP and not proxy.issec and elems is not None:
+            # the members of a group section are PEs: no vote needed
+            for n, pes in enumerate(elems):
+                members[n] = [(proxy.gid, int(pe)) for pe in pes]
+        else:
+            # every member of the collection or section says which sections it is in
+            f = self.Future()
+            proxy._sectionVote_(numsections, section_func, slicing, elems, f,
+                                proxy if proxy.issec else None)
+            for coll_id, index, secs in f.get():
+                for n in secs:
+                    members[n].append((coll_id, index))
+        for n, m in enumerate(members):
+            if len(m) == 0:
+                raise Charm4PyError('charm.split: section ' + str(n) + ' has no members')
+        done = self.Future(numsections)
+        sids = [self._create_section(proxy, m, done) for m in members]
+        done.get()
+        return [proxy._as_section(sid) for sid in sids]
+
+    def combine(self, *proxies):
+        """ The union of array sections and arrays of one chare class with one index
+            dimension count, as a new section (each element once); returns its proxy.
+            Group sections cannot be combined (TypeError): a combined section is a
+            Charm++ multi-array section. Must be called from a coroutine. """
+        if len(proxies) == 0:
+            raise Charm4PyError('charm.combine: no proxies')
+        first = proxies[0]
+        for p in proxies:
+            if not isinstance(p, _ckdyn.Proxy) or p._kind != CKDYN_ARRAY or p._has_elem:
+                raise TypeError('charm.combine accepts array sections and arrays only, got ' + repr(p) +
+                                ' (group sections cannot be combined)')
+            if type(p) is not type(first):
+                raise TypeError('charm.combine: the arrays must be of one chare class (' +
+                                type(first).__name__ + ', ' + type(p).__name__ + ')')
+            if p.ndims != first.ndims:
+                raise TypeError('charm.combine: the arrays must have one index dimension count (' +
+                                str(first.ndims) + ', ' + str(p.ndims) + ')')
+        self._require_coroutine('charm.combine')
+        sids = []
+        for p in proxies:
+            if not p.issec:
+                p = self.split(p, 1)[0]  # the whole array as a section
+            sids.append(p.section[1])
+        done = self.Future()
+        sid = _ckdyn.section_combine(sids, done)
+        done.get()
+        return first._as_section(sid)
 
     def startQD(self, callback):
-        fid = 0
-        if isinstance(callback, Future):
-            fid = callback.fid
-            callback = callback.getTargetProxyEntryMethod()
-        cb_proxy = callback.__self__
-        if hasattr(cb_proxy, 'section'):
-            self.lib.CkStartQD_SectionCallback(cb_proxy.section[1], cb_proxy.section[0], callback.ep)
-        elif hasattr(cb_proxy, 'gid'):
-            self.lib.CkStartQD_GroupCallback(cb_proxy.gid, cb_proxy.elemIdx, callback.ep, fid)
-        elif hasattr(cb_proxy, 'aid'):
-            self.lib.CkStartQD_ArrayCallback(cb_proxy.aid, cb_proxy.elemIdx, callback.ep, fid)
+        _ckdyn.start_qd(callback)
+
+    def checkpoint(self, dirname, resume=None):
+        """ Write a checkpoint of every chare to directory dirname (Charm++
+            CkStartCheckpoint). A program started with +restart dirname
+            continues from it.
+
+            resume is None: returns a future that receives None once the
+            checkpoint is written; call this from a coroutine and wait on the
+            future. A restarted run has nothing to continue in this form.
+
+            resume is a bound entry method of a group proxy, an array element
+            proxy or the main chare (for example self.thisProxy.resumed in the
+            main chare): the runtime calls that entry with no arguments once
+            the checkpoint is written, and, in a program restarted from
+            dirname, on the restored object once the restart completes. This
+            is how a program continues after a restart, because coroutines
+            (including a coroutine main) are not restored. Called from a
+            coroutine, it also returns a future that receives None on the
+            original run once the checkpoint is written; called from a plain
+            entry method it returns None.
+
+            Futures and suspended coroutines from before a restart do not
+            exist in the restarted run.
+        """
+        if resume is not None and getattr(getattr(resume, '__self__', None), 'issec', False):
+            # CkDynCheckpoint rejects a SECTION callback as its done callback
+            raise Charm4PyError('charm.checkpoint: resume cannot be an entry of a section proxy')
+        if resume is None:
+            f = self.threadMgr.createFuture()  # raises NotThreadedError outside a coroutine
+            _ckdyn.checkpoint(dirname, f)
+            return f
+        # the done callback is resume with reference number (seq << 24) | (PE + 1);
+        # charm._invoke strips it and sends _checkpoint_written to this PE
+        self._ckpt_seq = (self._ckpt_seq % 255) + 1
+        tag = (self._ckpt_seq << 24) | (self._myPe + 1)
+        cb = _ckdyn.Callback.target(resume, tag)
+        f = None
+        if not self.threadMgr.isMainThread():
+            f = self.threadMgr.createFuture()
+        self._ckpt_future = f
+        _ckdyn.checkpoint(dirname, cb)
+        return f
+
+    def _checkpoint_done(self, tag):
+        """ a charm.checkpoint resume entry is being delivered with its tag """
+        if _ckdyn.is_restarting() and not self._restart_done_seen:
+            # the restart's own delivery: the checkpointing PE's future is gone
+            self._restart_done_seen = True
+            return
+        pe = (tag & 0xffffff) - 1
+        if pe == self._myPe:
+            self._checkpoint_written(tag)
         else:
-            self.lib.CkStartQD_ChareCallback(cb_proxy.cid, callback.ep, fid)
+            self.thisProxy[pe]._checkpoint_written(tag)
+
+    def _checkpoint_written(self, tag):
+        """ on the PE that called charm.checkpoint(dir, resume): deposit its future """
+        f = self._ckpt_future
+        if f is None or (tag >> 24) != self._ckpt_seq:
+            return  # a group resume delivers once per PE: only the first one counts
+        self._ckpt_future = None
+        self.threadMgr.depositFuture(f.fid, None)
 
     def waitQD(self):
         f = self.Future()
@@ -897,16 +1181,19 @@ class Charm(object):
             tag = self.sched_next_tag
             self.sched_next_tag += 1
         self.sched_callables[tag] = (callable_obj, args)
-        self.lib.scheduleTagAfter(tag, secs * 1000)
+        _ckdyn.call_after(tag, secs * 1000)
 
     def triggerCallable(self, tag):
-        if self.options.profiling:
-            self.triggerCallableEM.startMeasuringTime()
-        cb, args = self.sched_callables.pop(tag)
-        self.sched_tagpool.add(tag)
-        cb(*args)
-        if self.options.profiling:
-            self.triggerCallableEM.stopMeasuringTime()
+        try:
+            if self.options.profiling:
+                self.triggerCallableEM.startMeasuringTime()
+            cb, args = self.sched_callables.pop(tag)
+            self.sched_tagpool.add(tag)
+            cb(*args)
+            if self.options.profiling:
+                self.triggerCallableEM.stopMeasuringTime()
+        except Exception as e:
+            self.handleGeneralError(e)
 
     # generator that yields objects (works for Futures and Channels) as they
     # become ready (have a msg ready to receive immediately)
@@ -941,10 +1228,6 @@ class Charm(object):
         stats[3] += size
         stats[4] = size
         
-    # deposit value of one of the futures that was created on this PE
-    def _future_deposit_result(self, fid, result=None):
-        self.threadMgr.depositFuture(fid, result)
-
     def __printTable__(self, table, sep):
         col_width = [max(len(x) for x in col) for col in zip(*table)]
         for j, line in enumerate(table):
@@ -952,6 +1235,11 @@ class Charm(object):
             print("| " + " | ".join("{:{}}".format(x, col_width[i]) for i, x in enumerate(line)) + " |")
 
     def printStats(self):
+        """ Print the profiling tables of this PE (charm.options.profiling).
+            Columns: time inside entry methods ('em', which includes the time
+            spent sending, since sends made through proxies are not timed
+            separately by the CkDyn binding), time recorded as receive
+            overhead ('recv') and their total. """
         assert self.started, 'charm was not started'
         if not self.options.profiling:
             print('NOTE: called charm.printStats() but profiling is disabled')
@@ -964,11 +1252,14 @@ class Charm(object):
             em.stopMeasuringTime()
             em.startMeasuringTime()
 
+        def em_vals(times):
+            return [times[0] + times[1], times[2], sum(times)]
+
         print('Timings for PE', self.myPe(), ':')
-        table = [['', 'em', 'send', 'recv', 'total']]
+        table = [['', 'em', 'recv', 'total']]
         lineNb = 1
         sep = {}
-        row_totals = [0.0] * 4
+        row_totals = [0.0] * 3
         chares_sorted = sorted([(C.__module__, C.__name__,
                                  charm_type.type_id, C, charm_type)
                                  for C, charm_type in self.activeChares])
@@ -989,7 +1280,7 @@ class Charm(object):
                     em_name = self.entry_func.__module__ + '.' + self.entry_func.__name__ + ' (main function)'
                 else:
                     em_name = em.name
-                vals = em.times + [sum(em.times)]
+                vals = em_vals(em.times)
                 for i in range(len(row_totals)):
                     row_totals[i] += vals[i]
                 table.append([em_name] + [str(round(v, 3)) for v in vals])
@@ -997,63 +1288,44 @@ class Charm(object):
         sep[lineNb] = '-----------------------------------------------------------'
         table.append([''] + [str(round(v, 3)) for v in row_totals])
         lineNb += 1
-        sep[lineNb] = '-----------------------------------------------------------'
-        misc_overheads = [str(round(v, 3)) for v in self.lib.times]
-        table.append(['reductions', ' ', ' ', misc_overheads[0], misc_overheads[0]])
-        table.append(['custom reductions',   ' ', ' ', misc_overheads[1], misc_overheads[1]])
-        table.append(['migrating out',  ' ', ' ', misc_overheads[2], misc_overheads[2]])
-        lineNb += 3
         triggerCallableTotalTime = sum(self.triggerCallableEM.times)
         if triggerCallableTotalTime > 0:
-            vals = self.triggerCallableEM.times + [triggerCallableTotalTime]
+            sep[lineNb] = '-----------------------------------------------------------'
+            vals = em_vals(self.triggerCallableEM.times)
             for i, v in enumerate(vals):
                 row_totals[i] += v
-            times = [str(round(v, 3)) for v in vals]
-            table.append(['triggerCallable'] + times)
+            table.append(['triggerCallable'] + [str(round(v, 3)) for v in vals])
             lineNb += 1
-        sep[lineNb] = '-----------------------------------------------------------'
-        row_totals[2] += sum(self.lib.times)
-        row_totals[3] += sum(self.lib.times)
-        table.append([''] + [str(round(v, 3)) for v in row_totals])
-        lineNb += 1
+            sep[lineNb] = '-----------------------------------------------------------'
+            table.append([''] + [str(round(v, 3)) for v in row_totals])
+            lineNb += 1
         self.__printTable__(table, sep)
 
         for i in (0, 1):
             if i == 0:
-                num_msgs = self.msg_send_stats[0]
-                min_msgsize, max_msgsize, sum_msgsize = self.msg_send_stats[1:4]
-                avg_msgsize = sum_msgsize / num_msgs
-                print('\nMessages sent: ' + str(num_msgs))
+                stats, what = self.msg_send_stats, 'sent'
             else:
-                num_msgs = self.msg_recv_stats[0]
-                min_msgsize, max_msgsize, sum_msgsize = self.msg_recv_stats[1:4]
-                avg_msgsize = sum_msgsize / num_msgs
-                print('\nMessages received: ' + str(num_msgs))
+                stats, what = self.msg_recv_stats, 'received'
+            num_msgs = stats[0]
+            if num_msgs == 0:
+                continue  # message counts are not recorded by the CkDyn binding
+            min_msgsize, max_msgsize, sum_msgsize = stats[1:4]
+            avg_msgsize = sum_msgsize / num_msgs
+            print('\nMessages ' + what + ': ' + str(num_msgs))
             msgSizeStats = [min_msgsize, avg_msgsize, max_msgsize]
             msgSizeStats = [round(val, 3) for val in msgSizeStats]
             print('Message size in bytes (min / mean / max): ' + ' / '.join([str(v) for v in msgSizeStats]))
             print('Total bytes = ' + str(round(sum_msgsize / 1024.0 / 1024.0, 3)) + ' MB')
         print('')
 
-    def lib_version_check(self, commit_id_str):
-        req_version = tuple([int(n) for n in open(os.path.dirname(__file__) + '/libcharm_version', 'r').read().split('.')])
-        version = [int(n) for n in commit_id_str.split('-')[0][1:].split('.')]
-        try:
-            version = tuple(version + [int(commit_id_str.split('-')[1])])
-        except:
-            version = tuple(version + [0])
-        if version < req_version:
-            req_str = '.'.join([str(n) for n in req_version])
-            cur_str = '.'.join([str(n) for n in version])
-            raise Charm4PyError('Charm++ version >= ' + req_str + ' required. ' +
-                                'Existing version is ' + cur_str)
-
     def getTopoTreeEdges(self, pe, root_pe, pes=None, bfactor=4):
         """ Returns (parent, children) of 'pe' in a tree spanning the given 'pes',
             or all PEs if 'pes' is None
             If 'pes' is specified, 'root_pe' must be in the first position of 'pes',
             and 'pe' must be a member of 'pes' """
-        return self.lib.getTopoTreeEdges(pe, root_pe, pes, bfactor)
+        if pes is not None:
+            pes = list(pes)
+        return _ckdyn.topo_tree_edges(pe, root_pe, pes, bfactor)
 
     def getTopoSubtrees(self, root_pe, pes, bfactor=4):
         """ Returns a list of subtrees of root_pe in a spanning tree containing
@@ -1062,7 +1334,25 @@ class Charm(object):
             otherwise the list doesn't specify the structure of the subtree
             (the subtree structure can be extracted by recursively calling this
             method). """
-        return self.lib.getTopoSubtrees(root_pe, pes, bfactor)
+        pes = list(pes)
+        _, children = _ckdyn.topo_tree_edges(root_pe, root_pe, pes, bfactor)
+        subtrees = []
+        idx = 1
+        num_pes = len(pes)
+        for i in range(len(children)):
+            if i < len(children) - 1:
+                next_child = children[i + 1]
+            else:
+                next_child = -1
+            subtree = []
+            while idx < num_pes:
+                pe = pes[idx]
+                if pe == next_child:
+                    break
+                subtree.append(pe)
+                idx += 1
+            subtrees.append(subtree)
+        return subtrees
 
     def myPe(self):
         return self._myPe
@@ -1070,65 +1360,84 @@ class Charm(object):
     def numPes(self):
         return self._numPes
 
+    def myNode(self):
+        """ the logical node (process) of this PE, the index of its nodegroup branches """
+        return _ckdyn.my_node()
+
+    def numNodes(self):
+        """ the number of logical nodes (processes), the number of branches of a nodegroup """
+        return _ckdyn.num_nodes()
+
     def myHost(self):
-        return self.lib.CkPhysicalNodeID(self._myPe)
+        return _ckdyn.physical_node_id(self._myPe)
 
     def numHosts(self):
-        return self.lib.CkNumPhysicalNodes()
+        return _ckdyn.num_physical_nodes()
 
     def getHostPes(self, host):
-        return self.lib.CkGetPesOnPhysicalNode(host)
+        return _ckdyn.pes_on_physical_node(host)
 
     def getHostFirstPe(self, host):
-        return self.lib.CkGetFirstPeOnPhysicalNode(host)
+        return _ckdyn.pes_on_physical_node(host)[0]
 
     def getHostNumPes(self, host):
-        return self.lib.CkNumPesOnPhysicalNode(host)
+        return _ckdyn.num_pes_on_physical_node(host)
 
     def getPeHost(self, pe):
-        return self.lib.CkPhysicalNodeID(pe)
+        return _ckdyn.physical_node_id(pe)
 
     def getPeHostRank(self, pe):
-        return self.lib.CkPhysicalRank(pe)
+        return _ckdyn.physical_rank(pe)
 
     def exit(self, exit_code=0):
-        self.lib.CkExit(exit_code)
+        _ckdyn.exit(exit_code)
 
     def abort(self, message):
-        self.lib.CkAbort(message)
+        _ckdyn.abort(message)
 
     def addReducer(self, func):
         self.reducers.addReducer(func)
 
     def LBTurnInstrumentOn(self):
-        self.lib.LBTurnInstrumentOn()
+        _ckdyn.lb_instrument(True)
 
     def LBTurnInstrumentOff(self):
-        self.lib.LBTurnInstrumentOff()
+        _ckdyn.lb_instrument(False)
 
-    #functions for ccs 
+    def myDevice(self):
+        """ the GPU device Charm++ (HAPI) assigned to this PE, which is also the
+            current CUDA device of the thread running Python code; -1 without
+            device support """
+        return _ckdyn.my_device()
+
+    def hapiAddCudaCallback(self, stream, future):
+        _ckdyn.hapi_add_callback(stream, future)
+
+    #functions for ccs
     def CcsRegisterHandler(self, handlername, handler):
         self.ccs_methods[handlername] = handler
-        self.lib.CcsRegisterHandler(handlername, handler)
+        _ckdyn.ccs_register(handlername)
 
     def CcsIsRemoteRequest(self):
-        self.lib.isRemoteRequest()
-    
+        return _ckdyn.ccs_is_remote_request()
+
     def CcsSendReply(self, message):
-        self.lib.CcsSendReply(message)
+        _ckdyn.ccs_send_reply(message)
 
     def CcsDelayReply(self):
-        return self.lib.CcsDelayReply()
-    
+        return _ckdyn.ccs_delay_reply()
+
     def CcsSendDelayedReply(self, d, message):
-        self.lib.CcsSendDelayedReply(d, message)
+        _ckdyn.ccs_send_delayed_reply(d, message)
 
     def callHandler(self, handlername, data):
-        if handlername in self.ccs_methods:
-            self.ccs_methods[handlername](data)
-        else:
-            raise Charm4PyError('Handler ' + handlername + ' not registered')
-
+        try:
+            if handlername in self.ccs_methods:
+                self.ccs_methods[handlername](data)
+            else:
+                raise Charm4PyError('Handler ' + handlername + ' not registered')
+        except Exception as e:
+            self.handleGeneralError(e)
 
 
 class CharmRemote(Chare):
@@ -1143,10 +1452,10 @@ class CharmRemote(Chare):
         return charm.myPe()
 
     def LBTurnInstrumentOn(self):
-        charm.lib.LBTurnInstrumentOn()
+        charm.LBTurnInstrumentOn()
 
     def LBTurnInstrumentOff(self):
-        charm.lib.LBTurnInstrumentOff()
+        charm.LBTurnInstrumentOff()
 
     def addReducer(self, func):
         charm.addReducer(func)
@@ -1181,23 +1490,20 @@ class CharmRemote(Chare):
             raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
         return eval(expression, sys.modules[module_name].__dict__)
 
-    # deposit value of one of the futures that was created on this PE
-    def _future_deposit_result(self, fid, result=None):
-        charm.threadMgr.depositFuture(fid, result)
-
-    def notify_future_deletion(self, store_id, depth):
-        charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers -= 1
-        if charm.threadMgr.borrowed_futures[(store_id, depth)].num_borrowers == 0:
+    def notify_future_deletion(self, store_id, key):
+        # a copy of the future that this PE sent under borrow key `key` was deleted
+        fut = charm.threadMgr.borrowed_futures[(store_id, key)]
+        fut.num_borrowers -= 1
+        if fut.num_borrowers == 0:
             # check if threadMgr.futures has the only reference to fid
             # if yes, remove it
-            fut = charm.threadMgr.borrowed_futures[(store_id, depth)]
             refcount = ctypes.c_long.from_address(id(fut)).value
             # print(store_id, "on pe", charm.myPe(), "depth", depth, "ref count =", refcount)
             if (fut.parent == None and refcount == 3) or (fut.parent != None and refcount == 2):
                 # print("Real deletion of", store_id, "from", charm.myPe())
                 if fut.parent == None:
                     charm.threadMgr.futures.pop(fut.fid)
-                charm.threadMgr.borrowed_futures.pop((store_id, depth))
+                charm.threadMgr.borrowed_futures.pop((store_id, key))
 
     def propagateException(self, error):
         if time.time() - charm.last_exception_timestamp >= 1.0:
@@ -1212,6 +1518,9 @@ class CharmRemote(Chare):
     def printStats(self):
         charm.printStats()
 
+    def _checkpoint_written(self, tag):
+        charm._checkpoint_written(tag)
+
     def registerNewChareType(self, name, source):
         if charm.options.remote_exec is not True:
             raise Charm4PyError('Remote code execution is disabled. Set charm.options.remote_exec to True')
@@ -1221,32 +1530,13 @@ class CharmRemote(Chare):
         charm.registerInCharm(chare_type)
 
     def registerNewChareTypes(self, classes):
+        if charm.options.remote_exec is not True:
+            # CkDyn allows registration after start-up only with remote_exec
+            # (CkDynAllowLateRegistration); it aborts otherwise
+            raise Charm4PyError('Registering classes after start needs charm.options.remote_exec = True')
         for chare_type in classes:
             charm.register(chare_type)
             charm.registerInCharm(chare_type)
-
-
-def load_charm_library(charm):
-    args = sys.argv
-    libcharm_path = os.path.join(os.path.dirname(__file__), '.libs')
-    if os.name == 'nt':
-        os.environ['PATH'] += ';' + libcharm_path
-    if '+libcharm_interface' in args:
-        arg_idx = args.index('+libcharm_interface')
-        interface = args.pop(arg_idx + 1)
-        args.pop(arg_idx)
-        if interface == 'cython':
-            from .charmlib.charmlib_cython import CharmLib
-        else:
-            raise Charm4PyError('Unrecognized interface ' + interface)
-    else:
-        # pick best available interface
-        import platform
-        py_impl = platform.python_implementation()
-        from .charmlib.charmlib_cython import CharmLib
-        
-      
-    return CharmLib(charm, charm.options, libcharm_path)
 
 
 def profile_send_function(func):
@@ -1266,23 +1556,6 @@ def profile_send_function(func):
 
 class __ReadOnlies(object):
     pass
-
-
-def rebuildByteArray(data):
-    return bytes(data)
-
-
-def rebuildArray(data, typecode):
-    #a = array.array('d', data.cast(typecode))  # this is slow
-    a = array.array(typecode)
-    a.frombytes(data)
-    return a
-
-
-def rebuildNumpyArray(data, shape, dt):
-    a = numpy.frombuffer(data, dtype=numpy.dtype(dt))  # this does not copy
-    a.shape = shape
-    return a.copy()
 
 
 charm = Charm()

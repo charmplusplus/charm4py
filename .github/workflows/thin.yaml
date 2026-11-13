@@ -1,0 +1,107 @@
+name: Charm4py 2 (thin)
+
+# Branch thin only: charm4py 2 builds libcharm from the Charm++ commit in
+# charm_version.txt (tools/build_charm.py) and runs only on Reconverse.
+# Runs for thin and, once thin is merged, for main (build_wheels.yml, the 1.x
+# wheel workflow, is dispatch-only and unused by 2.0).
+on:
+  push:
+    branches: [thin, main]
+  pull_request:
+    branches: [thin, main]
+  workflow_dispatch:
+
+# One run per ref: a new push to thin or to a PR branch cancels the run that is
+# still queued or in progress for the same ref, so runners are not held by stale runs.
+concurrency:
+  group: thin-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The source distribution, installed with pip, which clones and builds
+  # Charm++ and then runs the test suite on the installed package.
+  sdist:
+    name: sdist install and tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # On the macOS runners every launch of a Reconverse job has taken about
+    # 36 s (charm4py.yml, reconverse job), so the test step there is long.
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS runners are scarce in the organization: pull requests run the Linux
+        # job only; pushes to thin run both.
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-15"]') }}
+    env:
+      # LCI takes the first provider libfabric offers; on hosted runners that
+      # can be one that fails to start, and there is no fabric to test anyway.
+      FI_PROVIDER: tcp
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install libfabric
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update && sudo apt-get install -y libfabric-dev
+          else
+            brew install libfabric
+          fi
+      - name: Build the source distribution
+        run: |
+          python -m pip install build
+          python -m build --sdist
+          tar tzf dist/charm4py-*.tar.gz | sort > sdist-contents.txt
+          wc -l sdist-contents.txt
+      - name: Install from the source distribution
+        run: |
+          export CHARM_BUILD_PROCESSES=$(getconf _NPROCESSORS_ONLN)
+          python -m pip install -v dist/charm4py-*.tar.gz
+      - name: Install the test dependencies
+        run: |
+          # examples/ray/parameter_server.py needs torch, torchvision, filelock;
+          # the CPU-only torch on Linux (the default one carries CUDA)
+          if [ "$RUNNER_OS" = Linux ]; then
+            python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          else
+            python -m pip install torch torchvision
+          fi
+          python -m pip install filelock matplotlib
+      - name: Run the tests on the installed package
+        run: |
+          # outside the source tree, so that the tests import the installed package
+          mkdir "$RUNNER_TEMP/c4p_test"
+          cp -r auto_test.py test_config.json tests examples "$RUNNER_TEMP/c4p_test/"
+          cd "$RUNNER_TEMP/c4p_test"
+          python -c "import charm4py, os; print(charm4py.__file__); print(os.listdir(os.path.join(os.path.dirname(charm4py.__file__), '.libs')))"
+          python -m charmrun.start examples/simple/hello_world.py +p1
+          python -m charmrun.start examples/simple/hello_world.py +p2
+          export CHARM4PY_TEST_NUM_PROCESSES=2
+          export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+          python auto_test.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sdist-${{ matrix.os }}
+          path: |
+            dist/*.tar.gz
+            sdist-contents.txt
+
+  wheels:
+    name: wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04-arm builds the aarch64 wheels natively
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "ubuntu-24.04-arm"]') || fromJSON('["ubuntu-latest", "ubuntu-24.04-arm", "macos-15"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      # configuration in pyproject.toml, [tool.cibuildwheel]
+      - uses: pypa/cibuildwheel@v4.3.5
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cibw-wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl

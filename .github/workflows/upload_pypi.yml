@@ -1,17 +1,28 @@
 name: Publish wheels to pypi
 
+# Publishes the sdist and wheels of one successful run of thin.yaml (charm4py 2).
+# The sdist is taken from the ubuntu-latest sdist job only: the macos-15 job builds
+# a same-named .tar.gz. All wheels from the cibw-wheels-* artifacts are kept.
+#
+# Release procedure:
+#   1. Set the version in pyproject.toml on thin, commit, tag (git tag v<version>), push.
+#   2. Wait for the thin.yaml run of that commit to succeed (gh run list --branch thin).
+#   3. gh workflow run upload_testpypi.yml --ref thin -f workflow_id=<run id>
+#   4. Verify: pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ charm4py==<version>
+#   5. gh workflow run upload_pypi.yml --ref thin -f workflow_id=<same run id>
+
 on:
   workflow_dispatch:
     inputs:
       workflow_id:
-        description: "The workflow ID to pull wheels from"
+        description: "The run ID of thin.yaml to pull the sdist and wheels from"
         required: true
         type: string
 
 jobs:
   publish:
-    name: Publish Python 🐍 distribution 📦 to PyPI
-    runs-on: ubuntu-26.04
+    name: Publish Python distribution to PyPI
+    runs-on: ubuntu-latest
 
     environment:
       name: pypi
@@ -24,16 +35,30 @@ jobs:
       - name: Download all the dists
         uses: dawidd6/action-download-artifact@v28
         with:
-          # download all the wheels
           path: unmerged
           run_id: ${{ github.event.inputs.workflow_id }}
-          workflow: build_wheels.yml
+          workflow: thin.yaml
 
       - name: Merge files to dist
         run: |
           mkdir dist
-          mv unmerged/*/*.whl dist
-          mv unmerged/*/*.tar.gz dist
+          find unmerged/cibw-wheels-* -name '*.whl' -exec mv {} dist/ \;
+          find unmerged/sdist-ubuntu-latest -name '*.tar.gz' -exec mv {} dist/ \;
 
-      - name: Publish distribution 📦 to PyPI
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Check dist
+        run: |
+          ls -l dist
+          nwhl=$(ls dist/*.whl 2>/dev/null | wc -l)
+          nsdist=$(ls dist/*.tar.gz 2>/dev/null | wc -l)
+          echo "wheels: $nwhl, sdists: $nsdist"
+          if [ "$nwhl" -eq 0 ]; then echo "no wheels in dist/"; exit 1; fi
+          if [ "$nsdist" -ne 1 ]; then echo "expected exactly one sdist in dist/"; exit 1; fi
+          python -m pip install twine
+          twine check dist/*
+
+      - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

@@ -57,6 +57,17 @@ of a chare collection.
 * ``gather``: Adds contributions to a Python list, and sorts the list based
   on the index of the contributors in their collection.
 
+The numeric reducers (``max``, ``min``, ``sum``, ``product`` and the
+``logical_*`` reducers) over numpy arrays of two or more dimensions return an
+array of the contributors' shape: ``(2, 3)`` contributions give a ``(2, 3)``
+result, over a whole collection and over a section. All contributions to one
+reduction must have the same shape (the program aborts otherwise); in
+particular one reduction cannot mix arrays of two or more dimensions with
+1-D arrays or scalars (it aborts with "contributions to one reduction use
+different reducers"; contribute ``a.ravel()`` for a flat result). A
+contribution of one number, or of a 1-D array of one element, gives a Python
+scalar.
+
 
 Registering custom reducers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

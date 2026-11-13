@@ -30,8 +30,17 @@ class RayProxy(object):
     def __init__(self, subclass, args, pe):
         from charm4py import Chare, register, charm
         self.proxy = Chare(subclass, args=args, onPE=pe)
+        # the actor's entry methods: the proxy's bound proxy methods (they have
+        # an entry index, ep). The proxy's other attributes are not wrapped; some
+        # of them (gid, cid) raise AttributeError for an array element proxy.
         for f in dir(self.proxy):
-            if not f.startswith('__'):
+            if f.startswith('_'):
+                continue
+            try:
+                attr = getattr(self.proxy, f)
+            except AttributeError:
+                continue
+            if hasattr(attr, 'ep'):
                 setattr(self, f, RayProxyFunction(self.remote_function(f)))
 
     def remote_function(self, f):

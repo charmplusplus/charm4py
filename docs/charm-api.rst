@@ -98,6 +98,16 @@ Query processor and host information
 
     Returns the total number of PEs that the application is running on.
 
+* **charm.myNode()**:
+
+    Returns the logical node (process) of the caller, the index of the
+    :ref:`NodeGroup <nodegroup-api-label>` branches on it.
+
+* **charm.numNodes()**:
+
+    Returns the number of logical nodes (processes), which is the number of
+    branches of a NodeGroup.
+
 * **charm.myHost()**:
 
     Returns the host number on which the caller is running.
@@ -171,6 +181,36 @@ completion (see :ref:`Proxies <proxy-api-label>`).
 * **charm.waitQD()**
 
     Suspend the current coroutine until Quiescence Detection is reached.
+
+Checkpoint and restart
+----------------------
+
+* **charm.checkpoint(dirname, resume=None)**
+
+    Write a checkpoint of all chares, the readonlies and the runtime state to
+    the directory *dirname*. Starting the program again with
+    ``+restart dirname`` (the same command line otherwise) restores the
+    chares instead of running the main chare's constructor.
+
+    With ``resume=None``, it returns a :ref:`Future <futures-api-label>` that
+    receives ``None`` when the checkpoint has been written; call it from a
+    coroutine and wait on the future.
+
+    *resume* is a remote method with no parameters of a group (``proxy.method``,
+    called on every PE), of an array element (``proxy[index].method``) or of
+    the main chare (``self.thisProxy.method`` inside the main chare). The
+    runtime calls it when the checkpoint has been written, and, in a program
+    restarted from *dirname*, on the restored object once the restart is
+    complete. This is how a program continues after a restart: coroutines,
+    including a coroutine ``main`` and the coroutine that called
+    ``charm.checkpoint``, are not restored. Called from a coroutine, it also
+    returns a future that receives ``None`` in the checkpointing run when the
+    checkpoint has been written (otherwise it returns ``None``). The resume
+    method runs in both runs; a program tells them apart itself, for example
+    with a module-level flag that the main chare's constructor sets.
+
+    Futures created before a restart do not exist in the restarted run.
+    tests/thin/checkpoint_restart.py is an example.
 
 Timer-based scheduling
 ----------------------

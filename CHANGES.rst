@@ -2,6 +2,115 @@
 This describes the most significant changes. For more detail, see the commit
 log in the source code repository.
 
+What's new in v2.0
+==================
+
+Charm4py 2.0 keeps the Python API of 1.x and replaces what is underneath it.
+It is a binding (the nanobind extension module ``charm4py._ckdyn``) over CkDyn,
+the C API in Charm++ for chares whose classes and entry methods a language
+binding registers at run time. CkDyn is part of the Charm++ 9.0 line
+(``recharm``), whose runtime is Reconverse. Message dispatch, argument packing,
+sections, reductions, migration and checkpoints are done by Charm++ itself;
+charm4py's own scheduler, its message layer and the Charm++ Ext API it used
+are gone. On one PE, a one-way message costs 0.38 us (2.27 us in 1.x), a
+message to a coroutine 1.48 us (6.14 us) and a 1 MB numpy argument 24.9 us
+(59.6 us) (``docs/design/DESIGN.md``, sections 7.1 and 7.4). Upgrading a 1.x
+program: ``docs/migrating.rst``.
+
+**New**
+
+- Checkpoint and restart: ``charm.checkpoint(dirname, resume=None)`` and
+  ``+restart dirname``.
+- Zero-copy numpy arguments: a contiguous array of at least
+  ``charm.options.zerocopy_threshold`` bytes (1 MB) in a point-to-point send
+  goes through Charm++ zero-copy; received arrays are views of the message,
+  not copies (``charm.options.copy_received_arrays`` restores copies).
+- GPUs, in a Charm++ built with ``cuda`` or ``hip`` (``docs/gpus.rst``):
+
+  - device arrays (CuPy, PyTorch, Numba) as entry-method arguments, sent device
+    to device and received as ``charm4py._ckdyn.DeviceBuffer``;
+  - posted receives, ``Chare.post_buffer``, which receive an argument into an
+    array the program allocated;
+  - persistent device buffers, ``charm.DevicePersistent``, with ``get`` and
+    ``put`` between registered buffers (copy, CUDA IPC or GPUDirect RDMA);
+  - ``charm.myDevice()``, the GPU of the PE, which is made the current device
+    so that CuPy, PyTorch and Numba allocate on it.
+
+- ``NodeGroup``: one branch per process, with ``charm.myNode()`` and
+  ``charm.numNodes()``.
+- Entry-method attributes: ``@entry(expedited=True)``, ``inline``,
+  ``notrace``, ``appwork``, and ``exclusive`` and ``immediate`` for nodegroups.
+- Message priorities: ``proxy.method(..., prio=p)`` on point-to-point sends and
+  broadcasts.
+- Destroying array elements: ``proxy[i].ckDestroy()``, ``proxy.ckDestroy()``
+  and ``self.ckDestroy()``.
+- ``ckInsert`` works from any process, not only the one that created the
+  array (#320).
+- Sections are Charm++ ``CkMulticast`` sections: section members may migrate,
+  and ``charm.combine`` builds a deduplicated union.
+- Projections and Summary traces name every Python chare class and entry
+  method (``module.Class.method``), in a Charm++ built with tracing.
+- ``charm.options.cprofiling``: a ``cProfile`` dump per PE.
+- Also new since 1.1, from the 1.x line: CCS (#289), ``charm.hapiAddCudaCallback``
+  (#282), Projections support (#290), liveViz (#298, #310), live load data over
+  CCS with ``charm4py.appspector`` (#311), and steering, ``charm4py.steer`` (#312).
+
+**Changed** (each item is a section of ``docs/migrating.rst``)
+
+- Numpy arrays received from a broadcast, a section multicast or an
+  ``allreduce`` are read-only views, because one message is shared by every
+  recipient in the process ("Received numpy arrays are views").
+- A numpy array sent by zero-copy is read-only from the send until the
+  transfer is done, so that a write cannot change what the receiver gets.
+- Arguments are never passed by reference, even to a chare in the same
+  process, and are converted one by one, so the same object passed twice
+  arrives as two objects ("Arguments are never shared by reference").
+- Built-in reductions of numpy arrays with two or more dimensions return the
+  contributors' shape for whole collections too (1.x returned a flat array),
+  and contributions of different shapes abort (#321, "Numeric reduction
+  results keep the contributors' array shape").
+- ``local_msg_optim``, ``local_msg_buf_size`` and ``+libcharm_interface`` are
+  accepted and ignored, and ``pickle_protocol`` defaults to 5 ("Options that
+  are accepted and ignored").
+- ``self.migrate(pe)`` packs and removes the element before it returns, so it
+  must be the last call of the entry method; an element with a suspended
+  coroutine is not migrated by load balancers ("``migrate()`` must be the last
+  call", "Suspended coroutines and migration").
+- ``charm.split``, ``charm.combine``, proxy slicing and ``Group(C, onPEs=...)``
+  must be called from a coroutine, and ``charm.combine`` accepts arrays of one
+  chare class and one number of index dimensions only ("Sections").
+- ``_sectionVote_`` is a reserved method name ("Reserved names").
+- A derived chare class no longer runs its parent's constructor without
+  arguments before its own ("Constructors of derived chare classes").
+- ``charm.printStats()`` has no "send" column ("Profiling and appspector").
+
+**Removed or not available in 2.0**
+
+- Processes with several PEs: ``+pe N`` in one process is refused at start-up.
+- Classic Converse builds (``netlrts``, ``multicore``, ``mpi``), the
+  ``charmrun`` binary, and ``++ppn`` and ``++nodelist``.
+- PyPy and the ctypes and CFFI interface layers (removed after 1.1, #281).
+- Sections and constrained groups are not part of a checkpoint; a program
+  creates them again after ``+restart``.
+- ``charm.combine`` of groups, group sections, or arrays of different classes
+  or dimension counts.
+- A per-send ``expedited=`` keyword, ``prio=`` on section sends, and
+  priorities on reduction callbacks.
+- Tracing in wheels, CUDA and HIP wheels, free-threaded (``3.13t``) wheels and
+  a macOS x86_64 build.
+
+**Requirements**
+
+- CPython 3.11 or newer; wheels for 3.11 to 3.13 on Linux x86_64 and aarch64
+  (``manylinux_2_28``) and macOS 14 or newer on arm64.
+- Charm++ with CkDyn on Reconverse: the ``recharm`` commit in
+  ``charm_version.txt`` (a 9.0 release tag when one exists), built with
+  ``--with-refnum-type="unsigned int"``. Wheels and source installs include it.
+- One PE per process. Start processes with ``python -m charmrun.start +pN``,
+  LCI's ``lcrun -n N ... +pe N`` or the cluster's launcher
+  (``srun -n N ... +pe N``).
+
+
 What's new in v1.1
 ==================
 

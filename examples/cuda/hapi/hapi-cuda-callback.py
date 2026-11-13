@@ -14,7 +14,9 @@ def main(args):
     array_size = (N,)
 
     s = cuda.stream()
-    stream_handle = s.handle.value
+    # numba's stream handle is a ctypes c_void_p (.value) in numba.cuda and a
+    # cuda.bindings CUstream (int()) in numba-cuda 0.2x and later
+    stream_handle = s.handle.value if hasattr(s.handle, 'value') else int(s.handle)
 
     A_host = np.arange(N, dtype=np.float32)
 

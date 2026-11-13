@@ -1,5 +1,5 @@
 from charm4py import charm, Chare, Group, Array, Future, coro, Channel, Reducer, register
-from charm4py.c_object_store import CObjectStore
+from charm4py._ckdyn import CObjectStore
 
 @register
 class ObjectStore(Chare):

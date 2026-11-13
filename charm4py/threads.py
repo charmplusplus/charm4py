@@ -1,13 +1,11 @@
 from greenlet import getcurrent
 from .ray.api import get_object_store
+from . import _ckdyn
 
-# Future IDs (fids) are sometimes carried as reference numbers inside
-# Charm++ CkCallback objects. The data type most commonly used for
-# this is unsigned short, hence this limit
-# FIXME: This could fail according to the above warning, 
-# but we need large number of futures for the ray
-# programming model. 
-FIDMAXVAL = 4294967295
+# Future IDs (fids) are carried as reference numbers inside Charm++
+# CkCallback objects, which are 32 bits wide in the charm4py build of
+# Charm++ (REFNUM_TYPE "unsigned int")
+FIDMAXVAL = 2**32 - 2  # all ones is reserved (no reference number)
 
 
 class NotThreadedError(Exception):
@@ -78,13 +76,10 @@ class Future(object):
         if self.store:
             self.create_object(result)
         else:
-            charm.thisProxy[self.src]._future_deposit_result(self.fid, result)
+            _ckdyn.future_set(self.src, self.fid, result)
 
     def __call__(self, result=None):
         self.send(result)
-
-    def getTargetProxyEntryMethod(self):
-        return charm.thisProxy[self.src]._future_deposit_result
 
     def deposit(self, result):
         """ Deposit a value for this future. """
@@ -160,26 +155,30 @@ class Future(object):
         self._requested = True
 
     def __getstate__(self):
-        # keep track of how many PEs this future is being sent to
+        # keep track of how many copies of this future are sent. A copy notifies
+        # its parent PE when it is deleted, naming this object by its borrow key:
+        # one PE can hold several copies of the same stored future at the same
+        # depth (one per message that carried it), so the key is per object, not
+        # (store_id, depth). borrowed_futures keeps this object alive until every
+        # copy made from it has notified.
         self.num_borrowers += 1
+        key = 0
         if self.store:
-            # print("Getting state for id", self.store_id, "at borrow depth", self.borrow_depth, "num borrowers", self.num_borrowers, "on pe", charm.myPe())
-            #in the case where one pe has 2 instances of futures with matching store ids and borrow depths
-            if (self.store_id, self.borrow_depth) in charm.threadMgr.borrowed_futures:
-                if charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] is not self:
-                    charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)].num_borrowers += 1
-            else:
-                charm.threadMgr.borrowed_futures[(self.store_id, self.borrow_depth)] = self
-        return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe())
+            key = self.__dict__.get('_borrow_key')
+            if key is None:
+                tm = charm.threadMgr
+                tm.last_borrow_key += 1
+                key = self._borrow_key = tm.last_borrow_key
+            charm.threadMgr.borrowed_futures[(self.store_id, key)] = self
+        return (self.fid, self.src, self.store, self.borrow_depth, charm.myPe(), key)
 
     def __setstate__(self, state):
-        self.fid, self.src, self.store, self.borrow_depth, self.parent = state
+        self.fid, self.src, self.store, self.borrow_depth, self.parent, self.parent_key = state
         self.borrow_depth += 1
         if self.store:
             self.store_id = (self.src << 32) + self.fid
         else:
             self.store_id = 0
-        # print("Setting state for id", self.store_id, "on pe", charm.myPe(), "at depth", self.borrow_depth)
         self._requested = False
         self.num_borrowers = 0
 
@@ -187,12 +186,33 @@ class Future(object):
         if self.store:
             if self.parent == None and self.num_borrowers == 0:
                 # This is the owner, delete the object from the object store
-                # print("Deleting owner", self.store_id)
+                #print("Deleting owner", self.store_id)
                 self.delete_object()
             else:
                 # this is a borrower, notify its parent of the deletion
-                # print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent, "at depth", self.borrow_depth)
-                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.borrow_depth - 1)
+                #print("Deleting", self.store_id, "from", charm.myPe(), "sending notify to", self.parent)
+                charm.thisProxy[self.parent].notify_future_deletion(self.store_id, self.parent_key)
+
+
+def remote_future(pe, fid):
+    """ The Future object for future `fid` of PE `pe`, as received in a message
+        (a FUTURE slot). Sending to it sets the future on its PE. """
+    f = Future.__new__(Future)
+    f.fid = fid
+    f.gr = None
+    f.src = pe
+    f.nvals = 1
+    f.values = []
+    f.blocked = False
+    f.gotvalues = False
+    f.error = None
+    f.store = False
+    f.store_id = 0
+    f._requested = False
+    f.num_borrowers = 0
+    f.parent = None
+    f.borrow_depth = 0
+    return f
 
 
 class CollectiveFuture(Future):
@@ -247,7 +267,8 @@ class EntryMethodThreadManager(object):
         self.options = charm.options
         self.lastfid = 0  # future ID of the last future created on this PE
         self.futures = {}  # future ID -> Future object
-        self.borrowed_futures = {}
+        self.borrowed_futures = {}  # (store_id, borrow key) -> Future sent to other PEs (Future.__getstate__)
+        self.last_borrow_key = 0
         self.coll_futures = {}  # (future ID, obj) -> CollectiveFuture object
 
     def start(self):
@@ -266,8 +287,17 @@ class EntryMethodThreadManager(object):
             raise Charm4PyError('Migration of chares with active threads is not currently supported')
 
     def throwNotThreadedError(self):
-        raise NotThreadedError("Method '" + charm.last_em_exec.C.__name__ + "." +
-                               charm.last_em_exec.name +
+        # the entry method running now is the one the C++ fast path ran last
+        # (_ckdyn.last_ep()), unless the Python slow path ran one after it
+        em = charm.last_em_exec
+        ep = _ckdyn.last_ep()
+        if em is None or ep != getattr(charm, '_last_ep_mark', None):
+            em = charm.entryMethods.get(ep, em)
+        if em is None:
+            name = '<unknown>'
+        else:
+            name = em.C.__name__ + "." + em.name
+        raise NotThreadedError("Method '" + name +
                                "' must be a couroutine to be able to suspend (decorate it with @coro)")
 
     def pauseThread(self):
@@ -282,6 +312,11 @@ class EntryMethodThreadManager(object):
         if gr.notify:
             obj = gr.obj
             obj._thread_notify_target.threadPaused(obj._thread_notify_data)
+        # while a coroutine of obj is suspended, load balancers must not move obj
+        obj = gr.obj
+        obj._nsuspended += 1
+        if obj._nsuspended == 1 and getattr(obj, 'migratable', False):
+            _ckdyn.set_migratable(obj, False)
         if gr.parent != main_gr:
             # this can happen with threaded chare constructors that are called
             # "inline" by Charm++ on the PE where the collection is created.
@@ -289,9 +324,13 @@ class EntryMethodThreadManager(object):
             # we make the parent to be the main thread
             parent = gr.parent
             gr.parent = main_gr
-            return parent.switch()
+            result = parent.switch()
         else:
-            return main_gr.switch()
+            result = main_gr.switch()
+        obj._nsuspended -= 1
+        if obj._nsuspended == 0 and getattr(obj, 'migratable', False):
+            _ckdyn.set_migratable(obj, True)
+        return result
 
     def _resumeThread(self, gr, arg):
         """ Deposit a result or signal that a local entry method thread is waiting on,
@@ -301,9 +340,9 @@ class EntryMethodThreadManager(object):
         if gr.notify:
             obj = gr.obj
             obj._thread_notify_target.threadResumed(obj._thread_notify_data)
-        gr.switch(arg)
-        if gr.dead:
-            gr.obj._numthreads -= 1
+        obj = gr.obj
+        if _ckdyn.resume(gr, arg):
+            obj._numthreads -= 1
 
     def resumeThread_prof(self, gr, arg):
         ems = getcurrent().em_callstack
@@ -352,11 +391,14 @@ class EntryMethodThreadManager(object):
         if f.deposit(result):
             del futures[fid]
             # resume if a thread is blocked on the future
-            obj = f.gr.obj
+            # f.gr is a pooled worker greenlet: once the task that created f has
+            # ended, it holds no obj (or another task's); only a blocked waiter's
+            # obj is the one resumed
+            obj = getattr(f.gr, 'obj', None) if f.blocked else None
             f.resume(self)
             # this is necessary because the result is being deposited from an
             # entry method of CharmRemote, not the object that we resumed
-            if self.options.auto_flush_wait_queues and obj._cond_next is not None:
+            if obj is not None and self.options.auto_flush_wait_queues and obj._cond_next is not None:
                 obj.__flush_wait_queues__()
 
     def depositCollectiveFuture(self, fid, result, obj):

@@ -173,6 +173,7 @@
         "path": "tests/futures/test_futures.py"
     },
     {
+        "force_min_processes": 2,
         "path": "tests/futures/test_different_coroutines.py"
     },
     {
@@ -320,5 +321,66 @@
     {
         "force_min_processes": 2,
         "path": "tests/appspector/loads.py"
+    },
+    {
+        "path": "tests/thin/zerocopy.py"
+    },
+    {
+        "path": "tests/thin/sweep_defects.py"
+    },
+    {
+        "force_min_processes": 2,
+        "path": "tests/thin/cprofile.py"
+    },
+    {
+        "path": "tests/thin/entry_attrs.py"
+    },
+    {
+        "path": "tests/thin/nodegroup.py"
+    },
+    {
+        "path": "tests/thin/priorities.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/thin/device.py"
+    },
+    {
+        "path": "tests/thin/posted_receive.py"
+    },
+    {
+        "force_min_processes": 2,
+        "path": "tests/thin/ckdestroy.py"
+    },
+    {
+        "force_min_processes": 2,
+        "path": "tests/thin/remote_insert.py"
+    },
+    {
+        "path": "tests/thin/section_reduce.py"
+    },
+    {
+        "path": "tests/thin/reduction_shape.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/thin/device_persistent.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/thin/cupy_exit.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/cuda/single_array.py"
+    },
+    {
+        "condition": "deviceSupport",
+        "force_min_processes": 2,
+        "path": "tests/cuda/multi_array.py"
     }
 ]

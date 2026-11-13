@@ -1,12 +1,13 @@
 [build-system]
 requires = [
-    "setuptools>=43.0.0",
-    "cython>=3.0.0",
-    "numpy>=1.10.0",
-    # makes Reconverse builds relocatable on Linux (setup.py)
+    "scikit-build-core>=0.10",
+    "nanobind>=2.2",
+    "numpy",
+    "greenlet>=3.0.0",
+    # makes Reconverse builds relocatable on Linux (tools/bundle_libs.py)
     "patchelf; sys_platform == 'linux'",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "scikit_build_core.build"
 
 [project]
 description = 'Charm4py Parallel Programming Framework'
@@ -16,7 +17,7 @@ authors = [
 ]
 maintainers = [{ name = "Maya Taylor", email = "mayat4@illinois.edu" }]
 name = "charm4py"
-dynamic = ["version"]
+version = "2.0.0.dev0"
 readme = { file = "README.rst", content-type = "text/x-rst" }
 keywords = [
     "parallel",
@@ -27,7 +28,7 @@ keywords = [
     "HPC",
     "runtime",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = ["numpy>=1.10.0", "greenlet>=3.0.0"]
 classifiers = [
     'Intended Audience :: Developers',
@@ -48,3 +49,58 @@ Repository = "https://github.com/charmplusplus/charm4py"
 
 [project.scripts]
 charmrun = 'charmrun.start:start'
+
+[tool.scikit-build]
+minimum-version = "0.10"
+cmake.version = ">=3.21"
+build-dir = "build/{wheel_tag}"
+build.verbose = true
+wheel.packages = ["charm4py", "charmrun"]
+# the Cython sources and binaries of the old build are not part of the wheel
+# (these patterns also apply to CMake's output, so they name the old files only)
+wheel.exclude = [
+    "charm4py/charmlib/**",
+    "charm4py/c_object_store.pyx",
+    "charm4py/c_object_store.pxd",
+    "charm4py/c_object_store.cpp",
+    "charm4py/c_object_store.html",
+    "charm4py/c_object_store.cpython-*",
+    "charm4py/__pycache__/**",
+]
+editable.mode = "redirect"
+# build/ also holds the Charm++ clone and build of tools/build_charm.py
+sdist.exclude = ["build", "charm4py/.libs", "charm4py/charmlib", "dist", "wheelhouse",
+                 "venv*", "*.ckpt", "*.ckpt.*", "/*.png", "output"]
+
+[[tool.scikit-build.generate]]
+path = "charm4py/_version.py"
+template = "version='${version}'\n"
+location = "source"
+
+# ---- wheels (docs/design/SPEC-6.md) ----------------------------------------
+# Each wheel build first builds libcharm (tools/build_charm.py, the commit in
+# charm_version.txt; one Charm++ build serves every Python version of a job)
+# against a small libfabric (tools/build_libfabric.sh) that auditwheel or
+# delocate then copies into the wheel.
+[tool.cibuildwheel]
+build = "cp311-* cp312-* cp313-*"
+# no musllinux, no free-threaded interpreters (step 7)
+skip = "*-musllinux_* cp3??t-*"
+build-verbosity = 1
+test-command = [
+    "python -m charmrun.start {project}/examples/simple/hello_world.py +p1",
+    "python -m charmrun.start {project}/examples/simple/hello_world.py +p2",
+]
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+before-all = "sh tools/build_libfabric.sh /usr/local"
+# CHARM4PY_WHEEL_BUILD: LCI's ofi backend only and no hwloc (tools/build_charm.py)
+environment = { OFI_ROOT = "/usr/local", LD_LIBRARY_PATH = "/usr/local/lib", FI_PROVIDER = "tcp", CHARM4PY_WHEEL_BUILD = "1" }
+
+[tool.cibuildwheel.macos]
+archs = ["arm64"]
+before-all = "MACOSX_DEPLOYMENT_TARGET=14.0 sh tools/build_libfabric.sh $HOME/charm4py-libfabric"
+environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OFI_ROOT = "$HOME/charm4py-libfabric", FI_PROVIDER = "tcp", CHARM4PY_WHEEL_BUILD = "1" }

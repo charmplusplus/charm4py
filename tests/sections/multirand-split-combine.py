@@ -1,3 +1,9 @@
+# Changed for the thin charm4py (DESIGN.md 5.4 item 15, 2026-11-08): charm.combine
+# accepts only array sections and arrays of one chare class with one index
+# dimension count, since a combined section is a Charm++ multi-array section, and
+# raises TypeError for group sections. This test therefore combines only the
+# collections that come from its arrays (Collection.is_array); splits of every
+# collection, and all the other checks, are unchanged.
 from charm4py import charm, Chare, Group, Array, Reducer, Future
 import random
 import numpy
@@ -55,10 +61,11 @@ class Test(Chare):
 
 class Collection(object):
 
-    def __init__(self, elems, proxy):
+    def __init__(self, elems, proxy, is_array):
         self.elems = set(elems)  # set of (cid, idx)
         assert len(self.elems) == len(elems)
         self.proxy = proxy
+        self.is_array = is_array  # an array, or a section of arrays (combine takes only these)
 
     def addElems(self, elems):
         # collections resulting from combining sections could get the same
@@ -100,7 +107,7 @@ class Collection(object):
             assert len(section) > 0
         proxies = charm.split(self.proxy, N, inSections)
         assert len(proxies) == N
-        collections = [Collection(sections[i], proxies[i]) for i in range(N)]
+        collections = [Collection(sections[i], proxies[i], self.is_array) for i in range(N)]
         return collections
 
 
@@ -125,14 +132,14 @@ def main(args):
         proxy = Array(Test, random.randint(1, charm.numPes() * 10), args=[cid])
         f = Future()
         proxy.getIds(f)
-        collections.append(Collection(f.get(), proxy))
+        collections.append(Collection(f.get(), proxy, True))
         cid += 1
 
     for _ in range(NUM_GROUPS):
         proxy = Group(Test, args=[cid])
         f = Future()
         proxy.getIds(f)
-        collections.append(Collection(f.get(), proxy))
+        collections.append(Collection(f.get(), proxy, False))
         cid += 1
 
     sections_split = 0
@@ -154,11 +161,12 @@ def main(args):
                 sections_split += 1
         else:
             # combine
+            array_collections = [c for c in collections if c.is_array]
             N = random.randint(2, 10)
-            cs = random.sample(collections, N)
+            cs = random.sample(array_collections, N)
             proxies = [c.proxy for c in cs]
             proxy = charm.combine(*proxies)
-            c = Collection([], proxy)
+            c = Collection([], proxy, True)
             for c_ in cs:
                 c.addElems(c_.elems)
             assert hasattr(c.proxy, 'section') and c.proxy.issec

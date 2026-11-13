@@ -1,0 +1,9 @@
+# Weekly GPU gate of the thin charm4py stack on NCSA Delta (SPEC-3.md section 6, decision F18).
+# Kale installs this himself, since it runs under his allocation:
+#   ssh delta; crontab-style edit with `scrontab -e`, paste the two lines below; `scrontab -l` lists them.
+# Runs Sunday 03:00 Central time (Delta's local time) on gpuA40x4-interactive for at most
+# 30 minutes, and appends one summary line per run to $WS/gate-history.txt (written by
+# gpu-gate.sbatch when GATE_HISTORY is set). The builds are not refreshed by this entry;
+# it tests whatever $WS/charm and $WS/charm4py hold (see README.md to rebuild).
+#SCRON -A mzu-delta-gpu -p gpuA40x4-interactive -t 00:30:00 -N 1 --ntasks=4 --cpus-per-task=4 --gpus-per-node=2 --mem=32g -J c4thin-weekly -o /projects/mzu/lkale/software/charm4py-thin/gate-%j.out
+0 3 * * 0 cd /projects/mzu/lkale/software/charm4py-thin && GATE_HISTORY=/projects/mzu/lkale/software/charm4py-thin/gate-history.txt bash gpu-gate.sbatch
