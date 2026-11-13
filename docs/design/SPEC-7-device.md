@@ -287,6 +287,19 @@ gpub002 (gpuA40x4-interactive, two NVIDIA A40); the modes printed by
 `+gpupersistverbose` are "IPC open ... failed; using RDMA" in `n2` and "CUDA/HIP IPC
 between processes on one host" in `n2vis`. The script is tools/delta/cxx-latency.sbatch.
 
+**Correction (2026-11-13).** `latency-persistent` as shipped on recharm never told PE 1
+the message size (`Block::size` was uninitialised there and the receive callback of a put
+carries no length), so PE 1 replied with puts of 0 bytes and the benchmark reported
+(full put + empty put) / 2, about half the real one-way time for large messages. The
+persistent columns below for `n2` and two nodes come from a corrected copy that tracks
+the size on PE 1 (`$WS/logs-cxxbench/verify/latency-check`, run with `-c 0`: the fixed
+benchmark without checks, `-s 1024 -x 67108864 -i 200 -l 20 -w 5`): `n2` from job
+23851354 on gpub001, two nodes from job 23854427 on gpub075 and gpub092. The `n2vis`
+persistent column is still from the defective benchmark. The fix to the benchmark itself
+is on the local branch `latency-persistent-size` (not pushed). The binding tables above
+measured the persistent path with `bench_devpersist.py`, which carries the size in both
+directions, so they are not affected.
+
 These numbers were measured in C++ with no Python binding involved; the tables above
 (`bench_zc_delta.py`, `bench_devpersist.py`, median of 20 on A100 nodes) were measured
 through the binding, so they include the Python-side call, future and callback costs and
@@ -294,22 +307,22 @@ are not directly comparable cell by cell.
 
 One node, two processes, one GPU per task (`n2`; both paths on RDMA within the host), us:
 
-| size | host-staged message | zero-copy parameter | persistent put |
+| size | host-staged message | zero-copy parameter | persistent put (corrected, job 23851354, gpub001) |
 |---|---|---|---|
-| 1 KB | 18.7 | 15.3 | 18.5 |
-| 4 KB | 20.4 | 15.3 | 18.3 |
-| 16 KB | 37.0 | 17.2 | 18.4 |
-| 64 KB | 45.5 | 19.3 | 19.7 |
-| 256 KB | 88.9 | 28.0 | 24.4 |
-| 1 MB | 248 | 62.8 | 42.0 |
-| 4 MB | 882 | 223 | 113 |
-| 16 MB | 7960 | 846 | 488 |
-| 64 MB | 34500 | 3330 | 1910 |
+| 1 KB | 18.7 | 15.3 | 19.5 |
+| 4 KB | 20.4 | 15.3 | 19.2 |
+| 16 KB | 37.0 | 17.2 | 19.4 |
+| 64 KB | 45.5 | 19.3 | 21.8 |
+| 256 KB | 88.9 | 28.0 | 30.3 |
+| 1 MB | 248 | 62.8 | 64.4 |
+| 4 MB | 882 | 223 | 229 |
+| 16 MB | 7960 | 846 | 842 |
+| 64 MB | 34500 | 3330 | 3320 |
 
 One node, two processes, both GPUs visible (`n2vis`; persistent on CUDA IPC, the
 zero-copy parameter on RDMA, or on HAPI's IPC buffer with `+gpushm`), us:
 
-| size | host-staged message | zero-copy parameter | zero-copy parameter, `+gpushm` | persistent put |
+| size | host-staged message | zero-copy parameter | zero-copy parameter, `+gpushm` | persistent put (from the defective benchmark, about 2x optimistic for large sizes; rerun pending) |
 |---|---|---|---|---|
 | 1 KB | 19.5 | 15.5 | 25.8 | 8.57 |
 | 4 KB | 20.5 | 15.4 | 26.0 | 8.31 |
@@ -329,38 +342,42 @@ rerun.
 Two nodes, one process and one GPU each (RDMA over Slingshot; job 23846960 on gpub074 and
 gpub082, one A40 each; `+gpupersistverbose`: "put: RDMA on registered device memory"), us:
 
-| size | host-staged message | zero-copy parameter | persistent put |
+| size | host-staged message | zero-copy parameter | persistent put (corrected, job 23854427, gpub075 and gpub092) |
 |---|---|---|---|
-| 1 KB | 19.3 | 15.7 | 18.3 |
-| 4 KB | 20.4 | 15.7 | 18.2 |
-| 16 KB | 37.8 | 17.9 | 18.5 |
-| 64 KB | 49.4 | 21.5 | 19.7 |
-| 256 KB | 94.6 | 33.4 | 24.4 |
-| 1 MB | 269 | 78.4 | 42.6 |
-| 4 MB | 909 | 278 | 112 |
-| 16 MB | 7820 | 1050 | 393 |
-| 64 MB | 34500 | 4280 | 1400 |
+| 1 KB | 19.3 | 15.7 | 20.2 |
+| 4 KB | 20.4 | 15.7 | 19.0 |
+| 16 KB | 37.8 | 17.9 | 19.7 |
+| 64 KB | 49.4 | 21.5 | 21.5 |
+| 256 KB | 94.6 | 33.4 | 30.6 |
+| 1 MB | 269 | 78.4 | 65.8 |
+| 4 MB | 909 | 278 | 255 |
+| 16 MB | 7820 | 1050 | 969 |
+| 64 MB | 34500 | 4280 | 3770 |
 
 Reading. Below 64 KB the fixed per-message cost dominates every path: the zero-copy
-parameter takes 15-19 us, the persistent put 18-20 us over RDMA (no gain, slightly slower
-up to 64 KB) and 8.3-9.6 us over CUDA IPC (about 1.8 times faster than the zero-copy
-parameter). Over RDMA the persistent put gains from 128 KB on and reaches 1.7 times at
-16-64 MB (488 against 846 us at 16 MB; 35 against 20 GB/s at 64 MB); with IPC it is 2.1-2.7
-times faster than either zero-copy form from 256 KB up (360 against 846 and 766 us at 16 MB;
-48 GB/s at 64 MB). The host-staged message costs only 3-5 us more than the zero-copy
-parameter at 1-4 KB, but from 8 KB on it is 2-10 times slower than the zero-copy parameter
-and 16-25 times slower than the persistent put at 16-64 MB (7700-7960 us at 16 MB).
+parameter takes 15-19 us, the persistent put over RDMA 19-22 us (about 1.25 times slower
+up to 16 KB, on one node and between nodes). On one node over RDMA the corrected
+persistent put and the zero-copy parameter take the same time within 3% from 256 KB up
+(842 against 846 us at 16 MB, 3320 against 3330 us at 64 MB, 20 GB/s; the two columns
+come from different jobs and nodes). The `n2vis` (CUDA IPC) persistent column is still
+from the defective benchmark and is not interpreted here. The host-staged message costs
+only 3-5 us more than the zero-copy parameter at 1-4 KB, but from 8 KB on it is 2-10
+times slower than the zero-copy parameter (7700-7960 us at 16 MB).
 
-Between nodes the persistent put is slower than the zero-copy parameter up to 16 KB (18.2
-against 15.7 us), equal at 32 KB, and faster from 64 KB on: 1.8 times at 1 MB, 2.7 times at
-16 MB and 3.1 times at 64 MB (1400 against 4280 us). The zero-copy parameter is 1.2-1.3
-times slower between nodes than over one-node RDMA from 1 MB up (4280 against 3330 us at
-64 MB), while the persistent put takes the same time or less (1400 against 1910 us at
-64 MB). These persistent times are not yet explained: 64 MB in 1400 us is 48 GB/s, above
-the 25 GB/s of a 200 Gb/s Slingshot port, 16 MB took 0.85 ms through the binding between
-two A100 nodes (table above), and `latency-persistent` does not check the received bytes.
-A run that checks the destination buffer after each put is needed before these
-persistent numbers are used.
+Between nodes the persistent put is slower than the zero-copy parameter up to 16 KB (19.7
+against 17.9 us), equal at 64 KB, and faster from 256 KB on by 1.08-1.19 times: 1.19
+times at 1 MB (65.8 against 78.4 us), 1.08 times at 16 MB (969 against 1050 us) and 1.13
+times at 64 MB (3770 against 4280 us, 17.8 GB/s, below the 25 GB/s of the node's one
+200 Gb/s Cassini port). The earlier "unexplained" persistent times (1400 us at 64 MB,
+48 GB/s) came from the benchmark defect described above: PE 1 replied with empty puts. A
+checked copy of the benchmark that fills the source before each put and verifies the
+destination in the receive callback found 0 mismatching bytes in every size on one node
+and between nodes, and the runtime is correct: a put between processes is a get issued
+by the destination's PE (`ckrdmadevice.C`), so the receive callback fires only after the
+destination's own RDMA read completes. The corrected 16 MB time between A40 nodes, 0.97
+ms, is in line with the binding's 0.85 ms for 16 MB between A100 nodes (`bench_devpersist.py`,
+table above; different node types, so not a cell-by-cell comparison): the binding adds
+no visible cost at this size.
 
 **Open.** HAPI's `+gpushm` with one GPU per task (above; the coordinator handles the
 issue). The pin in `charm_version.txt` moves at merge (the binding needs
