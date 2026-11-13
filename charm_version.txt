@@ -5,11 +5,9 @@
 # The pin is a commit of Charm++'s recharm branch that carries CkDyn
 # (ckdyn.h, the layer this package binds to); CkDyn merged into recharm
 # with charm PR #4193 on 2026-11-12. The pin moves to a 9.0 release tag
-# when one exists. Until charm PR #4249 (shaped reductions) merges, the
-# pin is the tip of its branch ckdyn-shaped-reductions, which is recharm
-# plus that PR's three commits.
+# when one exists.
 # Reconverse is the contrib/reconverse submodule at whatever commit this
 # Charm++ commit records.
 repository https://github.com/charmplusplus/charm.git
-branch ckdyn-shaped-reductions
-commit a1519160360fd416aed5e66e99629a875c067d61
+branch recharm
+commit 964c6626f4c47f2b84a6f1fb7a811180c2047720
