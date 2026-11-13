@@ -354,6 +354,10 @@
         "path": "tests/thin/ckdestroy.py"
     },
     {
+        "force_min_processes": 2,
+        "path": "tests/thin/remote_insert.py"
+    },
+    {
         "path": "tests/thin/section_reduce.py"
     },
     {
