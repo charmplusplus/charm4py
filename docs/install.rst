@@ -176,9 +176,26 @@ GPUs (CUDA and HIP)
 
 Wheels have no device support. A CUDA or HIP build is a source build against
 a Charm++ built with ``cuda`` or ``hip`` and the site's CUDA, libfabric and
-PMI. The recipe (``CHARM_EXTRA_BUILD_OPTS=cuda``) is written and checked in
-step 3 of the Charm4py 2 plan (``docs/design/DESIGN.md``, section 6.4); until
-then this section is a placeholder.
+PMI, by one of two routes:
+
+* let ``pip install .`` build Charm++ with the device option added,
+  ``CHARM_EXTRA_BUILD_OPTS=cuda`` (or ``hip``);
+* or build the ``charm4py`` target yourself and point
+  ``CHARM4PY_CHARM_BUILD_DIR`` at it (with ``CHARM4PY_CHARM_DIR`` at the source
+  tree), as in `Building against your own Charm++ build`_::
+
+    $ ./build charm4py reconverse-linux-x86_64 cuda -j16 --with-production \
+          --disable-fortran --with-refnum-type="unsigned int" \
+          --destination=$PWD/reconverse-linux-x86_64-cuda-charm4py
+
+Each process uses one GPU, and Charm4py makes it the current device of the
+process (``charm.myDevice()``), so CuPy, PyTorch and Numba allocate on it.
+Transfers between processes on one node use CUDA IPC only when every GPU of
+the node is visible to every process (``srun --gpus=N --gpu-bind=none``, not
+``--gpus-per-task=1``; device arrays sent as arguments also need the
+``+gpushm`` option); otherwise they use GPUDirect RDMA. ``tools/delta``
+holds a working recipe for NCSA Delta (``env-cuda.sh``, ``build.sh``), and
+:doc:`gpus` describes the device API.
 
 Known issues
 ------------
