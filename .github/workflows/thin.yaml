@@ -2,12 +2,13 @@ name: Charm4py 2 (thin)
 
 # Branch thin only: charm4py 2 builds libcharm from the Charm++ commit in
 # charm_version.txt (tools/build_charm.py) and runs only on Reconverse.
-# The 1.x workflows (charm4py.yml, build_wheels.yml) stay as they are for main.
+# Runs for thin and, once thin is merged, for main (build_wheels.yml, the 1.x
+# wheel workflow, is dispatch-only and unused by 2.0).
 on:
   push:
-    branches: [thin]
+    branches: [thin, main]
   pull_request:
-    branches: [thin]
+    branches: [thin, main]
   workflow_dispatch:
 
 # One run per ref: a new push to thin or to a PR branch cancels the run that is
