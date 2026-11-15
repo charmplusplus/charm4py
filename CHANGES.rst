@@ -104,7 +104,7 @@ program: ``docs/migrating.rst``.
 - CPython 3.11 or newer; wheels for 3.11 to 3.13 on Linux x86_64 and aarch64
   (``manylinux_2_28``) and macOS 14 or newer on arm64.
 - Charm++ with CkDyn on Reconverse: the ``recharm`` commit in
-  ``charm_version.txt`` (a 9.0 release tag when one exists), built with
+  ``charm_version.txt`` (release tag v9.0.0-beta1), built with
   ``--with-refnum-type="unsigned int"``. Wheels and source installs include it.
 - One PE per process. Start processes with ``python -m charmrun.start +pN``,
   LCI's ``lcrun -n N ... +pe N`` or the cluster's launcher
