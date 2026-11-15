@@ -107,7 +107,11 @@ def run_mixed(flat):
 
 
 def check_mixed(flag):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(('LCT_', 'LCI_', 'PMI_', 'PMIX_'))}
+    # The child must start as a single process. Besides the PMI variables of this
+    # run, remove the Slurm variables: with no PMI server, LCI's file-based
+    # bootstrap reads SLURM_NTASKS and waits for the other ranks of the step.
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(('LCT_', 'LCI_', 'PMI_', 'PMIX_', 'SLURM_'))}
     p = subprocess.run([sys.executable, os.path.abspath(__file__), flag, '+pe', '1'], env=env,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120)
     out = p.stdout
