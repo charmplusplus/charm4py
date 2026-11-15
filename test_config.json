@@ -271,7 +271,8 @@
         "path": "examples/nqueen/nqueen-numba.py"
     },
     {
-        "path": "examples/parallel-map/square.py"
+        "path": "examples/parallel-map/square.py",
+        "force_min_processes": 2
     },
     {
         "path": "examples/particle/particle.py",
@@ -290,7 +291,8 @@
         "path": "examples/simple/hello_world.py"
     },
     {
-        "path": "examples/ray/simple.py"
+        "path": "examples/ray/simple.py",
+        "force_min_processes": 2
     },
     {
         "timeout_override": 480,
@@ -303,7 +305,8 @@
         "args": "async"
     },
     {
-        "path": "examples/ray/fib.py"
+        "path": "examples/ray/fib.py",
+        "force_min_processes": 2
     },
     {
         "prefix": "tests/exec.sh",
@@ -316,7 +319,8 @@
     },
     {
         "path": "examples/ray/mandelbrot/mandelbrot.py",
-        "args": "100 100 10 10"
+        "args": "100 100 10 10",
+        "force_min_processes": 2
     },
     {
         "force_min_processes": 2,
