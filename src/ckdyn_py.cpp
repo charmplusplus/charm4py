@@ -176,7 +176,7 @@ PyObject *g_dumps, *g_loads, *g_array_type, *g_format_exception;
 PyObject *g_DONE, *g_EXC, *g_worker_main, *g_empty_tuple;
 PyObject *s_cond_next, *s_flush, *s_ckdyn_target, *s_src, *s_fid, *s_store, *s_append, *s_frombytes,
     *s_ret, *s_awaitable, *s_is_ray, *s_prio, *s_Future, *s_createFuture, *s_name, *s_kw_protocol_cb,
-    *s_kw_buffers, *s_kw_store;
+    *s_kw_buffers, *s_kw_store, *s_cai;
 PyObject *k_block, *k_bcast, *k_bcastret, *k_creation, *k_is_ray, *k_custom_reducer, *k_single, *k_refnum,
     *k_sid, *k_constrained;
 
@@ -852,6 +852,18 @@ bool future_ids(PyObject *f, int *pe, uint32_t *fid) {
 
 PyObject *getattr_or_null(PyObject *o, const char *name);
 
+// getattr that returns 0 and *out = NULL when the attribute is missing, without
+// raising an AttributeError internally where the interpreter allows it (generic
+// getattr): PyObject_GetOptionalAttr from Python 3.13, _PyObject_LookupAttr before.
+// -1 with an exception set for any other error.
+int lookup_attr(PyObject *o, PyObject *name, PyObject **out) {
+#if PY_VERSION_HEX >= 0x030D0000
+  return PyObject_GetOptionalAttr(o, name, out);
+#else
+  return _PyObject_LookupAttr(o, name, out);
+#endif
+}
+
 // The done function of an NCPY or DEVICE slot: the source object (one
 // reference, taken when the slot was added) may be released. CkDyn calls it
 // from the scheduler of the sending PE.
@@ -1195,13 +1207,18 @@ struct Packer {
       CkDynMsgAddProxy(b, &t);
       return true;
     }
-    PyObject *cai = getattr_or_null(o, "__cuda_array_interface__");
+    // A device array: look for __cuda_array_interface__ without raising (and
+    // clearing) an AttributeError for every pickled argument. The built-in
+    // containers never have it.
+    if (tp == &PyList_Type || tp == &PyTuple_Type || tp == &PyDict_Type || tp == &PySet_Type)
+      return pickle(o);
+    PyObject *cai = nullptr;
+    if (lookup_attr(o, s_cai, &cai) < 0) PyErr_Clear();   // a failing __getattr__: pickle, as before
     if (cai) {
       bool ok = add_device(o, cai);
       Py_DECREF(cai);
       return ok;
     }
-    PyErr_Clear();
     return pickle(o);
   }
 
@@ -3158,6 +3175,7 @@ NB_MODULE(_ckdyn, m) {
   INTERN(s_fid, "fid");
   INTERN(s_store, "store");
   INTERN(s_append, "append");
+  INTERN(s_cai, "__cuda_array_interface__");
   INTERN(s_frombytes, "frombytes");
   INTERN(s_ret, "ret");
   INTERN(s_awaitable, "awaitable");
