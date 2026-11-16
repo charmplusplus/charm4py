@@ -22,7 +22,7 @@ There are three ways to install it:
 Installing a wheel
 ------------------
 
-Wheels exist for CPython 3.11, 3.12 and 3.13 on
+Wheels exist for CPython 3.11, 3.12, 3.13 and 3.14 on
 
 * Linux x86_64 and aarch64 (``manylinux_2_28``: glibc 2.28 or newer), and
 * macOS 14 or newer on Apple Silicon (arm64).

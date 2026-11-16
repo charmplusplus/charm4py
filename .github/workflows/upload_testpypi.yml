@@ -5,11 +5,11 @@ name: Publish wheels to testpypi
 # a same-named .tar.gz. All wheels from the cibw-wheels-* artifacts are kept.
 #
 # Release procedure:
-#   1. Set the version in pyproject.toml on thin, commit, tag (git tag v<version>), push.
-#   2. Wait for the thin.yaml run of that commit to succeed (gh run list --branch thin).
-#   3. gh workflow run upload_testpypi.yml --ref thin -f workflow_id=<run id>
+#   1. Set the version in pyproject.toml on main, commit, tag (git tag v<version>), push.
+#   2. Wait for the thin.yaml run of that commit to succeed (gh run list --branch main).
+#   3. gh workflow run upload_testpypi.yml --ref main -f workflow_id=<run id>
 #   4. Verify: pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ charm4py==<version>
-#   5. gh workflow run upload_pypi.yml --ref thin -f workflow_id=<same run id>
+#   5. gh workflow run upload_pypi.yml --ref main -f workflow_id=<same run id>
 
 on:
   workflow_dispatch:

@@ -35,7 +35,6 @@ classifiers = [
     'Operating System :: MacOS :: MacOS X',
     'Operating System :: POSIX',
     'Operating System :: POSIX :: Linux',
-    'Operating System :: Microsoft :: Windows',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Topic :: System :: Distributed Computing',
@@ -84,7 +83,7 @@ location = "source"
 # against a small libfabric (tools/build_libfabric.sh) that auditwheel or
 # delocate then copies into the wheel.
 [tool.cibuildwheel]
-build = "cp311-* cp312-* cp313-*"
+build = "cp311-* cp312-* cp313-* cp314-*"
 # no musllinux, no free-threaded interpreters (step 7)
 skip = "*-musllinux_* cp3??t-*"
 build-verbosity = 1

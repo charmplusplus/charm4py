@@ -1,9 +1,9 @@
 name: Charm4py 2 (thin)
 
-# Branch thin only: charm4py 2 builds libcharm from the Charm++ commit in
-# charm_version.txt (tools/build_charm.py) and runs only on Reconverse.
-# Runs for thin and, once thin is merged, for main (build_wheels.yml, the 1.x
-# wheel workflow, is dispatch-only and unused by 2.0).
+# Charm4py 2: builds libcharm from the Charm++ commit in charm_version.txt
+# (tools/build_charm.py) and runs only on Reconverse. Runs for main (and thin
+# while it exists); 1.x has its own workflow on branch 1.x. build_wheels.yml,
+# the 1.x wheel workflow, is dispatch-only and unused by 2.0.
 on:
   push:
     branches: [thin, main]
@@ -29,9 +29,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS runners are scarce in the organization: pull requests run the Linux
-        # job only; pushes to thin run both.
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-15"]') }}
+        # Pull requests and pushes both run Linux and one macOS job here, so that
+        # macOS problems show up before a merge. macOS runners are scarce in the
+        # organization, so the macOS wheel job runs on pushes only.
+        os: ["ubuntu-latest", "macos-15"]
     env:
       # LCI takes the first provider libfabric offers; on hosted runners that
       # can be one that fails to start, and there is no fabric to test anyway.
