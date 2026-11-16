@@ -1022,11 +1022,13 @@ class Charm(object):
             raise Charm4PyError(what + ' must be called from a coroutine: it waits until '
                                 'every member has joined the new section(s)')
 
-    def _create_section(self, proxy, members, done):
+    def _create_section(self, proxy, members, done, helpers):
         """ Create one section on this PE (its root) from members, a list of
             (gid, pe) or (aid, index); returns the section id. Members from several
             arrays (the split of a combined section) become one section per array,
-            combined. """
+            combined; the ids of those per-array sections are appended to helpers,
+            for the caller to delete once done has fired (the combined section has
+            copied their members by then). """
         if proxy._kind == CKDYN_GROUP:
             gid = members[0][0]
             return _ckdyn.section_create_group(gid, sorted({pe for _, pe in members}), 0, done)
@@ -1042,6 +1044,7 @@ class Charm(object):
             aid, ndims, flat = parts[0]
             return _ckdyn.section_create_array(aid, ndims, flat, 0, done)
         sids = [_ckdyn.section_create_array(aid, ndims, flat, 0, None) for aid, ndims, flat in parts]
+        helpers.extend(sids)
         return _ckdyn.section_combine(sids, done)
 
     def split(self, proxy, numsections, section_func=None, elems=None, slicing=None):
@@ -1079,8 +1082,12 @@ class Charm(object):
             if len(m) == 0:
                 raise Charm4PyError('charm.split: section ' + str(n) + ' has no members')
         done = self.Future(numsections)
-        sids = [self._create_section(proxy, m, done) for m in members]
+        helpers = []
+        sids = [self._create_section(proxy, m, done, helpers) for m in members]
         done.get()
+        # every combined section is ready: the per-array parts are not needed
+        for sid in helpers:
+            _ckdyn.section_delete(sid)
         return [proxy._as_section(sid) for sid in sids]
 
     def combine(self, *proxies):
@@ -1103,13 +1110,19 @@ class Charm(object):
                                 str(first.ndims) + ', ' + str(p.ndims) + ')')
         self._require_coroutine('charm.combine')
         sids = []
+        helpers = []
         for p in proxies:
             if not p.issec:
                 p = self.split(p, 1)[0]  # the whole array as a section
+                helpers.append(p.section[1])
             sids.append(p.section[1])
         done = self.Future()
         sid = _ckdyn.section_combine(sids, done)
         done.get()
+        # the combined section is ready and has copied the members of its parts:
+        # the whole-array sections made above are not needed
+        for hsid in helpers:
+            _ckdyn.section_delete(hsid)
         return first._as_section(sid)
 
     def startQD(self, callback):
