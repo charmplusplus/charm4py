@@ -11,11 +11,11 @@
 #   n2visshm the same with +gpushm: the zero-copy parameter goes through HAPI's IPC buffer;
 #            +gpucommbuffer 256 (MB) because the default 64 MB buffer aborts a 64 MB message.
 #   2node    srun -N 2 --ntasks-per-node=1 --gpus-per-task=1: RDMA over Slingshot.
-# Submit:  sbatch -N 1 cxx-latency.sbatch
-#          sbatch -N 2 --ntasks-per-node=1 --gpus-per-node=1 cxx-latency.sbatch
+# Submit:  sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -N 1 cxx-latency.sbatch
+#          sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -N 2 --ntasks-per-node=1 --gpus-per-node=1 cxx-latency.sbatch
 # Sources $WS/charm4py/tools/delta/env-cuda.sh (modules, CBUILD_CXX = the charm++-target
-# CUDA reconverse build). Change WS (or CBUILD_CXX after sourcing) for another workspace.
-#SBATCH -A mzu-delta-gpu
+# CUDA reconverse build). WS is $CHARM4PY_DELTA_WS (required); set CBUILD_CXX after
+# sourcing for another build.
 #SBATCH -p gpuA40x4-interactive
 #SBATCH -J cxxlat
 #SBATCH -N 1
@@ -26,7 +26,7 @@
 #SBATCH -t 00:40:00
 #SBATCH -o cxxlat-%j.out
 ulimit -c 0
-WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
 cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)
 export CUDA_ARCH=sm_$cap
 source $WS/charm4py/tools/delta/env-cuda.sh

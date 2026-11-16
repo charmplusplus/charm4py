@@ -1,12 +1,11 @@
 #!/bin/bash
 # GPU gate for the thin charm4py stack on Delta (one node, two GPUs, four tasks).
-# Submit from the workspace:  sbatch -p gpuA40x4-interactive  gpu-gate.sbatch
-#                         or  sbatch -p gpuA100x4-interactive gpu-gate.sbatch
+# Submit from the workspace:  sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA40x4-interactive gpu-gate.sbatch
+#                         or  sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA100x4-interactive gpu-gate.sbatch
 # Environment switches: SKIP_CXX, SKIP_PY (skip the C++ or the Python part),
 # SKIP_SUITE (skip the full test_config.json suite), FILTER (regex on suite labels),
 # MODE (srun or charmrun for the suite).
 # Every step writes $OUT/<name>.log and one "RESULT <name> exit=<rc>" line.
-#SBATCH -A mzu-delta-gpu
 #SBATCH -J c4thin-gate
 #SBATCH -N 1
 #SBATCH --ntasks=4
@@ -16,7 +15,7 @@
 #SBATCH -t 00:45:00
 #SBATCH -o gate-%j.out
 ulimit -c 0
-WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
 cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)
 export CUDA_ARCH=sm_$cap
 source $WS/env-cuda.sh
@@ -99,7 +98,7 @@ if [ -z "$SKIP_SUITE" ]; then
 python $WS/run_thin.py $OUT/thin --mode ${MODE:-srun} --counts 1,2 ${FILTER:+--filter "$FILTER"} 2>&1 | tee $OUT/suite.txt
 fi
 echo "END $(date '+%F %T %Z')"
-# one summary line per run, appended to $GATE_HISTORY when set (the weekly scrontab entry sets it).
+# one summary line per run, appended to $GATE_HISTORY when set (README.md, "Scheduling the gate").
 # The two abort steps (stalesend, zcbcast) are expected to exit nonzero; they count as
 # passing when their message was found.
 if [ -n "$GATE_HISTORY" ]; then

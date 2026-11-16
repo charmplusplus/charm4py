@@ -1,5 +1,6 @@
 # Delta environment for the thin charm4py stack on a CUDA reconverse build.
 # Source from the login shell and from every batch script:  source $WS/env-cuda.sh
+# Needs CHARM4PY_DELTA_WS (the workspace directory) in the environment.
 # Override CUDA_ARCH (sm_80 A100, sm_86 A40) before sourcing, or let the batch
 # script set it from nvidia-smi.
 if [ -z "$LMOD_CMD" ]; then source /etc/profile.d/zz-lmod.sh 2>/dev/null || source /usr/share/lmod/lmod/init/bash; fi
@@ -7,7 +8,11 @@ if [ -z "$LMOD_CMD" ]; then source /etc/profile.d/zz-lmod.sh 2>/dev/null || sour
 # libfabric/2.3.1, craype-accel-nvidia80; hwloc is the system /usr/lib64 one.
 module load cmake/3.31.8 2>/dev/null
 module load python/3.13.5-gcc13.3.1 2>/dev/null
-export WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+if [ -z "$CHARM4PY_DELTA_WS" ]; then
+    echo "env-cuda.sh: set CHARM4PY_DELTA_WS to the workspace directory (see tools/delta/README.md)" >&2
+    return 1 2>/dev/null || exit 1
+fi
+export WS=$CHARM4PY_DELTA_WS
 export CHARM_SRC=$WS/charm
 export CHARM4PY_SRC=$WS/charm4py
 export CBUILD=$CHARM_SRC/reconverse-linux-x86_64-cuda-charm4py

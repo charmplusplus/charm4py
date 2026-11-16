@@ -1,8 +1,7 @@
 #!/bin/bash
 # Incremental rebuild of both CUDA builds and the charm4py reinstall, inside an
 # allocation (keeps parallel compiles off the login nodes). Submit from the workspace:
-#   sbatch -p gpuA40x4-interactive build-incr.sbatch
-#SBATCH -A mzu-delta-gpu
+#   sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA40x4-interactive build-incr.sbatch
 #SBATCH -J c4thin-build
 #SBATCH -N 1
 #SBATCH --ntasks=1
@@ -11,7 +10,7 @@
 #SBATCH --mem=32g
 #SBATCH -t 00:30:00
 #SBATCH -o build-%j.out
-WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
 cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)
 export CUDA_ARCH=sm_$cap
 source $WS/env-cuda.sh

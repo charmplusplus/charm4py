@@ -1,10 +1,9 @@
 #!/bin/bash
 # Persistent device buffers, posted receives and the +gpushm IPC path (SPEC-7-device.md).
 # One node, two GPUs (the default) or, with -N 2, two nodes with one GPU each:
-#   sbatch -p gpuA40x4-interactive gpu-devpersist.sbatch
-#   sbatch -p gpuA40x4-interactive -N 2 --ntasks-per-node=1 --gpus-per-node=1 gpu-devpersist.sbatch
+#   sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA40x4-interactive gpu-devpersist.sbatch
+#   sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA40x4-interactive -N 2 --ntasks-per-node=1 --gpus-per-node=1 gpu-devpersist.sbatch
 # Switches: SKIP_CXX, SKIP_PY, SKIP_BENCH. Logs: $WS/devp-<jobid>/<step>.log, one RESULT line each.
-#SBATCH -A mzu-delta-gpu
 #SBATCH -J c4thin-devp
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=2
@@ -14,7 +13,7 @@
 #SBATCH -t 00:45:00
 #SBATCH -o devp-%j.out
 ulimit -c 0
-WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
 cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)
 export CUDA_ARCH=sm_$cap
 source $WS/env-cuda.sh

@@ -17,15 +17,35 @@ on Delta and running its GPU gate. Recorded results: `docs/design/SPEC-3.md`, se
 | `gpu-devpersist.sbatch` | SPEC-7-device: ckdyntest (`devpersist` phases), `device_persistent.py`, `posted_receive.py`, `device.py` per shape (one node: `-n 1`, `-n 2`, `-n 2 +gpushm`, and both again with both GPUs visible to both tasks; two nodes with `-N 2`), then the measurements |
 | `bench_devpersist.py` | time of a persistent `get` or `put` between two PEs (`OP BYTES +pe 2`), with its transfer mode |
 | `build-incr-cpu.sbatch` | incremental `make` of both builds and the charm4py reinstall as a cpu-interactive job (no GPU needed; `CUDA_CAP` picks the target, default 86); the login nodes should not run parallel builds |
-| `scrontab.txt` | the weekly gate entry; installed by hand with `scrontab -e` |
+
+## Environment
+
+The scripts hard-code no allocation or path. Set these in the login shell (for example in
+`~/.bashrc`); there are no defaults, and a script stops with a one-line message when the
+variable it needs is unset:
+
+| variable | what |
+|---|---|
+| `CHARM4PY_DELTA_WS` | the workspace directory: holds `charm/`, `charm4py/`, `venv/`, these scripts and the job output |
+| `CHARM4PY_DELTA_ACCOUNT_GPU` | the Slurm account of GPU jobs (an allocation such as `abcd-delta-gpu`) |
+| `CHARM4PY_DELTA_ACCOUNT_CPU` | the Slurm account of CPU jobs (`build-incr-cpu.sbatch`) |
+
+An `#SBATCH --account=` line cannot read an environment variable, so the batch scripts
+carry no account line: pass it on the command line, as in every `sbatch` example below.
+`${VAR:?}` makes the shell refuse the command when the variable is unset:
+
+    sbatch --account=${CHARM4PY_DELTA_ACCOUNT_GPU:?} -p gpuA40x4-interactive gpu-gate.sbatch
+
+`sbatch` passes the submitting shell's environment to the job, so `CHARM4PY_DELTA_WS`
+reaches the batch script.
 
 ## Setup (once, on a login node)
 
-    WS=/projects/mzu/lkale/software/charm4py-thin       # workspace; copy these scripts there
+    WS=$CHARM4PY_DELTA_WS                                # copy these scripts there
     cd $WS
     git clone -b ckdyn-dev https://github.com/charmplusplus/charm.git charm
     git -C charm submodule update --init contrib/reconverse
-    git clone -b thin https://github.com/charmplusplus/charm4py.git charm4py
+    git clone -b main https://github.com/charmplusplus/charm4py.git charm4py
     module load python/3.13.5-gcc13.3.1 && python3 -m venv venv
     source env-cuda.sh
     pip install numpy greenlet cython scikit-build-core nanobind ninja patchelf \
@@ -62,9 +82,10 @@ copies of libcharm and the reconverse libraries in `charm4py/.libs`.
 ## Running the gate by hand
 
     cd $WS
-    sbatch -p gpuA40x4-interactive gpu-gate.sbatch       # or gpuA100x4-interactive
-    sbatch --export=ALL,SKIP_SUITE=1 -p gpuA40x4-interactive gpu-gate.sbatch   # no full suite
-    sbatch -p gpuA40x4-interactive gpu-2node.sbatch      # two nodes
+    A=--account=${CHARM4PY_DELTA_ACCOUNT_GPU:?}
+    sbatch $A -p gpuA40x4-interactive gpu-gate.sbatch       # or gpuA100x4-interactive
+    sbatch $A --export=ALL,SKIP_SUITE=1 -p gpuA40x4-interactive gpu-gate.sbatch   # no full suite
+    sbatch $A -p gpuA40x4-interactive gpu-2node.sbatch      # two nodes
 
 Switches (environment): `SKIP_CXX`, `SKIP_PY`, `SKIP_SUITE`, `FILTER` (regex on suite
 labels), `MODE` (`srun` or `charmrun`), `GATE_HISTORY` (file to append a summary line to).
@@ -78,3 +99,15 @@ Expected non-zero exits: `ckdyn_n1_stalesend` and `ckdyn_n1_zcbcast` (abort test
 SPEC-3 section 7), and the suite's n=1 runs of `charm.pool` examples (square, ray/simple,
 ray/fib, ray/mandelbrot), which need more than one PE. A multi-process result counts only
 when its log shows `Starting Reconverse with N processes`.
+
+## Scheduling the gate
+
+To run the gate on a schedule, add an entry with `scrontab -e` on a login node
+(`scrontab -l` lists it). scrontab does not read `~/.bashrc`, so the entry names the account
+and the workspace itself. For example, Sundays at 03:00, with a summary line per run
+appended to `gate-history.txt`:
+
+    #SCRON -A <gpu-account> -p gpuA40x4-interactive -t 00:30:00 -N 1 --ntasks=4 --cpus-per-task=4 --gpus-per-node=2 --mem=32g -J c4p-gate -o <workspace>/gate-%j.out
+    0 3 * * 0 cd <workspace> && CHARM4PY_DELTA_WS=<workspace> GATE_HISTORY=<workspace>/gate-history.txt bash gpu-gate.sbatch
+
+The entry runs whatever `$WS/charm` and `$WS/charm4py` hold; it does not rebuild them.

@@ -1,8 +1,7 @@
 #!/bin/bash
 # Two nodes, one process and one GPU per node: ckdyntest's ncpy and device phases and
 # the BUFFER / NCPY / DEVICE one-way measurement (SPEC-3.md section 6) across Slingshot.
-# Submit from the workspace:  sbatch -p gpuA40x4-interactive gpu-2node.sbatch
-#SBATCH -A mzu-delta-gpu
+# Submit from the workspace:  sbatch --account=$CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA40x4-interactive gpu-2node.sbatch
 #SBATCH -J c4thin-2node
 #SBATCH -N 2
 #SBATCH --ntasks-per-node=1
@@ -12,7 +11,7 @@
 #SBATCH -t 00:30:00
 #SBATCH -o gate2n-%j.out
 ulimit -c 0
-WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
 cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)
 export CUDA_ARCH=sm_$cap
 source $WS/env-cuda.sh
