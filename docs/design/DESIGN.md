@@ -1967,17 +1967,23 @@ the result back. `gather` keeps its pre/post-process functions.
 
 ### 5.4 API changes, each with its reason
 
+`docs/migrating.rst` is the user-facing reference for these changes; this section
+records the decisions and their reasons.
+
 Additions (no existing program changes behavior):
 
 1. `NodeGroup(C, args=[])`: one branch per process; `thisIndex` is the node number;
    entries may be marked `@entry(exclusive=True)`. Reason: missing feature; `NodeGroupDyn`
    needs no binding code beyond the class kind.
 2. `@entry(expedited=False, inline=False, immediate=False, notrace=False,
-   exclusive=False)` decorator on chare methods, and `priority=` / `expedited=`
-   reserved keyword arguments on proxy calls. Reason: entry-method attributes and
-   message priorities were not exposed; they are the Charm++ features the analysis
-   listed as absent. `ret`, `awaitable` and `is_ray` were already reserved
-   (chare.py:340, 476-483).
+   exclusive=False)` decorator on chare methods, and a `prio=` reserved keyword
+   argument on proxy calls (integer priority, point-to-point sends and broadcasts;
+   not on section sends). There is no per-send `expedited=` keyword: expedited is an
+   attribute of the method. Reason: entry-method attributes and message priorities
+   were not exposed; they are the Charm++ features the analysis listed as absent.
+   `ret`, `awaitable` and `is_ray` were already reserved (chare.py:340, 476-483); an
+   entry method with a parameter named `ret`, `awaitable`, `is_ray` or `prio` is
+   rejected at registration (review of PR #316).
 3. `charm.checkpoint(dirname, resume)` and `+restart <dir>`. Reason: 3.10 makes it
    work; today it cannot. Decision 2026-11-08 (review F11): `resume` is an entry method
    of a group, an array element or the main chare, invoked after `+restart`; on the
@@ -1997,8 +2003,10 @@ Removals and changes:
    the message. Tests `dcopy/test_dcopy.py`, `exceptions/pool.py` and
    `sections/multirand-split-combine.py` set these options and keep working.
 7. `charm.options.pickle_protocol` default becomes 5 (was -1, the highest, which is 5
-   on every supported Python). Reason: out-of-band buffers (4.3) need protocol 5;
-   setting a lower protocol disables that path but still works.
+   on every supported Python), and the option applies only to readonlies and to
+   chares packed for migration and checkpoints. Entry-method messages always use
+   protocol 5. Reason: out-of-band buffers (4.3) need protocol 5, and the message
+   path is in C++.
 8. Received numpy arrays from a broadcast or section multicast are read-only views;
    from point-to-point sends they are writable views; neither is a copy. Reason: 4.3.
    The result of an `allreduce` arrives by broadcast and is therefore read-only too
@@ -2040,13 +2048,38 @@ Removals and changes:
     of its coroutines is suspended (4.5). Checkpoint of such an element is allowed;
     the suspended coroutines are not part of the checkpoint, and restart resumes from
     the checkpoint callback or `resumeFromSync`. A future created before a restart
-    raises when used after it instead of hanging. Reason: 4.5 items 3-5.
+    raises `Charm4PyError` when used after it (a send to it, pickling it, passing it
+    as an argument) instead of receiving a value meant for a new future with the same
+    id. A restarted run can checkpoint again with any resume target. Reason: 4.5
+    items 3-5.
 15. `charm.combine` accepts only array sections whose arrays share an index type, and
     raises `TypeError` for a mix of group and array sections or of arrays with different
     index types (tests/sections/multirand-split-combine.py:120-160 is adapted to combine
     its array sections only). Reason: decision 2026-11-08 (review F17); a combined
     section is a CkMulticast multi-array section, which covers exactly that case, and
-    charm4py supports what Charm++ supports (3.9).
+    charm4py supports what Charm++ supports (3.9). There is no user API to delete a
+    section; the helper sections that `split` and `combine` create are deleted
+    internally.
+16. Built-in numeric reductions of numpy arrays with two or more dimensions return
+    the contributors' shape (`CkDynContributeShaped`), for whole collections as for
+    sections (1.x returned a flat array for whole collections); contributions of
+    different shapes abort. `Reducer.sum` of booleans counts (numpy widening), and a
+    scalar result is a number. Reason: the shape travels with the contribution in
+    C++.
+17. For a chare class that inherits its constructor from another chare class, the
+    parent's constructor is no longer run once without arguments before the user
+    constructor. Reason: one constructor call per object, as in Python and Charm++.
+18. `self.migrate(pe)` packs and removes the element before it returns, as in C++, so
+    it must be the last call of the entry method; code after it runs on an object
+    that has left, and a `contribute` from it aborts. Reason: CkDyn packs the element
+    inside the call, as `CkMigrate` does in C++.
+19. Arguments are never shared by reference and are converted one by one (numbers,
+    strings, bytes, numpy arrays, futures and proxies directly; everything else in one
+    pickle), so `proxy.m(a, a)` delivers two arrays. Constructor arguments are
+    writable for `Chare(C, args, onPE)`, `ckInsert` and group or nodegroup branches
+    (point-to-point), and read-only views for a bulk `Array(C, N, args=...)` (one
+    message shared by the elements), like broadcasts. Reason: 4.3 and the removal of
+    the local-message path (item 6).
 
 Everything else in the documented API (charm4py/docs/*.rst, the list in
 surveys/survey-tests.md) is unchanged.

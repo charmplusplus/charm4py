@@ -291,16 +291,18 @@ charm.options
 You can set runtime options via the ``charm.options`` object, which has the
 following attributes:
 
-* **local_msg_optim** (default=True): if ``True``, remote method arguments sent to a chare
-  that is in the same PE as the caller will be passed by reference (instead of copied
-  or serialized).
-  Best performance is obtained when this is enabled.
+* **copy_received_arrays** (default=False): if ``True``, every numpy array an entry
+  method receives is a copy, as in 1.x. By default a received array is a view of the
+  message (no copy); arrays received from a broadcast, a section multicast or an
+  ``allreduce`` are read-only views. See :doc:`migrating`.
 
-* **local_msg_buf_size** (default=50): size of the pool used to store "local" messages
-  (see previous option).
+* **cprofiling** (default=False): if ``True``, every PE runs ``cProfile`` from start-up
+  to exit and writes its statistics to ``<cprofile_filename><pe>.prof``.
+  **cprofile_filename** (default='profile') sets the prefix. See :doc:`profiling`.
 
-* **pickle_protocol** (default=-1): determines the pickle protocol used by Charm4py.
-  A value of ``-1`` tells ``pickle`` to use the highest protocol number (recommended).
+* **pickle_protocol** (default=5): the pickle protocol used for readonlies, and for
+  chares packed for migration and checkpoints. Entry-method messages always use
+  protocol 5, whatever this option says.
   Note that not every type of argument sent to a remote method is pickled (see :doc:`serialization`).
 
 * **profiling** (default=False): if ``True``, Charm4py will profile the program and
@@ -311,6 +313,15 @@ following attributes:
 
 * **remote_exec** (default=False): if ``True``, allows remote calling of ``charm.exec()``
   and ``charm.eval()``.
+
+* **zerocopy_threshold** (default=1048576, that is 1 MB): a contiguous numpy array of at
+  least this many bytes passed in a point-to-point send goes through Charm++ zero-copy
+  instead of being copied into the message. The array is read-only from the send until
+  the transfer is done. Broadcasts, section multicasts and reduction contributions copy
+  arrays of any size. See :doc:`migrating` and :doc:`gpus`.
+
+``local_msg_optim`` and ``local_msg_buf_size`` from Charm4py 1.x are accepted and
+ignored: every call goes through a Charm++ message.
 
 .. * **auto_flush_wait_queues** (default=True): if ``True``, messages or threads waiting
 ..   on a condition (see "when" and "wait" constructs in :ref:`chare-api-label` API) are checked and

@@ -45,7 +45,9 @@ variables. Things that differ from 1.x:
 * The Charm++ library must be built with ``--with-refnum-type="unsigned int"``
   (the source builds do this); the extension module refuses a ``libcharm``
   built without it at import.
-* Wheels exist for CPython 3.11 to 3.13 on Linux x86_64 and aarch64 and on
+* Charm4py 2 needs Python 3.11 or later; Python 3.10, which 1.x supported,
+  is no longer supported.
+* Wheels exist for CPython 3.11 to 3.14 on Linux x86_64 and aarch64 and on
   macOS arm64. A wheel uses TCP-based networking only; on a cluster with a
   high-speed network, install from source against the site's libfabric.
 
@@ -76,7 +78,12 @@ In 1.x on classic Converse, ``+pN ++ppn M`` started processes with ``M``
 worker PEs each and one communication thread. There is no equivalent in 2.0:
 ``++ppn`` has no meaning, and the launcher's ``++nodelist`` (ssh start-up of
 remote hosts) is gone; use ``lcrun`` or the cluster's launcher on several
-hosts. See :doc:`running`.
+hosts. See :doc:`running`. ``++ppn M`` is not refused: the launcher passes it
+to the program, Charm++ prints ``WARNING: ++ppn is a command line argument
+beginning with a '+' but was not parsed by the RTS.`` on PE 0, and the option
+stays in ``sys.argv`` without effect. (``+ppn M`` with one ``+`` is Reconverse's
+PEs-per-process option; ``M`` greater than 1 stops the program at start-up, as
+``+pe N`` in one process does.)
 
 Code that runs unchanged
 ------------------------
@@ -112,6 +119,13 @@ every recipient on the process, so its views are read-only. The result of an
 point-to-point sends, and reduction results delivered to a future, are
 writable views.
 
+Constructor arguments follow the same rule. ``Chare(C, args, onPE)``,
+``ckInsert`` and the construction of a group or nodegroup branch are
+point-to-point: each new object gets its own message and writable arrays. The
+constructor arguments of a bulk ``Array(C, N, args=...)`` are one message
+shared by every element on the process, so they are read-only views, as for a
+broadcast.
+
 *What to change.* Copy the array before modifying it
 (``a = a.copy()``), or set ``charm.options.copy_received_arrays = True``
 before ``charm.start()``, which restores the 1.x behaviour (every received
@@ -139,7 +153,8 @@ is pickled together. A consequence is that ``proxy.m(a, a)`` with a numpy
 array ``a`` arrives as two separate arrays, and an array passed both as an
 argument and inside a list arrives as two objects. In 1.x all arguments were
 one pickle and arrived as one object. If the receiver relies on identity,
-pass the object once.
+pass the object once. The same holds for constructor arguments (``Chare``,
+``Group``, ``NodeGroup``, ``Array`` and ``ckInsert``).
 
 Numeric reduction results keep the contributors' array shape
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -183,8 +198,9 @@ Options that are accepted and ignored
 * The command-line option ``+libcharm_interface <name>`` is accepted and
   ignored: only one interface exists.
 * ``charm.options.pickle_protocol`` defaults to 5 (it was -1, the highest,
-  which is 5 on every supported Python). Out-of-band buffers need protocol 5;
-  a lower value still works and turns that path off.
+  which is 5 on every supported Python) and now applies only to readonlies
+  and to chares packed for migration and checkpoints. Entry-method messages
+  always use protocol 5, whatever the option says.
 
 ``migrate()`` must be the last call of the entry method
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -265,8 +281,12 @@ it fails registration with ``Charm4PyError: <class> redefines reserved method
 '_sectionVote_'``. ``__addLocal__``, ``__removeLocal__`` and
 ``_getSectionLocations_`` are no longer reserved. Charm4py 2 also stores these
 attributes on chare objects; do not use the names: ``_ckdyn_target``,
-``_ckdyn_packed``, ``_nsuspended`` and ``_sections``. The keyword arguments
-``ret``, ``awaitable`` and ``is_ray`` of proxy calls stay reserved, as in 1.x.
+``_ckdyn_packed``, ``_nsuspended`` and ``_sections``.
+
+The keyword arguments of proxy calls ``ret``, ``awaitable``, ``is_ray`` and
+the new ``prio`` (message priority) are reserved. An entry method with a
+parameter of one of these names is rejected when its class is registered;
+rename the parameter.
 
 Constructors of derived chare classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -294,7 +314,10 @@ New in 2.0
   (``self.thisProxy.resumed``); the runtime calls it when the checkpoint is
   written and, in the restarted run, once the restart is complete. Program
   flow continues there, because coroutines (including a coroutine ``main``)
-  and futures are not restored. See :doc:`charm-api` and
+  and futures are not restored. A future created before the restart raises
+  ``Charm4PyError`` when it is used in the restarted run (a send or a value
+  set to it, pickling it, or passing it as an argument). A restarted run can
+  checkpoint again, with any ``resume`` target. See :doc:`charm-api` and
   ``tests/thin/checkpoint_restart.py``.
 * **Zero-copy options.** ``charm.options.zerocopy_threshold`` (bytes,
   default 1 MB): a contiguous numpy array of at least this size in a
@@ -361,6 +384,12 @@ Removed or not yet available
   (``Group(C, onPEs=...)``) is built on a section, so its ``thisProxy`` does
   not survive a restart either: a program that checkpoints constrained
   groups must recreate them after ``+restart``.
+* Restart with a number of processes different from the checkpointing run's
+  has not been tested; the tests restart with the same count.
+* There is no API to delete a section: a section lives until the program
+  exits. (The helper sections that ``charm.split`` and ``charm.combine``
+  create internally are deleted by the runtime.) A program that creates
+  sections repeatedly keeps their tables on the members and on the root PE.
 * ``charm.combine`` of groups, group sections or arrays of different classes
   or dimension counts.
 * A per-send ``expedited=`` keyword (use ``@entry(expedited=True)`` on the
@@ -390,18 +419,7 @@ Checklist
 7. Move work after ``AtSync()`` into ``resumeFromSync``.
 8. Call ``split``, ``combine``, slicing and constrained ``Group`` creation
    from a coroutine; restrict ``combine`` to arrays of one class.
-9. Rename any chare method ``_sectionVote_`` and attributes ``_ckdyn_*``,
-   ``_nsuspended``, ``_sections``.
+9. Rename any chare method ``_sectionVote_``, attributes ``_ckdyn_*``,
+   ``_nsuspended``, ``_sections``, and entry-method parameters named ``ret``,
+   ``awaitable``, ``is_ray`` or ``prio``.
 10. Run the program at 1, 2 and 4 processes.
-
-.. To be confirmed (for the editor; not rendered):
-   1. Whether ``++ppn`` given to the launcher or to the program is refused,
-      ignored, or passed through to the program's argv.
-   2. A future created before a restart: DESIGN 4.5 item 5 says a deposit or
-      get() raises Charm4PyError("future from before the restart"); the code
-      on thin has no such message. Which one holds?
-   3. Restart with a different process count than the checkpointing run
-      (tests use the same count).
-   4. docs/gpus.rst's closing note says the device paths have not been run on a
-      GPU; DESIGN 7.1 step 3 says the Delta gate passed 2026-11-08. That note
-      (not this file) needs updating.

@@ -26,13 +26,10 @@ the scope of this section.
   control is switched to a different task.
 
 
-- For best inter-process communication *on the same host*, an efficient
-  network layer is highly recommended. For example, OpenMPI uses shared
-  memory for inter-process communication and is much faster than Charm++'s TCP
-  communication layer. On supercomputers, you should build Charm++ choosing a
-  network layer that is optimized for the system interconnect.
-  The Charm4py version distributed via pip uses TCP. You have to build Charm++ to
-  use a different network layer (see :doc:`install`).
+- For communication between hosts on a cluster with a high-speed network
+  (InfiniBand, Slingshot, Omni-Path), install Charm4py from source against the
+  site's libfabric or libibverbs. A wheel includes a libfabric with TCP providers
+  only, and shared memory on Linux (see :doc:`install`).
 
 .. - Coroutines are very lightweight, but do add a tiny bit of overhead. For
 ..   very small methods that do a negligible amount of work but are called frequently,
@@ -73,8 +70,11 @@ the scope of this section.
 - Make sure profiling is disabled (it is disabled by default). Charm4py prints
   a warning at startup if it is enabled.
 
-- Charm4py accesses the Charm++ shared library using Cython. Previous support for
-  ctypes and cffi has been removed.
+- Large numpy arrays in point-to-point sends go through Charm++ zero-copy
+  (``charm.options.zerocopy_threshold``, 1 MB by default), and received arrays
+  are views of the message, not copies. Do not set
+  ``charm.options.copy_received_arrays`` unless the program needs it, and copy
+  only the received arrays it keeps or modifies (see :doc:`charm-api`).
 
 .. _numpy: https://www.numpy.org/
 
