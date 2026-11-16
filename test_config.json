@@ -365,6 +365,9 @@
         "path": "tests/thin/section_reduce.py"
     },
     {
+        "path": "tests/thin/reduction_bool.py"
+    },
+    {
         "path": "tests/thin/reduction_shape.py"
     },
     {

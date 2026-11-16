@@ -68,9 +68,31 @@ def _pairwiseOp(op, data):
 
 def _np_dtype(contribs):
     # the element type of numpy contributions, so that add.reduce and
-    # multiply.reduce do not widen small integers (the Charm++ reducers keep it)
+    # multiply.reduce do not widen small integers (the Charm++ reducers keep it).
+    # Booleans are the exception: a bool-typed add is a logical OR, so they widen
+    # to an integer count, as np.sum and np.prod do.
     c0 = contribs[0] if len(contribs) > 0 else None
-    return c0.dtype if isinstance(c0, np.ndarray) and not c0.dtype.hasobject else None
+    if isinstance(c0, np.ndarray) and not c0.dtype.hasobject and c0.dtype.kind != 'b':
+        return c0.dtype
+    return None
+
+
+def _bool_as_int(data):
+    """ booleans contributed to a sum or product, as integers (Charm++ has no
+        bool sum or product, and np.sum of booleans counts them); other data as is """
+    if not haveNumpy:
+        if type(data) == bool:
+            return int(data)
+        if isinstance(data, (list, tuple)) and len(data) > 0 and all(type(x) == bool for x in data):
+            return [int(x) for x in data]
+        return data
+    if isinstance(data, (bool, np.bool_)):
+        return int(data)
+    if isinstance(data, np.ndarray) and data.dtype.kind == 'b':
+        return data.astype(np.int64)
+    if isinstance(data, (list, tuple)) and len(data) > 0 and all(isinstance(x, (bool, np.bool_)) for x in data):
+        return [int(x) for x in data]
+    return data
 
 
 # python versions of built-in reducers
@@ -301,6 +323,8 @@ class ReductionManager(object):
         if type(reducer) == tuple:
             op, py_red_func = reducer
             pyReducer = None
+            if op in (SUM, PRODUCT):
+                data = _bool_as_int(data)
             dt = type(data)
             if isinstance(data, np.ndarray) or isinstance(data, np.number):
                 if not data.dtype.hasobject and data.dtype.name in self.numpy_type_map:
