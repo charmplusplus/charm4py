@@ -417,12 +417,15 @@ class Charm(object):
             obj.main = self.entry_func
         if self.options.profiling:
             self.activeChares.add((em.C, Mainchare))
+        # registered before __init__ runs, as group branches and array elements
+        # are, so that the constructor can use methods that need the object to be
+        # local (post_buffer)
+        self.chares[cid] = obj
         gc.collect()
         try:
             em.run(obj, {}, [argv])  # now call the user's __init__
         except Exception as e:
             self.handleGeneralError(e)
-        self.chares[cid] = obj
         gc.collect()
         return obj
 

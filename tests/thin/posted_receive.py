@@ -15,7 +15,9 @@ posts a numpy array for an argument, and the method receives that same object:
 - errors: a second post for the same argument, a slot out of range, a method
   of another object, a stale object after migration (Charm4PyError);
 - post then migrate (+p2): the post is dropped and the next message allocates;
-- -mismatch: a 1 MB post for a 2 MB array aborts with both lengths.
+- -mismatch: a 1 MB post for a 2 MB array aborts with both lengths;
+- a post made in the main chare's constructor (Main.__init__), filled by a
+  chare on the last PE while the constructor waits.
 With cupy and a CUDA build of Charm++ the device phases run too: a cupy array
 posted and received directly (identity, contents, same device pointer), and a
 broadcast of a cupy array (pickled) into posted cupy arrays.
@@ -91,6 +93,9 @@ class R(Chare):
                 if type(e).__name__ != 'Charm4PyError':
                     out.append(what + ': ' + type(e).__name__ + ': ' + str(e))
         return out
+
+    def fill_main(self, main, seed):
+        main.fill(pattern(seed), seed)
 
     def post_and_migrate(self, to, fut):
         self.posted = np.zeros(N)
@@ -184,4 +189,25 @@ def main(args):
     charm.exit()
 
 
-charm.start(main)
+class Main(Chare):
+    """ posts a buffer in its constructor (the main chare is local while
+        __init__ runs), then runs main() """
+
+    def __init__(self, args):
+        if '-mismatch' not in args:
+            self.mposted = np.zeros(N)
+            self.post_buffer(self.fill, 0, self.mposted)
+            self.fill_fut = Future()
+            w = Chare(R, onPE=charm.numPes() - 1)
+            w.fill_main(self.thisProxy, 10.0)
+            assert self.fill_fut.get() == 0, 'post from Main.__init__ not consumed'
+            print('posted_receive: post from the main chare constructor passed')
+        main(args)
+
+    def fill(self, x, seed):
+        assert x is self.mposted, 'fill: got a %s, not the array posted by Main.__init__' % type(x).__name__
+        assert np.array_equal(x, pattern(seed)), 'fill: data differs'
+        self.fill_fut.send(_ckdyn.posted_count(self))
+
+
+charm.start(Main)
