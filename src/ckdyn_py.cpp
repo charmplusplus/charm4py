@@ -3075,6 +3075,10 @@ void contribute_any(nb::handle obj, nb::handle data, int rtype, nb::handle targe
   // and a reducer without a numeric element kind, as flat.
   Py_buffer v;
   if (PyObject_GetBuffer(data.ptr(), &v, PyBUF_ANY_CONTIGUOUS) < 0) throw_py();
+  if ((uint64_t)v.len > 0xffffffffull) {   // CkDynRedData.len is 32 bits, as in Packer::finish
+    PyBuffer_Release(&v);
+    throw nb::value_error("contribution of 4 GB or more");
+  }
   d.data = v.buf;
   d.len = (uint32_t)v.len;
   if (v.ndim >= 2 && v.ndim <= CKDYN_MAX_BUF_DIMS && v.shape && PyBuffer_IsContiguous(&v, 'C')) {
