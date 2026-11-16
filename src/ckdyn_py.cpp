@@ -41,6 +41,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace nb = nanobind;
@@ -141,6 +142,11 @@ struct PeState {
   // outstanding posts per object (key: the object's handle); dropped by destruct
   std::unordered_map<void *, std::vector<PostRec> > posts;
   bool device_used = false;   // use_device ran on this PE
+  // Handles destructed while a deliver_many call runs on this PE (a handler may
+  // destroy or migrate a sibling element): the call skips them. deliver_many holds a
+  // reference to every handle, so no address in this set is reused meanwhile.
+  int many_depth = 0;
+  std::unordered_set<void *> many_dead;
 };
 thread_local PeState tls;
 
@@ -1804,9 +1810,14 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
     ObjVec args;
     PyObject *block = nullptr;
     if (!view_args(ctx, args, &block)) hook_abort("deliver_many (converting arguments)");
+    // A handler may destroy or migrate another local element (h_destruct then
+    // releases its object): hold every object for the call and skip the ones
+    // destructed meanwhile (ckdyn.h, deliver_many).
+    for (int i = 0; i < n; i++) Py_XINCREF((PyObject *)handles[i]);
+    tls.many_depth++;
     for (int i = 0; i < n; i++) {
       PyObject *obj = (PyObject *)handles[i];
-      if (!obj) continue;
+      if (!obj || tls.many_dead.count(obj)) continue;
       CkDynTarget t = target_of(obj);
       PyObject *efr = meter_enter(obj, ep);
       // CkDyn records no per-element event for a deliver_many broadcast. A plain
@@ -1826,6 +1837,8 @@ void h_deliver_many(void *, void **handles, int n, int ep, uint32_t, uint32_t ep
       if (coro) CkDynCallstackPop(&t); else CkDynCoroSuspend(&t);
       meter_leave(efr, nullptr);
     }
+    if (--tls.many_depth == 0) tls.many_dead.clear();
+    for (int i = 0; i < n; i++) Py_XDECREF((PyObject *)handles[i]);
     Py_XDECREF(block);
   } catch (...) {
     cpp_exc_to_python();
@@ -1908,6 +1921,7 @@ void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
 void h_destruct(void *, void *handle) {
   Gil g;
   PyObject *obj = (PyObject *)handle;
+  if (tls.many_depth) tls.many_dead.insert(handle);   // h_deliver_many skips it
   drop_posts(handle);   // CkDyn dropped its posts with the object
   auto it = tls.packed.find(handle);
   if (it != tls.packed.end()) { Py_DECREF(it->second); tls.packed.erase(it); }
