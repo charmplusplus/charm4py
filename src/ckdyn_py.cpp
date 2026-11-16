@@ -1163,7 +1163,10 @@ struct Packer {
     if (tp == &PyUnicode_Type) {
       Py_ssize_t n;
       const char *s = PyUnicode_AsUTF8AndSize(o, &n);
-      if (!s) return false;
+      if (!s) {   // not valid UTF-8 (a lone surrogate, as os.fsdecode gives): pickle keeps it
+        PyErr_Clear();
+        return pickle(o);
+      }
       if ((uint64_t)n > 0xffffffffull) return pickle(o);
       CkDynMsgAddBytes(b, s, (uint32_t)n, TAG_STR);
       return true;
