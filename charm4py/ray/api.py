@@ -26,6 +26,11 @@ class RayProxyFunction(object):
         return self.func(*args, **kwargs)
 
 
+# entry methods that every Chare has, which are not actor methods
+_INTERNAL_ENTRIES = ('_coll_future_deposit_result', '_sectionVote_',
+                     '_channelConnect__', '_channelRecv__')
+
+
 class RayProxy(object):
     def __init__(self, subclass, args, pe):
         from charm4py import Chare, register, charm
@@ -33,8 +38,10 @@ class RayProxy(object):
         # the actor's entry methods: the proxy's bound proxy methods (they have
         # an entry index, ep). The proxy's other attributes are not wrapped; some
         # of them (gid, cid) raise AttributeError for an array element proxy.
+        # As in charm4py 1.x, a method whose name starts with one underscore is an
+        # actor method; dunder names and charm4py's internal entries are not.
         for f in dir(self.proxy):
-            if f.startswith('_'):
+            if f.startswith('__') or f in _INTERNAL_ENTRIES:
                 continue
             try:
                 attr = getattr(self.proxy, f)
