@@ -262,8 +262,7 @@ class CObjectStore {
     loc_req_buffer_.erase(obj_id);
   }
 
-  // cdef check_obj_loc_requests_buffer. The Cython code erases the entry of
-  // loc_req_buffer here, not of obj_loc_req_buffer; kept as written.
+  // cdef check_obj_loc_requests_buffer
   void check_obj_loc_requests_buffer(ObjectId obj_id) {
     auto it = obj_loc_req_buffer_.find(obj_id);
     if (it == obj_loc_req_buffer_.end()) return;
@@ -271,7 +270,7 @@ class CObjectStore {
     int pe = lookup_location(obj_id, false);
     nb::object req_pes = to_int32_array(vec);
     pe_proxy(pe).attr("bulk_send_object")(obj_id, req_pes);
-    loc_req_buffer_.erase(obj_id);
+    obj_loc_req_buffer_.erase(obj_id);
   }
 
   // cdef check_obj_requests_buffer
