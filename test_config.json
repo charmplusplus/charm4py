@@ -377,6 +377,9 @@
         "path": "tests/thin/ctor_writable.py"
     },
     {
+        "path": "tests/thin/send_fallbacks.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device_persistent.py"

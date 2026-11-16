@@ -2276,6 +2276,26 @@ bool do_send(ProxyObject *p, int ep, PyObject *const *args, size_t nargs, uint16
   return true;
 }
 
+// Remove future f (made by threadMgr.createFuture for a call whose send then
+// failed) from charm.threadMgr.futures. Nobody waits on it yet, so dropping the
+// entry is enough (threads.py cancelFuture would also resume a waiter). The
+// pending exception (the send's) is kept.
+void drop_future(PyObject *f) {
+  if (!f) return;
+  PyObject *et, *ev, *tb;
+  PyErr_Fetch(&et, &ev, &tb);
+  PyObject *tm = PyObject_GetAttrString(g_charm, "threadMgr");
+  PyObject *futs = tm ? PyObject_GetAttrString(tm, "futures") : nullptr;
+  PyObject *fid = futs ? PyObject_GetAttr(f, s_fid) : nullptr;
+  if (fid && PyDict_Check(futs)) {
+    PyObject *cur = PyDict_GetItemWithError(futs, fid);   // borrowed
+    if (cur == f) PyDict_DelItem(futs, fid);
+  }
+  Py_XDECREF(fid); Py_XDECREF(futs); Py_XDECREF(tm);
+  PyErr_Clear();
+  PyErr_Restore(et, ev, tb);
+}
+
 PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames) {
   if (!is_proxy(proxy)) {
     PyErr_Format(PyExc_TypeError, "%U: first argument must be a proxy", pm->qualname);
@@ -2361,7 +2381,7 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
     PyObject *meth = PyObject_GetAttr(g_charm, s_createFuture);
     ray_future = meth ? PyObject_Vectorcall(meth, argv, 0, s_kw_store) : nullptr;
     Py_XDECREF(meth);
-    if (!ray_future) { Py_XDECREF(future); return nullptr; }
+    if (!ray_future) { drop_future(future); Py_XDECREF(future); return nullptr; }
     full.push_back(ray_future);
   }
   if (nkw > 0 || is_ray) { pos = full.data(); npos = full.size(); }
@@ -2370,7 +2390,11 @@ PyObject *pm_call(PMObject *pm, PyObject *proxy, PyObject *const *args, Py_ssize
   if (is_ray) flags |= CKDYN_MSG_RAY;
   if (ret && is_bcast_proxy(p)) flags |= CKDYN_MSG_BCASTRET;
   bool ok = do_send(p, pm->ep, pos, npos, flags, future, false, has_prio, prio);
-  if (!ok) { Py_XDECREF(future); Py_XDECREF(ray_future); return nullptr; }
+  if (!ok) {   // e.g. an argument that cannot be pickled: no future stays in the table
+    drop_future(future); drop_future(ray_future);
+    Py_XDECREF(future); Py_XDECREF(ray_future);
+    return nullptr;
+  }
   if (ray_future) { Py_XDECREF(future); return ray_future; }
   if (future) return future;
   Py_RETURN_NONE;
