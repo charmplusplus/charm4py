@@ -68,8 +68,8 @@ CUDA simulator runs the `staged` mode on the CPU (slowly; small grids only):
 
 ## Running on NCSA Delta
 
-With the workspace of `tools/delta/README.md` (`env-cuda.sh` loads the modules and
-the venv). Every GPU of the node should be visible to every process: Charm++ gives
+With the workspace of `tools/delta/README.md` (`WS=$CHARM4PY_DELTA_WS`; `env-cuda.sh`
+loads the modules and the venv; the account is `$CHARM4PY_DELTA_ACCOUNT_GPU`). Every GPU of the node should be visible to every process: Charm++ gives
 process k of a node device k, and CUDA IPC between processes of a node needs the
 other process's GPU visible. numba-cuda 0.30.4 calls `numpy.row_stack`, removed in
 numpy 2.5, so the kernels need `$WS/numpy-compat` (numpy < 2.5) on `PYTHONPATH`:
@@ -80,10 +80,10 @@ numpy 2.5, so the kernels need `$WS/numpy-compat` (numpy < 2.5) on `PYTHONPATH`:
         env CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=$WS/numpy-compat \
         python jacobi3d.py -x 512 -y 512 -z 512 -m persistent +pe 2
 
-inside an allocation such as `salloc -A mzu-delta-gpu -p gpuA100x4-interactive -N 1
+inside an allocation such as `salloc -A $CHARM4PY_DELTA_ACCOUNT_GPU -p gpuA100x4-interactive -N 1
 --ntasks=2 --cpus-per-task=4 --gpus-per-node=2 --mem=32g -t 30`. For timing runs of
 all modes on several nodes, `scripts/charm4py.sh` is a batch script:
 
-    sbatch -N 2 scripts/charm4py.sh                  # 8 processes, one per GPU
-    GRID=1024 MODES="device persistent" sbatch -N 4 scripts/charm4py.sh
+    sbatch --account=${CHARM4PY_DELTA_ACCOUNT_GPU:?} -N 2 scripts/charm4py.sh   # 8 processes, one per GPU
+    GRID=1024 MODES="device persistent" sbatch --account=${CHARM4PY_DELTA_ACCOUNT_GPU:?} -N 4 scripts/charm4py.sh
     scripts/process_times.py jacobi3d-charm4py 1 4   # after renaming outputs to <job>-n<nodes>-*.out

@@ -5,14 +5,15 @@
 # python -m charmrun.start when it is not inside a Slurm job.
 #
 # Delta (one process per GPU; 4 GPUs per node on gpuA100x4 and gpuA40x4):
-#   sbatch -N 2 scripts/charm4py.sh          # from examples/cuda/gpudirect/jacobi3d
+#   sbatch --account=${CHARM4PY_DELTA_ACCOUNT_GPU:?} -N 2 scripts/charm4py.sh   # from examples/cuda/gpudirect/jacobi3d
+#   (CHARM4PY_DELTA_WS and CHARM4PY_DELTA_ACCOUNT_GPU: see tools/delta/README.md)
 # One machine with NGPUS GPUs:
 #   NGPUS=2 bash scripts/charm4py.sh
 # Variables: GRID (cube edge, default 768), ITERS (100), WARMUP (10),
-#            MODES ("staged device persistent"), RUNS (3), WS (Delta workspace).
+#            MODES ("staged device persistent"), RUNS (3); on Delta CHARM4PY_DELTA_WS
+#            (the workspace, required).
 # Each run prints "Average time per iteration" and "Communication time per
 # iteration"; scripts/process_times.py averages them per mode.
-#SBATCH -A mzu-delta-gpu
 #SBATCH -J jacobi3d-charm4py
 #SBATCH -p gpuA100x4
 #SBATCH -N 1
@@ -32,7 +33,7 @@ RUNS=${RUNS:-3}
 exe() { echo "\$ $*" ; "$@" ; }
 
 if [ -n "$SLURM_JOB_ID" ]; then
-  WS=${WS:-/projects/mzu/lkale/software/charm4py-thin}
+  WS=${CHARM4PY_DELTA_WS:?must be set to the workspace directory (see tools/delta/README.md)}
   source $WS/env-cuda.sh       # modules, FI_PROVIDER=cxi, the venv (tools/delta/env-cuda.sh)
   # numba-cuda 0.30.4 calls numpy.row_stack, removed in numpy 2.5 (tools/delta/README.md)
   [ -d $WS/numpy-compat ] && export PYTHONPATH=$WS/numpy-compat${PYTHONPATH:+:$PYTHONPATH}
