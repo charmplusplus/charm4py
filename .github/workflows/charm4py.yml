@@ -1,10 +1,15 @@
 name: Charm4py
 
+# The 1.x line lives on branch 1.x; main is Charm4py 2 (thin.yaml).
 on:
   push:
     branches:
-      - main
+      - 1.x
   pull_request:
+    branches:
+      - 1.x
+  # GitHub runs scheduled workflows from the default branch (main) only, so this
+  # entry does not run while 1.x is not the default branch; kept for reference.
   schedule:
     - cron: "5 0 * * *" # Runs at 00:05 UTC every day.
 
