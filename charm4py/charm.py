@@ -196,8 +196,11 @@ class Charm(object):
         self.proxyClasses      = [{} for _ in CHARM_TYPES]  # charm_type_id -> class -> proxy class
         self.sched_tagpool = set(range(1, 128))  # pool of tags for scheduling callables
         self._ckpt_future = None      # future of the charm.checkpoint(dir, resume) in progress on this PE
+        self._ckpt_tag = 0            # tag of that checkpoint's resume deliveries (charm.checkpoint)
         self._ckpt_seq = 0            # sequence number of the last checkpoint started on this PE
-        self._restart_done_seen = False  # the restart's own resume delivery arrived (restarted process)
+        # 8-bit token of this process in checkpoint tags, nonzero; at most 254 so
+        # that no tag is 0xffffffff, which means "no reference number"
+        self._ckpt_token = os.urandom(1)[0] % 254 + 1
         self.sched_next_tag = 128  # the pool grows from here when every tag is in use
         self.sched_callables = {}  # tag -> (callable, args)
 
@@ -1139,25 +1142,35 @@ class Charm(object):
             f = self.threadMgr.createFuture()  # raises NotThreadedError outside a coroutine
             _ckdyn.checkpoint(dirname, f)
             return f
-        # the done callback is resume with reference number (seq << 24) | (PE + 1);
-        # charm._invoke strips it and sends _checkpoint_written to this PE
-        self._ckpt_seq = (self._ckpt_seq % 255) + 1
-        tag = (self._ckpt_seq << 24) | (self._myPe + 1)
+        # The done callback is resume with a reference number, the tag: bits 31-24
+        # the token of this process (random, chosen at start-up), bits 23-20 a
+        # sequence number (1..15), bits 19-0 this PE + 1. charm._invoke strips it
+        # and sends _checkpoint_written to this PE, which accepts only the tag it
+        # issued. A restarted run also delivers the tag of the checkpoint it
+        # restarted from, whose issuing run is gone: the token tells it apart,
+        # except with probability 1/256 when the same PE has started a new
+        # checkpoint with the same sequence number before that delivery reaches
+        # it. A restart epoch saved in the checkpoint would remove that case.
+        if self._numPes > 0xfffff:
+            raise Charm4PyError('charm.checkpoint with a resume entry supports at most %d PEs' % 0xfffff)
+        self._ckpt_seq = (self._ckpt_seq % 15) + 1
+        tag = (self._ckpt_token << 24) | (self._ckpt_seq << 20) | (self._myPe + 1)
         cb = _ckdyn.Callback.target(resume, tag)
         f = None
         if not self.threadMgr.isMainThread():
             f = self.threadMgr.createFuture()
         self._ckpt_future = f
+        self._ckpt_tag = tag
         _ckdyn.checkpoint(dirname, cb)
         return f
 
     def _checkpoint_done(self, tag):
-        """ a charm.checkpoint resume entry is being delivered with its tag """
-        if _ckdyn.is_restarting() and not self._restart_done_seen:
-            # the restart's own delivery: the checkpointing PE's future is gone
-            self._restart_done_seen = True
-            return
-        pe = (tag & 0xffffff) - 1
+        """ a charm.checkpoint resume entry is being delivered with its tag: tell
+            the PE that called charm.checkpoint (it ignores a tag it did not issue,
+            for example the one of the checkpoint a restarted run started from) """
+        pe = (tag & 0xfffff) - 1
+        if not 0 <= pe < self._numPes:
+            return  # a restart with fewer PEs than the checkpointing run had
         if pe == self._myPe:
             self._checkpoint_written(tag)
         else:
@@ -1166,8 +1179,10 @@ class Charm(object):
     def _checkpoint_written(self, tag):
         """ on the PE that called charm.checkpoint(dir, resume): deposit its future """
         f = self._ckpt_future
-        if f is None or (tag >> 24) != self._ckpt_seq:
-            return  # a group resume delivers once per PE: only the first one counts
+        if f is None or tag != self._ckpt_tag:
+            # a group resume delivers once per PE: only the first one counts; or a
+            # tag this run did not issue (the restart's own delivery)
+            return
         self._ckpt_future = None
         self.threadMgr.depositFuture(f.fid, None)
 

@@ -18,9 +18,11 @@ Second run (+restart): the main chare's constructor and coroutine are not run;
 the runtime restores the objects and calls Main.resumed, which checks the
 restored state on every PE, checks that futures from before the restart raise
 when used (sent to, passed as an argument, pickled into a message), also after
-new futures of the restarted run took the same ids, then takes a second
-checkpoint with a group entry as the resume target (one delivery per PE, the
-future on PE 0) and exits.
+new futures of the restarted run took the same ids, then takes two more
+checkpoints: the first with the resume target an array element on the last PE
+(its future on PE 0 must complete even though that PE never received the
+restart's own resume delivery), the second with a group entry as the resume
+target (one delivery per PE, the future on PE 0), and exits.
 Each check prints a PASS line; any failure aborts.
 """
 
@@ -77,6 +79,9 @@ class A(Chare):
     def keep(self, f):
         self.oldf = f   # a future of the checkpointing run, restored with this element
 
+    def mype(self):
+        return charm.myPe()
+
     def take(self, f):
         pass
 
@@ -95,6 +100,9 @@ class A(Chare):
 
     def echo_to(self, f, v):
         f.send(v)   # a future of the restarted run, received as an argument
+
+    def resumed3(self):
+        self.seen3 = True
 
 
 class Main(Chare):
@@ -165,7 +173,14 @@ class Main(Chare):
             f = charm.Future()
             self.a[i].echo_to(f, i)
             check(f.get() == i, 'element %d sent to a future of the restarted run' % i)
-        # a second checkpoint with a group entry as the resume target
+        # a checkpoint whose resume target is an array element on the last PE: that
+        # PE did not receive the restart's own resume delivery (the main chare did)
+        last = charm.numPes() - 1
+        pes = [self.a[i].mype(ret=True).get() for i in range(n)]
+        idx = pes.index(last)
+        f = charm.checkpoint(self.dir + '.3', resume=self.a[idx].resumed3)
+        check(f.get() is None, 'checkpoint with an array element on PE %d as resume target completes' % last)
+        # a further checkpoint with a group entry as the resume target
         f = charm.checkpoint(self.dir + '.2', resume=self.g.resumed2)
         check(f.get() is None, 'second checkpoint (group resume target) future deposited')
         print('restart run complete')
