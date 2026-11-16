@@ -3,7 +3,7 @@
 Written 2026-11-08 with the implementation (branch `thin`), against `ckdyn-dev`
 c81fbeecc. It extends SPEC-4a.md and SPEC-4b.md. DESIGN.md 3.10, 3.12, 4.5 (items
 1-6) and 5.4 items 10, 13 and 14 are the design; review findings F9 and F10
-(REVIEW-2026-11-07.md) were implemented in the 4a follow-ups and are verified here.
+(history/REVIEW-2026-11-07.md) were implemented in the 4a follow-ups and are verified here.
 
 ## 1. What migration does in the binding
 
