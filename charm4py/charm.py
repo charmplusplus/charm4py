@@ -646,7 +646,9 @@ class Charm(object):
         kind = target.kind
         if kind == CKDYN_ARRAY:
             return self.arrays.get(target.aid, {}).get(tuple(target.index)) is obj
-        if kind in (CKDYN_GROUP, CKDYN_ARRAYMAP, CKDYN_NODEGROUP):
+        if kind == CKDYN_NODEGROUP:
+            return self.nodegroups.get(target.gid) is obj
+        if kind in (CKDYN_GROUP, CKDYN_ARRAYMAP):
             return self.groups.get(target.gid) is obj
         return self.chares.get(target.cid) is obj
 

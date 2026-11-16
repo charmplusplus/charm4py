@@ -9,7 +9,8 @@ directory (tempfile.gettempdir()).
 Phases (first run):
 - create: NodeGroup(N, args=[...]) from the main coroutine; every branch has
   thisIndex == charm.myNode(), a nodegroup proxy as thisProxy, the constructor
-  arguments; charm.numNodes() branches exist; ckLocalBranch on the creating node.
+  arguments; charm.numNodes() branches exist; ckLocalBranch on the creating node;
+  charm._is_local is true for every branch on its node.
 - p2p: ng[node].method(..., ret=True) on every node, from the main chare and from a
   group branch on every PE that received the proxy as an argument.
 - bcast: ng.method(...) to every branch, then ng.method(ret=True) gathers one value
@@ -62,6 +63,10 @@ class N(Chare):
     def info(self):
         return (self.thisIndex, charm.myNode(), charm.myPe(), self.args,
                 self.thisProxy.gid, type(self.thisProxy).__name__)
+
+    def is_local(self):
+        # charm._is_local finds the branch in charm.nodegroups
+        return charm._is_local(self)
 
     def bump(self, k):
         self.count += k
@@ -159,6 +164,8 @@ class Main(Chare):
                   'create: branch %d index %d on node %d PE %d args %r proxy %s' % (n, idx, node, pe, args, pname))
         check(charm.nodegroups[ng.gid] is ng.ckLocalBranch() and ng.ckLocalBranch().thisIndex == charm.myNode(),
               'create: ckLocalBranch and charm.nodegroups')
+        check(all(ng[n].is_local(ret=True).get() for n in range(nn)),
+              'create: charm._is_local of every branch')
         check(ng[0].elemIdx == 0 and ng.elemIdx == -1, 'create: elemIdx of an element and of the whole nodegroup')
         try:
             ng[0:1]
