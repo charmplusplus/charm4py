@@ -372,7 +372,13 @@ class Charm(object):
             blockFuture.send(e)
 
     def recvReadOnly(self, msg):
-        roData = cPickle.loads(msg)
+        # in a restarted run the readonlies come from the checkpoint: a Future
+        # among them is from before the restart (Future.__setstate__)
+        threads.restoring_checkpoint = _ckdyn.is_restarting()
+        try:
+            roData = cPickle.loads(msg)
+        finally:
+            threads.restoring_checkpoint = False
         for name, obj in roData.items():
             if name == 'charm_pool_proxy__h':
                 from .pool import Pool
@@ -423,7 +429,11 @@ class Charm(object):
         for attr in dir(readonlies):  # attr is string
             if not attr.startswith('_') and not attr.endswith('_'):
                 roData[attr] = getattr(readonlies, attr)
-        return cPickle.dumps(roData, self.options.pickle_protocol)
+        threads.packing_object = True  # a stale Future among them may be pickled
+        try:
+            return cPickle.dumps(roData, self.options.pickle_protocol)
+        finally:
+            threads.packing_object = False
 
     def _construct(self, target, ep, header, args):
         """ create a group branch, array element or singleton chare; returns it """
@@ -551,6 +561,7 @@ class Charm(object):
         if hasattr(obj, '__channels__'):
             assert len(obj.__pendingChannels__) == 0, 'Cannot migrate chares that did not complete channel establishment'
         target = d.pop('_ckdyn_target', None)
+        threads.packing_object = True  # a stale Future in obj's state may be pickled
         try:
             data = cPickle.dumps(obj, self.options.pickle_protocol)
         except Exception as e:
@@ -558,6 +569,7 @@ class Charm(object):
                                 (' for migration' if why == CKDYN_PUP_MIGRATE else ' for a checkpoint') +
                                 ': ' + type(e).__name__ + ': ' + str(e)) from e
         finally:
+            threads.packing_object = False
             if target is not None:
                 obj._ckdyn_target = target
         if sizing and not (why == CKDYN_PUP_MIGRATE and obj._nsuspended > 0):
@@ -566,7 +578,16 @@ class Charm(object):
 
     def _unpack(self, target, reason, data):
         """ an object arriving by migration or restored from a checkpoint; returns it """
-        obj = cPickle.loads(data)
+        if reason != CKDYN_PUP_MIGRATE:
+            # restored from a checkpoint: every Future in it is from before the
+            # restart and is marked stale (Future.__setstate__)
+            threads.restoring_checkpoint = True
+            try:
+                obj = cPickle.loads(data)
+            finally:
+                threads.restoring_checkpoint = False
+        else:
+            obj = cPickle.loads(data)
         obj._ckdyn_target = target
         if reason != CKDYN_PUP_MIGRATE:
             # restored from a checkpoint: its coroutines were not restored
@@ -1106,8 +1127,10 @@ class Charm(object):
             original run once the checkpoint is written; called from a plain
             entry method it returns None.
 
-            Futures and suspended coroutines from before a restart do not
-            exist in the restarted run.
+            Suspended coroutines from before a restart do not exist in the
+            restarted run. A future from before the restart that was restored
+            with an object raises Charm4PyError when it is used (sent to,
+            waited on, or sent in a message).
         """
         if resume is not None and getattr(getattr(resume, '__self__', None), 'issec', False):
             # CkDynCheckpoint rejects a SECTION callback as its done callback

@@ -833,6 +833,12 @@ bool future_ids(PyObject *f, int *pe, uint32_t *fid) {
   Py_DECREF(i);
   if (w == (unsigned long long)-1 && PyErr_Occurred()) return false;
   if (w > 0xffffffffull) { PyErr_SetString(PyExc_OverflowError, "future id does not fit in 32 bits"); return false; }
+  if (w == 0) {   // fid 0 is never allocated: a Future restored from a checkpoint (stale)
+    PyObject *t = charm4py_error_type();
+    PyErr_SetString(t, "this future was created before the restart and no longer exists");
+    Py_DECREF(t);
+    return false;
+  }
   *pe = (int)v; *fid = (uint32_t)w;
   return true;
 }

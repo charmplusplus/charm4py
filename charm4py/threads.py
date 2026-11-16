@@ -8,6 +8,16 @@ from . import _ckdyn
 FIDMAXVAL = 2**32 - 2  # all ones is reserved (no reference number)
 
 
+# Set by charm._unpack while it unpickles an object restored from a checkpoint
+# (every Future unpickled then is from before the restart: Future.__setstate__
+# marks it stale) and by charm._pack while it pickles an object for migration
+# or a checkpoint (a stale Future may be kept in an object's state).
+restoring_checkpoint = False
+packing_object = False
+
+STALE_FUTURE_MSG = 'this future was created before the restart and no longer exists'
+
+
 class NotThreadedError(Exception):
     def __init__(self, msg):
         super(NotThreadedError, self).__init__(msg)
@@ -25,6 +35,8 @@ class NotThreadedError(Exception):
 # futures were pickled.
 
 class Future(object):
+
+    _stale = False  # unpickled from a checkpoint: from before the restart (fid 0)
 
     def __init__(self, fid, gr, src, num_vals, store=False):
         self.fid = fid  # unique future ID within the process that created it
@@ -50,6 +62,8 @@ class Future(object):
             future. If the values are already available then they are returned immediately.
         """
         from .charm import charm
+        if self._stale:
+            raise Charm4PyError(STALE_FUTURE_MSG)
         if self.store:
             return charm.get_future_value(self)
         else:
@@ -73,6 +87,8 @@ class Future(object):
 
     def send(self, result=None):
         """ Send a value to this future. """
+        if self._stale:
+            raise Charm4PyError(STALE_FUTURE_MSG)
         if self.store:
             self.create_object(result)
         else:
@@ -161,6 +177,11 @@ class Future(object):
         # depth (one per message that carried it), so the key is per object, not
         # (store_id, depth). borrowed_futures keeps this object alive until every
         # copy made from it has notified.
+        if self._stale:
+            if not packing_object:
+                raise Charm4PyError(STALE_FUTURE_MSG)
+            # kept in the state of a migrating or checkpointed object: fid 0 keeps it stale
+            return (0, self.src, self.store, self.borrow_depth, charm.myPe(), 0)
         self.num_borrowers += 1
         key = 0
         if self.store:
@@ -174,6 +195,11 @@ class Future(object):
 
     def __setstate__(self, state):
         self.fid, self.src, self.store, self.borrow_depth, self.parent, self.parent_key = state
+        if restoring_checkpoint or self.fid == 0:
+            # from before the restart: its id may name a new future of the restarted
+            # run, so it gets fid 0, which createFuture never allocates
+            self.fid = 0
+            self._stale = True
         self.borrow_depth += 1
         if self.store:
             self.store_id = (self.src << 32) + self.fid
@@ -183,7 +209,7 @@ class Future(object):
         self.num_borrowers = 0
 
     def __del__(self):
-        if self.store:
+        if self.store and not self._stale:
             if self.parent == None and self.num_borrowers == 0:
                 # This is the owner, delete the object from the object store
                 #print("Deleting owner", self.store_id)
