@@ -65,13 +65,20 @@ program: ``docs/migrating.rst``.
 - Arguments are never passed by reference, even to a chare in the same
   process, and are converted one by one, so the same object passed twice
   arrives as two objects ("Arguments are never shared by reference").
+  Constructor arguments follow the same rule: numpy arrays are writable for
+  ``Chare(C, args, onPE)``, ``ckInsert`` and group and nodegroup branches, and
+  read-only views for a bulk ``Array(C, N, args=...)``, whose elements share
+  one message.
 - Built-in reductions of numpy arrays with two or more dimensions return the
   contributors' shape for whole collections too (1.x returned a flat array),
   and contributions of different shapes abort (#321, "Numeric reduction
-  results keep the contributors' array shape").
+  results keep the contributors' array shape"). ``Reducer.sum`` of booleans
+  counts the ``True`` values (numpy widens them to integers), and a scalar
+  result is a number.
 - ``local_msg_optim``, ``local_msg_buf_size`` and ``+libcharm_interface`` are
-  accepted and ignored, and ``pickle_protocol`` defaults to 5 ("Options that
-  are accepted and ignored").
+  accepted and ignored, and ``pickle_protocol`` defaults to 5 and applies only
+  to readonlies, migration and checkpoints; messages always use protocol 5
+  ("Options that are accepted and ignored").
 - ``self.migrate(pe)`` packs and removes the element before it returns, so it
   must be the last call of the entry method; an element with a suspended
   coroutine is not migrated by load balancers ("``migrate()`` must be the last
@@ -79,7 +86,12 @@ program: ``docs/migrating.rst``.
 - ``charm.split``, ``charm.combine``, proxy slicing and ``Group(C, onPEs=...)``
   must be called from a coroutine, and ``charm.combine`` accepts arrays of one
   chare class and one number of index dimensions only ("Sections").
-- ``_sectionVote_`` is a reserved method name ("Reserved names").
+- ``_sectionVote_`` is a reserved method name, and an entry method with a
+  parameter named ``ret``, ``awaitable``, ``is_ray`` or ``prio`` is rejected at
+  registration ("Reserved names").
+- A future created before a restart raises ``Charm4PyError`` when it is used
+  in the restarted run (sent to, pickled or passed as an argument). A
+  restarted run can checkpoint again with any resume target.
 - A derived chare class no longer runs its parent's constructor without
   arguments before its own ("Constructors of derived chare classes").
 - ``charm.printStats()`` has no "send" column ("Profiling and appspector").
@@ -98,10 +110,20 @@ program: ``docs/migrating.rst``.
   priorities on reduction callbacks.
 - Tracing in wheels, CUDA and HIP wheels, free-threaded (``3.13t``) wheels and
   a macOS x86_64 build.
+- Python 3.10 (supported by 1.x).
+
+**Known limitations**
+
+- There is no API to delete a section; a section lives until the program
+  exits (the helper sections created by ``split`` and ``combine`` are deleted
+  internally).
+- Restart with a number of processes different from the checkpointing run's
+  has not been tested.
 
 **Requirements**
 
-- CPython 3.11 or newer; wheels for 3.11 to 3.13 on Linux x86_64 and aarch64
+- CPython 3.11 or newer (3.10 is no longer supported); wheels for 3.11 to
+  3.14 on Linux x86_64 and aarch64
   (``manylinux_2_28``) and macOS 14 or newer on arm64.
 - Charm++ with CkDyn on Reconverse: the ``recharm`` commit in
   ``charm_version.txt`` (release tag v9.0.0-beta1), built with
