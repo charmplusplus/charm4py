@@ -60,6 +60,7 @@ namespace {
 enum : uint16_t {
   PYMSG_REDRESULT = 1u << 12,
   PYMSG_SINGLE    = 1u << 13,
+  PYMSG_INSERT    = 1u << 14,   // array_insert: the element has a constructor message of its own
 };
 enum : uint16_t { TAG_STR = 1, TAG_ARRAY = 2, TAG_PICKLED = 3, TAG_ND0 = 4, TAG_NDN = 5 };
 const int PICKLE_PROTOCOL = 5;
@@ -1896,7 +1897,14 @@ void *h_construct(void *, const CkDynTarget *t, const CkDynMsgView *v) {
   Gil g;
   PyObject *fr = meter_enter(nullptr, v->hdr ? v->hdr->ep : -1);
   try {
-    bool p2p = (t->kind == CKDYN_CHARE);
+    // Writable numpy arguments, as for a point-to-point send, when this object has
+    // its constructor message to itself: a singleton chare, an inserted array
+    // element (Chare(C, args, onPE), ckInsert), and a group or nodegroup branch
+    // (_createGroup broadcasts a copy to every other PE and constructs the local
+    // branch from the original). The elements of a bulk Array(C, n, args) share
+    // one message: read-only views.
+    uint16_t f = v->hdr ? v->hdr->flags : 0;
+    bool p2p = t->kind == CKDYN_CHARE || is_group_kind(t->kind) || (f & (PYMSG_SINGLE | PYMSG_INSERT));
     RecvCtx ctx(v, true, p2p);
     ObjVec args;
     PyObject *block = nullptr;
@@ -2973,6 +2981,7 @@ void mod_array_insert(int aid, nb::handle index, int on_pe, nb::handle args, int
   if (iv.empty() || iv.size() > CKDYN_MAX_DIMS) throw nb::value_error("array index must have 1 to 6 dimensions");
   if (use_at_sync) flags |= CKDYN_MSG_USESATSYNC;
   flags &= ~CKDYN_MSG_CREATION;
+  flags |= PYMSG_INSERT;
   CkDynMsg *m = build_msg(ce.first_ep, (uint16_t)flags, future, args, -1, nullptr);
   CkDynArrayInsert(aid, (int)iv.size(), iv.data(), on_pe, m);
 }

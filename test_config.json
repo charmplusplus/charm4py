@@ -374,6 +374,9 @@
         "path": "tests/thin/destroy_sibling.py"
     },
     {
+        "path": "tests/thin/ctor_writable.py"
+    },
+    {
         "condition": "deviceSupport",
         "force_min_processes": 2,
         "path": "tests/thin/device_persistent.py"
