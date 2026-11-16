@@ -9,7 +9,8 @@ Phases:
   on a class registered for NodeGroup only.
 - errors: charm.register raises Charm4PyError for an unknown attribute, for inline
   on a coroutine, and for immediate or exclusive on a class registered as Group,
-  Array or singleton Chare.
+  Array or singleton Chare, and for an entry method with a parameter named after a
+  keyword every proxy call consumes (ret, awaitable, prio, is_ray).
 - deliver: immediate (no effect on reconverse) and exclusive nodegroup entries
   deliver to every node; expedited, notrace and appwork entries of a group and an array deliver,
   locally and to the last PE; an inline entry of a group branch and of an array
@@ -196,6 +197,18 @@ class Main(Chare):
                 check(Bad not in charm.registered, 'errors: %s raises Charm4PyError (%s)' % (what, e))
             else:
                 charm.abort('FAIL errors: %s was accepted' % what)
+        # the keywords every proxy call consumes are reserved as parameter names
+        for name in ('ret', 'awaitable', 'prio', 'is_ray'):
+            ns = {}
+            exec('def m(self, x, %s=None):\n    pass\n' % name, ns)
+            Bad = type('Bad', (Chare,), {'m': ns['m']})
+            try:
+                charm.register(Bad, (GROUP,))
+            except Charm4PyError as e:
+                check(Bad not in charm.registered and "'%s'" % name in str(e) and 'Bad.m' in str(e),
+                      'errors: parameter named %s raises Charm4PyError (%s)' % (name, e))
+            else:
+                charm.abort('FAIL errors: an entry method with a parameter named %s was accepted' % name)
 
     def phase_deliver(self):
         nx = NodeGroup(NGAttrs)

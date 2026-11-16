@@ -338,11 +338,34 @@ def trace_class_name(C):
 TRACE_KIND_SUFFIX = {MAINCHARE: '', GROUP: '/group', ARRAY: '', CHARE: '/chare', NODEGROUP: '/nodegroup'}
 
 
+# the keywords every proxy call consumes (pm_call in src/ckdyn_py.cpp); an entry
+# method parameter of one of these names would also be read as the call option
+RESERVED_PARAMS = ('ret', 'awaitable', 'prio', 'is_ray')
+
+
+def check_param_names(cls, method_name):
+    """ raise Charm4PyError if an entry method has a parameter named after a reserved
+        proxy-call keyword. charm4py's own PoolScheduler.start keeps its is_ray
+        parameter: Pool.map passes is_ray to it as both the option and the value. """
+    func = getattr(cls, method_name, None)
+    while func is not None and not hasattr(func, '__code__') and hasattr(func, '__wrapped__'):
+        func = func.__wrapped__
+    code = getattr(func, '__code__', None)
+    if code is None:
+        return
+    params = code.co_varnames[1:code.co_argcount + code.co_kwonlyargcount]
+    internal = (cls.__module__ or '').startswith('charm4py.')
+    for name in RESERVED_PARAMS:
+        if name in params and not (internal and name == 'is_ray'):
+            raise Charm4PyError("entry method %s.%s: parameter name '%s' is reserved (every proxy call "
+                                "takes %s as keywords)" % (cls.__name__, method_name, name,
+                                                           ', '.join(RESERVED_PARAMS)))
+
+
 def getEntryMethodInfo(cls, method_name):
     func = getattr(cls, method_name)
     argcount = func.__code__.co_argcount - 1  # - 1 to disregard "self" argument
     argnames = tuple(func.__code__.co_varnames[1:argcount + 1])
-    assert 'ret' not in argnames, '"ret" keyword for entry method parameters is reserved'
     defaults = func.__defaults__
     if defaults is None:
         defaults = ()

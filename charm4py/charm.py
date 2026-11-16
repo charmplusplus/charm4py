@@ -850,6 +850,7 @@ class Charm(object):
         for charm_type_id in collections:
             for m in ['__init__'] + self._entry_method_names(C, charm_type_id):
                 entry_method.entry_flags(C, m, charm_type_id == NODEGROUP)
+                chare.check_param_names(C, m)
 
     # called by user (from Python) to register their Charm++ classes with the Charm4py runtime
     # by default a class is registered to work as Group, Array, singleton Chare and NodeGroup;
