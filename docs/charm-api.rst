@@ -98,6 +98,16 @@ Query processor and host information
 
     Returns the total number of PEs that the application is running on.
 
+* **charm.myNode()**:
+
+    Returns the logical node (process) of the caller, the index of the
+    :ref:`NodeGroup <nodegroup-api-label>` branches on it.
+
+* **charm.numNodes()**:
+
+    Returns the number of logical nodes (processes), which is the number of
+    branches of a NodeGroup.
+
 * **charm.myHost()**:
 
     Returns the host number on which the caller is running.
@@ -171,6 +181,36 @@ completion (see :ref:`Proxies <proxy-api-label>`).
 * **charm.waitQD()**
 
     Suspend the current coroutine until Quiescence Detection is reached.
+
+Checkpoint and restart
+----------------------
+
+* **charm.checkpoint(dirname, resume=None)**
+
+    Write a checkpoint of all chares, the readonlies and the runtime state to
+    the directory *dirname*. Starting the program again with
+    ``+restart dirname`` (the same command line otherwise) restores the
+    chares instead of running the main chare's constructor.
+
+    With ``resume=None``, it returns a :ref:`Future <futures-api-label>` that
+    receives ``None`` when the checkpoint has been written; call it from a
+    coroutine and wait on the future.
+
+    *resume* is a remote method with no parameters of a group (``proxy.method``,
+    called on every PE), of an array element (``proxy[index].method``) or of
+    the main chare (``self.thisProxy.method`` inside the main chare). The
+    runtime calls it when the checkpoint has been written, and, in a program
+    restarted from *dirname*, on the restored object once the restart is
+    complete. This is how a program continues after a restart: coroutines,
+    including a coroutine ``main`` and the coroutine that called
+    ``charm.checkpoint``, are not restored. Called from a coroutine, it also
+    returns a future that receives ``None`` in the checkpointing run when the
+    checkpoint has been written (otherwise it returns ``None``). The resume
+    method runs in both runs; a program tells them apart itself, for example
+    with a module-level flag that the main chare's constructor sets.
+
+    Futures created before a restart do not exist in the restarted run.
+    tests/thin/checkpoint_restart.py is an example.
 
 Timer-based scheduling
 ----------------------
@@ -251,16 +291,18 @@ charm.options
 You can set runtime options via the ``charm.options`` object, which has the
 following attributes:
 
-* **local_msg_optim** (default=True): if ``True``, remote method arguments sent to a chare
-  that is in the same PE as the caller will be passed by reference (instead of copied
-  or serialized).
-  Best performance is obtained when this is enabled.
+* **copy_received_arrays** (default=False): if ``True``, every numpy array an entry
+  method receives is a copy, as in 1.x. By default a received array is a view of the
+  message (no copy); arrays received from a broadcast, a section multicast or an
+  ``allreduce`` are read-only views. See :doc:`migrating`.
 
-* **local_msg_buf_size** (default=50): size of the pool used to store "local" messages
-  (see previous option).
+* **cprofiling** (default=False): if ``True``, every PE runs ``cProfile`` from start-up
+  to exit and writes its statistics to ``<cprofile_filename><pe>.prof``.
+  **cprofile_filename** (default='profile') sets the prefix. See :doc:`profiling`.
 
-* **pickle_protocol** (default=-1): determines the pickle protocol used by Charm4py.
-  A value of ``-1`` tells ``pickle`` to use the highest protocol number (recommended).
+* **pickle_protocol** (default=5): the pickle protocol used for readonlies, and for
+  chares packed for migration and checkpoints. Entry-method messages always use
+  protocol 5, whatever this option says.
   Note that not every type of argument sent to a remote method is pickled (see :doc:`serialization`).
 
 * **profiling** (default=False): if ``True``, Charm4py will profile the program and
@@ -271,6 +313,15 @@ following attributes:
 
 * **remote_exec** (default=False): if ``True``, allows remote calling of ``charm.exec()``
   and ``charm.eval()``.
+
+* **zerocopy_threshold** (default=1048576, that is 1 MB): a contiguous numpy array of at
+  least this many bytes passed in a point-to-point send goes through Charm++ zero-copy
+  instead of being copied into the message. The array is read-only from the send until
+  the transfer is done. Broadcasts, section multicasts and reduction contributions copy
+  arrays of any size. See :doc:`migrating` and :doc:`gpus`.
+
+``local_msg_optim`` and ``local_msg_buf_size`` from Charm4py 1.x are accepted and
+ignored: every call goes through a Charm++ message.
 
 .. * **auto_flush_wait_queues** (default=True): if ``True``, messages or threads waiting
 ..   on a condition (see "when" and "wait" constructs in :ref:`chare-api-label` API) are checked and

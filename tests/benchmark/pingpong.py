@@ -15,11 +15,14 @@ class Ping(Chare):
         else:
             self.neighbor = self.thisProxy[0]
 
-    def start(self, done_future, threaded=False):
+    def start(self, done_future, threaded=False, nbytes=None):
         self.done_future = done_future
         self.iter = 0
-        #data = np.zeros(PAYLOAD, dtype='int8')
-        data = 3
+        if nbytes is None:
+            data = 3
+        else:
+            import numpy as np
+            data = np.zeros(nbytes, dtype='int8')
         self.startTime = time()
         if threaded:
             self.neighbor.recv_th(data)
@@ -47,14 +50,15 @@ class Ping(Chare):
 
 
 def main(args):
-    threaded = False
-    if len(args) > 1 and args[1] == '-t':
-        threaded = True
+    threaded = '-t' in args[1:]
+    nbytes = None
+    if '-n' in args[1:]:
+        nbytes = int(args[args.index('-n') + 1])
     pings = Array(Ping, 2)
     charm.awaitCreation(pings)
     for _ in range(2):
         done_future = Future()
-        pings[0].start(done_future, threaded)
+        pings[0].start(done_future, threaded, nbytes)
         totalTime = done_future.get()
         print("ping pong time per iter (us)=", totalTime / NITER * 1000000)
     exit()

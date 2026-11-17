@@ -22,6 +22,10 @@ class Compute(object):
         print("Add actor method", a, b)
         return a + b
 
+    def _scale(self, a, k):
+        # a method whose name starts with one underscore is an actor method too
+        return a * k
+
 
 def main(args):
     ray.init()
@@ -38,6 +42,8 @@ def main(args):
     f = arr[3].add.remote(c, 4)
     g = arr[3].add.remote(a, b)
     h = add_task.remote(e, f)
+    s = arr[1]._scale.remote(7, 3)
+    assert ray.get(s) == 21, 'actor method _scale'
 
     not_ready = [c, d, e, f, g, h]
     while len(not_ready) > 0:

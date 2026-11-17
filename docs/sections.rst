@@ -14,6 +14,16 @@ Creating sections
     the below mechanisms, store and reuse the resulting section proxies and do
     not repeatedly create the same sections.
 
+.. important::
+    ``charm.split``, ``charm.combine``, proxy slicing and ``Group(C, onPEs=...)``
+    must be called from a coroutine (the main function or an entry method
+    decorated with ``@coro``). They return when every member of every new
+    section has joined it, so the returned proxies can be used at once. Called
+    from anything else they raise ``Charm4PyError``.
+
+    Sections are not part of a checkpoint: a program restarted with
+    ``+restart`` creates its sections again.
+
 
 * **charm.split(proxy, numsections, section_func=None, elems=None)**
 
@@ -55,11 +65,17 @@ Creating sections
 
 * **charm.combine(*proxies)**
 
-    Combines multiple collections into one. Returns a section proxy.
+    Combines multiple collections into one. Returns a section proxy. An
+    element that is in several of the combined collections is a member of the
+    result once: it receives one copy of each broadcast and contributes once.
 
     The parameter *proxies* is a list of proxies that refer to the collections
-    to combine. Collection and chare types don't have to match as long as the
-    methods that will be called via the section proxy have the same signature.
+    to combine. They must be arrays or array sections (including combined
+    sections) of one chare class with one number of index dimensions, since a
+    combined section is a Charm++ multi-array section; anything else (a group,
+    a group section, arrays of different classes or dimension counts) raises
+    ``TypeError``. (Charm4py 1.x also combined group sections and chares of
+    different types.)
 
     Note that sending one broadcast to a combined collection is more efficient
     than sending a separate broadcast to each component. Similarly for reductions.

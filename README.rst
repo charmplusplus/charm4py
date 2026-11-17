@@ -3,8 +3,8 @@ Charm4py
 ========
 
 
-.. image:: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml/badge.svg?event=push
-       :target: https://github.com/charmplusplus/charm4py/actions/workflows/charm4py.yml
+.. image:: https://github.com/charmplusplus/charm4py/actions/workflows/thin.yaml/badge.svg?branch=main&event=push
+       :target: https://github.com/charmplusplus/charm4py/actions/workflows/thin.yaml
 
 .. image:: https://readthedocs.org/projects/charm4py/badge/?version=latest
        :target: https://charm4py.readthedocs.io/

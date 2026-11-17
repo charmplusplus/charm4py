@@ -17,8 +17,9 @@ Features
   See the :doc:`introduction` for a quick overview.
 
 - **Speed**: The core Charm++ library is implemented in C/C++, making runtime
-  overhead very low. A Cython module offers efficient access
-  to the library. `Charm++`_ has been used in high-performance computing for many years,
+  overhead very low. Charm4py calls it through one C++ extension module
+  (``charm4py._ckdyn``), which builds and delivers messages in C++.
+  `Charm++`_ has been used in high-performance computing for many years,
   with applications scaling to the world's top supercomputers.
 
 - **Load balancing** of persistent objects: distributed objects can be migrated
@@ -33,11 +34,11 @@ Features
   parallel state space search or similar algorithms. The runtime decides where
   to launch tasks and balances them across processes.
 
-- **High-performance communication**: Charm4py offers a choice of multiple
-  high-performance communication layers (when manually building the Charm++ library),
-  including MPI as well as native layers for many high-performance interconnects
-  like Cray GNI, UCX, Intel OFI and IBM PAMI, with features like shared memory
-  and RDMA.
+- **High-performance communication**: Charm4py runs on Reconverse, whose
+  communication layer LCI uses libfabric or InfiniBand verbs, so a source build
+  against a site's libfabric uses the cluster's high-speed network (see
+  :doc:`install`). Wheels include libfabric's TCP providers (and shared memory
+  on Linux) only.
 
 
 
