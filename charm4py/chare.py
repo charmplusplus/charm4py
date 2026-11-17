@@ -347,6 +347,7 @@ def check_param_names(cls, method_name):
     """ raise Charm4PyError if an entry method has a parameter named after a reserved
         proxy-call keyword. charm4py's own PoolScheduler.start keeps its is_ray
         parameter: Pool.map passes is_ray to it as both the option and the value. """
+    from .charm import Charm4PyError   # chare.py gets the module global only in charmStarting()
     func = getattr(cls, method_name, None)
     while func is not None and not hasattr(func, '__code__') and hasattr(func, '__wrapped__'):
         func = func.__wrapped__

@@ -10,7 +10,8 @@ Phases:
 - errors: charm.register raises Charm4PyError for an unknown attribute, for inline
   on a coroutine, and for immediate or exclusive on a class registered as Group,
   Array or singleton Chare, and for an entry method with a parameter named after a
-  keyword every proxy call consumes (ret, awaitable, prio, is_ray).
+  keyword every proxy call consumes (ret, awaitable, prio, is_ray); the last also
+  for a class registered at charm.start (a child run with --bad-at-start).
 - deliver: immediate (no effect on reconverse) and exclusive nodegroup entries
   deliver to every node; expedited, notrace and appwork entries of a group and an array deliver,
   locally and to the last PE; an inline entry of a group branch and of an array
@@ -21,6 +22,9 @@ The notrace attribute also removes the entry from Projections logs; that is chec
 with the trace build (logs/step-7/trace/), not here.
 """
 import functools
+import os
+import subprocess
+import sys
 from charm4py import charm, Chare, Group, Array, NodeGroup, coro, when, entry
 from charm4py import _ckdyn
 from charm4py.charm import Charm4PyError
@@ -209,6 +213,19 @@ class Main(Chare):
                       'errors: parameter named %s raises Charm4PyError (%s)' % (name, e))
             else:
                 charm.abort('FAIL errors: an entry method with a parameter named %s was accepted' % name)
+        # the same check at charm.start, before chare.py has its Charm4PyError global
+        # (a child run; it must start as a single process, so drop the launcher's
+        # PMI and Slurm variables)
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(('LCT_', 'LCI_', 'PMI_', 'PMIX_', 'SLURM_'))}
+        p = subprocess.run([sys.executable, os.path.abspath(__file__), '--bad-at-start', '+pe', '1'],
+                           env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                           timeout=120)
+        out = p.stdout
+        check(p.returncode != 0 and "Charm4PyError: entry method BadAtStart.m: parameter name 'prio'" in out
+              and 'NameError' not in out and 'BAD-AT-START RAN' not in out,
+              'errors: a reserved parameter name in a class registered at charm.start raises '
+              'Charm4PyError (exit %d)' % p.returncode)
 
     def phase_deliver(self):
         nx = NodeGroup(NGAttrs)
@@ -234,4 +251,16 @@ class Main(Chare):
                       % (kname, pe, r))
 
 
-charm.start(Main)
+if '--bad-at-start' in sys.argv:
+    class BadAtStart(Chare):
+        def m(self, x, prio=None):
+            pass
+
+    def bad_main(args):
+        print('BAD-AT-START RAN')
+        charm.exit()
+
+    sys.argv.remove('--bad-at-start')
+    charm.start(bad_main)
+else:
+    charm.start(Main)

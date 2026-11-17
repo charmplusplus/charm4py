@@ -1167,7 +1167,7 @@ class Charm(object):
         # and sends _checkpoint_written to this PE, which accepts only the tag it
         # issued. A restarted run also delivers the tag of the checkpoint it
         # restarted from, whose issuing run is gone: the token tells it apart,
-        # except with probability 1/256 when the same PE has started a new
+        # except with probability 1/254 when the same PE has started a new
         # checkpoint with the same sequence number before that delivery reaches
         # it. A restart epoch saved in the checkpoint would remove that case.
         if self._numPes > 0xfffff:

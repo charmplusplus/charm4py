@@ -43,9 +43,10 @@ reaches the batch script.
 
     WS=$CHARM4PY_DELTA_WS                                # copy these scripts there
     cd $WS
-    git clone -b ckdyn-dev https://github.com/charmplusplus/charm.git charm
-    git -C charm submodule update --init contrib/reconverse
     git clone -b main https://github.com/charmplusplus/charm4py.git charm4py
+    git clone https://github.com/charmplusplus/charm.git charm
+    git -C charm checkout $(awk '/^commit/ {print $2}' charm4py/charm_version.txt)
+    git -C charm submodule update --init contrib/reconverse
     module load python/3.13.5-gcc13.3.1 && python3 -m venv venv
     source env-cuda.sh
     pip install numpy greenlet cython scikit-build-core nanobind ninja patchelf \
