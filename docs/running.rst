@@ -18,6 +18,12 @@ applications like this::
 
 The option ``+pN`` specifies how many processes to run the application with.
 
+.. note::
+  Charm4py on Reconverse runs one PE per process for now. Use several
+  processes with one PE each (``+pN`` with the launcher above, or
+  ``lcrun -n N python myprogram.py +pe N``). Giving ``+pe N`` to a single
+  process stops the program at start-up with an error saying so.
+
 Alternatively, if ``charmrun`` is in your PATH (this depends on where Charm4py was
 installed and your system configuration)::
 
@@ -37,34 +43,11 @@ Charm4py programs accept the `same command-line parameters`_ as Charm++.
 Running on multiple hosts
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``charmrun`` can run an application on multiple hosts (e.g. a network of workstations)
-by passing it a file containing the list of nodes (*nodelist* file). Hosts can be
-specified by IP address or host name. For example, this is a simple nodelist file
-specifying four hosts::
-
-    group mynodes
-        host 192.168.0.10
-        host 192.168.0.133
-        host myhost
-        host myhost2
-
-The application can be launched like this::
-
-    $ python3 -m charmrun.start +pN myprogram.py ++nodelist mynodelist.txt
-
-With this method, charmrun uses ``ssh`` to log into remote machines and spawn processes.
-
-charmrun can also use the cluster's ``mpiexec`` job launcher instead of the built-in ssh method.
-
-See the `charmrun manual`_ for more information and alternative ways to work with nodelist
-files.
-
-.. important::
-  If you need to set environment variables on the remote hosts, you can let
-  charmrun do it by adding your export commands to a file called ``~/.charmrunrc``.
-
-
-.. _charmrun manual: https://charm.readthedocs.io/en/latest/charm++/manual.html#running-charm-programs
+The Charm4py launcher starts processes on the local machine only: the
+``++nodelist`` file and the ssh start-up of the 1.x ``charmrun`` binary are
+part of classic Converse, which Charm4py 2 does not use. On several hosts,
+start the processes with the cluster's launcher (`Using system job
+launchers`_) or with LCI's ``lcrun``.
 
 
 Using charmrun from a Python program
@@ -96,51 +79,25 @@ Solution
     program on a single host.
 
 
-mpirun (or equivalent)
-----------------------
-
-If you have built Charm4py to use MPI, you can launch Charm4py applications
-using mpirun, mpiexec or other valid method on your system that supports
-launching MPI applications. For example::
-
-    $ mpirun -np 4 /usr/bin/python3 myprogram.py
-
-See :doc:`install` for instructions on building Charm4py for MPI.
-
-You can launch an *interactive shell* with mpirun like this (or similar command)::
-
-    $ mpirun -np 4 /usr/bin/python3 -m charm4py.interactive
-
-Note that the console has limited functionality in terms of tab completion, etc.
-due to stdin and stdout limitations when using mpirun.
-
-
 Using system job launchers
 --------------------------
 
-Charm4py applications can also be launched using system job launchers
-(e.g. aprun, ibrun, SLURM).
-The exact details of how to do so depend on the system, and typically Charm++ has
-to be built with a specialized network layer like MPI, GNI or OFI
-(see `Charm++ manual build`__).
-
-.. __: install.html#manually-building-the-charm-shared-library
-
-In all cases, the mechanism consists in launching one or multiple Python processes
-on each node, and passing the main application file to Python. Here is a simple script
-for SLURM on a Cray-based system:
+Charm4py applications can also be launched with system job launchers (srun,
+mpiexec, aprun and others): start one Python process per PE, pass the main
+application file to Python, and give the total PE count with ``+pe``. The
+processes find each other through LCI's PMI support (PMI-1, PMI-2 or PMIx, as
+the launcher provides). For SLURM:
 
 .. code-block:: bash
 
     #!/bin/bash -l
-    #SBATCH -N 8         # number of nodes
+    #SBATCH -N 8              # number of nodes
+    #SBATCH --ntasks-per-node 16
     #SBATCH -t 00:30:00
-    #SBATCH -C knl
 
-    module load craype-hugepages8M
-    module load python/3.6-anaconda-4.4
-
-    export PYTHONPATH=/path/to/charm4py
     PYTHON_EXEC=`which python3`
+    srun $PYTHON_EXEC myprogram.py +pe 128 app_param1 app_param2 ...
 
-    srun -n 512 -c 1 $PYTHON_EXEC myprogram.py app_param1 app_param2 ...
+A wheel's libfabric has only its TCP-based providers; to use a cluster's
+high-speed network, install Charm4py from source against the site's libfabric
+(see :doc:`install`).

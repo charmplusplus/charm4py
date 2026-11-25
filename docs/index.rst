@@ -24,6 +24,7 @@ to the largest supercomputers.
    features
    introduction
    install
+   migrating
    running
    tutorial
    examples
