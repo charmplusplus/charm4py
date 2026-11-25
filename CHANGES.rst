@@ -5,6 +5,10 @@ log in the source code repository.
 What's new in v2.0
 ==================
 
+2.0.0b1 (2026-11-25) is a beta built against Charm++ v9.0.0-beta1, the first
+Charm++ release with CkDyn; 2.0.0 will be released after the Charm++ 9.0.0 
+release.
+
 Charm4py 2.0 keeps the Python API of 1.x and replaces what is underneath it.
 It is a binding (the nanobind extension module ``charm4py._ckdyn``) over CkDyn,
 the C API in Charm++ for chares whose classes and entry methods a language
