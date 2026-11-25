@@ -17,7 +17,7 @@ authors = [
 ]
 maintainers = [{ name = "Maya Taylor", email = "mayat4@illinois.edu" }]
 name = "charm4py"
-version = "2.0.0.dev0"
+version = "2.0.0b1"
 readme = { file = "README.rst", content-type = "text/x-rst" }
 keywords = [
     "parallel",
