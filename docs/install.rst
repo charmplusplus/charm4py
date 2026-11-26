@@ -29,7 +29,14 @@ Wheels exist for CPython 3.11, 3.12, 3.13 and 3.14 on
 
 ::
 
-    $ pip install charm4py
+    $ pip install --pre charm4py
+
+.. note::
+
+   Charm4py 2.0 is a beta (``2.0.0b1``, built against Charm++ v9.0.0-beta1)
+   until Charm++ 9.0.0 is released. pip does not pick a beta on its own:
+   ``pip install charm4py`` gives 1.1; ``--pre`` or ``charm4py==2.0.0b1``
+   gives 2.0. The same applies to the ``pip install`` commands below.
 
 A wheel includes ``libcharm``, Reconverse, LCI, and a libfabric built with only
 its ``tcp``, ``sockets``, ``udp`` and ``rxm`` providers (and ``shm`` on Linux).
