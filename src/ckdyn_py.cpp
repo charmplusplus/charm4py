@@ -2838,9 +2838,11 @@ void mod_start(nb::list argv) {
   atexit(flush_at_exit);   // for a process that reaches no hook; see flush_at_exit
   g_started = true;
   flush_stdio();
-  PyThreadState *ts = PyEval_SaveThread();
+  // Released with RAII: CkDynStart does not return, but a failed LCI assert
+  // during startup throws std::runtime_error, and nanobind needs the thread
+  // state back to turn it into a Python exception (else SIGSEGV in PyErr_SetString).
+  nb::gil_scoped_release nogil;
   CkDynStart((int)n, cargv);   // does not return
-  PyEval_RestoreThread(ts);
 }
 
 // name: the registered chare name (Projections); None uses cls.__name__
@@ -3174,9 +3176,8 @@ nb::tuple mod_topo_tree_edges(int pe, int root, nb::handle pes, int bfactor) {
 
 void mod_exit(int code) {
   flush_stdio();
-  PyThreadState *ts = PyEval_SaveThread();
+  nb::gil_scoped_release nogil;   // as in mod_start: CkDynExit can throw
   CkDynExit(code);
-  PyEval_RestoreThread(ts);
 }
 
 }  // namespace

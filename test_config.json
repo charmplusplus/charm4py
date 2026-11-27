@@ -340,6 +340,9 @@
         "path": "tests/thin/entry_attrs.py"
     },
     {
+        "path": "tests/thin/startup_error.py"
+    },
+    {
         "path": "tests/thin/nodegroup.py"
     },
     {
