@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the charm++ target (same source, CUDA, reconverse) for the C++ tests
-# (ckdyntest, hapitest). The charm4py-target build sets CMK_CHARM4PY, under which
-# a charmxi program aborts with "No callback for CkRegisterMainModule".
+# (ckdyntest, hapitest). The charm4py-target build sets CMK_LIBCHARM_SHARED, under
+# which a charmxi program aborts with "No CkDyn registration hook ...".
 # usage: build-cxx.sh [--force]    (login node)
 set -o pipefail
 source "$(dirname "$(readlink -f "$0")")/env-cuda.sh"

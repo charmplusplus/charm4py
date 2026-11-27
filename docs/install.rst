@@ -208,6 +208,6 @@ Known issues
 ------------
 
 * The pin in ``charm_version.txt`` is a commit of Charm++'s ``recharm``
-  branch at release tag ``v9.0.0-beta1``.
+  branch after release tag ``v9.0.0-beta1``, not a release.
 * No free-threaded (``3.13t``) wheels yet, and no multi-PE processes (step 7
   of the plan).
