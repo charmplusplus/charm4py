@@ -2,11 +2,14 @@
 # CHARM4PY_CHARM_BUILD_DIR nor CHARM4PY_CHARM_DIR is set (tools/build_charm.py).
 # Format: one "key value" pair per line; '#' starts a comment.
 #
-# The pin is the commit of Charm++'s release tag v9.0.0-beta1 (branch
-# recharm), the first release with CkDyn (ckdyn.h, the layer this package
-# binds to; merged with charm PR #4193 on 2026-11-12).
+# The pin is a commit of Charm++'s recharm branch after release tag
+# v9.0.0-beta1 (the first release with CkDyn, the layer this package binds
+# to). It includes charm PR #4248, which deletes the charm4py 1.x Ext API
+# (the CMK_CHARM4PY build macro is now CMK_LIBCHARM_SHARED), and charm PR
+# #4337, which keeps the static CUDA runtime off the libcharm.so link
+# (charm issue #4327).
 # Reconverse is the contrib/reconverse submodule at whatever commit this
 # Charm++ commit records.
 repository https://github.com/charmplusplus/charm.git
 branch recharm
-commit 7a414b861c8365718f8ea02d55c12e29bc546fc0
+commit d045c9153d0ddcd2eacf6a97450a4d440ede3f91
